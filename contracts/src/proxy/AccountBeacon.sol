@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import { UpgradeableBeacon } from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
+import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
 /**
  * @title AccountBeacon
@@ -15,5 +15,5 @@ contract AccountBeacon is UpgradeableBeacon {
      *      Ownership is set to the deployer by default (OpenZeppelin's Ownable).
      * @param implementation_ The address of the initial implementation contract.
      */
-    constructor(address implementation_) UpgradeableBeacon(implementation_,msg.sender) {}
+    constructor(address implementation_) UpgradeableBeacon(implementation_, msg.sender) {}
 }

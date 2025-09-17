@@ -7,3 +7,6 @@
 [submodule "contracts/lib/account-abstraction"]
 	path = contracts/lib/account-abstraction
 	url = https://github.com/eth-infinitism/account-abstraction
+[submodule "contracts/lib/foundry-devops"]
+	path = contracts/lib/foundry-devops
+	url = https://github.com/Cyfrin/foundry-devops

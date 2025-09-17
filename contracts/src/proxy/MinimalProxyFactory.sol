@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
 // Interface for the minimal beacon proxy, requiring an init function
 interface IBeaconProxyMinimal {
@@ -44,9 +44,14 @@ contract MinimalProxyFactory {
         proxy = Clones.cloneDeterministic(implementationTemplate, salt);
         emit ProxyDeployed(proxy, salt);
 
-        // Initializes the proxy 
-        (bool ok, bytes memory ret) = proxy.call(abi.encodeWithSelector(IBeaconProxyMinimal.init.selector, initCalldata));
-        if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
+        // Initializes the proxy
+        (bool ok, bytes memory ret) =
+            proxy.call(abi.encodeWithSelector(IBeaconProxyMinimal.init.selector, initCalldata));
+        if (!ok) {
+            assembly {
+                revert(add(ret, 32), mload(ret))
+            }
+        }
     }
 
     /**
