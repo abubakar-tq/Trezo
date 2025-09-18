@@ -20,7 +20,7 @@ contract SendPackedUserOp is Script {
     function run() public {
         // Setup
         HelperConfig helperConfig = new HelperConfig();
-        address dest = address(0); // arbitrum mainnet USDC address
+        address dest =  helperConfig.getConfig().usdc; 
         uint256 value = 0;
         address minimalAccountAddress = DevOpsTools.get_most_recent_deployment("SmartAccount", block.chainid);
 
@@ -47,8 +47,8 @@ contract SendPackedUserOp is Script {
         PackedUserOperation memory userOp = _generateUnsignedUserOperation(callData, smartAccount, nonce);
 
         // 2. Get the userOp Hash
-        bytes32 userOpHash = IEntryPoint(config.entryPoint).getUserOpHash(userOp);
-        bytes32 digest = userOpHash.toEthSignedMessageHash();
+        bytes32 digest = IEntryPoint(config.entryPoint).getUserOpHash(userOp);
+       
 
         // 3. Sign it
         uint8 v;

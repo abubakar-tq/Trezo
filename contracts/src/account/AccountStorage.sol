@@ -15,7 +15,7 @@ library AccountStorage {
         // Module registry (account-level view)
         mapping(address => bool) enabledModule;
         // --- reserve room for future vars to avoid shifting storage ---
-        uint256[49] __gap;
+        uint256[50] __gap;
     }
 
     function layout() internal pure returns (Layout storage s) {

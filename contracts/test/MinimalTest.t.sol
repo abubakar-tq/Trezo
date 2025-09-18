@@ -7,6 +7,9 @@ import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {AccountBeacon} from "src/proxy/AccountBeacon.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
+import {DeployAccount} from "script/DeployAccount.s.sol";
+import {HelperConfig} from "script/HelperConfig.s.sol";
+
 
 contract MinimalTest is Test {
     AccountBeacon beacon;
@@ -14,17 +17,16 @@ contract MinimalTest is Test {
     MinimalProxyFactory factory;
     address proxy;
     AccountFactory accountFactory;
+    HelperConfig helperConfig;
 
     function setUp() public {
-        // Deploy SmartAccount implementation
-        implementation = new SmartAccount();
-        // Deploy AccountBeacon pointing to SmartAccount
-        beacon = new AccountBeacon(address(implementation));
-        // Deploy MinimalProxyFactory with BeaconAwareProxy as template
-        BeaconAwareProxy template = new BeaconAwareProxy(address(beacon), "");
-        factory = new MinimalProxyFactory(address(template));
 
-        accountFactory = new AccountFactory(address(beacon), address(factory), address(this));
+        BeaconAwareProxy beaconProxy;
+        DeployAccount deployer = new DeployAccount();
+        (helperConfig, implementation, beacon, beaconProxy, factory, accountFactory) = deployer.deployAccount();
+        proxy = address(beaconProxy);
+        console2.log("Setup complete");
+
     }
 
     function testProxyDelegation() public {
@@ -53,4 +55,8 @@ contract MinimalTest is Test {
         assert(owner == address(this));
         assert(who != bytes32(0));
     }
+
+
+    
+
 }

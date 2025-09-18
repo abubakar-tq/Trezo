@@ -105,9 +105,9 @@ contract SmartAccount is IAccount {
         view
         returns (uint256 validationData)
     {
-        bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(userOpHash);
+       
 
-        (address signer,,) = ECDSA.tryRecover(ethSignedMessageHash, userOp.signature);
+        (address signer,,) = ECDSA.tryRecover(userOpHash, userOp.signature);
 
         if (signer != AccountStorage.layout().owner) {
             return SIG_VALIDATION_FAILED;
@@ -136,6 +136,14 @@ contract SmartAccount is IAccount {
 
     function getNonce(uint192 key) external view returns (uint256) {
         return IEntryPoint(AccountStorage.layout().entryPoint).getNonce(address(this), key);
+    }
+
+    function getInitialized() external view returns (bool) {
+        return AccountStorage.layout().initialized;
+    }
+
+    function getOwner() external view returns (address) {
+        return AccountStorage.layout().owner;
     }
 
     /*//////////////////////////////////////////////////////////////
