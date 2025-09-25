@@ -1,4 +1,7 @@
 {
+  "contracts/lib/foundry-devops": {
+    "rev": "efff097a87e70c3d15661c9f2a2daeae0b33d5d5"
+  },
   "lib/account-abstraction": {
     "tag": {
       "name": "v0.8.0",
@@ -9,6 +12,15 @@
     "tag": {
       "name": "0.4.0",
       "rev": "efff097a87e70c3d15661c9f2a2daeae0b33d5d5"
+    }
+  },
+  "lib/module-template": {
+    "rev": "3cc27159e15010264f9dbbec7b5a04fe04457bbd"
+  },
+  "lib/modulekit": {
+    "tag": {
+      "name": "v0.5.9",
+      "rev": "b696ccbe1b16a55d8b1a1de192309500af0fae5e"
     }
   },
   "lib/openzeppelin-contracts": {
