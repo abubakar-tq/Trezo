@@ -7,7 +7,7 @@ interface IMinimalProxyFactory {
 }
 
 contract AccountFactory {
-    event AccountCreated(address indexed account, address indexed owner, bytes32 salt);
+    event AccountCreated(address indexed account,bytes32 salt);
 
     address public immutable beacon; // AccountBeacon
     address public immutable proxyFactory; // MinimalProxyFactory
@@ -19,12 +19,12 @@ contract AccountFactory {
         entryPoint = _entryPoint;
     }
 
-    /// @notice CREATE2-deploy a new wallet proxy and initialize owner
-    function createAccount(address owner, bytes32 salt) external returns (address account) {
-        // init calldata = SmartAccount.initialize(owner, entryPoint)
-        bytes memory initCalldata = abi.encodeWithSignature("initialize(address,address)", owner, entryPoint);
+    /// @notice CREATE2-deploy a new wallet proxy 
+    function createAccount(bytes32 salt) external returns (address account) {
+        // init calldata = SmartAccount.initialize( entryPoint)
+        bytes memory initCalldata = abi.encodeWithSignature("initialize(address)", entryPoint);
         account = IMinimalProxyFactory(proxyFactory).createProxy(initCalldata, salt);
-        emit AccountCreated(account, owner, salt);
+        emit AccountCreated(account, salt);
     }
 
     function predictAccount(bytes32 salt) external view returns (address predicted) {

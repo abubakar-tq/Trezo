@@ -18,7 +18,7 @@ contract AccountStorageTest is Test {
     address proxy;
     address entryPoint;
     HelperConfig helperCofig;
-    address immutable OWNER = makeAddr("Owner");
+    
 
 
 
@@ -50,14 +50,14 @@ contract AccountStorageTest is Test {
     function testSmartAccountStorageIsInitialized() public { 
         bytes32 salt = keccak256("user-storage-test");
         // Deploy proxy via AccountFactory
-        proxy = accountFactory.createAccount(OWNER, salt);
+        proxy = accountFactory.createAccount( salt);
         // Check storage variables via SmartAccount interface
         bool initialized = SmartAccount(payable(proxy)).getInitialized();
-        address storedOwner = SmartAccount(payable(proxy)).getOwner();
+       
         address storedEntryPoint = SmartAccount(payable(proxy)).getEntryPoint();
         // Assert values
         assertEq(initialized,true,"SmartAccount not initialized");
-        assertEq(storedOwner, OWNER, "Owner not set correctly");
+       
         assertEq(storedEntryPoint, entryPoint, "EntryPoint not set correctly");
         console2.log("SmartAccount storage initialized and verified");
     }
@@ -65,17 +65,17 @@ contract AccountStorageTest is Test {
     function testInitializationTwiceFails() public {
         bytes32 salt = keccak256("user-storage-test-2");
         // Deploy proxy via AccountFactory
-        proxy = accountFactory.createAccount(OWNER, salt);
+        proxy = accountFactory.createAccount(salt);
         // Try to initialize again and expect revert
         vm.expectRevert(AlreadyInitialized.selector);
-        SmartAccount(payable(proxy)).initialize(OWNER, entryPoint);
+        SmartAccount(payable(proxy)).initialize(entryPoint);
         console2.log("Re-initialization correctly reverted");
     }
 
     function testEntryPointIsSetCorrectly() public {
         bytes32 salt = keccak256("user-storage-test-3");
         // Deploy proxy via AccountFactory
-        proxy = accountFactory.createAccount(OWNER, salt);
+        proxy = accountFactory.createAccount(salt);
         // Check entryPoint via SmartAccount interface
         address storedEntryPoint = SmartAccount(payable(proxy)).getEntryPoint();
         // Assert values

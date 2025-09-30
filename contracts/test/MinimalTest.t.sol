@@ -18,6 +18,8 @@ contract MinimalTest is Test {
     address proxy;
     AccountFactory accountFactory;
     HelperConfig helperConfig;
+    
+
 
     function setUp() public {
 
@@ -33,7 +35,7 @@ contract MinimalTest is Test {
         // // Prepare init calldata for SmartAccount.initialize(owner, value)
         // bytes memory initCalldata = abi.encodeWithSelector(SmartAccount.initialize.selector, address(this));
         // Deploy proxy via Account Factory
-        proxy = accountFactory.createAccount(address(this), keccak256("user1"));
+        proxy = accountFactory.createAccount(keccak256("user1"));
         console2.log("Account created successfully");
         // Verify proxy address is not zero
         assert(proxy != address(0));
@@ -50,13 +52,8 @@ contract MinimalTest is Test {
         // Interact with proxy (delegatecall to SmartAccount)
         (bool ok, bytes memory ret) = proxy.call(abi.encodeWithSelector(SmartAccount.ping.selector));
         require(ok, "Delegatecall failed");
-        (bytes32 who, address owner) = abi.decode(ret, (bytes32, address));
-        // Verify delegatecall returned expected values
-        assert(owner == address(this));
+        (bytes32 who) = abi.decode(ret, (bytes32));
         assert(who != bytes32(0));
     }
-
-
-    
 
 }

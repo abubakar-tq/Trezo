@@ -31,7 +31,7 @@ contract MinimalProxyFactory {
 
     /**
      * @notice Deploys a minimal proxy using CREATE2 and initializes it.
-     * @param initCalldata Initialization data for the proxy (e.g., owner, modules).
+     * @param initCalldata Initialization data for the proxy (e.g., entryPoint, modules).
      * @param salt Unique value to ensure deterministic address.
      * @return proxy Address of the deployed proxy.
      *

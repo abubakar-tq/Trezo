@@ -8,20 +8,22 @@ import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPo
 import {AccountStorage} from "./AccountStorage.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {ModuleManager} from "src/account/managers/ModuleManager.sol";
 
-contract SmartAccount is IAccount {
+contract SmartAccount is IAccount, ModuleManager {
     using AccountStorage for AccountStorage.Layout;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
-    event OwnerSet(address indexed owner);
+    event ModuleInstalled(uint256 moduleTypeId, address module);
+    event ModuleUninstalled(uint256 moduleTypeId, address module);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
     error MinimalAccount__NotFromEntryPoint();
-    error MinimalAccount__NotFromEntryPointOrOwner();
+    // error MinimalAccount__NotFromEntryPointOrOwner();
     error MinimalAccount__CallFailed(bytes);
     error AlreadyInitialized();
 
@@ -35,13 +37,16 @@ contract SmartAccount is IAccount {
         }
         _;
     }
+    /// @notice Modifier for admin-only functions that MUST be invoked via a self-call.
+    /// @dev  For Admin functions will only be called by the account itself
 
-    modifier requireFromEntryPointOrOwner() {
-        if (msg.sender != AccountStorage.layout().entryPoint && msg.sender != AccountStorage.layout().owner) {
-            revert MinimalAccount__NotFromEntryPointOrOwner();
-        }
+    modifier onlySelf() {
+        require(msg.sender == address(this), "Account: ONLY_ACCOUNT");
         _;
     }
+
+    // Modifier for future modular access control (e.g., via modules)
+    // function modifierModuleOrEntryPoint() internal view {}
 
     /*//////////////////////////////////////////////////////////////
                                FUNCTIONS
@@ -71,7 +76,7 @@ contract SmartAccount is IAccount {
     {
         //this will be called by entrypoint.sol so you have to check the validity of the user operation
 
-        validationData = _validateSignature(userOp, userOpHash);
+        validationData = _routeValidateUserOp(userOp, userOpHash);
 
         _payPrefund(missingAccountFunds);
     }
@@ -80,12 +85,83 @@ contract SmartAccount is IAccount {
      * @param dest The address of the destination contract
      * @param value The amount of Ether to send
      * @param functionData The data to send to the destination contract
-     * @dev This function can be called by owner and the entry point after verification of signature
+     * @dev This function can be called by the entry point or authorized modules (future extension)
      */
-    function execute(address dest, uint256 value, bytes calldata functionData) external requireFromEntryPointOrOwner {
+    function execute(address dest, uint256 value, bytes calldata functionData) external requireFromEntryPoint {
         (bool success, bytes memory result) = dest.call{value: value}(functionData);
         if (!success) {
             revert MinimalAccount__CallFailed(result);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    //  ERC-7579 Specific
+    // ---------------------------------------------------------------------
+
+    /**
+     * @notice Generic module installer that routes to the typed function.
+     * @dev Follow the reference: the Account exposes a generic entry that dispatches
+     *      to the correct typed install based on ModuleType. For v1 we only implement
+     *      VALIDATION path; EXECUTION/FALLBACK are no-ops or revert.
+     *
+     * @param moduleType  The numeric module type (e.g., VALIDATION=1 in ref impl).
+     * @param module      Module address to install.
+     * @param init        ABI-encoded initializer forwarded to the module.
+     *
+     * Requirements:
+     *  - Must be invoked via a self-call after validator-based auth (onlySelf).
+     */
+    function installModule(uint256 moduleType, address module, bytes calldata init) external onlySelf {
+        // If you import the constants from the reference, do:
+        // if (moduleType == MODULE_TYPE_VALIDATION) { this.installValidator(module, init); }
+        // else if (moduleType == MODULE_TYPE_EXECUTION) { /* this.installExecutor(...) */ }
+        // else if (moduleType == MODULE_TYPE_FALLBACK)  { /* this.installFallback(...) */ }
+        // else { revert("Account: UNKNOWN_MODULE_TYPE"); }
+
+        // For now (validators only):
+        // Accept only the validator type value you use in your SDK (e.g., 1).
+        require(moduleType == 1, "Account: ONLY_VALIDATION_SUPPORTED");
+        this.installValidator(module, init); // external call => msg.sender becomes address(this) in manager
+        emit ModuleInstalled(moduleType, module);
+    }
+
+    /**
+     * @notice Generic module uninstaller that routes to the typed function.
+     * @param moduleType The numeric module type.
+     * @param module     Module address to uninstall.
+     * @param data       ABI-encoded data for module.onUninstall.
+     */
+    function uninstallModule(uint256 moduleType, address module, bytes calldata data) external onlySelf {
+        require(moduleType == 1, "Account: ONLY_VALIDATION_SUPPORTED");
+        this.uninstallValidator(module, data);
+        emit ModuleUninstalled(moduleType, module);
+    }
+
+    /**
+     * @notice Set the active validator through a typed entry.
+     * @param validator Installed validator to activate.
+     */
+    function setActiveValidatorFromAccount(address validator) external onlySelf {
+        this.setActiveValidator(validator);
+    }
+
+    /**
+     * @param hash The hash of the data to verify
+     * @param data The data to verify
+     */
+    function isValidSignature(bytes32 hash, bytes calldata data) external view returns (bytes4) {
+        return _routeIsValidSignature(hash, data);
+    }
+
+    function isModuleInstalled(uint256 moduleTypeId, address module, bytes calldata /*additionalContext*/ )
+        external
+        view
+        returns (bool)
+    {
+        if (moduleTypeId == 1) {
+            return isValidatorInstalled(module);
+        } else {
+            revert("Not Installed");
         }
     }
 
@@ -96,24 +172,16 @@ contract SmartAccount is IAccount {
     /**
      * @param userOp The user operation to validate
      * @param userOpHash The hash of the user operation
-     * @dev The signature will be valid only if it was signed by the owner of "this" contract
+     * @dev The signature will be valid only if it was signed by an authorized module (future extension)
      * @dev The function will return SIG_VALIDATION_SUCCESS if the signature is valid, and SIG_VALIDATION_FAILED otherwise
      * @return validationData The validation data
      */
     function _validateSignature(PackedUserOperation calldata userOp, bytes32 userOpHash)
         internal
-        view
         returns (uint256 validationData)
     {
-       
-
-        (address signer,,) = ECDSA.tryRecover(userOpHash, userOp.signature);
-
-        if (signer != AccountStorage.layout().owner) {
-            return SIG_VALIDATION_FAILED;
-        }
-
-        return SIG_VALIDATION_SUCCESS;
+        // TODO: Replace with modular signature validation
+        return _routeValidateUserOp(userOp, userOpHash);
     }
 
     /**
@@ -142,25 +210,23 @@ contract SmartAccount is IAccount {
         return AccountStorage.layout().initialized;
     }
 
-    function getOwner() external view returns (address) {
-        return AccountStorage.layout().owner;
-    }
+    // function getOwner() external pure returns (address) {
+    //     return address(0);
+    // }
 
     /*//////////////////////////////////////////////////////////////
                             Initializer FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function initialize(address _owner, address _entryPoint) external {
+    function initialize(address _entryPoint) external {
         AccountStorage.Layout storage s = AccountStorage.layout();
         if (s.initialized) revert AlreadyInitialized();
-        s.owner = _owner;
         s.entryPoint = _entryPoint;
         s.initialized = true;
-        emit OwnerSet(_owner);
     }
 
     // a no-op example function just to prove delegatecall works
-    function ping() external view returns (bytes32 who, address _owner) {
-        return (blockhash(block.number - 1), msg.sender);
+    function ping() external view returns (bytes32 who) {
+        return (blockhash(block.number - 1));
     }
 }

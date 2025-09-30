@@ -42,7 +42,7 @@ contract DeployAccount is Script {
         vm.startBroadcast(networkConfig.account);
 
         smartAccount = new SmartAccount();
-        smartAccount.initialize(networkConfig.account, networkConfig.entryPoint);
+        smartAccount.initialize(networkConfig.entryPoint);
 
         beacon = new AccountBeacon(address(smartAccount));
         proxy = new BeaconAwareProxy(address(beacon), "");

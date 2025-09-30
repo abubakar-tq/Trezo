@@ -65,7 +65,7 @@ contract SendPackedUserOp is Script {
     }
 
     function _generateUnsignedUserOperation(bytes memory callData, address sender, uint256 nonce)
-        internal
+        public
         pure
         returns (PackedUserOperation memory)
     {

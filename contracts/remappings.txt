@@ -16,13 +16,16 @@ lib/modulekit/:src/=lib/modulekit/src/
 lib/modulekit/:test/=lib/modulekit/test/
 lib/modulekit/:@ERC4337/=lib/modulekit/node_modules/@ERC4337/
 
+lib/erc7579-implementation/:account-abstraction/=lib/account-abstraction/contracts/
+
 
 @openzeppelin/=lib/openzeppelin-contracts/
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
 @openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
 @account-abstraction/=lib/account-abstraction/
 @account-abstraction/contracts/=lib/account-abstraction/contracts/
+@ERC4337/=lib/modulekit/node_modules/@ERC4337/
 forge-std/=lib/forge-std/src/
 solady/=lib/solady/src/
 @webauthn-sol/=lib/webauthn-sol/
-
+@ERC7579=lib/erc7579-implementation/

@@ -17,7 +17,7 @@ contract UserOperationTest is Test {
     HelperConfig helperConfig;
     address usdc;
     address entryPoint;
-    address owner;
+    
     address proxy;
     address immutable RANDOM_USER= makeAddr("RandomUser");
 
@@ -36,13 +36,13 @@ contract UserOperationTest is Test {
         helperConfig = _helperConfig;
         usdc = helperConfig.getConfig().usdc;
         entryPoint = helperConfig.getConfig().entryPoint;
-        owner = helperConfig.getConfig().account;
+       
     }
 
     function testSendUserOpAndApproveUSDC() public {
         bytes32 salt = keccak256("userop-test");
         // Deploy proxy via AccountFactory
-        proxy = accountFactory.createAccount(owner, salt);
+        proxy = accountFactory.createAccount(salt);
         // Prepare approve calldata for USDC
         
         bytes memory functionData = abi.encodeWithSelector(IERC20(usdc).approve.selector, RANDOM_USER, 1e18);
