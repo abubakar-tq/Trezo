@@ -2,23 +2,22 @@
 pragma solidity ^0.8.30;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {PasskeyTypes} from "../modules/Types.sol";
+import {ISmartAccount} from "../interfaces/IAccount.sol";
 
-// Interface for the minimal beacon proxy, requiring an init function
-interface IBeaconProxyMinimal {
-    function init(bytes calldata initCalldata) external;
-}
+
+
 
 /**
  * @title MinimalProxyFactory
- * @dev Deploys minimal proxies (EIP-1167 clones) pointing to a beacon-aware implementation.
+ * @dev Deploys minimal proxies (EIP-1167 clones)
  *      Uses OpenZeppelin's Clones library for deterministic deployments via CREATE2.
  */
 contract MinimalProxyFactory {
     event ProxyDeployed(address indexed proxy, bytes32 salt);
 
-    error InitFailed();
 
-    // Address of the implementation template (BeaconProxyMinimal contract)
+    // Address of the implementation template
     address public immutable implementationTemplate;
 
     /**
@@ -46,7 +45,7 @@ contract MinimalProxyFactory {
 
         // Initializes the proxy
         (bool ok, bytes memory ret) =
-            proxy.call(abi.encodeWithSelector(IBeaconProxyMinimal.init.selector, initCalldata));
+            proxy.call(initCalldata);
         if (!ok) {
             assembly {
                 revert(add(ret, 32), mload(ret))

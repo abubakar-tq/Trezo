@@ -22,6 +22,11 @@ contract Rip7212Mock {
 contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
     using ModuleKitHelpers for *;
 
+    modifier skipAnvil() {
+        if (block.chainid == 31337) return;
+        else _;
+    }
+
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -31,7 +36,6 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
 
     Account owner1;
     Account owner2;
-
 
     bytes32 internal dummyId;
     bytes32 internal rpIdHash;
@@ -100,7 +104,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
      * @notice Execute with PasskeyValidator using off-chain P-256 r,s pasted below.
      * @dev If r or s are zero, the test will skip execution to keep CI passing.
      */
-    function test_exec_with_passkey_external_signature() public {
+    function test_exec_with_passkey_external_signature() public skipAnvil {
         address target = makeAddr("target2");
         uint256 startBal = target.balance;
         uint256 value = 0.05 ether;

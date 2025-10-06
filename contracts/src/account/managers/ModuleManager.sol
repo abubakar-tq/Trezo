@@ -146,6 +146,10 @@ abstract contract ModuleManager {
         IValidator(validator).onInstall(init);
         bool ok = S.validators.add(validator);
         assert(ok);
+        if(S.activeValidator == address(0)) {
+            S.activeValidator = validator;
+            emit ActiveValidatorChanged(address(0), validator);
+        }
         emit ValidatorInstalled(validator);
     }
 

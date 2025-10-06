@@ -5,6 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {EntryPoint} from "lib/account-abstraction/contracts/core/EntryPoint.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
+
 contract HelperConfig is Script {
     error HelperConfig__InvalidChainId();
 
@@ -34,6 +35,14 @@ contract HelperConfig is Script {
     function getConfig() public returns (NetworkConfig memory) {
         return getConfigByChainId(block.chainid);
     }
+
+    constructor() {
+        networkConfigs[ETH_SEPOLIA_CHAIN_ID] = getEthSepoliaNetworkConfig();
+        networkConfigs[ETH_MAINNET_CHAIN_ID] = getEthMainnetConfig();
+        networkConfigs[ZKSYNC_MAINNET_CHAIN_ID] = getZkSyncConfig();
+       
+    }
+
 
     function getConfigByChainId(uint256 chainId) public returns (NetworkConfig memory) {
         if (chainId == LOCAL_CHAIN_ID) {
@@ -66,6 +75,7 @@ contract HelperConfig is Script {
             account: BURNER_WALLET
         });
     }
+   
 
     function getZkSyncSepoliaConfig() public pure returns (NetworkConfig memory) {
         return NetworkConfig({
@@ -99,4 +109,6 @@ contract HelperConfig is Script {
 
         return localNetworkConfig;
     }
+
+    
 }

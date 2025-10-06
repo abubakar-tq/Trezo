@@ -9,6 +9,8 @@ import {AccountStorage} from "./AccountStorage.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ModuleManager} from "src/account/managers/ModuleManager.sol";
+import {PasskeyTypes} from "src/modules/Types.sol";
+import "@ERC7579/src/interfaces/IERC7579Module.sol";
 
 contract SmartAccount is IAccount, ModuleManager {
     using AccountStorage for AccountStorage.Layout;
@@ -18,6 +20,7 @@ contract SmartAccount is IAccount, ModuleManager {
     //////////////////////////////////////////////////////////////*/
     event ModuleInstalled(uint256 moduleTypeId, address module);
     event ModuleUninstalled(uint256 moduleTypeId, address module);
+    event AccountInitialized(address entryPoint, bytes32 passKeyId);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -26,6 +29,8 @@ contract SmartAccount is IAccount, ModuleManager {
     // error MinimalAccount__NotFromEntryPointOrOwner();
     error MinimalAccount__CallFailed(bytes);
     error AlreadyInitialized();
+    error ZeroAddress();
+    error SMARTACCOUNT_INITIALIZATION_FAILED(bytes reason);
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -56,6 +61,12 @@ contract SmartAccount is IAccount, ModuleManager {
      * @dev For receiving the ether
      */
     receive() external payable {}
+
+    constructor() {
+        // Disable initializer on the implementation itself.
+        AccountStorage.Layout storage s = AccountStorage.layout();
+        s.initialized = true;
+    }
 
     /*//////////////////////////////////////////////////////////////
                                 EXTERNAL
@@ -218,11 +229,32 @@ contract SmartAccount is IAccount, ModuleManager {
                             Initializer FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function initialize(address _entryPoint) external {
+    /// @notice Initialize clone with entryPoint, attach passkey validator, and register first passkey
+    /// @param _entryPoint ERC-4337 entry point
+    /// @param validator address of the Passkey validator module for this account
+    /// @param passkey PasskeyInit containing idRaw + (px,py,rpIdHash,signCounterFromAuth)
+    function initialize(address _entryPoint, address validator, PasskeyTypes.PasskeyInit calldata passkey) external {
         AccountStorage.Layout storage s = AccountStorage.layout();
         if (s.initialized) revert AlreadyInitialized();
+        if (_entryPoint == address(0) || validator == address(0)) revert ZeroAddress();
+
+        // 1) set core AA wiring
         s.entryPoint = _entryPoint;
+
+        // 2) install the PasskeyValidator module
+        // Note: this calls the module's onInstall() which registers the initial passkey
+        try this.installModule(MODULE_TYPE_VALIDATOR, validator, abi.encode(passkey)) {
+            // ok
+        } catch (bytes memory reason) {
+            revert SMARTACCOUNT_INITIALIZATION_FAILED(reason);
+        }
+
+        // 4) finalize
         s.initialized = true;
+
+        // emit events for indexers if you have them
+        // emit Initialized(_entryPoint, validator, passkey.idRaw);
+        emit AccountInitialized(_entryPoint, passkey.idRaw);
     }
 
     // a no-op example function just to prove delegatecall works

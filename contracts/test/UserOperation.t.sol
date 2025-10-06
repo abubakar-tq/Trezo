@@ -11,6 +11,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
+import {PassKeyDemo} from "test/utils/PasskeyCred.sol";
 
 contract UserOperationTest is Test {
     AccountFactory accountFactory;
@@ -27,22 +29,23 @@ contract UserOperationTest is Test {
         (
             HelperConfig _helperConfig,
             , // smartAccount
-            , // beacon
-            , // proxy
             , // proxyFactory
-            AccountFactory _accountFactory
+            AccountFactory _accountFactory,
+            PasskeyValidator _passkeyValidator
         ) = deployScript.deployAccount();
         accountFactory = _accountFactory;
         helperConfig = _helperConfig;
         usdc = helperConfig.getConfig().usdc;
         entryPoint = helperConfig.getConfig().entryPoint;
+
+        proxy = accountFactory.createAccount(keccak256("userop-setup"), address(_passkeyValidator), PassKeyDemo.getPasskeyInit(0));
+
        
     }
 
     function testSendUserOpAndApproveUSDC() public {
-        bytes32 salt = keccak256("userop-test");
-        // Deploy proxy via AccountFactory
-        proxy = accountFactory.createAccount(salt);
+   
+        
         // Prepare approve calldata for USDC
         
         bytes memory functionData = abi.encodeWithSelector(IERC20(usdc).approve.selector, RANDOM_USER, 1e18);

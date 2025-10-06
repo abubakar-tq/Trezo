@@ -69,9 +69,9 @@ contract SendPackedUserOp is Script {
         pure
         returns (PackedUserOperation memory)
     {
-        uint128 verificationGasLimit = 16777216;
+        uint128 verificationGasLimit = 36777216;
         uint128 callGasLimit = verificationGasLimit;
-        uint128 maxPriorityFeePerGas = 256;
+        uint128 maxPriorityFeePerGas = 456;
         uint128 maxFeePerGas = maxPriorityFeePerGas;
         return PackedUserOperation({
             sender: sender,

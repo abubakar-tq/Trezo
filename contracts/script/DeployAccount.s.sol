@@ -4,10 +4,9 @@ pragma solidity ^0.8.30;
 import {Script} from "forge-std/Script.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
-import {AccountBeacon} from "src/proxy/AccountBeacon.sol";
+import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
-import {BeaconAwareProxy} from "src/proxy/BeaconAwareProxy.sol";
 
 contract DeployAccount is Script {
     function run()
@@ -15,10 +14,9 @@ contract DeployAccount is Script {
         returns (
             HelperConfig helperConfig,
             SmartAccount smartAccount,
-            AccountBeacon beacon,
-            BeaconAwareProxy proxy,
             MinimalProxyFactory proxyFactory,
-            AccountFactory accountFactory
+            AccountFactory accountFactory,
+            PasskeyValidator passkeyValidator
         )
     {
         return deployAccount();
@@ -29,10 +27,9 @@ contract DeployAccount is Script {
         returns (
             HelperConfig helperConfig,
             SmartAccount smartAccount,
-            AccountBeacon beacon,
-            BeaconAwareProxy proxy,
             MinimalProxyFactory proxyFactory,
-            AccountFactory accountFactory
+            AccountFactory accountFactory,
+            PasskeyValidator passkeyValidator
         )
     {
         helperConfig = new HelperConfig();
@@ -41,16 +38,19 @@ contract DeployAccount is Script {
 
         vm.startBroadcast(networkConfig.account);
 
+        // Deploy implementation (SmartAccount) - do not initialize here
         smartAccount = new SmartAccount();
-        smartAccount.initialize(networkConfig.entryPoint);
 
-        beacon = new AccountBeacon(address(smartAccount));
-        proxy = new BeaconAwareProxy(address(beacon), "");
-        proxyFactory = new MinimalProxyFactory(address(proxy));
-        accountFactory = new AccountFactory(address(beacon), address(proxyFactory), networkConfig.entryPoint);
+        // Deploy proxy factory using proxy template
+        proxyFactory = new MinimalProxyFactory(address(smartAccount));
+
+        // Deploy account factory
+        accountFactory = new AccountFactory(address(proxyFactory), networkConfig.entryPoint);
+
+        passkeyValidator = new PasskeyValidator();
 
         vm.stopBroadcast();
 
-        return (helperConfig, smartAccount, beacon, proxy, proxyFactory, accountFactory);
+        return (helperConfig, smartAccount, proxyFactory, accountFactory, passkeyValidator);
     }
 }

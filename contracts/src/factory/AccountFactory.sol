@@ -1,28 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
+import {HelperConfig} from "script/HelperConfig.s.sol";
+import {IMinimalProxyFactory} from "../interfaces/IMinimalProxyFactory.sol";
+import {PasskeyTypes} from "../modules/Types.sol";
+import {ISmartAccount} from "../interfaces/IAccount.sol";
 
-interface IMinimalProxyFactory {
-    function createProxy(bytes calldata initCalldata, bytes32 salt) external returns (address proxy);
-    function predictProxyAddress(bytes32 salt) external view returns (address predicted);
-}
+
+
 
 contract AccountFactory {
     event AccountCreated(address indexed account,bytes32 salt);
 
-    address public immutable beacon; // AccountBeacon
     address public immutable proxyFactory; // MinimalProxyFactory
     address public immutable entryPoint; // IEntryPoint
 
-    constructor(address _beacon, address _proxyFactory, address _entryPoint) {
-        beacon = _beacon;
+    constructor( address _proxyFactory, address _entryPoint) {
+
         proxyFactory = _proxyFactory;
         entryPoint = _entryPoint;
+        
     }
 
     /// @notice CREATE2-deploy a new wallet proxy 
-    function createAccount(bytes32 salt) external returns (address account) {
+    function createAccount(bytes32 salt,address validator,PasskeyTypes.PasskeyInit calldata passkeyInit) external returns (address account) {
         // init calldata = SmartAccount.initialize( entryPoint)
-        bytes memory initCalldata = abi.encodeWithSignature("initialize(address)", entryPoint);
+        bytes memory initCalldata = abi.encodeWithSelector(ISmartAccount.initialize.selector, entryPoint,validator,passkeyInit);
+
+
         account = IMinimalProxyFactory(proxyFactory).createProxy(initCalldata, salt);
         emit AccountCreated(account, salt);
     }
