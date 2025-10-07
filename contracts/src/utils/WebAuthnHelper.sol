@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.23;
+pragma solidity ^0.8.30;
 
 import { Base64 } from "lib/webauthn-sol/lib/openzeppelin-contracts/contracts/utils/Base64.sol";
 
-/// @title WebAuthnTestUtils
+/// @title WebAuthnHelper
 /// @notice Utilities to build WebAuthn assertion components for testing PasskeyValidator.
-///         These functions help compose authenticatorData, clientDataJSON, indices, message hash,
-///         onInstall data, and to ABI-encode the signature payload expected by the validator.
-library WebAuthnTestUtils {
+library WebAuthnHelper {
     /// @dev Bit flags for WebAuthn authenticatorData[32]
     bytes1 internal constant FLAG_UP = 0x01; // User Present
     bytes1 internal constant FLAG_UV = 0x04; // User Verified
@@ -90,4 +88,3 @@ library WebAuthnTestUtils {
         return type(uint256).max;
     }
 }
-

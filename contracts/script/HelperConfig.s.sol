@@ -69,8 +69,9 @@ contract HelperConfig is Script {
     }
 
     function getEthSepoliaNetworkConfig() public pure returns (NetworkConfig memory) {
+        // Use canonical v0.7+ EntryPoint to match PackedUserOperation
         return NetworkConfig({
-            entryPoint: 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789,
+            entryPoint: 0x0000000071727De22E5E9d8BAf0edAc6f37da032,
             usdc: 0x53844F9577C2334e541Aec7Df7174ECe5dF1fCf0, // Will update with a mock token
             account: BURNER_WALLET
         });

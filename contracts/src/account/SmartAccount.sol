@@ -123,14 +123,7 @@ contract SmartAccount is IAccount, ModuleManager {
      *  - Must be invoked via a self-call after validator-based auth (onlySelf).
      */
     function installModule(uint256 moduleType, address module, bytes calldata init) external onlySelf {
-        // If you import the constants from the reference, do:
-        // if (moduleType == MODULE_TYPE_VALIDATION) { this.installValidator(module, init); }
-        // else if (moduleType == MODULE_TYPE_EXECUTION) { /* this.installExecutor(...) */ }
-        // else if (moduleType == MODULE_TYPE_FALLBACK)  { /* this.installFallback(...) */ }
-        // else { revert("Account: UNKNOWN_MODULE_TYPE"); }
-
-        // For now (validators only):
-        // Accept only the validator type value you use in your SDK (e.g., 1).
+       
         require(moduleType == 1, "Account: ONLY_VALIDATION_SUPPORTED");
         this.installValidator(module, init); // external call => msg.sender becomes address(this) in manager
         emit ModuleInstalled(moduleType, module);

@@ -5,6 +5,9 @@ libs = ["lib"]
 auto_detect_remappings = false
 [lint]
 lint_on_build = false
+gas_limit = "18446744073709551615"
+memory_limit = 2147483648
+verbosity = 3
 
 remappings = [
     # # Project-wide defaults (used by your code and any deps that don't override via context)

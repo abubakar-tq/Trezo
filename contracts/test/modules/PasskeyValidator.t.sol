@@ -7,17 +7,15 @@ import {RhinestoneModuleKit, ModuleKitHelpers, AccountInstance, UserOpData} from
 
 import {MODULE_TYPE_VALIDATOR} from "lib/modulekit/src/accounts/kernel/types/Constants.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
-import {WebAuthnTestUtils} from "test/modules/utils/WebAuthnTestUtils.sol";
+import {WebAuthnHelper} from "src/utils/WebAuthnHelper.sol";
+import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
+import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
+import {HelperConfig} from "script/HelperConfig.s.sol";
+import {PackedUserOperation} from "lib/account-abstraction/contracts/interfaces/PackedUserOperation.sol";
+import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
+import {SmartAccount} from "src/account/SmartAccount.sol";
+import {P256Signer} from "script/P256Signer.s.sol";
 
-// RIP-7212 precompile mock. Returns 1 for any input
-contract Rip7212Mock {
-    fallback() external {
-        assembly {
-            mstore(0x00, 1)
-            return(0x00, 0x20)
-        }
-    }
-}
 
 contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
     using ModuleKitHelpers for *;
@@ -33,6 +31,8 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
 
     PasskeyValidator internal validator;
     AccountInstance internal instance;
+    SendPackedUserOp internal sendUserOp;
+    HelperConfig internal helperConfig;
 
     Account owner1;
     Account owner2;
@@ -42,6 +42,8 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
 
     uint256 internal px;
     uint256 internal py;
+
+    P256Signer internal signer;
 
     function setUp() public {
         init();
@@ -61,15 +63,20 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         // Install PasskeyValidator with a passkey
         // Data encoding expected by onInstall:
         // abi.encode(bytes32 idRaw, uint256 px, uint256 py, bytes32 rpIdHash)
-        dummyId = 0xb976cb58a15d247afc49d3015e7a45b962532a388c5c2d6225ef7ba3bd494b7d;
-        px = uint256(0xc92b6c998c854fcb69cff745bbc83c69cd3e1f3b2904f2cfd7e5a9119ee8eb38);
-        py = uint256(0xd64d667544491335c127c62471c5bbca05d1a3aa9641989f964f7cd26504a45d);
-        rpIdHash = 0x638841ea13dd17405349cb4795e780a1105648d79c51e6671af0a66d7597f945;
+        PassKeyDemo.PasskeyCredential memory passkey = PassKeyDemo.getPasskey(1);
+        dummyId = passkey.init.idRaw;
+        px = passkey.init.px;
+        py = passkey.init.py;
+        rpIdHash = passkey.init.rpIdHash;
         instance.installModule({
             moduleTypeId: MODULE_TYPE_VALIDATOR,
             module: address(validator),
             data: abi.encode(dummyId, px, py, rpIdHash)
         });
+
+        helperConfig = new HelperConfig();
+        sendUserOp = new SendPackedUserOp();
+        signer = new P256Signer();
     }
     /**
      * @notice Build WebAuthn inputs and log the message hash to sign with P-256.
@@ -83,10 +90,10 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         UserOpData memory userOpData =
             instance.getExecOps({target: target, value: value, callData: "", txValidator: address(validator)});
 
-        bytes memory ad = WebAuthnTestUtils.buildAuthenticatorData(rpIdHash, true, 1);
+        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, 1);
         (string memory cjson, uint256 cIdx, uint256 tIdx) =
-            WebAuthnTestUtils.buildClientDataJSONAndIndices(userOpData.userOpHash);
-        bytes32 msgHash = WebAuthnTestUtils.webAuthnMessageHash(ad, cjson);
+            WebAuthnHelper.buildClientDataJSONAndIndices(userOpData.userOpHash);
+        bytes32 msgHash = WebAuthnHelper.webAuthnMessageHash(ad, cjson);
 
         console2.log("Passkey msgHash");
         console2.logBytes32(msgHash);
@@ -104,7 +111,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
      * @notice Execute with PasskeyValidator using off-chain P-256 r,s pasted below.
      * @dev If r or s are zero, the test will skip execution to keep CI passing.
      */
-    function test_exec_with_passkey_external_signature() public skipAnvil {
+    function test_exec_with_passkey_external_signature() public {
         address target = makeAddr("target2");
         uint256 startBal = target.balance;
         uint256 value = 0.05 ether;
@@ -112,21 +119,16 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         UserOpData memory userOpData =
             instance.getExecOps({target: target, value: value, callData: "", txValidator: address(validator)});
 
-        bytes memory ad = WebAuthnTestUtils.buildAuthenticatorData(rpIdHash, true, 1);
+        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, 1);
         (string memory cjson, uint256 cIdx, uint256 tIdx) =
-            WebAuthnTestUtils.buildClientDataJSONAndIndices(userOpData.userOpHash);
-        bytes32 msgHash = WebAuthnTestUtils.webAuthnMessageHash(ad, cjson);
-        console2.log("Passkey msgHash (sign off-chain and paste r,s)");
-        console2.logBytes32(msgHash);
+            WebAuthnHelper.buildClientDataJSONAndIndices(userOpData.userOpHash);
+        bytes32 msgHash = WebAuthnHelper.webAuthnMessageHash(ad, cjson);
 
-        uint256 r = 0x011c9b597a9d140fbb97ed9aa2e2f0239115352e25c5bdcbda9460e61130c172;
-        uint256 s = 0x7030fa31d9589781eb906106c7e62241235d3d3508bb9731b64a9799219c6383;
-        if (r == 0 || s == 0) {
-            console2.log("Skipping execution: provide non-zero r,s to run");
-            return;
-        }
+        // HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
+        (uint256 r, uint256 s) = signer.signDigestWithNonce(msgHash, uint256(PassKeyDemo.getPasskeyPrivateKey(1)), 0);
 
-        bytes memory sig = WebAuthnTestUtils.encodePasskeySignature(dummyId, ad, cjson, cIdx, tIdx, r, s);
+        bytes memory sig = WebAuthnHelper.encodePasskeySignature(dummyId, ad, cjson, cIdx, tIdx, r, s);
+
         userOpData.userOp.signature = sig;
         userOpData.execUserOps();
 

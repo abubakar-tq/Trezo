@@ -29,3 +29,4 @@ forge-std/=lib/forge-std/src/
 solady/=lib/solady/src/
 @webauthn-sol/=lib/webauthn-sol/
 @ERC7579=lib/erc7579-implementation/
+test/=test/

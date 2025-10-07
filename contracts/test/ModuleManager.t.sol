@@ -14,15 +14,14 @@ import {
 import {ModeLib, ModeCode, CallType, CALLTYPE_SINGLE} from "@ERC7579/src/lib/ModeLib.sol";
 import {ExecutionLib} from "@ERC7579/src/lib/ExecutionLib.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
-import {MockTarget} from "test/mocks/ModuleMocks.sol";
-import {WebAuthnTestUtils} from "test/modules/utils/WebAuthnTestUtils.sol";
+import {WebAuthnHelper} from "src/utils/WebAuthnHelper.sol";
 import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {DeployAccount} from "script/DeployAccount.s.sol";
-import {PassKeyDemo} from "test/utils/PasskeyCred.sol";
+import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
 import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 contract ModuleManagerTest is Test {
@@ -34,10 +33,12 @@ contract ModuleManagerTest is Test {
     HelperConfig helperConfig;
 
     PasskeyValidator internal validator;
-    MockTarget internal target;
 
     address internal owner = address(this);
     address internal stranger = makeAddr("stranger");
+
+    bytes32 internal constant PASSKEY1_PRIV_KEY =
+        0xe869435ccce456e66779f607cad397fd79c6f3bb82d846b121121b128c569715;
 
     bytes32 internal dummyId;
     bytes32 internal rpIdHash;
@@ -66,8 +67,8 @@ contract ModuleManagerTest is Test {
         dummyId = 0xb976cb58a15d247afc49d3015e7a45b962532a388c5c2d6225ef7ba3bd494b7d;
     }
 
-    function installPasskey() internal {
-        //Todo: Create PackedUser operation to install the passkey validator which is being signed  in next lines, create a function to create user ops first then use it here
+    function testInstallPasskey() public {
+        
 
         bytes memory functionData = abi.encodeWithSelector(
             SmartAccount.installModule.selector,
@@ -78,33 +79,29 @@ contract ModuleManagerTest is Test {
         bytes memory executeCalldata =
             abi.encodeWithSelector(SmartAccount.execute.selector, proxy, 0, functionData);
 
-        PackedUserOperation memory userOpData = sendUserOp._generateUnsignedUserOperation(
-            executeCalldata, proxy, IEntryPoint(entryPoint).getNonce(proxy, 0)
+        HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
+        SendPackedUserOp.PasskeySignatureData memory passkeyData = sendUserOp.generatePasskeySignatureData(
+            executeCalldata,
+            config,
+            proxy,
+            0
         );
 
-        bytes32 digest = IEntryPoint(entryPoint).getUserOpHash(userOpData);
+        console2.log("Passkey msgHash (reference)");
+        console2.logBytes32(passkeyData.messageHash);
 
-        bytes memory ad = WebAuthnTestUtils.buildAuthenticatorData(rpIdHash, true, 1);
-        (string memory cjson, uint256 cIdx, uint256 tIdx) = WebAuthnTestUtils.buildClientDataJSONAndIndices(digest);
-        bytes32 msgHash = WebAuthnTestUtils.webAuthnMessageHash(ad, cjson);
-        console2.log("Passkey msgHash (sign off-chain and paste r,s)");
-        console2.logBytes32(msgHash);
-
-        uint256 r = 0xb164fbf91459949fd4402e4a6e9db9725783617f553393e754a4af78a2f7cc0a;
-        uint256 s = 0x75c83e6eca6c7ed3d263fcef1440e2ec1cd22edf54d437b6230ddd9d1bd235e1;
-        if (r == 0 || s == 0) {
-            console2.log("Skipping execution: provide non-zero r,s to run");
-            return;
-        }
-
-        bytes memory sig = WebAuthnTestUtils.encodePasskeySignature(dummyId, ad, cjson, cIdx, tIdx, r, s);
-        userOpData.signature = sig;
+        PackedUserOperation memory signedUserOp = sendUserOp.generatePasskeySignedUserOperation(
+            executeCalldata,
+            config,
+            proxy,
+            0,
+            1,
+            true,
+            PassKeyDemo.getPasskeyPrivateKey(0)
+        );
 
         PackedUserOperation[] memory ops = new PackedUserOperation[](1);
-        ops[0] = userOpData;
-
-        console2.log("Proxy EntryPoint: ", SmartAccount(payable(proxy)).getEntryPoint());
-        console2.log("Config EntryPoint: ", entryPoint);
+        ops[0] = signedUserOp;
 
 
         vm.deal(payable(proxy), 2 ether);
@@ -116,7 +113,8 @@ contract ModuleManagerTest is Test {
     }
 
     function testInstallValidatorAndValidateUserOp() public {
-        installPasskey();
+
+        testInstallPasskey();
 
         // Validate that the validator module is installed
         address module = SmartAccount(payable(proxy)).activeValidator();
@@ -132,9 +130,9 @@ contract ModuleManagerTest is Test {
 
         // bytes32 digest = IEntryPoint(helperConfig.getConfig().entryPoint).getUserOpHash(userOp);
 
-        // bytes memory ad = WebAuthnTestUtils.buildAuthenticatorData(rpIdHash, true, 1);
-        // (string memory cjson, uint256 cIdx, uint256 tIdx) = WebAuthnTestUtils.buildClientDataJSONAndIndices(digest);
-        // bytes32 msgHash = WebAuthnTestUtils.webAuthnMessageHash(ad, cjson);
+        // bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, 1);
+        // (string memory cjson, uint256 cIdx, uint256 tIdx) = WebAuthnHelper.buildClientDataJSONAndIndices(digest);
+        // bytes32 msgHash = WebAuthnHelper.webAuthnMessageHash(ad, cjson);
         // console2.log("Passkey msgHash (sign off-chain and paste r,s)");
         // console2.logBytes32(msgHash);
 
@@ -145,7 +143,7 @@ contract ModuleManagerTest is Test {
         //     return;
         // }
 
-        // bytes memory sig = WebAuthnTestUtils.encodePasskeySignature(dummyId, ad, cjson, cIdx, tIdx, r, s);
+        // bytes memory sig = WebAuthnHelper.encodePasskeySignature(dummyId, ad, cjson, cIdx, tIdx, r, s);
         // userOp.signature = sig;
         // PackedUserOperation[] memory ops = new PackedUserOperation[](1);
         // ops[0] = userOp;

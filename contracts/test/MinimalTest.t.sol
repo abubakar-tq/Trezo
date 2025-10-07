@@ -8,7 +8,10 @@ import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
-import {PassKeyDemo} from "test/utils/PasskeyCred.sol";
+import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
+import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
+import {PackedUserOperation} from "lib/account-abstraction/contracts/interfaces/PackedUserOperation.sol";
+import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
 contract MinimalTest is Test {
 
     SmartAccount implementation;
@@ -17,6 +20,7 @@ contract MinimalTest is Test {
     AccountFactory accountFactory;
     HelperConfig helperConfig;
     PasskeyValidator passkeyValidator;
+    SendPackedUserOp sendUserOp;
 
     function setUp() public {
         DeployAccount deployer = new DeployAccount();
@@ -24,6 +28,7 @@ contract MinimalTest is Test {
 
 
         proxy = accountFactory.createAccount(keccak256("user1"), address(passkeyValidator), PassKeyDemo.getPasskeyInit(0));
+        sendUserOp = new SendPackedUserOp();
         
         console2.log("Setup complete");
     }
@@ -39,36 +44,39 @@ contract MinimalTest is Test {
         assert(who != bytes32(0));
     }
 
-    // /**
-    //  * @notice Execute with PasskeyValidator using off-chain P-256 r,s pasted below.
-    //  * @dev If r or s are zero, the test will skip execution to keep CI passing.
-    //  */
-    // function testTransferWithPassKey() public {
-    //     address target = makeAddr("target2");
-    //     uint256 startBal = target.balance;
-    //     uint256 value = 0.05 ether;
+    
+    function testTransferWithPassKey() public {
+        HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
 
-    //     UserOpData memory userOpData =
-    //         instance.getExecOps({target: target, value: value, callData: "", txValidator: address(validator)});
+        address target = makeAddr("target2");
+        uint256 value = 0.05 ether;
 
-    //     bytes memory ad = WebAuthnTestUtils.buildAuthenticatorData(rpIdHash, true, 1);
-    //     (string memory cjson, uint256 cIdx, uint256 tIdx) =
-    //         WebAuthnTestUtils.buildClientDataJSONAndIndices(userOpData.userOpHash);
-    //     bytes32 msgHash = WebAuthnTestUtils.webAuthnMessageHash(ad, cjson);
-    //     console2.log("Passkey msgHash (sign off-chain and paste r,s)");
-    //     console2.logBytes32(msgHash);
+        bytes memory functionData = "";
+        bytes memory callData = abi.encodeWithSelector(
+            SmartAccount.execute.selector,
+            target,
+            value,
+            functionData
+        );
 
-    //     uint256 r = 0x011c9b597a9d140fbb97ed9aa2e2f0239115352e25c5bdcbda9460e61130c172;
-    //     uint256 s = 0x7030fa31d9589781eb906106c7e62241235d3d3508bb9731b64a9799219c6383;
-    //     if (r == 0 || s == 0) {
-    //         console2.log("Skipping execution: provide non-zero r,s to run");
-    //         return;
-    //     }
+        PackedUserOperation memory userOp = sendUserOp.generatePasskeySignedUserOperation(
+            callData,
+            config,
+            proxy,
+            0
+        );
 
-    //     bytes memory sig = WebAuthnTestUtils.encodePasskeySignature(dummyId, ad, cjson, cIdx, tIdx, r, s);
-    //     userOpData.userOp.signature = sig;
-    //     userOpData.execUserOps();
+        PackedUserOperation[] memory ops = new PackedUserOperation[](1);
+        ops[0] = userOp;
 
-    //     assertEq(target.balance, startBal + value, "target2 should receive value");
-    // }
+        vm.deal(proxy, 1 ether);
+
+        address bundler = makeAddr("bundler");
+        vm.deal(bundler, 1 ether);
+        vm.startPrank(bundler);
+        IEntryPoint(config.entryPoint).handleOps(ops, payable(bundler));
+        vm.stopPrank();
+
+        assertEq(target.balance, value, "target should receive transferred value");
+    }
 }
