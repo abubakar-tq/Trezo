@@ -2,13 +2,20 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+auto_detect_remappings = false
 [lint]
 lint_on_build = false
+gas_limit = "18446744073709551615"
+memory_limit = 2147483648
+verbosity = 3
 
 remappings = [
-    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
-    "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
-    "@account-abstraction/contracts/=lib/account-abstraction/contracts/",
+    # # Project-wide defaults (used by your code and any deps that don't override via context)
+    # "@openzeppelin/=lib/openzeppelin-contracts/",
+    # "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    # "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+    # "@account-abstraction/=lib/account-abstraction/",
+    # "@account-abstraction/contracts/=lib/account-abstraction/contracts/",
 ]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

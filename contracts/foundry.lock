@@ -1,8 +1,29 @@
 {
+  "contracts/lib/foundry-devops": {
+    "rev": "efff097a87e70c3d15661c9f2a2daeae0b33d5d5"
+  },
   "lib/account-abstraction": {
     "tag": {
       "name": "v0.8.0",
       "rev": "4cbc06072cdc19fd60f285c5997f4f7f57a588de"
+    }
+  },
+  "lib/erc7579-implementation": {
+    "tag": {
+      "name": "v0.0.2",
+      "rev": "0f321b8544cea7ad3be1b5669c7998329636ef84"
+    }
+  },
+  "lib/foundry-devops": {
+    "tag": {
+      "name": "0.4.0",
+      "rev": "efff097a87e70c3d15661c9f2a2daeae0b33d5d5"
+    }
+  },
+  "lib/modulekit": {
+    "tag": {
+      "name": "v0.5.9",
+      "rev": "b696ccbe1b16a55d8b1a1de192309500af0fae5e"
     }
   },
   "lib/openzeppelin-contracts": {
@@ -16,5 +37,8 @@
       "name": "v5.4.0",
       "rev": "e725abddf1e01cf05ace496e950fc8e243cc7cab"
     }
+  },
+  "lib/webauthn-sol": {
+    "rev": "619f20ab0f074fef41066ee4ab24849a913263b2"
   }
 }
