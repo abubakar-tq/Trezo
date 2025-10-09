@@ -9,7 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {DevOpsTools} from "lib/foundry-devops/src/DevOpsTools.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
-import {PasskeyTypes} from "src/modules/Types.sol";
+import {PasskeyTypes} from "src/common/Types.sol";
 import {WebAuthnHelper} from "src/utils/WebAuthnHelper.sol";
 import {FCL_ecdsa_utils} from "lib/webauthn-sol/lib/FreshCryptoLib/solidity/src/FCL_ecdsa_utils.sol";
 import {FCL_Elliptic_ZZ} from "lib/webauthn-sol/lib/FreshCryptoLib/solidity/src/FCL_elliptic.sol";

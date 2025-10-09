@@ -9,7 +9,7 @@ import {AccountStorage} from "./AccountStorage.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ModuleManager} from "src/account/managers/ModuleManager.sol";
-import {PasskeyTypes} from "src/modules/Types.sol";
+import {PasskeyTypes} from "src/common/Types.sol";
 import "@ERC7579/src/interfaces/IERC7579Module.sol";
 
 contract SmartAccount is IAccount, ModuleManager {

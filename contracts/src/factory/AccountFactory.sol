@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {IMinimalProxyFactory} from "../interfaces/IMinimalProxyFactory.sol";
-import {PasskeyTypes} from "../modules/Types.sol";
+import {PasskeyTypes} from "../common/Types.sol";
 import {ISmartAccount} from "../interfaces/IAccount.sol";
 
 

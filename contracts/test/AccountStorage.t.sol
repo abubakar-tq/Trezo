@@ -8,7 +8,7 @@ import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
-import {PasskeyTypes} from "src/modules/Types.sol";
+import {PasskeyTypes} from "src/common/Types.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 
 contract AccountStorageTest is Test {

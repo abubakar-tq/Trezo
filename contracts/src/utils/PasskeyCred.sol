@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {PasskeyTypes} from "src/modules/Types.sol";
+import {PasskeyTypes} from "src/common/Types.sol";
 
 /// @notice Helper library providing passkey fixtures used in tests and scripts.
 /// @dev Fixture #0 leaves the private key empty; fixture #1 includes a deterministic

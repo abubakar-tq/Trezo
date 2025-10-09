@@ -11,7 +11,6 @@ import {WebAuthnHelper} from "src/utils/WebAuthnHelper.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
 import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
-import {PackedUserOperation} from "lib/account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {P256Signer} from "script/P256Signer.s.sol";
@@ -42,6 +41,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
 
     uint256 internal px;
     uint256 internal py;
+    uint256 internal passkeyPrivateKey;
 
     P256Signer internal signer;
 
@@ -68,6 +68,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         px = passkey.init.px;
         py = passkey.init.py;
         rpIdHash = passkey.init.rpIdHash;
+        passkeyPrivateKey = uint256(passkey.privateKey);
         instance.installModule({
             moduleTypeId: MODULE_TYPE_VALIDATOR,
             module: address(validator),
@@ -133,5 +134,345 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         userOpData.execUserOps();
 
         assertEq(target.balance, startBal + value, "target2 should receive value");
+    }
+
+    struct SignatureComponents {
+        bytes authenticatorData;
+        string clientDataJSON;
+        uint256 challengeIndex;
+        uint256 typeIndex;
+        uint256 r;
+        uint256 s;
+    }
+
+    function test_is_initialized_and_counts_passkeys() public view {
+        // Arrange
+        address account = instance.account;
+
+        // Act
+        bool initialized = validator.isInitialized(account);
+        uint256 count = validator.passkeyCount(account);
+
+        // Assert
+        assertTrue(initialized, "validator should be initialized after install");
+        assertEq(count, 1, "exactly one passkey expected after install");
+    }
+
+    function test_add_passkey_allows_multiple_keys() public {
+        // Arrange
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+
+        // Act
+        vm.expectEmit(true, true, false, false);
+        emit PasskeyValidator.PasskeyAdded(instance.account, additional.init.idRaw);
+        vm.prank(instance.account);
+        validator.addPasskey(
+            instance.account,
+            PasskeyValidator.PasskeyId.wrap(additional.init.idRaw),
+            additional.init.px,
+            additional.init.py,
+            additional.init.rpIdHash
+        );
+
+        uint256 count = validator.passkeyCount(instance.account);
+
+        // Assert
+        assertEq(count, 2, "adding a second passkey should increase count");
+    }
+
+    function test_add_passkey_reverts_on_duplicate_id() public {
+        // Arrange
+        PassKeyDemo.PasskeyCredential memory existing = PassKeyDemo.getPasskey(1);
+
+        // Act
+        vm.expectRevert("exists");
+        vm.prank(instance.account);
+        validator.addPasskey(
+            instance.account,
+            PasskeyValidator.PasskeyId.wrap(existing.init.idRaw),
+            existing.init.px,
+            existing.init.py,
+            existing.init.rpIdHash
+        );
+    }
+
+    function test_remove_passkey_emits_event_and_decrements_count() public {
+        // Arrange
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(
+            instance.account,
+            PasskeyValidator.PasskeyId.wrap(additional.init.idRaw),
+            additional.init.px,
+            additional.init.py,
+            additional.init.rpIdHash
+        );
+
+        // Act
+        vm.expectEmit(true, true, false, false);
+        emit PasskeyValidator.PasskeyRemoved(instance.account, additional.init.idRaw);
+        vm.prank(instance.account);
+        validator.removePasskey(
+            instance.account, PasskeyValidator.PasskeyId.wrap(additional.init.idRaw)
+        );
+
+        uint256 count = validator.passkeyCount(instance.account);
+
+        // Assert
+        assertEq(count, 1, "removing extra passkey should restore count");
+    }
+
+    function test_remove_passkey_reverts_when_missing() public {
+        // Arrange
+        bytes32 missingId = keccak256("missing-passkey");
+
+        // Act
+        vm.expectRevert("no such key");
+        vm.prank(instance.account);
+        validator.removePasskey(
+            instance.account, PasskeyValidator.PasskeyId.wrap(missingId)
+        );
+    }
+
+    function test_validate_user_op_succeeds_and_blocks_replay() public {
+        // Arrange
+        (UserOpData memory userOpData, bytes memory signature,) = _prepareUserOpSignature(1);
+        userOpData.userOp.signature = signature;
+
+        // Act
+        uint256 result = _callValidateUserOp(userOpData);
+
+        // Assert
+        uint256 expected = uint256(type(uint48).max) << 160;
+        assertEq(
+            result,
+            expected,
+            "successful validation should yield open validity"
+        );
+
+        // Act
+        uint256 replay = _callValidateUserOp(userOpData);
+
+        // Assert
+        assertEq(
+            replay,
+            1,
+            "replayed signature counter should fail validation"
+        );
+    }
+
+    function test_validate_user_op_fails_for_unknown_passkey() public {
+        // Arrange
+        (UserOpData memory userOpData,, SignatureComponents memory components) = _prepareUserOpSignature(1);
+        bytes memory forgedSignature = WebAuthnHelper.encodePasskeySignature(
+            bytes32(uint256(111)),
+            components.authenticatorData,
+            components.clientDataJSON,
+            components.challengeIndex,
+            components.typeIndex,
+            components.r,
+            components.s
+        );
+        userOpData.userOp.signature = forgedSignature;
+
+        // Act
+        uint256 result = _callValidateUserOp(userOpData);
+
+        // Assert
+        assertEq(
+            result,
+            1,
+            "unregistered passkey should flag sig failure"
+        );
+    }
+
+    function test_validate_user_op_rejects_wrong_rp_id_hash() public {
+        // Arrange
+        (UserOpData memory userOpData,, SignatureComponents memory components) = _prepareUserOpSignature(1);
+        bytes memory wrongAd = abi.encodePacked(
+            bytes32(uint256(999)),
+            components.authenticatorData[32],
+            components.authenticatorData[33],
+            components.authenticatorData[34],
+            components.authenticatorData[35],
+            components.authenticatorData[36]
+        );
+        bytes memory signature = WebAuthnHelper.encodePasskeySignature(
+            dummyId,
+            wrongAd,
+            components.clientDataJSON,
+            components.challengeIndex,
+            components.typeIndex,
+            components.r,
+            components.s
+        );
+        userOpData.userOp.signature = signature;
+
+        // Act
+        uint256 result = _callValidateUserOp(userOpData);
+
+        // Assert
+        assertEq(
+            result,
+            1,
+            "rpId mismatch should result in sig failure"
+        );
+    }
+
+    function test_is_valid_signature_with_sender_checks_counter_progression() public {
+        // Arrange
+        (UserOpData memory userOpData, bytes memory opSignature,) = _prepareUserOpSignature(1);
+        userOpData.userOp.signature = opSignature;
+        _callValidateUserOp(userOpData);
+
+        bytes32 messageHash = keccak256("1271-message");
+        SignatureComponents memory freshComponents = _buildSignatureComponents(messageHash, 2);
+        bytes memory freshSignature = WebAuthnHelper.encodePasskeySignature(
+            dummyId,
+            freshComponents.authenticatorData,
+            freshComponents.clientDataJSON,
+            freshComponents.challengeIndex,
+            freshComponents.typeIndex,
+            freshComponents.r,
+            freshComponents.s
+        );
+
+        // Act
+        bytes4 success = validator.isValidSignatureWithSender(
+            instance.account,
+            messageHash,
+            freshSignature
+        );
+
+        // Assert
+        assertEq(
+            uint32(success),
+            uint32(0x1626ba7e),
+            "fresh counter must satisfy ERC-1271 check"
+        );
+
+        SignatureComponents memory staleComponents = _buildSignatureComponents(messageHash, 1);
+        bytes memory staleSignature = WebAuthnHelper.encodePasskeySignature(
+            dummyId,
+            staleComponents.authenticatorData,
+            staleComponents.clientDataJSON,
+            staleComponents.challengeIndex,
+            staleComponents.typeIndex,
+            staleComponents.r,
+            staleComponents.s
+        );
+
+        // Act
+        bytes4 failure = validator.isValidSignatureWithSender(
+            instance.account,
+            messageHash,
+            staleSignature
+        );
+
+        // Assert
+        assertEq(
+            uint32(failure),
+            uint32(0xffffffff),
+            "stale counter should fail ERC-1271 check"
+        );
+    }
+
+    function test_validate_signature_with_data_enforces_sender_and_counter() public {
+        // Arrange
+        bytes32 messageHash = keccak256("validate-data");
+        SignatureComponents memory signatureComponents = _buildSignatureComponents(messageHash, 1);
+        bytes memory signature = WebAuthnHelper.encodePasskeySignature(
+            dummyId,
+            signatureComponents.authenticatorData,
+            signatureComponents.clientDataJSON,
+            signatureComponents.challengeIndex,
+            signatureComponents.typeIndex,
+            signatureComponents.r,
+            signatureComponents.s
+        );
+
+        // Act
+        bool ok = validator.validateSignatureWithData(
+            messageHash,
+            signature,
+            abi.encode(instance.account)
+        );
+
+        // Assert
+        assertTrue(ok, "matching sender and fresh counter should validate");
+
+        bool wrongSender = validator.validateSignatureWithData(
+            messageHash,
+            signature,
+            abi.encode(makeAddr("wrongSender"))
+        );
+        assertFalse(wrongSender, "incorrect sender context must fail");
+
+        // Arrange
+        (UserOpData memory userOpData, bytes memory opSignature,) = _prepareUserOpSignature(1);
+        userOpData.userOp.signature = opSignature;
+        _callValidateUserOp(userOpData);
+
+        // Act
+        bool stale = validator.validateSignatureWithData(
+            messageHash,
+            signature,
+            abi.encode(instance.account)
+        );
+
+        // Assert
+        assertFalse(stale, "stale counter should fail after stateful validation");
+    }
+
+    function _prepareUserOpSignature(uint32 counter)
+        internal
+        returns (UserOpData memory, bytes memory, SignatureComponents memory)
+    {
+        address target = makeAddr("userOpTarget");
+        UserOpData memory userOpData = instance.getExecOps({
+            target: target,
+            value: 0,
+            callData: "",
+            txValidator: address(validator)
+        });
+
+        SignatureComponents memory components = _buildSignatureComponents(userOpData.userOpHash, counter);
+        bytes memory signature = WebAuthnHelper.encodePasskeySignature(
+            dummyId,
+            components.authenticatorData,
+            components.clientDataJSON,
+            components.challengeIndex,
+            components.typeIndex,
+            components.r,
+            components.s
+        );
+
+        return (userOpData, signature, components);
+    }
+
+    function _buildSignatureComponents(bytes32 challenge, uint32 counter)
+        internal
+        view
+        returns (SignatureComponents memory components)
+    {
+        components.authenticatorData = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, counter);
+        (components.clientDataJSON, components.challengeIndex, components.typeIndex) =
+            WebAuthnHelper.buildClientDataJSONAndIndices(challenge);
+
+        bytes32 msgHash =
+            WebAuthnHelper.webAuthnMessageHash(components.authenticatorData, components.clientDataJSON);
+        (components.r, components.s) = signer.signDigestWithNonce(msgHash, passkeyPrivateKey, 0);
+    }
+
+    function _callValidateUserOp(UserOpData memory userOpData) internal returns (uint256) {
+        (bool success, bytes memory ret) = address(validator).call(
+            abi.encodeWithSelector(
+                PasskeyValidator.validateUserOp.selector,
+                userOpData.userOp,
+                userOpData.userOpHash
+            )
+        );
+        assertTrue(success, "validateUserOp call failed");
+        return abi.decode(ret, (uint256));
     }
 }
