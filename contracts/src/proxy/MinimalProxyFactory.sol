@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {PasskeyTypes} from "../common/Types.sol";
-import {ISmartAccount} from "../interfaces/IAccount.sol";
+import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
 
-
-
+// Interface for the minimal beacon proxy, requiring an init function
+interface IBeaconProxyMinimal {
+    function init(bytes calldata initCalldata) external;
+}
 
 /**
  * @title MinimalProxyFactory
- * @dev Deploys minimal proxies (EIP-1167 clones)
+ * @dev Deploys minimal proxies (EIP-1167 clones) pointing to a beacon-aware implementation.
  *      Uses OpenZeppelin's Clones library for deterministic deployments via CREATE2.
  */
 contract MinimalProxyFactory {
     event ProxyDeployed(address indexed proxy, bytes32 salt);
 
+    error InitFailed();
 
-    // Address of the implementation template
+    // Address of the implementation template (BeaconProxyMinimal contract)
     address public immutable implementationTemplate;
 
     /**
@@ -30,7 +31,7 @@ contract MinimalProxyFactory {
 
     /**
      * @notice Deploys a minimal proxy using CREATE2 and initializes it.
-     * @param initCalldata Initialization data for the proxy (e.g., entryPoint, modules).
+     * @param initCalldata Initialization data for the proxy (e.g., owner, modules).
      * @param salt Unique value to ensure deterministic address.
      * @return proxy Address of the deployed proxy.
      *
@@ -43,14 +44,9 @@ contract MinimalProxyFactory {
         proxy = Clones.cloneDeterministic(implementationTemplate, salt);
         emit ProxyDeployed(proxy, salt);
 
-        // Initializes the proxy
-        (bool ok, bytes memory ret) =
-            proxy.call(initCalldata);
-        if (!ok) {
-            assembly {
-                revert(add(ret, 32), mload(ret))
-            }
-        }
+        // Initializes the proxy 
+        (bool ok, bytes memory ret) = proxy.call(abi.encodeWithSelector(IBeaconProxyMinimal.init.selector, initCalldata));
+        if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
     }
 
     /**
