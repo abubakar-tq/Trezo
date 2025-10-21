@@ -156,6 +156,16 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         return keccak256(abi.encode(wallet, _hashPasskeyInit(newPassKey)));
     }
 
+    function getRecoveryDigest(address wallet, uint256 nonce, PasskeyTypes.PasskeyInit calldata newPassKey)
+        external
+        view
+        returns (bytes32)
+    {
+        return _hashTypedDataV4(
+            keccak256(abi.encode(_TYPE_HASH_SOCIAL_RECOVERY, wallet, nonce, _hashPasskeyInit(newPassKey)))
+        );
+    }
+
     /*//////////////////////////////////////////////////////////////
                                VALIDATION
     //////////////////////////////////////////////////////////////*/
@@ -178,10 +188,7 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
             address guardian = details.guardians[sig.index];
 
             if (sig.kind == SigKind.EOA_ECDSA) {
-                if (sig.sig.length != 65) {
-                    revert SocialRecovery_InvalidEOASignatureLength(sig.sig.length);
-                }
-                (uint8 v, bytes32 r, bytes32 s) = abi.decode(sig.sig, (uint8, bytes32, bytes32));
+                (uint8 v, bytes32 r, bytes32 s) = _parseEOASignature(sig.sig);
                 address recovered = ecrecover(digest, v, r, s);
                 if (recovered != guardian) {
                     return false;
@@ -359,6 +366,20 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
 
     function _hashPasskeyInit(PasskeyTypes.PasskeyInit calldata passkey) internal pure returns (bytes32) {
         return keccak256(abi.encode(_TYPE_HASH_PASSKEY_INIT, passkey.idRaw, passkey.px, passkey.py, passkey.rpIdHash));
+    }
+
+    function _parseEOASignature(bytes memory signature) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
+        if (signature.length != 65) {
+            revert SocialRecovery_InvalidEOASignatureLength(signature.length);
+        }
+        assembly {
+            r := mload(add(signature, 0x20))
+            s := mload(add(signature, 0x40))
+            v := byte(0, mload(add(signature, 0x60)))
+        }
+        if (v < 27) {
+            v += 27;
+        }
     }
 
     function _currentOperationState(RecoveryDetails storage details) internal view returns (OperationState) {
