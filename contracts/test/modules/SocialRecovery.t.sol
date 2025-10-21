@@ -6,6 +6,26 @@ import {SocialRecovery, ISocialRecoveryAccount} from "src/modules/SocialRecovery
 import {ISocialRecovery} from "src/modules/SocialRecovery/interfaces/ISocialRecovery.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
 
+contract MockERC1271Guardian {
+    bytes4 internal constant MAGIC = 0x1626ba7e;
+    mapping(bytes32 => bool) internal approvals;
+
+    function setSignature(bytes32 digest, bytes calldata signature, bool approved) external {
+        approvals[_key(digest, signature)] = approved;
+    }
+
+    function isValidSignature(bytes32 digest, bytes calldata signature) external view returns (bytes4) {
+        if (approvals[_key(digest, signature)]) {
+            return MAGIC;
+        }
+        return 0xffffffff;
+    }
+
+    function _key(bytes32 digest, bytes calldata signature) private pure returns (bytes32) {
+        return keccak256(abi.encodePacked(digest, keccak256(signature)));
+    }
+}
+
 contract MockSocialRecoveryAccount is ISocialRecoveryAccount {
     mapping(address => bool) private _recoveryModules;
     PasskeyTypes.PasskeyInit private _lastPasskey;
@@ -71,6 +91,48 @@ contract SocialRecoveryTest is Test {
 
         vm.expectRevert(SocialRecovery.SocialRecovery_ModuleNotAuthorized.selector);
         recovery.scheduleRecovery(address(account), newPassKey, sigs);
+    }
+
+    function testScheduleWithERC1271Guardian() public {
+        SocialRecovery newRecovery = new SocialRecovery();
+        MockSocialRecoveryAccount newAccount = new MockSocialRecoveryAccount();
+        MockERC1271Guardian contractGuardian = new MockERC1271Guardian();
+
+        address[] memory guardians = new address[](2);
+        guardians[0] = guardian1;
+        guardians[1] = address(contractGuardian);
+
+        vm.prank(address(newAccount));
+        newRecovery.onInstall(abi.encode(guardians, uint256(2)));
+        newAccount.setRecoveryModule(address(newRecovery), true);
+
+        PasskeyTypes.PasskeyInit memory passkey = _makePasskey("seed-erc1271");
+        bytes32 digest = newRecovery.getRecoveryDigest(address(newAccount), 0, passkey);
+
+        bytes memory contractSig = bytes("contract-approval");
+        contractGuardian.setSignature(digest, contractSig, true);
+
+        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(guardianKey1, digest);
+
+        ISocialRecovery.GuardianSig[] memory sigs = new ISocialRecovery.GuardianSig[](2);
+        sigs[0] = ISocialRecovery.GuardianSig({
+            index: 0,
+            kind: ISocialRecovery.SigKind.EOA_ECDSA,
+            sig: _packSignature(v1, r1, s1)
+        });
+        sigs[1] = ISocialRecovery.GuardianSig({
+            index: 1,
+            kind: ISocialRecovery.SigKind.ERC1271,
+            sig: contractSig
+        });
+
+        vm.prank(guardian1);
+        newRecovery.scheduleRecovery(address(newAccount), passkey, sigs);
+
+        vm.warp(block.timestamp + TIME_LOCK + 1);
+        newRecovery.executeRecovery(address(newAccount), passkey);
+
+        assertEq(newAccount.passkeyAddCount(), 1, "contract guardian recovery failed");
     }
 
     function testScheduleRevertsWhenThresholdNotMet() public {
