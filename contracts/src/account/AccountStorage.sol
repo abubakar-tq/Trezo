@@ -15,9 +15,10 @@ library AccountStorage {
     struct Layout {
         address entryPoint;
         bool initialized;
-    
+        mapping(address => bool) recoveryModules;
+
         // --- reserve room for future vars to avoid shifting storage ---
-        uint256[50] __gap;
+        uint256[49] __gap;
     }
 
     function layout() internal pure returns (Layout storage s) {

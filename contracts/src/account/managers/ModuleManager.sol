@@ -77,8 +77,7 @@ abstract contract ModuleManager {
         // ---- VALIDATORS (live in v1) ----
         AddressSetLib.Set validators; // installed validator modules
         address activeValidator; // singleton active validator
-        // ---- EXECUTORS (append later) ----
-        // AddressSetLib.Set executors;
+        AddressSetLib.Set executors; // installed executor modules
         // mapping(address => bool) executorMayDelegatecall;
 
         // ---- FALLBACKS (append later) ----
@@ -86,7 +85,7 @@ abstract contract ModuleManager {
         // address activeFallback;
 
         // Reserved gap for future variables
-        uint256[48] __gap;
+        uint256[47] __gap;
     }
 
     function _layout() private pure returns (Layout storage s) {
@@ -108,6 +107,12 @@ abstract contract ModuleManager {
 
     /// @notice Emitted when the active validator pointer updates.
     event ActiveValidatorChanged(address indexed previous, address indexed current);
+
+    /// @notice Emitted when an executor is installed.
+    event ExecutorInstalled(address indexed executor);
+
+    /// @notice Emitted when an executor is uninstalled.
+    event ExecutorUninstalled(address indexed executor);
 
    
 
@@ -182,6 +187,37 @@ abstract contract ModuleManager {
         emit ActiveValidatorChanged(prev, validator);
     }
 
+    /**
+     * @notice Install an executor module.
+     * @param executor Executor module address.
+     * @param init ABI-encoded initializer forwarded to executor.onInstall.
+     */
+    function installExecutor(address executor, bytes calldata init) external onlyAccount {
+        Layout storage S = _layout();
+        require(executor != address(0), "MM: ZERO_ADDR");
+        require(!S.executors.contains(executor), "MM: EXECUTOR_EXISTS");
+
+        IExecutor(executor).onInstall(init);
+        bool ok = S.executors.add(executor);
+        assert(ok);
+        emit ExecutorInstalled(executor);
+    }
+
+    /**
+     * @notice Uninstall an executor module.
+     * @param executor Installed executor address.
+     * @param data ABI-encoded data forwarded to executor.onUninstall.
+     */
+    function uninstallExecutor(address executor, bytes calldata data) external onlyAccount {
+        Layout storage S = _layout();
+        require(S.executors.contains(executor), "MM: EXECUTOR_NOT_INSTALLED");
+
+        IExecutor(executor).onUninstall(data);
+        bool ok = S.executors.remove(executor);
+        assert(ok);
+        emit ExecutorUninstalled(executor);
+    }
+
     // ---------------------------------------------------------------------
     // Views & routing helpers (Account calls these)
     // ---------------------------------------------------------------------
@@ -199,6 +235,11 @@ abstract contract ModuleManager {
     /// @notice True if a validator is installed.
     function isValidatorInstalled(address validator) public view returns (bool) {
         return _layout().validators.contains(validator);
+    }
+
+    /// @notice True if an executor is installed.
+    function isExecutorInstalled(address executor) public view returns (bool) {
+        return _layout().executors.contains(executor);
     }
 
     /**

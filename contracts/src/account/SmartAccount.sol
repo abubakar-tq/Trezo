@@ -12,8 +12,15 @@ import {ModuleManager} from "src/account/managers/ModuleManager.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
 import "@ERC7579/src/interfaces/IERC7579Module.sol";
 
+interface IPasskeyValidator {
+    function addPasskey(bytes32 idRaw, uint256 px, uint256 py, bytes32 rpIdHash) external;
+}
+
 contract SmartAccount is IAccount, ModuleManager {
     using AccountStorage for AccountStorage.Layout;
+
+    uint256 internal constant TYPE_VALIDATOR = MODULE_TYPE_VALIDATOR;
+    uint256 internal constant TYPE_EXECUTOR = MODULE_TYPE_EXECUTOR;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -21,6 +28,8 @@ contract SmartAccount is IAccount, ModuleManager {
     event ModuleInstalled(uint256 moduleTypeId, address module);
     event ModuleUninstalled(uint256 moduleTypeId, address module);
     event AccountInitialized(address entryPoint, bytes32 passKeyId);
+    event RecoveryModuleUpdated(address indexed module, bool enabled);
+    event PasskeyAddedViaRecovery(bytes32 indexed passkeyId);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -31,6 +40,7 @@ contract SmartAccount is IAccount, ModuleManager {
     error AlreadyInitialized();
     error ZeroAddress();
     error SMARTACCOUNT_INITIALIZATION_FAILED(bytes reason);
+    error UnauthorizedRecoveryModule(address caller);
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -123,9 +133,14 @@ contract SmartAccount is IAccount, ModuleManager {
      *  - Must be invoked via a self-call after validator-based auth (onlySelf).
      */
     function installModule(uint256 moduleType, address module, bytes calldata init) external onlySelf {
-       
-        require(moduleType == 1, "Account: ONLY_VALIDATION_SUPPORTED");
-        this.installValidator(module, init); // external call => msg.sender becomes address(this) in manager
+        if (moduleType == TYPE_VALIDATOR) {
+            this.installValidator(module, init); // external call => msg.sender becomes address(this) in manager
+        } else if (moduleType == TYPE_EXECUTOR) {
+            this.installExecutor(module, init);
+            this.updateRecoveryModule(module, true);
+        } else {
+            revert("Account: MODULE_TYPE_UNSUPPORTED");
+        }
         emit ModuleInstalled(moduleType, module);
     }
 
@@ -136,8 +151,14 @@ contract SmartAccount is IAccount, ModuleManager {
      * @param data       ABI-encoded data for module.onUninstall.
      */
     function uninstallModule(uint256 moduleType, address module, bytes calldata data) external onlySelf {
-        require(moduleType == 1, "Account: ONLY_VALIDATION_SUPPORTED");
-        this.uninstallValidator(module, data);
+        if (moduleType == TYPE_VALIDATOR) {
+            this.uninstallValidator(module, data);
+        } else if (moduleType == TYPE_EXECUTOR) {
+            this.uninstallExecutor(module, data);
+            this.updateRecoveryModule(module, false);
+        } else {
+            revert("Account: MODULE_TYPE_UNSUPPORTED");
+        }
         emit ModuleUninstalled(moduleType, module);
     }
 
@@ -147,6 +168,42 @@ contract SmartAccount is IAccount, ModuleManager {
      */
     function setActiveValidatorFromAccount(address validator) external onlySelf {
         this.setActiveValidator(validator);
+    }
+
+    function updateRecoveryModule(address module, bool enabled) external onlySelf {
+        if (module == address(0)) {
+            revert ZeroAddress();
+        }
+        AccountStorage.Layout storage s = AccountStorage.layout();
+        bool current = s.recoveryModules[module];
+        if (enabled) {
+            if (!current) {
+                s.recoveryModules[module] = true;
+                emit RecoveryModuleUpdated(module, true);
+            }
+        } else {
+            if (current) {
+                delete s.recoveryModules[module];
+                emit RecoveryModuleUpdated(module, false);
+            }
+        }
+    }
+
+    function isRecoveryModule(address module) external view returns (bool) {
+        return AccountStorage.layout().recoveryModules[module];
+    }
+
+    function addPasskeyFromRecovery(PasskeyTypes.PasskeyInit calldata newPassKey) external {
+        AccountStorage.Layout storage s = AccountStorage.layout();
+        if (!s.recoveryModules[msg.sender]) {
+            revert UnauthorizedRecoveryModule(msg.sender);
+        }
+        address validator = activeValidator();
+        require(validator != address(0), "Account: NO_ACTIVE_VALIDATOR");
+        IPasskeyValidator(validator).addPasskey(
+            newPassKey.idRaw, newPassKey.px, newPassKey.py, newPassKey.rpIdHash
+        );
+        emit PasskeyAddedViaRecovery(newPassKey.idRaw);
     }
 
     /**
@@ -162,8 +219,10 @@ contract SmartAccount is IAccount, ModuleManager {
         view
         returns (bool)
     {
-        if (moduleTypeId == 1) {
+        if (moduleTypeId == TYPE_VALIDATOR) {
             return isValidatorInstalled(module);
+        } else if (moduleTypeId == TYPE_EXECUTOR) {
+            return isExecutorInstalled(module);
         } else {
             revert("Not Installed");
         }

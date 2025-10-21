@@ -166,13 +166,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         vm.expectEmit(true, true, false, false);
         emit PasskeyValidator.PasskeyAdded(instance.account, additional.init.idRaw);
         vm.prank(instance.account);
-        validator.addPasskey(
-            instance.account,
-            PasskeyValidator.PasskeyId.wrap(additional.init.idRaw),
-            additional.init.px,
-            additional.init.py,
-            additional.init.rpIdHash
-        );
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py, additional.init.rpIdHash);
 
         uint256 count = validator.passkeyCount(instance.account);
 
@@ -187,34 +181,20 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         // Act
         vm.expectRevert("exists");
         vm.prank(instance.account);
-        validator.addPasskey(
-            instance.account,
-            PasskeyValidator.PasskeyId.wrap(existing.init.idRaw),
-            existing.init.px,
-            existing.init.py,
-            existing.init.rpIdHash
-        );
+        validator.addPasskey(existing.init.idRaw, existing.init.px, existing.init.py, existing.init.rpIdHash);
     }
 
     function test_remove_passkey_emits_event_and_decrements_count() public {
         // Arrange
         PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
         vm.prank(instance.account);
-        validator.addPasskey(
-            instance.account,
-            PasskeyValidator.PasskeyId.wrap(additional.init.idRaw),
-            additional.init.px,
-            additional.init.py,
-            additional.init.rpIdHash
-        );
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py, additional.init.rpIdHash);
 
         // Act
         vm.expectEmit(true, true, false, false);
         emit PasskeyValidator.PasskeyRemoved(instance.account, additional.init.idRaw);
         vm.prank(instance.account);
-        validator.removePasskey(
-            instance.account, PasskeyValidator.PasskeyId.wrap(additional.init.idRaw)
-        );
+        validator.removePasskey(additional.init.idRaw);
 
         uint256 count = validator.passkeyCount(instance.account);
 
@@ -229,9 +209,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         // Act
         vm.expectRevert("no such key");
         vm.prank(instance.account);
-        validator.removePasskey(
-            instance.account, PasskeyValidator.PasskeyId.wrap(missingId)
-        );
+        validator.removePasskey(missingId);
     }
 
     function test_validate_user_op_succeeds_and_blocks_replay() public {

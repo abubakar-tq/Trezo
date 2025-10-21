@@ -130,22 +130,22 @@ contract PasskeyValidator is ERC7579ValidatorBase {
                                      MODULE LOGIC
     //////////////////////////////////////////////////////////////////////////*/
 
-    function addPasskey(address account, PasskeyId id, uint256 px, uint256 py, bytes32 rpIdHash)
-        external /*onlyAccount*/
-    {
-        bytes32 raw = PasskeyId.unwrap(id);
-        require(!passkeyIds[account].contains(raw), "exists");
+    function addPasskey(bytes32 passkeyId, uint256 px, uint256 py, bytes32 rpIdHash) external {
+        address account = msg.sender;
+        PasskeyId id = PasskeyId.wrap(passkeyId);
+        require(!passkeyIds[account].contains(passkeyId), "exists");
         passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0);
-        passkeyIds[account].add(raw); // O(1)
-        emit PasskeyAdded(account, raw);
+        passkeyIds[account].add(passkeyId); // O(1)
+        emit PasskeyAdded(account, passkeyId);
     }
 
-    function removePasskey(address account, PasskeyId id) external /*onlyAccount*/ {
-        bytes32 raw = PasskeyId.unwrap(id);
-        require(passkeyIds[account].contains(raw), "no such key");
+    function removePasskey(bytes32 passkeyId) external {
+        address account = msg.sender;
+        PasskeyId id = PasskeyId.wrap(passkeyId);
+        require(passkeyIds[account].contains(passkeyId), "no such key");
         delete passkeys[account][id];
-        passkeyIds[account].remove(raw); // O(1), internally swap-and-pop
-        emit PasskeyRemoved(account, raw);
+        passkeyIds[account].remove(passkeyId); // O(1), internally swap-and-pop
+        emit PasskeyRemoved(account, passkeyId);
     }
 
     /**
