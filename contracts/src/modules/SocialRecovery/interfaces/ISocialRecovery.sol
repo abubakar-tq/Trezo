@@ -46,4 +46,6 @@ interface ISocialRecovery {
     function removeGuardians(address wallet, address[] calldata exGuardians, uint256 newThreshold) external;
 
     function getRecoveryDetails(address wallet) external view returns (address[] memory guardians, uint256 threshold);
+
+    function getRecoveryNonce(address wallet) external view returns (uint256 nonce);
 }

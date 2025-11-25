@@ -135,6 +135,33 @@ contract SocialRecoveryTest is Test {
         assertEq(newAccount.passkeyAddCount(), 1, "contract guardian recovery failed");
     }
 
+    function testRecoveryNonceIncrementsAfterSchedule() public {
+        assertEq(recovery.getRecoveryNonce(address(account)), 0, "nonce should start at zero");
+
+        PasskeyTypes.PasskeyInit memory newPassKey = _makePasskey("seed-nonce");
+        bytes32 digest = _recoveryDigest(address(account), 0, newPassKey);
+
+        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(guardianKey1, digest);
+        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(guardianKey2, digest);
+
+        ISocialRecovery.GuardianSig[] memory sigs = new ISocialRecovery.GuardianSig[](2);
+        sigs[0] = ISocialRecovery.GuardianSig({
+            index: 0,
+            kind: ISocialRecovery.SigKind.EOA_ECDSA,
+            sig: _packSignature(v1, r1, s1)
+        });
+        sigs[1] = ISocialRecovery.GuardianSig({
+            index: 1,
+            kind: ISocialRecovery.SigKind.EOA_ECDSA,
+            sig: _packSignature(v2, r2, s2)
+        });
+
+        vm.prank(guardian1);
+        recovery.scheduleRecovery(address(account), newPassKey, sigs);
+
+        assertEq(recovery.getRecoveryNonce(address(account)), 1, "nonce should increment after scheduling");
+    }
+
     function testScheduleRevertsWhenThresholdNotMet() public {
         PasskeyTypes.PasskeyInit memory newPassKey = _makePasskey("seed-threshold");
         ISocialRecovery.GuardianSig[] memory sigs = new ISocialRecovery.GuardianSig[](1);

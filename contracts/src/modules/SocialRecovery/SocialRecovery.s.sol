@@ -334,6 +334,10 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         threshold = details.threshold;
     }
 
+    function getRecoveryNonce(address wallet) external view override returns (uint256 nonce) {
+        nonce = _recoveryDetails[wallet].nonce;
+    }
+
     /*//////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
