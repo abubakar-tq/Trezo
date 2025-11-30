@@ -19,9 +19,11 @@ lib/modulekit/:src/external/ERC4337.sol=lib/modulekit/src/external/ERC4337.sol
 lib/modulekit/:@ERC4337/account-abstraction/contracts/=lib/modulekit/node_modules/@ERC4337/account-abstraction/contracts/
 
 lib/erc7579-implementation/:account-abstraction/=lib/account-abstraction/contracts/
-
 lib/webauthn-sol/:openzeppelin-contracts/contracts/=lib/webauthn-sol/lib/openzeppelin-contracts/contracts/
 lib/webauthn-sol/:FreshCryptoLib/=lib/webauthn-sol/lib/FreshCryptoLib/solidity/src/
+lib/email-recovery/:@zk-email/ether-email-auth-contracts/=lib/ether-email-auth/packages/contracts/
+
+lib/ether-email-auth/:@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
 
 
 @openzeppelin/=lib/openzeppelin-contracts/
@@ -34,4 +36,5 @@ forge-std/=lib/forge-std/src/
 solady/=lib/webauthn-sol/lib/solady/src/
 @webauthn-sol/=lib/webauthn-sol/
 @ERC7579=lib/erc7579-implementation/
+email-recovery/=lib/email-recovery/src/
 test/=test/
