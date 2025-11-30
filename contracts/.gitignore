@@ -17,8 +17,7 @@ docs/
 *.env.*
 
 
-#lib
-/lib
+
 
 /context.md
 
