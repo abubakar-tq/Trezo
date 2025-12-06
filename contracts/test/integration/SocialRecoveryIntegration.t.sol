@@ -12,7 +12,7 @@ import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
-import {SocialRecovery} from "src/modules/SocialRecovery/SocialRecovery.s.sol";
+import {SocialRecovery} from "src/modules/SocialRecovery/SocialRecovery.sol";
 import {ISocialRecovery} from "src/modules/SocialRecovery/interfaces/ISocialRecovery.sol";
 
 import {PackedUserOperation} from "lib/account-abstraction/contracts/interfaces/PackedUserOperation.sol";

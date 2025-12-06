@@ -10,11 +10,9 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ModuleManager} from "src/account/managers/ModuleManager.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
+import {IPasskeyValidator} from "src/modules/passkey/interfaces/IPasskeyValidator.sol";
 import "@ERC7579/src/interfaces/IERC7579Module.sol";
 
-interface IPasskeyValidator {
-    function addPasskey(bytes32 idRaw, uint256 px, uint256 py, bytes32 rpIdHash) external;
-}
 
 contract SmartAccount is IAccount, ModuleManager {
     using AccountStorage for AccountStorage.Layout;

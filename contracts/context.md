@@ -1,6 +1,6 @@
 # Smart-Contract Wallet — Contracts Overview
 
-> Context pack for coding assistants: ERC-4337 AA wallet with modular policies, multi-chain deployments, beacon+clones proxies, and cross-chain config sync using a manifest hash.
+> Context pack for coding assistants: ERC-4337 AA wallet with modular policies, multi-chain deployments, clones proxies, and cross-chain config sync using a manifest hash.
 
 
 ---
@@ -9,10 +9,10 @@
 
 Proxy & Account Pattern
 
-For scalability and upgradeability, we adopt a Beacon-aware minimal proxy setup combined with the ERC-7579 modular account standard:
+For scalability and upgradeability, we adopt a minimal proxy setup combined with the ERC-7579 modular account standard:
 
-Beacon-aware minimal proxies (EIP-1167 + Beacon):
-Each user wallet is a lightweight clone pointing to a beacon-aware proxy. The beacon holds the current implementation address, allowing instant upgrades for all wallets on a chain by updating the beacon. This keeps per-wallet deployment gas low while ensuring centralized, auditable upgrade paths.
+ minimal proxies (EIP-1167)
+Each user wallet is a lightweight clone pointing. This keeps per-wallet deployment gas low while ensuring centralized, auditable upgrade paths.
 
 ERC-7579 modular account pattern:
 The wallet core follows the ERC-7579 specification, which standardizes validators, executors, and hooks. This modular approach enables features like passkey/2FA authentication, guardian-based recovery, spending limits, DEX integrations, and cross-chain execution to be installed/uninstalled as modules instead of baking them into the core.
@@ -30,8 +30,7 @@ All accounts expose validateUserOp and integrate with bundlers/paymasters, ensur
 * **Module**: Plug-in that adds validation, execution hooks, or policies (e.g., guardians, limits, 2FA, session keys).
 * **Manifest**: Off-chain JSON/struct describing active modules + parameters.
 * **Manifest Hash**: Keccak256 of the canonical manifest stored on-chain (`bytes32`).
-* **Factory**: Deploys accounts (CREATE2) as minimal proxies pointing to a beacon.
-* **Beacon**: Holds the current implementation address for all account proxies on a chain.
+* **Factory**: Deploys accounts (CREATE2) as minimal proxies pointing to a template.
 * **Clone (EIP-1167)**: Minimal proxy used per-user/per-chain to keep deployments cheap.
 
 ---
@@ -42,12 +41,12 @@ All accounts expose validateUserOp and integrate with bundlers/paymasters, ensur
 AccountFactory ──deploys──▶ AccountProxy (EIP-1167 clone) ──delegatecall──▶ AccountImplementation (AccountVx)
                                          ▲
                                          │
-                                      Beacon ──holds──▶ current AccountImplementation
+                                        ──▶ current AccountImplementation
 ```
 
-* **One Factory + One Beacon per chain.**
+* **One Factory ***
 * **Many proxies (one per user per chain).**
-* **Shared upgrades** by switching the beacon’s implementation.
+
 
 ---
 
@@ -73,13 +72,11 @@ function deployAccount(
 ) external returns (address wallet);
 ```
 
-### 2.2 `UpgradeableBeacon` (standard)
 
-* `implementation()` getter and `upgradeTo()` guarded by timelocked multisig.
 
 ### 2.3 `AccountProxy` (EIP-1167 clone)
 
-* Minimal proxy that delegates to beacon’s `implementation()`.
+* Minimal proxy that delegates to `implementation()`.
 * **Storage lives here** (modules, guardians, limits, manifest fields, etc.).
 
 ### 2.4 `AccountVx` (Implementation)
@@ -190,7 +187,7 @@ event ModuleChanged(address indexed wallet, bytes32 moduleId, bool enabled);
 
 ## 6. Upgradeability & Governance
 
-* **Beacon Admin**: timelocked multisig controls `upgradeTo()`.
+
 * **Per-wallet state**: lives in proxies; safe across upgrades (append-only storage layout).
 * **Migrations**: new implementation exposes `migrate()` guarded by `manifestVersion` expectations.
 * **Kill Switches**: module-level pausables to isolate risk without freezing all functionality.
@@ -218,10 +215,10 @@ event ModuleChanged(address indexed wallet, bytes32 moduleId, bool enabled);
 ## 9. Deployment Checklist
 
 * Deploy `AccountImplementation (AccountV1)`.
-* Deploy `UpgradeableBeacon` pointing to `AccountV1`.
-* Deploy `AccountFactory` with beacon address.
+* Deploy `ProxyFactory` pointing to `AccountV1`.
+* Deploy `AccountFactory` with proxyFactory address.
 * Register initial modules in `ModuleRegistry` (if used).
-* Configure multisig + timelock over beacon/admin roles.
+* Configure multisig + timelock over admin roles.
 
 ---
 
@@ -254,7 +251,7 @@ function setDailyLimit(address token, uint256 amount,
 ```
 # mainnet / testnets
 AccountImplementation:  <to-fill>
-UpgradeableBeacon:      <to-fill>
+ProxyFactory            <to-fill>
 AccountFactory:         <to-fill>
 ModuleRegistry:         <to-fill>
 EntryPoint (4337):      <chain-specific>
@@ -268,12 +265,6 @@ Paymaster (optional):   <to-fill>
 * Treat `manifestHash` + `manifestVersion` as **must-update** fields on every config mutation.
 * Prefer **library functions** for manifest hashing to avoid drift; define canonical JSON/ABI encoding order.
 * Keep module interfaces cohesive; avoid reentrancy by design; consider `Checks-Effects-Interactions` + reentrancy guards where needed.
-* Gas: EIP-1167 clones for per-user wallets; beacon for shared upgrades; module calls should be tight and revert early.
+* Gas: EIP-1167 clones for per-user wallets; module calls should be tight and revert early.
 
----
 
-## 13. Future Extensions
-
-* Switch `manifestHash` to **Merkle root** for selective proofs.
-* Add cross-chain message executors for trust-minimized sync.
-* Introduce per-user beacons (rare; only if you need implementation variance per cohort).

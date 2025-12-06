@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import "forge-std/Test.sol";
-import {SocialRecovery, ISocialRecoveryAccount} from "src/modules/SocialRecovery/SocialRecovery.s.sol";
+import {SocialRecovery, ISocialRecoveryAccount} from "src/modules/SocialRecovery/SocialRecovery.sol";
 import {ISocialRecovery} from "src/modules/SocialRecovery/interfaces/ISocialRecovery.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
 
