@@ -19,3 +19,6 @@
 [submodule "contracts/lib/erc7579-implementation"]
 	path = contracts/lib/erc7579-implementation
 	url = https://github.com/erc7579/erc7579-implementation
+[submodule "contracts/lib/forge-std"]
+	path = contracts/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
