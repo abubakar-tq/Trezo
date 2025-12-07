@@ -32,7 +32,7 @@ contract UserOperationTest is Test {
             , // smartAccount
             , // proxyFactory
             AccountFactory _accountFactory,
-            PasskeyValidator _passkeyValidator
+            PasskeyValidator _passkeyValidator,
         ) = deployScript.deployAccount();
         accountFactory = _accountFactory;
         helperConfig = _helperConfig;

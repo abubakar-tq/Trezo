@@ -30,6 +30,7 @@ contract AccountStorageTest is Test {
             , // proxy Factory
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator
+            ,
         ) = deployScript.deployAccount();
 
         accountFactory = _accountFactory;

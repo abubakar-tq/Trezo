@@ -54,7 +54,7 @@ contract ModuleManagerTest is Test {
     function setUp() public {
         deployScript = new DeployAccount();
 
-        (helperConfig, account, factory, accountFactory, validator) = deployScript.deployAccount();
+        (helperConfig, account, factory, accountFactory, validator,) = deployScript.deployAccount();
 
         proxy = accountFactory.createAccount(
             keccak256("module-manager-test"), address(validator), PassKeyDemo.getPasskeyInit(0)

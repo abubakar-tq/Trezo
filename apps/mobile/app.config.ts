@@ -2,6 +2,9 @@ import "dotenv/config";
 import type { ExpoConfig } from "expo/config";
 
 const extra = {
+  eas: {
+    projectId: "95fc18a7-8bfb-45e5-a51d-bc853f9ca1e0"
+  },
   supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? "",
   supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
   passkeyRpId: process.env.EXPO_PUBLIC_PASSKEY_RP_ID ?? "trezo.app",
@@ -11,7 +14,7 @@ const extra = {
 const config: ExpoConfig = {
   name: "Trezo_Wallet",
   slug: "Trezo_Wallet",
-  owner: "adeeljahangir",
+  owner: "bakar00009",
   version: "1.0.0",
   orientation: "portrait",
   icon: "./assets/images/icon.png",

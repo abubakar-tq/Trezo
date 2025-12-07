@@ -47,3 +47,8 @@ app-example
 # Local documentation and scripts
 docs/
 scripts/
+
+
+#  Local contract deployments
+/src/integration/contracts/deployment.31337.json
+

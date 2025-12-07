@@ -24,7 +24,7 @@ contract MinimalTest is Test {
 
     function setUp() public {
         DeployAccount deployer = new DeployAccount();
-        (helperConfig, implementation,  factory, accountFactory,passkeyValidator) = deployer.deployAccount();
+        (helperConfig, implementation,  factory, accountFactory,passkeyValidator, ) = deployer.deployAccount();
 
 
         proxy = accountFactory.createAccount(keccak256("user1"), address(passkeyValidator), PassKeyDemo.getPasskeyInit(0));
