@@ -6,7 +6,13 @@ export * from "./account";
 export * from "./directDeploy";
 
 // Explicit re-exports to ensure proper module resolution
-export { buildCreateAccountUserOp, sendUserOp } from "./userOps";
+export {
+  buildCreateAccountUserOp,
+  buildInstallSocialRecoveryUserOp,
+  buildAddPasskeyUserOp,
+  sendUserOp,
+  encodeSocialRecoveryInitData,
+} from "./userOps";
 export { directDeployAccount, isAccountDeployed } from "./directDeploy";
 export { predictAccountAddress } from "./account";
 export type { PasskeyInit, CreateAccountParams } from "./userOps";
