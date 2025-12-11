@@ -42,18 +42,18 @@ const isAndroidEmulator = Platform.OS === 'android' && !isPhysicalDevice;
  */
 export const getRpcUrl = (): string => {
   // For Expo Go with tunnel, always use laptop WiFi IP (physical device scenario)
-  if (isExpoGo) {
-    const url = `http://${CHAIN_CONFIG.LAPTOP_IP}:8545`;
-    console.log(`🌐 [Chain] RPC URL (Expo Go/Physical Device): ${url}`);
-    return url;
-  }
+  // if (isExpoGo) {
+  //   const url = `http://${CHAIN_CONFIG.LAPTOP_IP}:8545`;
+  //   console.log(`🌐 [Chain] RPC URL (Expo Go/Physical Device): ${url}`);
+  //   return url;
+  // }
   
-  // Android emulator/simulator (development build, not Expo Go)
-  if (Platform.OS === 'android') {
-    const url = 'http://10.0.2.2:8545';
-    console.log(`🌐 [Chain] RPC URL (Android Emulator): ${url}`);
-    return url;
-  }
+  // // Android emulator/simulator (development build, not Expo Go)
+  // if (Platform.OS === 'android') {
+  //   const url = 'http://10.0.2.2:8545';
+  //   console.log(`🌐 [Chain] RPC URL (Android Emulator): ${url}`);
+  //   return url;
+  // }
   
   // iOS simulator (development build)
   const url = 'http://localhost:8545';
@@ -68,9 +68,9 @@ export const getBundlerUrl = (): string => {
   if (isExpoGo) {
     return `http://${CHAIN_CONFIG.LAPTOP_IP}:4337`;
   }
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:4337';
-  }
+  // if (Platform.OS === 'android') {
+  //   return 'http://10.0.2.2:4337';
+  // }
   return 'http://localhost:4337';
 };
 
@@ -78,12 +78,12 @@ export const getBundlerUrl = (): string => {
  * Get Paymaster URL (Gasless transactions)
  */
 export const getPaymasterUrl = (): string => {
-  if (isExpoGo) {
-    return `http://${CHAIN_CONFIG.LAPTOP_IP}:3000`;
-  }
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:3000';
-  }
+  // if (isExpoGo) {
+  //   return `http://${CHAIN_CONFIG.LAPTOP_IP}:3000`;
+  // }
+  // if (Platform.OS === 'android') {
+  //   return 'http://10.0.2.2:3000';
+  // }
   return 'http://localhost:3000';
 };
 

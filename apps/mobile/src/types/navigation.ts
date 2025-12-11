@@ -37,6 +37,7 @@ export type RootStackParamList = {
   AATest: undefined;
   AADebug: undefined;
   DeployAccount: undefined;
+  DevCreateAccount: undefined;
 };
 
 // Combined Navigation Types for convenience

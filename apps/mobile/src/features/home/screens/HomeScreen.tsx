@@ -11,7 +11,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Animated,
+    Clipboard,
     Easing,
     FlatList,
     Image,
@@ -83,9 +85,11 @@ const HomeScreen: React.FC = () => {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const contentBottomInset = useTabContentBottomInset();
   
-  // AA Wallet deployment status
+  // Smart Account deployment status
+  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   const aaAccount = useWalletStore((state) => state.aaAccount);
-  const isWalletDeployed = aaAccount?.isDeployed ?? false;
+  const isWalletDeployed = smartAccountDeployed;
   
   // Portfolio data
   const [portfolioBalance, setPortfolioBalance] = useState(0);
@@ -143,9 +147,17 @@ const HomeScreen: React.FC = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailRequestId, setDetailRequestId] = useState(0);
   const detailAbortRef = useRef<AbortController | null>(null);
-
+  const [accountModalVisible, setAccountModalVisible] = useState(false);
   const [activeAction, setActiveAction] = useState<QuickAction | null>(null);
   const refreshRotation = useRef(new Animated.Value(0)).current;
+
+  // Copy address to clipboard
+  const handleCopyAddress = useCallback(() => {
+    if (smartAccountAddress) {
+      Clipboard.setString(smartAccountAddress);
+      Alert.alert('Copied!', 'Address copied to clipboard', [{ text: 'OK' }]);
+    }
+  }, [smartAccountAddress]);
 
   useEffect(() => {
     fetchMarketData({ chain: activeChain }).catch(() => undefined);
@@ -455,32 +467,48 @@ const HomeScreen: React.FC = () => {
       >
         <AccountStatusBanner />
         
-        <View style={styles.headerRow}>
-          <Avatar uri={avatarUri} label={greetingName} />
-          <View style={{ flex: 1, paddingHorizontal: 12 }}>
-            <Text style={styles.greeting}>Welcome back</Text>
-            <Text style={styles.greetingName}>{greetingName}</Text>
-          </View>
+        {/* Wallet Address Header */}
+        <View className="flex-row items-center gap-3 mb-5 mt-3">
+          {smartAccountAddress ? (
+            <>
+              <TouchableOpacity 
+                className="flex-1 flex-row items-center justify-between bg-surface-elevated rounded-2xl p-3 px-4 border border-border/50"
+                onPress={() => setAccountModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <View className="flex-1">
+                  <Text className="text-xs text-text-secondary mb-0.5">Account 1</Text>
+                  <Text className="text-[15px] font-semibold text-text-primary font-mono">
+                    {smartAccountAddress.slice(0, 6)}...{smartAccountAddress.slice(-4)}
+                  </Text>
+                </View>
+                <Feather name="chevron-down" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="w-11 h-11 rounded-full bg-surface-elevated items-center justify-center border border-border/50"
+                onPress={handleCopyAddress}
+                activeOpacity={0.7}
+              >
+                <Feather name="copy" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              className="flex-1 flex-row items-center justify-center gap-2 bg-warning/10 rounded-2xl p-3 border border-warning/30"
+              onPress={() => navigation.navigate('Profile')}
+              activeOpacity={0.7}
+            >
+              <Feather name="alert-triangle" size={16} color={colors.warning} />
+              <Text className="text-sm font-semibold text-warning">Deploy Smart Account</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={() => navigation.navigate('AATest')}
-            style={styles.debugButton}
+            className="w-9 h-9 rounded-full bg-accent/10 items-center justify-center border border-accent/25"
             activeOpacity={0.7}
           >
             <Feather name="zap" size={16} color={colors.accent} />
           </TouchableOpacity>
-          <LinearGradient 
-            colors={isWalletDeployed ? gradients.card : [colors.warning + '20', colors.warning + '30']} 
-            style={[styles.statusPill, !isWalletDeployed && styles.statusPillWarning]}
-          >
-            <Feather 
-              name={isWalletDeployed ? "shield" : "alert-triangle"} 
-              size={14} 
-              color={isWalletDeployed ? colors.accent : colors.warning} 
-            />
-            <Text style={[styles.statusText, !isWalletDeployed && styles.statusTextWarning]}>
-              {isWalletDeployed ? "Secured" : "Not Deployed"}
-            </Text>
-          </LinearGradient>
         </View>
 
         <LinearGradient colors={gradients.hero} style={styles.balanceCard}>
@@ -489,7 +517,7 @@ const HomeScreen: React.FC = () => {
               <Text style={styles.balanceLabel}>Portfolio balance</Text>
               {portfolioLoading ? (
                 <ActivityIndicator size="small" color={colors.accent} style={{ marginTop: 8 }} />
-              ) : aaAccount?.predictedAddress ? (
+              ) : smartAccountAddress ? (
                 <Text style={styles.balanceValue}>{PortfolioService.formatUSD(portfolioBalance)}</Text>
               ) : (
                 <Text style={styles.balanceValue}>Connect a wallet to view balance</Text>
@@ -497,11 +525,11 @@ const HomeScreen: React.FC = () => {
             </View>
           </View>
 
-          <Text style={styles.balanceHelper}>
-            {aaAccount?.predictedAddress 
-              ? `AA Wallet: ${aaAccount.predictedAddress.slice(0, 6)}...${aaAccount.predictedAddress.slice(-4)}`
-              : "Securely link your on-chain accounts to unlock live valuation and performance insights."}
-          </Text>
+          {!smartAccountAddress && (
+            <Text style={styles.balanceHelper}>
+              Deploy your smart account to view balance and manage assets
+            </Text>
+          )}
 
           <View style={styles.quickActionsRow}>
             {quickActions.map((action) => (
@@ -694,6 +722,64 @@ const HomeScreen: React.FC = () => {
         action={activeAction}
         onDismiss={handleDismissAction}
       />
+      
+      {/* Account Modal */}
+      <Modal
+        transparent
+        visible={accountModalVisible}
+        animationType="fade"
+        onRequestClose={() => setAccountModalVisible(false)}
+      >
+        <Pressable 
+          className="flex-1 bg-black/50 pt-20 px-4"
+          onPress={() => setAccountModalVisible(false)}
+        >
+          <Pressable 
+            className="bg-surface rounded-2xl p-5 shadow-lg"
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-lg font-bold text-text-primary">Account 1</Text>
+              <TouchableOpacity
+                onPress={() => setAccountModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Feather name="x" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            
+            <View className="bg-surface-elevated rounded-xl p-4 mb-4">
+              <Text className="text-[13px] font-mono text-text-primary leading-5">
+                {smartAccountAddress}
+              </Text>
+            </View>
+            
+            <TouchableOpacity
+              className="flex-row items-center gap-3 p-4 bg-surface-elevated rounded-xl mb-2"
+              onPress={() => {
+                handleCopyAddress();
+                setAccountModalVisible(false);
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="copy" size={18} color={colors.accent} />
+              <Text className="text-[15px] font-semibold text-text-primary">Copy Address</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              className="flex-row items-center gap-3 p-4 bg-surface-elevated rounded-xl"
+              onPress={() => {
+                setAccountModalVisible(false);
+                navigation.navigate('Profile');
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="user" size={18} color={colors.accent} />
+              <Text className="text-[15px] font-semibold text-text-primary">View Profile</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </TabScreenContainer>
   );
 };
@@ -1149,7 +1235,6 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: withAlpha(colors.accent, 0.12),
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 8,
       borderWidth: 1,
       borderColor: withAlpha(colors.accent, 0.25),
     },

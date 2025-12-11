@@ -89,6 +89,8 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
         PasskeyId id = PasskeyId.wrap(idRaw);
         require(!passkeyIds[account].contains(idRaw), "exists");
+        // Initialize with signCounter = 0, first signature must have counter >= 1
+        // However, some authenticators start at 0, so we accept counter >= stored value
         passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0);
         passkeyIds[account].add(idRaw);
         emit PasskeyAdded(account, idRaw);
@@ -185,9 +187,12 @@ contract PasskeyValidator is ERC7579ValidatorBase {
             return _packValidationData({sigFailed: true, validUntil: 0, validAfter: 0});
         }
 
-        // 3) Enforce strictly increasing signature counter (clone detection)
+        // 3) Enforce non-decreasing signature counter (clone detection)
+        // WebAuthn spec requires counters to be monotonically increasing, but some
+        // authenticators may reuse the same counter value. We allow equal counters
+        // for the same account to support these devices, but reject decreasing counters.
         PasskeyRecord storage rec = passkeys[userOp.sender][PasskeyId.wrap(idRaw)];
-        if (newCounter <= rec.signCounter) {
+        if (newCounter < rec.signCounter) {
             return _packValidationData({sigFailed: true, validUntil: 0, validAfter: 0});
         }
 

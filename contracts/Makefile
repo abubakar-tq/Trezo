@@ -6,7 +6,7 @@ DEFAULT_ANVIL_KEY := 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6
 DEFAULT_ANVIL_ACCOUNT := 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
 
 # Where the Expo app lives (relative to contracts/)
-MOBILE_DIR ?= ../apps/mobile/integration
+MOBILE_DIR ?= ../apps/mobile/src/integration
 
 
 # Chain IDs (must match the actual networks)
@@ -41,26 +41,26 @@ deploy-sepolia: build
 .PHONY: sync-mobile
 sync-mobile:
 	@echo "Syncing artifacts for chain $(CHAIN_ID) to $(MOBILE_DIR)"
-	mkdir -p $(MOBILE_DIR)/src/contracts
+	mkdir -p $(MOBILE_DIR)/contracts
 
 	# copy deployment JSON (written by DeployAccount.s.sol as deployments/<chainId>.json)
 	cp deployments/$(CHAIN_ID).json \
-		$(MOBILE_DIR)/src/contracts/deployment.$(CHAIN_ID).json
+		$(MOBILE_DIR)/contracts/deployment.$(CHAIN_ID).json
 
 sync-abi:
-	mkdir -p $(MOBILE_DIR)/src/abi
+	mkdir -p $(MOBILE_DIR)/abi
 	# ABI-only JSONs for the mobile app
 	jq '{abi: .abi}' out/SmartAccount.sol/SmartAccount.json \
-		> $(MOBILE_DIR)/src/abi/SmartAccount.json
+		> $(MOBILE_DIR)/abi/SmartAccount.json
 
 	jq '{abi: .abi}' out/AccountFactory.sol/AccountFactory.json \
-		> $(MOBILE_DIR)/src/abi/AccountFactory.json
+		> $(MOBILE_DIR)/abi/AccountFactory.json
 
 	jq '{abi: .abi}' out/MinimalProxyFactory.sol/MinimalProxyFactory.json \
-		> $(MOBILE_DIR)/src/abi/MinimalProxyFactory.json
+		> $(MOBILE_DIR)/abi/MinimalProxyFactory.json
 
 	jq '{abi: .abi}' out/PasskeyValidator.sol/PasskeyValidator.json \
-		> $(MOBILE_DIR)/src/abi/PasskeyValidator.json
+		> $(MOBILE_DIR)/abi/PasskeyValidator.json
 
 	jq '{abi: .abi}' out/SocialRecovery.sol/SocialRecovery.json \
-		> $(MOBILE_DIR)/src/abi/SocialRecovery.json
+		> $(MOBILE_DIR)/abi/SocialRecovery.json

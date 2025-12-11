@@ -22,6 +22,7 @@ import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
+import { DirectDeployCard } from "../../wallet/components/DirectDeployCard";
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -31,12 +32,18 @@ type SettingsItem = {
   route?: keyof RootStackParamList;
 };
 
-const settingsItems: SettingsItem[] = [
+const baseSettingsItems: SettingsItem[] = [
   { label: "Browser settings", icon: "globe", route: "BrowserSettings" },
   { label: "Security & privacy", icon: "shield" },
   { label: "Connected devices", icon: "smartphone" },
   { label: "Notifications", icon: "bell" },
   { label: "Backup & recovery", icon: "cloud" },
+];
+
+const settingsItems: SettingsItem[] = [
+  ...baseSettingsItems,
+  // Dev-only quick link into the AA createAccount tester
+  ...(__DEV__ ? [{ label: "Dev: Create Account", icon: "cpu", route: "DevCreateAccount" }] : []),
 ];
 
 const ProfileScreen: React.FC = () => {
@@ -131,6 +138,8 @@ const ProfileScreen: React.FC = () => {
             </View>
           </LinearGradient>
         </View>
+
+        {__DEV__ && <DirectDeployCard />}
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Settings</Text>

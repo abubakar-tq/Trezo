@@ -3,7 +3,7 @@ import "react-native-reanimated";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
 import { ActivityIndicator, StyleSheet, View,Text } from "react-native";
-import "react-native-get-random-values";
+import "./src/integration/viem/polyfills";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AppErrorBoundary } from "@app/components/system/AppErrorBoundary";

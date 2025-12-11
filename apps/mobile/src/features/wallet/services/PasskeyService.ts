@@ -537,20 +537,10 @@ export class PasskeyService {
       if (response.publicKey) {
         console.log('✅ [PasskeyService] Found publicKey in response');
         
-        // The publicKey should be a base64url-encoded COSE key
-        // COSE P-256 key format:
-        // - kty: 2 (EC2)
-        // - alg: -7 (ES256)
-        // - crv: 1 (P-256)
-        // - x: 32 bytes (x coordinate)
-        // - y: 32 bytes (y coordinate)
-        
         const publicKeyBytes = this.base64UrlToUint8Array(response.publicKey);
         console.log('📝 [PasskeyService] Public key bytes length:', publicKeyBytes.length);
         
-        // For COSE EC2 key, the structure is CBOR-encoded
-        // We need to parse it to extract x and y coordinates
-        const parsed = this.parseCOSEPublicKey(publicKeyBytes);
+        const parsed = this.normalizePublicKey(publicKeyBytes);
         
         console.log('✅ [PasskeyService] Extracted P-256 coordinates');
         console.log('🔑 [PasskeyService] X:', parsed.x.slice(0, 20) + '...');
@@ -582,7 +572,7 @@ export class PasskeyService {
     // Simple CBOR parser for COSE P-256 key
     // COSE P-256 key is typically 65-77 bytes
     // Contains: kty, alg, crv, x(32 bytes), y(32 bytes)
-    
+
     console.log('📝 [PasskeyService] Parsing COSE key, length:', coseKey.length);
     
     // Look for 32-byte sequences that are likely x and y coordinates
@@ -639,6 +629,34 @@ export class PasskeyService {
       y: this.uint8ArrayToHex(yCoord),
     };
   }
+
+  /**
+   * Parse SPKI (DER) or raw uncompressed public key into x/y.
+   */
+  private static parseSpkiOrRaw(keyBytes: Uint8Array): { x: string; y: string } | null {
+    // Raw uncompressed: 0x04 || x(32) || y(32)
+    if (keyBytes.length === 65 && keyBytes[0] === 0x04) {
+      const x = keyBytes.slice(1, 33);
+      const y = keyBytes.slice(33, 65);
+      return { x: this.uint8ArrayToHex(x), y: this.uint8ArrayToHex(y) };
+    }
+
+    // SPKI DER: ... 03 42 00 04 <x||y>
+    if (keyBytes.length > 70 && keyBytes[0] === 0x30) {
+      for (let i = 0; i < keyBytes.length; i++) {
+        if (keyBytes[i] === 0x04 && i + 65 <= keyBytes.length) {
+          const possible = keyBytes.slice(i + 1, i + 65);
+          if (possible.length === 64) {
+            const x = possible.slice(0, 32);
+            const y = possible.slice(32, 64);
+            return { x: this.uint8ArrayToHex(x), y: this.uint8ArrayToHex(y) };
+          }
+        }
+      }
+    }
+
+    return null;
+  }
   
   /**
    * Parse WebAuthn authentication response into contract signature format
@@ -646,7 +664,7 @@ export class PasskeyService {
   private static parseWebAuthnSignature(response: any, passkeyIdRaw: string): PasskeySignature {
     console.log('📝 [PasskeyService] Parsing WebAuthn signature...');
     console.log('📝 [PasskeyService] Response keys:', Object.keys(response));
-    
+
     try {
       // Extract authenticatorData (base64url)
       if (!response.authenticatorData) {
@@ -667,12 +685,19 @@ export class PasskeyService {
       console.log('✅ [PasskeyService] Client data JSON:', clientDataJSON);
       
       // Parse clientDataJSON to find challenge and type indices
+      // Solidity expects: index of '"challenge":"' and '"type":"' patterns (where the key starts)
       const clientData = JSON.parse(clientDataJSON);
-      const challengeIndex = clientDataJSON.indexOf(clientData.challenge);
-      const typeIndex = clientDataJSON.indexOf(clientData.type);
+      
+      // Find the index of the pattern '"challenge":"' (where "challenge" key starts)
+      const challengeIndex = clientDataJSON.indexOf('"challenge"');
+      
+      // Find the index of the pattern '"type":"' (where "type" key starts)
+      const typeIndex = clientDataJSON.indexOf('"type"');
       
       console.log('📝 [PasskeyService] Challenge index:', challengeIndex);
       console.log('📝 [PasskeyService] Type index:', typeIndex);
+      console.log('📝 [PasskeyService] Challenge pattern check:', clientDataJSON.substring(challengeIndex, challengeIndex + 25));
+      console.log('📝 [PasskeyService] Type pattern check:', clientDataJSON.substring(typeIndex, typeIndex + 20));
       
       // Extract signature (DER-encoded P-256 signature)
       if (!response.signature) {
@@ -702,6 +727,16 @@ export class PasskeyService {
       console.log('📝 [PasskeyService] Full response:', JSON.stringify(response, null, 2));
       throw new Error(`Failed to parse signature: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * Normalize a public key to raw x/y from whatever format the platform returns.
+   * Accepts SPKI (DER) or raw uncompressed (0x04 || x || y).
+   */
+  private static normalizePublicKey(publicKey: Uint8Array): { x: string; y: string } {
+    const spki = this.parseSpkiOrRaw(publicKey);
+    if (spki) return spki;
+    return this.parseCOSEPublicKey(publicKey); // fallback
   }
   
   /**

@@ -5,7 +5,6 @@ import {Script} from "forge-std/Script.sol";
 import {EntryPoint} from "lib/account-abstraction/contracts/core/EntryPoint.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
-
 contract HelperConfig is Script {
     error HelperConfig__InvalidChainId();
 
@@ -27,7 +26,7 @@ contract HelperConfig is Script {
     uint256 constant ARBITRUM_MAINNET_CHAIN_ID = 42_161;
     uint256 constant ZKSYNC_MAINNET_CHAIN_ID = 324;
     address constant ANVIL_DEFAULT_ACCOUNT = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8; //when executed without a specific address
-    
+
     mapping(uint256 chainId => NetworkConfig) public networkConfigs;
 
     NetworkConfig public localNetworkConfig;
@@ -40,9 +39,7 @@ contract HelperConfig is Script {
         networkConfigs[ETH_SEPOLIA_CHAIN_ID] = getEthSepoliaNetworkConfig();
         networkConfigs[ETH_MAINNET_CHAIN_ID] = getEthMainnetConfig();
         networkConfigs[ZKSYNC_MAINNET_CHAIN_ID] = getZkSyncConfig();
-       
     }
-
 
     function getConfigByChainId(uint256 chainId) public returns (NetworkConfig memory) {
         if (chainId == LOCAL_CHAIN_ID) {
@@ -76,7 +73,6 @@ contract HelperConfig is Script {
             account: BURNER_WALLET
         });
     }
-   
 
     function getZkSyncSepoliaConfig() public pure returns (NetworkConfig memory) {
         return NetworkConfig({
@@ -101,17 +97,18 @@ contract HelperConfig is Script {
 
         vm.startBroadcast(ANVIL_DEFAULT_ACCOUNT);
         ERC20Mock usdc = new ERC20Mock();
-        EntryPoint entryPoint = new EntryPoint();
+        // EntryPoint entryPoint = new EntryPoint();
 
         vm.stopBroadcast();
 
         //0x9129aE5E58AeA81b08517e89cbBE8886C4cdAC35 Alto v8 entryPoint address for deploying on local
 
-        localNetworkConfig =
-            NetworkConfig({entryPoint: address(entryPoint), usdc: address(usdc), account: ANVIL_DEFAULT_ACCOUNT});
+        localNetworkConfig = NetworkConfig({
+            entryPoint: 0x0000000071727De22E5E9d8BAf0edAc6f37da032,
+            usdc: address(usdc),
+            account: ANVIL_DEFAULT_ACCOUNT
+        });
 
         return localNetworkConfig;
     }
-
-    
 }

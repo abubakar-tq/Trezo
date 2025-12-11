@@ -9,6 +9,7 @@ import BrowserSettingsScreen from "@features/profile/screens/BrowserSettingsScre
 import AATestScreen from "@features/wallet/screens/AATestScreen";
 import AAWalletDebugScreen from "@features/wallet/screens/AAWalletDebugScreen";
 import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
+import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScreen";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
@@ -150,6 +151,15 @@ const RootNavigation = () => {
 								animation: "slide_from_right",
 							}}
 						/>
+						<Stack.Screen 
+							name="DevCreateAccount" 
+							component={DevCreateAccountScreen}
+							options={{
+								headerShown: true,
+								headerTitle: "Dev: CreateAccount",
+								animation: "slide_from_right",
+							}}
+						/>
 					</>
 				)}
 			</Stack.Navigator>
@@ -158,4 +168,3 @@ const RootNavigation = () => {
 };
 
 export default RootNavigation;
-
