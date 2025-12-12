@@ -10,6 +10,7 @@
 
 import { getSupabaseClient } from '@/lib/supabase';
 import { useRecoveryStatusStore } from '@store/useRecoveryStatusStore';
+import { useWalletStore } from '@/src/features/wallet/store/useWalletStore';
 
 export interface GuardianData {
   address: string;
@@ -30,6 +31,11 @@ export class GuardianSyncService {
    */
   static async getAAWalletId(userId: string): Promise<string | null> {
     try {
+      const aaAccount = useWalletStore.getState().aaAccount;
+      if (aaAccount?.userId === userId && aaAccount.isDeployed && aaAccount.id) {
+        return aaAccount.id;
+      }
+
       const { data, error } = await this.supabase
         .from('aa_wallets')
         .select('id')

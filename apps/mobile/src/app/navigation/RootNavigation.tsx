@@ -210,7 +210,7 @@ const RootNavigation = () => {
 							component={DevCreateAccountScreen}
 							options={{
 								headerShown: true,
-								headerTitle: "Dev: CreateAccount",
+								headerTitle: "Dev Controls",
 								animation: "slide_from_right",
 							}}
 						/>

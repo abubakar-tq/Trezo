@@ -34,7 +34,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
         uint256 px; // P-256 pubkey X
         uint256 py; // P-256 pubkey Y
         bytes32 rpIdHash; // SHA-256(RP ID)
-        uint32 signCounter; 
+        uint32 signCounter;
     }
 
     // Encoded WebAuthn signature payload carried in signatures
@@ -102,7 +102,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      * Removes all registered passkeys for the caller. If no passkeys are
      * registered, it is treated as a no-op.
      */
-    function onUninstall(bytes calldata /*data*/) external override {
+    function onUninstall(bytes calldata /*data*/ ) external override {
         address account = msg.sender;
         uint256 len = passkeyIds[account].length();
         if (len == 0) return; // nothing to cleanup
@@ -342,25 +342,16 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     }
 
     function _decodeSig(bytes calldata signature) internal pure returns (SigPayload memory p) {
-        (
-            p.idRaw,
-            p.authenticatorData,
-            p.clientDataJSON,
-            p.challengeIndex,
-            p.typeIndex,
-            p.r,
-            p.s
-        ) = abi.decode(signature, (bytes32, bytes, string, uint256, uint256, uint256, uint256));
+        (p.idRaw, p.authenticatorData, p.clientDataJSON, p.challengeIndex, p.typeIndex, p.r, p.s) =
+            abi.decode(signature, (bytes32, bytes, string, uint256, uint256, uint256, uint256));
     }
 
     /// @dev Parse the 4-byte big-endian signature counter at bytes 33..36 of authenticatorData.
     function _parseSignCounter(bytes memory authenticatorData) internal pure returns (uint32 ctr) {
         // bytes[32] is flags, bytes[33..36] is counter (big-endian)
         unchecked {
-            ctr = (uint32(uint8(authenticatorData[33])) << 24)
-                | (uint32(uint8(authenticatorData[34])) << 16)
-                | (uint32(uint8(authenticatorData[35])) << 8)
-                | uint32(uint8(authenticatorData[36]));
+            ctr = (uint32(uint8(authenticatorData[33])) << 24) | (uint32(uint8(authenticatorData[34])) << 16)
+                | (uint32(uint8(authenticatorData[35])) << 8) | uint32(uint8(authenticatorData[36]));
         }
     }
 
