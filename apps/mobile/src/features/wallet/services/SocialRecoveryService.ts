@@ -1,13 +1,17 @@
 import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import {
+  ABIS,
   buildInstallSocialRecoveryUserOp,
   encodeSocialRecoveryInitData,
   getDeployment,
+  getPublicClient,
   sendUserOp,
 } from "@/src/integration/viem";
 import type { Address, Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
+
+const MODULE_TYPE_EXECUTOR = 2n;
 
 export type SocialRecoveryInstallRequest = {
   smartAccountAddress: Address;
@@ -84,5 +88,22 @@ export class SocialRecoveryService {
       throw new Error("Signed UserOperation must include a signature before submission");
     }
     return sendUserOp(params.signedUserOp, chainId, bundlerUrl, deployment.entryPoint);
+  }
+
+  static async isModuleInstalled(
+    smartAccountAddress: Address,
+    chainId: SupportedChainId = DEFAULT_CHAIN_ID,
+  ): Promise<boolean> {
+    const deployment = getDeployment(chainId);
+    if (!deployment?.socialRecovery) {
+      throw new Error(`No Social Recovery module configured for chain ${chainId}`);
+    }
+    const client = getPublicClient(chainId);
+    return client.readContract({
+      address: smartAccountAddress,
+      abi: ABIS.smartAccount,
+      functionName: "isModuleInstalled",
+      args: [MODULE_TYPE_EXECUTOR, deployment.socialRecovery, "0x"],
+    }) as Promise<boolean>;
   }
 }
