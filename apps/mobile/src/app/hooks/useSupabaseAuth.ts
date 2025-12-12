@@ -14,6 +14,8 @@ import {
   supabaseConfigIssue,
 } from "@lib/supabase";
 import { Profile, useUserStore } from "@store/useUserStore";
+import { ProfileSyncService } from "@/src/features/profile/services/ProfileSyncService";
+import { GuardianSyncService } from "@/src/features/profile/services/GuardianSyncService";
 
 const sanitizeUsername = (value: string | null | undefined) => {
 	if (!value) return undefined;
@@ -128,7 +130,7 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 	);
 
 	const applySession = useCallback(
-		(session: Session | null) => {
+		async (session: Session | null) => {
 			setSession(session);
 			setUser(session?.user ?? null);
 			const isAuthenticated = Boolean(session);
@@ -151,6 +153,26 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 				void syncProfileDefaults(session.user, profile);
 			} else if (!session?.user) {
 				syncedProfileRef.current = null;
+			}
+
+			// Sync profile and guardians from database on login
+			if (session?.user && isAuthenticated) {
+				try {
+					// Fetch profile from database
+					const dbProfile = await ProfileSyncService.fetchAndSyncProfile(session.user.id);
+					console.log("✅ Profile synced from database");
+
+					// Check if AA wallet exists and fetch guardians
+					const aaWalletId = await GuardianSyncService.getAAWalletId(session.user.id);
+					if (aaWalletId) {
+						await GuardianSyncService.fetchAndSyncGuardians(aaWalletId);
+						console.log("✅ Guardians synced from database");
+					} else {
+						console.log("📝 No AA wallet found, guardians stored locally only");
+					}
+				} catch (syncError) {
+					console.warn("⚠️  Failed to sync user data from database:", syncError);
+				}
 			}
 		},
 		[setIsLoggedIn, setIsOnboarded, setProfile, setSession, setUser, syncProfileDefaults],

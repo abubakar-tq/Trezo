@@ -34,6 +34,12 @@ export type RootStackParamList = {
   AuthNavigation: undefined;
   TabNavigation: undefined;
   BrowserSettings: undefined;
+  BackupRecovery: undefined;
+  GuardianRecovery: undefined;
+  ProfileEdit: undefined;
+  ContactList: undefined;
+  AddContact: undefined;
+  ContactDetail: { contactId: string };
   AATest: undefined;
   AADebug: undefined;
   DeployAccount: undefined;
