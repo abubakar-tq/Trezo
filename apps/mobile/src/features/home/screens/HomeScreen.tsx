@@ -363,13 +363,17 @@ const HomeScreen: React.FC = () => {
   }, [searchQuery, tokens]);
 
   const spotlightTokens = useMemo(() => {
-    // Show user's actual token holdings from portfolio
+    // Only show user's actual token holdings from portfolio
     if (portfolio && portfolio.tokens.length > 0) {
-      return portfolio.tokens.slice(0, 3);
+      // Get top 5 holdings by value
+      const holdings = [...portfolio.tokens]
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5);
+      return holdings;
     }
-    // Fallback to market data when no wallet connected
-    return tokens.slice(0, 3);
-  }, [portfolio, tokens]);
+    // Return empty array if no holdings
+    return [];
+  }, [portfolio]);
 
   const isInitialLoading = loading && tokens.length === 0;
   const isRefreshing = loading && tokens.length > 0;
@@ -1422,6 +1426,35 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.background,
       paddingHorizontal: 16,
       paddingTop: 8,
+    },
+    profileHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      marginHorizontal: -16,
+      marginTop: -8,
+      marginBottom: 8,
+      backgroundColor: withAlpha(colors.textPrimary, 0.02),
+      borderBottomWidth: 1,
+      borderBottomColor: withAlpha(colors.textPrimary, 0.06),
+    },
+    profileInfo: {
+      flex: 1,
+      minWidth: 0,
+    },
+    greetingText: {
+      fontSize: 11,
+      color: withAlpha(colors.textPrimary, 0.5),
+      marginBottom: 2,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    usernameText: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.textPrimary,
     },
     headerRow: {
       flexDirection: "row",

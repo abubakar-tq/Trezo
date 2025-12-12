@@ -32,10 +32,9 @@ const config: ExpoConfig = {
   android: {
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/images/android-icon-foreground.png",
-      backgroundImage: "./assets/images/android-icon-background.png",
-      monochromeImage: "./assets/images/android-icon-monochrome.png",
+      foregroundImage: "./assets/images/icon.png",
     },
+    icon: "./assets/images/icon.png",
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: "com.trezo.wallet", // set your Android applicationId
@@ -48,12 +47,13 @@ const config: ExpoConfig = {
     [
       "expo-splash-screen",
       {
-        image: "./assets/images/splash-icon.png",
+        image: "./assets/images/icon.png",
         imageWidth: 200,
         resizeMode: "contain",
-        backgroundColor: "#ffffff",
+        backgroundColor: "#E6F4FE",
         dark: {
-          backgroundColor: "#000000",
+          image: "./assets/images/icon.png",
+          backgroundColor: "#0A1929",
         },
       },
     ],

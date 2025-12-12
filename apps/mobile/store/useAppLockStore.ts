@@ -51,13 +51,15 @@ export const useAppLockStore = create<AppLockState>((set, get) => ({
       LocalAuthentication.isEnrolledAsync(),
     ]);
 
+    // Don't lock immediately on initialization - let the app load first
+    // The useAppLock hook will handle locking when appropriate
     set({
       hasInitialized: true,
       lockEnabled,
-      isLocked: lockEnabled && get().authContextActive,
+      isLocked: false, // Start unlocked, let useAppLock determine if lock is needed
       isBiometricAvailable: hasHardware && isEnrolled,
       lastError: null,
-      lastUnlockedAt: null,
+      lastUnlockedAt: Date.now(), // Set initial time to prevent immediate lock
     });
   },
 

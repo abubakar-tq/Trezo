@@ -16,14 +16,27 @@ export class ContactService {
     console.log(`🔄 [ContactService] Fetching contacts...`);
     
     try {
-      const { data, error } = await this.supabase
-        .from('contacts')
-        .select('*')
-        .order('name', { ascending: true });
+      // Check authentication first
+      const { data: { user }, error: authError } = await this.supabase.auth.getUser();
+      if (authError || !user) {
+        console.error(`❌ [ContactService] User not authenticated:`, authError);
+        return [];
+      }
+      console.log(`✅ [ContactService] User authenticated: ${user.id}`);
+
+      const { data, error } = await Promise.race([
+        this.supabase
+          .from('contacts')
+          .select('*')
+          .order('name', { ascending: true }),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), 10000)
+        )
+      ]);
 
       if (error) throw error;
 
-      console.log(`✅ [ContactService] Fetched ${data.length} contacts`);
+      console.log(`✅ [ContactService] Fetched ${data?.length || 0} contacts`);
       return data || [];
     } catch (error) {
       console.error(`❌ [ContactService] Failed to fetch contacts:`, error);
@@ -199,9 +212,21 @@ export class ContactService {
     console.log(`🔄 [ContactService] Fetching all tags...`);
     
     try {
-      const { data, error } = await this.supabase
-        .from('contacts')
-        .select('tags');
+      // Check authentication first
+      const { data: { user }, error: authError } = await this.supabase.auth.getUser();
+      if (authError || !user) {
+        console.error(`❌ [ContactService] User not authenticated for tags:`, authError);
+        return [];
+      }
+
+      const { data, error } = await Promise.race([
+        this.supabase
+          .from('contacts')
+          .select('tags'),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), 10000)
+        )
+      ]);
 
       if (error) throw error;
 
