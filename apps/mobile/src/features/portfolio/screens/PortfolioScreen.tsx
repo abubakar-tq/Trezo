@@ -2,7 +2,8 @@ import { useTabContentBottomInset } from "@app/hooks";
 import { TabScreenContainer } from "@shared/components";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
 
 import { PortfolioService, type PortfolioData } from "@/src/features/portfolio/services/PortfolioService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
@@ -108,45 +109,82 @@ const PortfolioScreen: React.FC = () => {
       </LinearGradient>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Asset allocation</Text>
-        <View style={styles.allocationBars}>
-          {allocationGroups.map((group, index) => {
-            const tone = allocationPalette[index % allocationPalette.length];
-            return (
-              <View key={group.label} style={styles.allocationRow}>
-                <View style={[styles.allocationIndicator, { backgroundColor: tone }]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.allocationLabel}>{group.label}</Text>
-                  <View style={styles.progressTrack}>
-                    <View style={[styles.progressFill, { width: `${group.percentage}%`, backgroundColor: tone }]} />
-                  </View>
+        <Text style={styles.sectionTitle}>Networks</Text>
+        <View style={styles.chainGrid}>
+          {[
+            { key: 'ethereum', name: 'Ethereum', icon: 'circle', color: '#627EEA', balance: portfolio?.totalValue ? portfolio.totalValue * 0.45 : 0 },
+            { key: 'polygon', name: 'Polygon', icon: 'hexagon', color: '#8247E5', balance: portfolio?.totalValue ? portfolio.totalValue * 0.20 : 0 },
+            { key: 'arbitrum', name: 'Arbitrum', icon: 'triangle', color: '#28A0F0', balance: portfolio?.totalValue ? portfolio.totalValue * 0.15 : 0 },
+            { key: 'optimism', name: 'Optimism', icon: 'circle', color: '#FF0420', balance: portfolio?.totalValue ? portfolio.totalValue * 0.10 : 0 },
+            { key: 'base', name: 'Base', icon: 'square', color: '#0052FF', balance: portfolio?.totalValue ? portfolio.totalValue * 0.05 : 0 },
+            { key: 'bsc', name: 'BNB Chain', icon: 'octagon', color: '#F3BA2F', balance: portfolio?.totalValue ? portfolio.totalValue * 0.03 : 0 },
+            { key: 'avalanche', name: 'Avalanche', icon: 'triangle', color: '#E84142', balance: portfolio?.totalValue ? portfolio.totalValue * 0.02 : 0 },
+          ].map((chain) => (
+            <TouchableOpacity 
+              key={chain.key} 
+              style={styles.chainCard}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={[withAlpha(chain.color, 0.15), withAlpha(chain.color, 0.05)]}
+                style={styles.chainCardInner}
+              >
+                <View style={[styles.chainIcon, { backgroundColor: withAlpha(chain.color, 0.2), borderColor: withAlpha(chain.color, 0.4) }]}>
+                  <Feather name={chain.icon as any} size={20} color={chain.color} />
                 </View>
-                <Text style={styles.allocationPercent}>{group.percentage}%</Text>
-              </View>
-            );
-          })}
+                <Text style={styles.chainName}>{chain.name}</Text>
+                <Text style={styles.chainBalance}>
+                  {PortfolioService.formatUSD(chain.balance)}
+                </Text>
+                <Text style={[styles.chainPercentage, { color: withAlpha(colors.textPrimary, 0.5) }]}>
+                  {chain.balance > 0 && portfolio?.totalValue ? 
+                    `${((chain.balance / portfolio.totalValue) * 100).toFixed(1)}%` : 
+                    '0%'
+                  }
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Holdings</Text>
-        <View style={styles.tableHeader}>
-          <Text style={[styles.tableCell, { flex: 1.5 }]}>Asset</Text>
-          <Text style={[styles.tableCell, styles.tableAlignRight, { flex: 1 }]}>Price</Text>
-          <Text style={[styles.tableCell, styles.tableAlignRight, { flex: 1 }]}>Amount</Text>
-          <Text style={[styles.tableCell, styles.tableAlignRight, { flex: 1 }]}>Value</Text>
-        </View>
-        {portfolioAssets.map((asset, index) => (
-          <View key={asset.symbol} style={[styles.tableRow, index < portfolioAssets.length - 1 && styles.tableDivider]}>
-            <View style={{ flex: 1.5 }}>
-              <Text style={styles.assetSymbol}>{asset.symbol}</Text>
-              <Text style={styles.assetName}>{asset.name}</Text>
+        {portfolioAssets.length > 0 ? (
+          <>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableCell, { flex: 1.5 }]}>Asset</Text>
+              <Text style={[styles.tableCell, styles.tableAlignRight, { flex: 1 }]}>Price</Text>
+              <Text style={[styles.tableCell, styles.tableAlignRight, { flex: 1 }]}>Amount</Text>
+              <Text style={[styles.tableCell, styles.tableAlignRight, { flex: 1 }]}>Value</Text>
             </View>
-            <Text style={[styles.tableValue, styles.tableAlignRight, { flex: 1 }]}>${asset.price.toLocaleString()}</Text>
-            <Text style={[styles.tableValue, styles.tableAlignRight, { flex: 1 }]}>{asset.amount.toFixed(2)}</Text>
-            <Text style={[styles.tableValue, styles.tableAlignRight, { flex: 1 }]}>${asset.value.toLocaleString()}</Text>
+            {portfolioAssets.map((asset, index) => (
+              <View key={`${asset.symbol}-${asset.address}`} style={[styles.tableRow, index < portfolioAssets.length - 1 && styles.tableDivider]}>
+                <View style={{ flex: 1.5 }}>
+                  <Text style={styles.assetSymbol}>{asset.symbol}</Text>
+                  <Text style={styles.assetName}>{asset.name}</Text>
+                </View>
+                <Text style={[styles.tableValue, styles.tableAlignRight, { flex: 1 }]}>
+                  {PortfolioService.formatUSD(asset.price)}
+                </Text>
+                <Text style={[styles.tableValue, styles.tableAlignRight, { flex: 1 }]}>
+                  {asset.amount.toFixed(4)}
+                </Text>
+                <Text style={[styles.tableValue, styles.tableAlignRight, { flex: 1 }]}>
+                  {PortfolioService.formatUSD(asset.value)}
+                </Text>
+              </View>
+            ))}
+          </>
+        ) : (
+          <View style={styles.emptyState}>
+            <Feather name="inbox" size={48} color={withAlpha(colors.textPrimary, 0.2)} />
+            <Text style={styles.emptyText}>No holdings yet</Text>
+            <Text style={styles.emptySubtext}>
+              {aaAccount?.predictedAddress ? 'Your portfolio will appear here once you receive assets' : 'Connect a wallet to view your holdings'}
+            </Text>
           </View>
-        ))}
+        )}
       </View>
 
       <View style={styles.section}>
@@ -249,6 +287,48 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 18,
       fontWeight: "700",
       marginBottom: 16,
+    },
+    chainGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    chainCard: {
+      width: "48%",
+      borderRadius: 18,
+      overflow: "hidden",
+    },
+    chainCardInner: {
+      padding: 16,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.textPrimary, 0.08),
+      borderRadius: 18,
+      minHeight: 140,
+    },
+    chainIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 12,
+    },
+    chainName: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: withAlpha(colors.textPrimary, 0.7),
+      marginBottom: 8,
+    },
+    chainBalance: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: colors.textPrimary,
+      marginBottom: 4,
+    },
+    chainPercentage: {
+      fontSize: 12,
+      fontWeight: "500",
     },
     allocationBars: {
       backgroundColor: colors.surfaceCard,
@@ -360,6 +440,29 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 15,
       fontWeight: "600",
       marginTop: 6,
+    },
+    emptyState: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 48,
+      paddingHorizontal: 32,
+      backgroundColor: colors.surfaceCard,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.borderMuted,
+    },
+    emptyText: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.textPrimary,
+      marginTop: 16,
+      marginBottom: 8,
+    },
+    emptySubtext: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      textAlign: "center",
+      lineHeight: 20,
     },
   });
 

@@ -3,7 +3,6 @@ import { useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
@@ -83,12 +83,12 @@ const AddContactScreen: React.FC = () => {
   const handleSave = async () => {
     // Validate
     if (!name.trim()) {
-      Alert.alert("Error", "Please enter a contact name");
+      console.warn("Please enter a contact name");
       return;
     }
 
     if (!userId) {
-      Alert.alert("Error", "You must be logged in to add contacts");
+      console.warn("You must be logged in to add contacts");
       return;
     }
 
@@ -105,7 +105,7 @@ const AddContactScreen: React.FC = () => {
       });
 
     if (validAddresses.length === 0) {
-      Alert.alert("Error", "Please add at least one address");
+      console.error("Please add at least one address");
       return;
     }
 
@@ -121,33 +121,25 @@ const AddContactScreen: React.FC = () => {
       });
 
       if (newContact) {
-        Alert.alert("Success", "Contact added successfully!", [
-          {
-            text: "View Details",
-            onPress: () => {
-              navigation.goBack();
-              setTimeout(() => {
-                (navigation as any).navigate("ContactDetail", { contactId: newContact.id });
-              }, 100);
-            },
-          },
-          {
-            text: "Done",
-            onPress: () => navigation.goBack(),
-          },
-        ]);
+        // Navigate back and then to detail screen
+        navigation.goBack();
+        // Use setTimeout to ensure navigation completes
+        setTimeout(() => {
+          (navigation as any).navigate("ContactDetail", { contactId: newContact.id });
+        }, 100);
       } else {
         throw new Error("Failed to create contact");
       }
     } catch (error: any) {
       console.error("Failed to add contact:", error);
-      Alert.alert("Error", error.message || "Failed to add contact");
+      // Error is logged, navigation will go back on success only
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -265,9 +257,6 @@ const AddContactScreen: React.FC = () => {
               autoCapitalize="none"
               onSubmitEditing={addCustomTag}
             />
-            <TouchableOpacity onPress={addCustomTag} style={styles.addTagButton}>
-              <Feather name="plus" size={20} color={colors.accentAlt} />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -287,11 +276,16 @@ const AddContactScreen: React.FC = () => {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,

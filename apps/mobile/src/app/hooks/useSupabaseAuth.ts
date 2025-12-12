@@ -145,22 +145,25 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 				}
 			}
 
-			const profile = normalizeProfile(session?.user);
-			setProfile(profile);
-			setIsOnboarded(Boolean(profile?.username));
-
-			if (session?.user && profile?.username) {
-				void syncProfileDefaults(session.user, profile);
-			} else if (!session?.user) {
-				syncedProfileRef.current = null;
-			}
-
-			// Sync profile and guardians from database on login
+			// Sync profile and guardians from database on login FIRST
 			if (session?.user && isAuthenticated) {
 				try {
-					// Fetch profile from database
+					// Fetch profile from database first (this updates the store)
 					const dbProfile = await ProfileSyncService.fetchAndSyncProfile(session.user.id);
-					console.log("✅ Profile synced from database");
+					
+					// Only use session metadata as fallback if database has no profile
+					if (!dbProfile || !dbProfile.username) {
+						const profile = normalizeProfile(session?.user);
+						setProfile(profile);
+						setIsOnboarded(Boolean(profile?.username));
+						
+						if (profile?.username) {
+							void syncProfileDefaults(session.user, profile);
+						}
+					} else {
+						// Database profile exists, use it
+						setIsOnboarded(true);
+					}
 
 					// Check if AA wallet exists and fetch guardians
 					const aaWalletId = await GuardianSyncService.getAAWalletId(session.user.id);
@@ -172,7 +175,17 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 					}
 				} catch (syncError) {
 					console.warn("⚠️  Failed to sync user data from database:", syncError);
+					// Fallback to session metadata on error
+					const profile = normalizeProfile(session?.user);
+					setProfile(profile);
+					setIsOnboarded(Boolean(profile?.username));
 				}
+			} else if (!session?.user) {
+				// User logged out
+				const profile = normalizeProfile(session?.user);
+				setProfile(profile);
+				setIsOnboarded(Boolean(profile?.username));
+				syncedProfileRef.current = null;
 			}
 		},
 		[setIsLoggedIn, setIsOnboarded, setProfile, setSession, setUser, syncProfileDefaults],

@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -47,9 +47,21 @@ const ContactListScreen: React.FC = () => {
     }
   }, []);
 
+  // Load contacts only once on mount
   useEffect(() => {
     loadContacts();
   }, [loadContacts]);
+
+  // Refresh contacts when screen comes into focus (if needed)
+  useFocusEffect(
+    useCallback(() => {
+      // Only reload if not already loading and not the initial load
+      if (!isLoading && contacts.length > 0) {
+        setIsRefreshing(true);
+        loadContacts();
+      }
+    }, [isLoading, contacts.length, loadContacts])
+  );
 
   // Filter contacts based on search and tags
   useEffect(() => {

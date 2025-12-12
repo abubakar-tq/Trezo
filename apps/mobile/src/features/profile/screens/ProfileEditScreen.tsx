@@ -3,7 +3,6 @@ import { useNavigation } from "@react-navigation/native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { ThemedAlert, type ThemedAlertButton } from "@shared/components/ui/ThemedAlert";
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
@@ -34,6 +34,24 @@ const ProfileEditScreen: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    buttons?: ThemedAlertButton[];
+  }>({ visible: false, title: "", message: "" });
+
+  const showAlert = useCallback((
+    title: string,
+    message: string,
+    buttons?: ThemedAlertButton[]
+  ) => {
+    setAlertConfig({ visible: true, title, message, buttons });
+  }, []);
+
+  const dismissAlert = useCallback(() => {
+    setAlertConfig({ visible: false, title: "", message: "" });
+  }, []);
 
   const handleUsernameChange = useCallback((text: string) => {
     setUsername(text);
@@ -45,7 +63,7 @@ const ProfileEditScreen: React.FC = () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (status !== "granted") {
-      Alert.alert(
+      showAlert(
         "Permission Required",
         "Please grant photo library access to change your profile picture."
       );
@@ -71,7 +89,7 @@ const ProfileEditScreen: React.FC = () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     
     if (status !== "granted") {
-      Alert.alert(
+      showAlert(
         "Permission Required",
         "Please grant camera access to take a profile picture."
       );
@@ -92,11 +110,11 @@ const ProfileEditScreen: React.FC = () => {
   }, []);
 
   const removeAvatar = useCallback(() => {
-    Alert.alert(
+    showAlert(
       "Remove Profile Picture",
       "Are you sure you want to remove your profile picture?",
       [
-        { text: "Cancel", style: "cancel" },
+        { text: "Cancel", style: "cancel", onPress: () => {} },
         {
           text: "Remove",
           style: "destructive",
@@ -110,26 +128,24 @@ const ProfileEditScreen: React.FC = () => {
   }, []);
 
   const showImageOptions = useCallback(() => {
-    Alert.alert(
-      "Profile Picture",
-      "Choose an option",
-      [
-        { text: "Take Photo", onPress: takePhoto },
-        { text: "Choose from Library", onPress: pickImage },
-        ...(avatarUri ? [{ text: "Remove Picture", onPress: removeAvatar, style: "destructive" as const }] : []),
-        { text: "Cancel", style: "cancel" },
-      ]
-    );
+    const options: ThemedAlertButton[] = [
+      { text: "Take Photo", onPress: takePhoto, style: "default" },
+      { text: "Choose from Library", onPress: pickImage, style: "default" },
+      ...(avatarUri ? [{ text: "Remove Picture", onPress: removeAvatar, style: "destructive" as const }] : []),
+      { text: "Cancel", style: "cancel" as const, onPress: () => {} },
+    ];
+    
+    showAlert("Profile Picture", "Choose an option", options);
   }, [avatarUri, pickImage, removeAvatar, takePhoto]);
 
   const handleSave = useCallback(async () => {
     if (!user?.id) {
-      Alert.alert("Error", "User not authenticated");
+      showAlert("Error", "User not authenticated");
       return;
     }
 
     if (!username.trim()) {
-      Alert.alert("Invalid Input", "Please enter a username");
+      showAlert("Invalid Input", "Please enter a username");
       return;
     }
 
@@ -140,7 +156,7 @@ const ProfileEditScreen: React.FC = () => {
       if (username.trim() !== profile?.username) {
         const result = await ProfileSyncService.updateUsername(user.id, username.trim());
         if (!result.success) {
-          Alert.alert("Username Error", result.error || "Failed to update username");
+          showAlert("Username Error", result.error || "Failed to update username");
           setIsSaving(false);
           return;
         }
@@ -158,9 +174,9 @@ const ProfileEditScreen: React.FC = () => {
         console.log('📊 Storage test result:', storageTest);
         
         if (!storageTest.canList) {
-          Alert.alert(
+          showAlert(
             "Storage Error", 
-            "Cannot access storage bucket. Please check your connection and try again.\n\n" +
+            "Cannot access storage bucket. Please check your connection and try again.\\n\\n" +
             `Error: ${storageTest.error || 'Unknown error'}`
           );
           setIsSaving(false);
@@ -173,7 +189,7 @@ const ProfileEditScreen: React.FC = () => {
         setIsUploading(false);
         
         if (!result.success) {
-          Alert.alert("Avatar Upload Error", result.error || "Failed to upload avatar");
+          showAlert("Avatar Upload Error", result.error || "Failed to upload avatar");
           setIsSaving(false);
           return;
         }
@@ -181,19 +197,19 @@ const ProfileEditScreen: React.FC = () => {
         // Remove avatar
         const success = await ProfileSyncService.removeAvatar(user.id);
         if (!success) {
-          Alert.alert("Error", "Failed to remove avatar");
+          showAlert("Error", "Failed to remove avatar");
           setIsSaving(false);
           return;
         }
       }
 
       setHasChanges(false);
-      Alert.alert("Success", "Profile updated successfully!", [
-        { text: "OK", onPress: () => navigation.goBack() }
+      showAlert("Success", "Profile updated successfully!", [
+        { text: "OK", onPress: () => navigation.goBack(), style: "default" }
       ]);
     } catch (error) {
       console.error("Failed to save profile:", error);
-      Alert.alert("Error", "An unexpected error occurred. Please try again.");
+      showAlert("Error", "An unexpected error occurred. Please try again.");
     } finally {
       setIsSaving(false);
       setIsUploading(false);
@@ -286,6 +302,13 @@ const ProfileEditScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+      <ThemedAlert
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        onDismiss={dismissAlert}
+      />
     </View>
   );
 };

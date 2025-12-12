@@ -3,14 +3,18 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Clipboard,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { ThemedAlert, type ThemedAlertButton } from "@shared/components/ui/ThemedAlert";
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
@@ -27,6 +31,24 @@ const ContactDetailScreen: React.FC = () => {
   const contactId = (route.params as any)?.contactId;
   const [contact, setContact] = useState<Contact | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [editedMemo, setEditedMemo] = useState("");
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    buttons?: ThemedAlertButton[];
+  }>({ visible: false, title: "", message: "" });
+
+  // Themed alert helper
+  const showAlert = (title: string, message: string, buttons?: ThemedAlertButton[]) => {
+    setAlertConfig({ visible: true, title, message, buttons });
+  };
+
+  const dismissAlert = () => {
+    setAlertConfig({ visible: false, title: "", message: "" });
+  };
 
   useEffect(() => {
     loadContact();
@@ -34,7 +56,7 @@ const ContactDetailScreen: React.FC = () => {
 
   const loadContact = async () => {
     if (!contactId) {
-      Alert.alert("Error", "Contact ID not provided");
+      showAlert("Error", "Contact ID not provided");
       navigation.goBack();
       return;
     }
@@ -43,8 +65,10 @@ const ContactDetailScreen: React.FC = () => {
     const data = await ContactService.getContact(contactId);
     if (data) {
       setContact(data);
+      setEditedName(data.name);
+      setEditedMemo(data.memo || "");
     } else {
-      Alert.alert("Error", "Contact not found");
+      showAlert("Error", "Contact not found");
       navigation.goBack();
     }
     setIsLoading(false);
@@ -52,15 +76,45 @@ const ContactDetailScreen: React.FC = () => {
 
   const handleCopyAddress = (address: string) => {
     Clipboard.setString(address);
-    Alert.alert("Copied", "Address copied to clipboard");
+    showAlert("Copied", "Address copied to clipboard");
+  };
+
+  const handleEdit = () => {
+    setIsEditing(true);
+  };
+
+  const handleSave = async () => {
+    if (!contact || !editedName.trim()) {
+      showAlert("Error", "Name cannot be empty");
+      return;
+    }
+
+    const updated = await ContactService.updateContact(contact.id, {
+      name: editedName.trim(),
+      memo: editedMemo.trim() || undefined,
+    });
+
+    if (updated) {
+      setContact(updated);
+      setIsEditing(false);
+      showAlert("Success", "Contact updated");
+    } else {
+      showAlert("Error", "Failed to update contact");
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditedName(contact?.name || "");
+    setEditedMemo(contact?.memo || "");
+    setIsEditing(false);
   };
 
   const handleDelete = () => {
-    Alert.alert(
+    showAlert(
       "Delete Contact",
       `Are you sure you want to delete ${contact?.name}?`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: "Cancel", style: "cancel", onPress: () => {} },
         {
           text: "Delete",
           style: "destructive",
@@ -68,11 +122,11 @@ const ContactDetailScreen: React.FC = () => {
             if (contact) {
               const success = await ContactService.deleteContact(contact.id);
               if (success) {
-                Alert.alert("Success", "Contact deleted", [
-                  { text: "OK", onPress: () => navigation.goBack() },
+                showAlert("Success", "Contact deleted", [
+                  { text: "OK", onPress: () => navigation.goBack(), style: "default" },
                 ]);
               } else {
-                Alert.alert("Error", "Failed to delete contact");
+                showAlert("Error", "Failed to delete contact");
               }
             }
           },
@@ -83,7 +137,7 @@ const ContactDetailScreen: React.FC = () => {
 
   if (isLoading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={24} color={colors.textPrimary} />
@@ -94,7 +148,7 @@ const ContactDetailScreen: React.FC = () => {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.accentAlt} />
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -103,72 +157,121 @@ const ContactDetailScreen: React.FC = () => {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Contact Details</Text>
-        <TouchableOpacity onPress={handleDelete}>
-          <Feather name="trash-2" size={20} color={withAlpha(colors.textPrimary, 0.6)} />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Name */}
-        <View style={styles.nameContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {contact.name.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <Text style={styles.name}>{contact.name}</Text>
-        </View>
-
-        {/* Tags */}
-        {contact.tags && contact.tags.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.tagsContainer}>
-              {contact.tags.map((tag, index) => (
-                <View key={index} style={styles.tag}>
-                  <Text style={styles.tagText}>{tag}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Addresses */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Addresses</Text>
-          {contact.addresses.map((addr, index) => (
-            <View key={index} style={styles.addressItem}>
-              <View style={styles.addressInfo}>
-                <Text style={styles.addressLabel}>{addr.label}</Text>
-                <Text style={styles.addressText} numberOfLines={1}>
-                  {addr.address}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => handleCopyAddress(addr.address)}
-                style={styles.copyButton}
-              >
-                <Feather name="copy" size={18} color={colors.accentAlt} />
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >        <View style={{ flex: 1 }}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Contact Details</Text>
+          {isEditing ? (
+            <View style={styles.headerButtons}>
+              <TouchableOpacity onPress={handleCancelEdit} style={styles.headerButton}>
+                <Feather name="x" size={20} color={withAlpha(colors.textPrimary, 0.6)} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
+                <Feather name="check" size={20} color={colors.accentAlt} />
               </TouchableOpacity>
             </View>
-          ))}
+          ) : (
+            <View style={styles.headerButtons}>
+              <TouchableOpacity onPress={handleEdit} style={styles.headerButton}>
+                <Feather name="edit-2" size={20} color={colors.accentAlt} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDelete} style={styles.headerButton}>
+                <Feather name="trash-2" size={20} color={withAlpha(colors.textPrimary, 0.6)} />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
-        {/* Memo */}
-        {contact.memo && (
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Name */}
+          <View style={styles.nameContainer}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {(isEditing ? editedName : contact.name).charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            {isEditing ? (
+              <TextInput
+                style={styles.nameInput}
+                value={editedName}
+                onChangeText={setEditedName}
+                placeholder="Contact name"
+                placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+                autoCapitalize="words"
+              />
+            ) : (
+              <Text style={styles.name}>{contact.name}</Text>
+            )}
+          </View>
+
+          {/* Addresses */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Addresses</Text>
+          {contact.addresses && contact.addresses.length > 0 ? (
+            contact.addresses.map((addr, index) => (
+              <View key={index} style={styles.addressItem}>
+                <View style={styles.addressInfo}>
+                  <Text style={styles.addressLabel}>{addr.label}</Text>
+                  <Text style={styles.addressText} numberOfLines={1}>
+                    {addr.address}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => handleCopyAddress(addr.address)}
+                  style={styles.copyButton}
+                >
+                  <Feather name="copy" size={18} color={colors.accentAlt} />
+                </TouchableOpacity>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.memoText}>No addresses added</Text>
+          )}
+        </View>
+
+          {/* Tags */}
+          {contact.tags && contact.tags.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Tags</Text>
+              <View style={styles.tagsContainer}>
+                {contact.tags.map((tag, index) => (
+                  <View key={index} style={styles.tag}>
+                    <Text style={styles.tagText}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Notes */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Notes</Text>
-            <View style={styles.memoContainer}>
-              <Text style={styles.memoText}>{contact.memo}</Text>
-            </View>
+            {isEditing ? (
+              <TextInput
+                style={styles.memoInput}
+                value={editedMemo}
+                onChangeText={setEditedMemo}
+                placeholder="Add notes about this contact"
+                placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+            ) : (
+              <View style={styles.memoContainer}>
+                <Text style={styles.memoText}>
+                  {contact.memo || "No notes added yet"}
+                </Text>
+              </View>
+            )}
           </View>
-        )}
 
         {/* Metadata */}
         <View style={styles.section}>
@@ -195,7 +298,16 @@ const ContactDetailScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
-    </View>
+        </View>
+      </KeyboardAvoidingView>
+      <ThemedAlert
+        visible={alertConfig.visible}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        onDismiss={dismissAlert}
+      />
+    </SafeAreaView>
   );
 };
 
@@ -218,6 +330,13 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 18,
       fontWeight: "600",
       color: colors.textPrimary,
+    },
+    headerButtons: {
+      flexDirection: "row",
+      columnGap: 12,
+    },
+    headerButton: {
+      padding: 4,
     },
     loadingContainer: {
       flex: 1,
@@ -251,6 +370,28 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 24,
       fontWeight: "600",
       color: colors.textPrimary,
+    },
+    nameInput: {
+      fontSize: 24,
+      fontWeight: "600",
+      color: colors.textPrimary,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      borderWidth: 1,
+      borderColor: colors.accentAlt,
+    },
+    memoInput: {
+      fontSize: 14,
+      color: colors.textPrimary,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      borderWidth: 1,
+      borderColor: colors.accentAlt,
+      minHeight: 100,
     },
     section: {
       paddingHorizontal: 20,
