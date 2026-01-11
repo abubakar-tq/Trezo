@@ -44,6 +44,18 @@ app-example
 /ios
 /android
 
-# Local documentation and scripts
+# Local documentation
 docs/
+
+# Scripts for testing/debugging
 scripts/
+
+# Temporary SQL files
+*.sql.bak
+APPLY_*.sql
+CHECK_*.sql
+
+
+#  Local contract deployments
+/src/integration/contracts/deployment.31337.json
+

@@ -15,11 +15,15 @@ type UserStore = {
 	profile: Profile | null;
 	isLoggedIn: boolean;
 	isOnboarded: boolean;
+	smartAccountAddress: string | null;
+	smartAccountDeployed: boolean;
 	setUser: (user: User | null) => void;
 	setSession: (session: Session | null) => void;
 	setProfile: (profile: Profile | null) => void;
 	setIsLoggedIn: (value: boolean) => void;
 	setIsOnboarded: (value: boolean) => void;
+	setSmartAccountAddress: (address: string | null) => void;
+	setSmartAccountDeployed: (deployed: boolean) => void;
 	reset: () => void;
 	logout: () => Promise<void>;
 };
@@ -30,6 +34,8 @@ const initialState = {
 	profile: null,
 	isLoggedIn: false,
 	isOnboarded: false,
+	smartAccountAddress: null,
+	smartAccountDeployed: false,
 } satisfies Partial<UserStore>;
 
 export const useUserStore = create<UserStore>()(
@@ -49,6 +55,8 @@ export const useUserStore = create<UserStore>()(
 			setProfile: (profile) => set({ profile }),
 			setIsLoggedIn: (value) => set({ isLoggedIn: value }),
 			setIsOnboarded: (value) => set({ isOnboarded: value }),
+			setSmartAccountAddress: (address) => set({ smartAccountAddress: address }),
+			setSmartAccountDeployed: (deployed) => set({ smartAccountDeployed: deployed }),
 			reset: () => set({ ...initialState }),
 			logout: async () => {
 				// Clear all AsyncStorage keys first
@@ -80,7 +88,9 @@ export const useUserStore = create<UserStore>()(
 				profile,
 				isLoggedIn,
 				isOnboarded,
-			}) => ({ user, session, profile, isLoggedIn, isOnboarded }),
+				smartAccountAddress,
+				smartAccountDeployed,
+			}) => ({ user, session, profile, isLoggedIn, isOnboarded, smartAccountAddress, smartAccountDeployed }),
 		},
 	),
 );

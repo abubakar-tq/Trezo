@@ -31,12 +31,19 @@ type SettingsItem = {
   route?: keyof RootStackParamList;
 };
 
-const settingsItems: SettingsItem[] = [
+const baseSettingsItems: SettingsItem[] = [
+  { label: "Contacts", icon: "book", route: "ContactList" },
   { label: "Browser settings", icon: "globe", route: "BrowserSettings" },
   { label: "Security & privacy", icon: "shield" },
   { label: "Connected devices", icon: "smartphone" },
   { label: "Notifications", icon: "bell" },
-  { label: "Backup & recovery", icon: "cloud" },
+  { label: "Backup & recovery", icon: "cloud", route: "BackupRecovery" },
+];
+
+const settingsItems: SettingsItem[] = [
+  ...baseSettingsItems,
+  // Dev-only quick link into the AA createAccount tester
+  ...(__DEV__ ? [{ label: "Dev Controls", icon: "cpu", route: "DevCreateAccount" }] : []),
 ];
 
 const ProfileScreen: React.FC = () => {
@@ -99,17 +106,24 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.heroWrapper}>
           <LinearGradient colors={gradients.profileHero} style={styles.heroGradient}>
             <View style={styles.heroHeader}>
-              <Avatar
-                size={72}
-                uri={
-                  profile?.avatarUrl ??
-                  (user?.user_metadata?.avatar_url as string | undefined) ??
-                  null
-                }
-                label={displayName}
-              />
+              <TouchableOpacity 
+                onPress={() => navigation.navigate("ProfileEdit")}
+                activeOpacity={0.85}
+              >
+                <Avatar
+                  size={72}
+                  uri={
+                    profile?.avatarUrl ??
+                    (user?.user_metadata?.avatar_url as string | undefined) ??
+                    null
+                  }
+                  label={displayName}
+                />
+              </TouchableOpacity>
               <View style={styles.heroInfo}>
-                <Text style={styles.name}>{displayName}</Text>
+                <TouchableOpacity onPress={() => navigation.navigate("ProfileEdit")}>
+                  <Text style={styles.name}>{displayName}</Text>
+                </TouchableOpacity>
                 <Text style={styles.email}>{user?.email ?? "wallet@trezo.app"}</Text>
                 <Text style={styles.modeHint}>
                   Theme: {resolvedMode === "dark" ? "Dark" : "Light"} mode

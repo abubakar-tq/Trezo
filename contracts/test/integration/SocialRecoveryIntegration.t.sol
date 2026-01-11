@@ -47,7 +47,7 @@ contract SocialRecoveryIntegrationTest is Test {
             ,
             ,
             AccountFactory _accountFactory,
-            PasskeyValidator _passkeyValidator
+            PasskeyValidator _passkeyValidator,
         ) = deployScript.deployAccount();
         helperConfig = _helperConfig;
         accountFactory = _accountFactory;

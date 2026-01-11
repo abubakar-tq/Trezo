@@ -1,17 +1,31 @@
 import { PortfolioService } from "@/src/features/portfolio/services/PortfolioService";
-import { AccountStatusBanner } from "@/src/features/wallet/components/AccountStatusBanner";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import type { AAAccount } from "@/src/features/wallet/store/useWalletStore";
 import type { RootStackParamList } from "@/src/types/navigation";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import {
+  directDeployAccount,
+  predictAccountAddress,
+  getDeployment,
+} from "@/src/integration/viem";
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import { sha256, toBytes, type Hex, type Address } from "viem";
+import {
+  devFundSmartAccount,
+  DEV_FUNDING_AMOUNT_ETH,
+} from "@/src/features/wallet/services/devFunding";
 import { Avatar, TabScreenContainer } from "@shared/components";
 import { MarketTokenSkeleton } from "@shared/components/ui";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Animated,
+    Clipboard,
     Easing,
     FlatList,
     Image,
@@ -83,9 +97,17 @@ const HomeScreen: React.FC = () => {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const contentBottomInset = useTabContentBottomInset();
   
-  // AA Wallet deployment status
+  // Smart Account deployment status
+  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
+  const setSmartAccountAddress = useUserStore((state) => state.setSmartAccountAddress);
+  const setSmartAccountDeployed = useUserStore((state) => state.setSmartAccountDeployed);
   const aaAccount = useWalletStore((state) => state.aaAccount);
-  const isWalletDeployed = aaAccount?.isDeployed ?? false;
+  const activeWalletAccount = useWalletStore((state) => state.activeAccount);
+  const setAAAccount = useWalletStore((state) => state.setAAAccount);
+  const isWalletDeployed = smartAccountDeployed;
+  const userId = user?.id ?? null;
+  const resolvedDeployChainId = (aaAccount?.chainId ?? DEFAULT_CHAIN_ID) as SupportedChainId;
   
   // Portfolio data
   const [portfolioBalance, setPortfolioBalance] = useState(0);
@@ -143,9 +165,178 @@ const HomeScreen: React.FC = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailRequestId, setDetailRequestId] = useState(0);
   const detailAbortRef = useRef<AbortController | null>(null);
-
+  const [accountModalVisible, setAccountModalVisible] = useState(false);
+  const [deployingAccount, setDeployingAccount] = useState(false);
+  const [fundingAccount, setFundingAccount] = useState(false);
+  const [accountActionStatus, setAccountActionStatus] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<QuickAction | null>(null);
   const refreshRotation = useRef(new Animated.Value(0)).current;
+
+  // Copy address to clipboard
+  const handleCopyAddress = useCallback(() => {
+    if (smartAccountAddress) {
+      Clipboard.setString(smartAccountAddress);
+      Alert.alert('Copied!', 'Address copied to clipboard', [{ text: 'OK' }]);
+    }
+  }, [smartAccountAddress]);
+
+  const fundSmartAccount = useCallback(
+    async (targetAddress?: string, options?: { silent?: boolean }) => {
+      const destination = (targetAddress ?? smartAccountAddress) as Address | undefined;
+      if (!destination) {
+        if (!options?.silent) {
+          Alert.alert("No Address", "Deploy your smart account before funding it.");
+        }
+        return null;
+      }
+      try {
+        setFundingAccount(true);
+        setAccountActionStatus("Funding smart account…");
+        const { transactionHash } = await devFundSmartAccount({
+          address: destination,
+          chainId: resolvedDeployChainId,
+        });
+        if (!options?.silent) {
+          Alert.alert(
+            "Account Funded",
+            `Sent ${DEV_FUNDING_AMOUNT_ETH} ETH to:\n${destination}\n\nTx: ${transactionHash.slice(0, 12)}…`,
+          );
+        }
+        return transactionHash;
+      } catch (error) {
+        if (!options?.silent) {
+          Alert.alert("Funding Failed", error instanceof Error ? error.message : "Unable to fund account");
+        }
+        throw error;
+      } finally {
+        setFundingAccount(false);
+        setAccountActionStatus(null);
+      }
+    },
+    [smartAccountAddress, resolvedDeployChainId],
+  );
+
+  const handleDeploySmartAccount = useCallback(async () => {
+    if (deployingAccount) return;
+    if (!userId) {
+      Alert.alert("Sign In Required", "Please sign in before deploying your smart account.");
+      return;
+    }
+    try {
+      setDeployingAccount(true);
+      setAccountActionStatus("Preparing deployment…");
+
+      let passkey = await PasskeyService.getPasskey(userId);
+      if (!passkey) {
+        const created = await PasskeyService.createPasskey(userId);
+        passkey = created ?? (await PasskeyService.getPasskey(userId));
+      }
+      if (!passkey) {
+        throw new Error("Unable to access passkey credentials on this device.");
+      }
+
+      const rpIdHash = passkey.rpIdHash
+        ? (passkey.rpIdHash as Hex)
+        : (sha256(toBytes(passkey.rpId)) as Hex);
+      const pxHex = passkey.publicKeyX.startsWith("0x")
+        ? (passkey.publicKeyX as Hex)
+        : (`0x${passkey.publicKeyX}` as Hex);
+      const pyHex = passkey.publicKeyY.startsWith("0x")
+        ? (passkey.publicKeyY as Hex)
+        : (`0x${passkey.publicKeyY}` as Hex);
+
+      if (pxHex.length !== 66 || pyHex.length !== 66) {
+        throw new Error("Stored passkey public key is invalid. Please recreate your passkey.");
+      }
+
+      const passkeyInit = {
+        idRaw: passkey.credentialIdRaw as Hex,
+        px: BigInt(pxHex),
+        py: BigInt(pyHex),
+        rpIdHash,
+      };
+      const salt = passkey.credentialIdRaw as Hex;
+      const deployment = getDeployment(resolvedDeployChainId);
+      if (!deployment?.passkeyValidator) {
+        throw new Error("Validator address missing for current chain.");
+      }
+
+      const predictedAddress = await predictAccountAddress(resolvedDeployChainId, salt);
+      setSmartAccountAddress(predictedAddress);
+
+      const baseAccount: AAAccount =
+        aaAccount ??
+        ({
+          id: `local-${userId}`,
+          userId,
+          predictedAddress,
+          ownerAddress: activeWalletAccount?.address ?? predictedAddress,
+          isDeployed: false,
+          walletName: `${profile?.username ?? "Primary"} Smart Account`,
+          chainId: resolvedDeployChainId,
+          createdAt: new Date().toISOString(),
+        } as AAAccount);
+
+      setAAAccount({ ...baseAccount, predictedAddress, chainId: resolvedDeployChainId, isDeployed: false });
+
+      setAccountActionStatus("Deploying smart account…");
+      const result = await directDeployAccount({
+        chainId: resolvedDeployChainId,
+        salt,
+        passkeyInit,
+        validator: deployment.passkeyValidator as Address,
+      });
+
+      const deployedAccount: AAAccount = {
+        ...baseAccount,
+        predictedAddress: result.accountAddress,
+        chainId: resolvedDeployChainId,
+        isDeployed: true,
+        deploymentTxHash: result.transactionHash,
+        deploymentBlockNumber:
+          typeof result.blockNumber === "bigint"
+            ? Number(result.blockNumber)
+            : result.blockNumber ?? baseAccount.deploymentBlockNumber,
+        deployedAt: new Date().toISOString(),
+      };
+      setAAAccount(deployedAccount);
+      setSmartAccountAddress(result.accountAddress);
+      setSmartAccountDeployed(true);
+
+      let fundingHash: string | null = null;
+      try {
+        fundingHash = await fundSmartAccount(result.accountAddress, { silent: true });
+      } catch (fundError) {
+        console.warn("[Home] Funding smart account failed", fundError);
+      }
+      setAccountActionStatus(null);
+      Alert.alert(
+        "Smart Account Ready",
+        `Deployed at:\n${result.accountAddress}${
+          fundingHash ? `\n\nFunded ${FUNDING_AMOUNT_ETH} ETH\nTx: ${fundingHash.slice(0, 12)}…` : ""
+        }`,
+      );
+    } catch (error) {
+      setAccountActionStatus(null);
+      Alert.alert(
+        "Deployment Failed",
+        error instanceof Error ? error.message : "Unable to deploy smart account",
+      );
+    } finally {
+      setDeployingAccount(false);
+    }
+  }, [
+    aaAccount,
+    activeWalletAccount?.address,
+    deployingAccount,
+    fundSmartAccount,
+    profile?.username,
+    resolvedDeployChainId,
+    setAAAccount,
+    setSmartAccountAddress,
+    setSmartAccountDeployed,
+    userId,
+  ]);
 
   useEffect(() => {
     fetchMarketData({ chain: activeChain }).catch(() => undefined);
@@ -172,13 +363,17 @@ const HomeScreen: React.FC = () => {
   }, [searchQuery, tokens]);
 
   const spotlightTokens = useMemo(() => {
-    // Show user's actual token holdings from portfolio
+    // Only show user's actual token holdings from portfolio
     if (portfolio && portfolio.tokens.length > 0) {
-      return portfolio.tokens.slice(0, 3);
+      // Get top 5 holdings by value
+      const holdings = [...portfolio.tokens]
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5);
+      return holdings;
     }
-    // Fallback to market data when no wallet connected
-    return tokens.slice(0, 3);
-  }, [portfolio, tokens]);
+    // Return empty array if no holdings
+    return [];
+  }, [portfolio]);
 
   const isInitialLoading = loading && tokens.length === 0;
   const isRefreshing = loading && tokens.length > 0;
@@ -453,34 +648,48 @@ const HomeScreen: React.FC = () => {
         contentContainerStyle={{ paddingBottom: contentBottomInset }}
         showsVerticalScrollIndicator={false}
       >
-        <AccountStatusBanner />
-        
-        <View style={styles.headerRow}>
-          <Avatar uri={avatarUri} label={greetingName} />
-          <View style={{ flex: 1, paddingHorizontal: 12 }}>
-            <Text style={styles.greeting}>Welcome back</Text>
-            <Text style={styles.greetingName}>{greetingName}</Text>
-          </View>
+        {/* Wallet Address Header */}
+        <View className="flex-row items-center gap-3 mb-5 mt-3">
+          {smartAccountAddress ? (
+            <>
+              <TouchableOpacity 
+                className="flex-1 flex-row items-center justify-between bg-surface-elevated rounded-2xl p-3 px-4 border border-border/50"
+                onPress={() => setAccountModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <View className="flex-1">
+                  <Text className="text-xs text-text-secondary mb-0.5">Account 1</Text>
+                  <Text className="text-[15px] font-semibold text-text-primary font-mono">
+                    {smartAccountAddress.slice(0, 6)}...{smartAccountAddress.slice(-4)}
+                  </Text>
+                </View>
+                <Feather name="chevron-down" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="w-11 h-11 rounded-full bg-surface-elevated items-center justify-center border border-border/50"
+                onPress={handleCopyAddress}
+                activeOpacity={0.7}
+              >
+                <Feather name="copy" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              className="flex-1 flex-row items-center justify-center gap-2 bg-warning/10 rounded-2xl p-3 border border-warning/30"
+              onPress={() => setAccountModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Feather name="alert-triangle" size={16} color={colors.warning} />
+              <Text className="text-sm font-semibold text-warning">Deploy Smart Account</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={() => navigation.navigate('AATest')}
-            style={styles.debugButton}
+            className="w-9 h-9 rounded-full bg-accent/10 items-center justify-center border border-accent/25"
             activeOpacity={0.7}
           >
             <Feather name="zap" size={16} color={colors.accent} />
           </TouchableOpacity>
-          <LinearGradient 
-            colors={isWalletDeployed ? gradients.card : [colors.warning + '20', colors.warning + '30']} 
-            style={[styles.statusPill, !isWalletDeployed && styles.statusPillWarning]}
-          >
-            <Feather 
-              name={isWalletDeployed ? "shield" : "alert-triangle"} 
-              size={14} 
-              color={isWalletDeployed ? colors.accent : colors.warning} 
-            />
-            <Text style={[styles.statusText, !isWalletDeployed && styles.statusTextWarning]}>
-              {isWalletDeployed ? "Secured" : "Not Deployed"}
-            </Text>
-          </LinearGradient>
         </View>
 
         <LinearGradient colors={gradients.hero} style={styles.balanceCard}>
@@ -489,7 +698,7 @@ const HomeScreen: React.FC = () => {
               <Text style={styles.balanceLabel}>Portfolio balance</Text>
               {portfolioLoading ? (
                 <ActivityIndicator size="small" color={colors.accent} style={{ marginTop: 8 }} />
-              ) : aaAccount?.predictedAddress ? (
+              ) : smartAccountAddress ? (
                 <Text style={styles.balanceValue}>{PortfolioService.formatUSD(portfolioBalance)}</Text>
               ) : (
                 <Text style={styles.balanceValue}>Connect a wallet to view balance</Text>
@@ -497,11 +706,11 @@ const HomeScreen: React.FC = () => {
             </View>
           </View>
 
-          <Text style={styles.balanceHelper}>
-            {aaAccount?.predictedAddress 
-              ? `AA Wallet: ${aaAccount.predictedAddress.slice(0, 6)}...${aaAccount.predictedAddress.slice(-4)}`
-              : "Securely link your on-chain accounts to unlock live valuation and performance insights."}
-          </Text>
+          {!smartAccountAddress && (
+            <Text style={styles.balanceHelper}>
+              Deploy your smart account to view balance and manage assets
+            </Text>
+          )}
 
           <View style={styles.quickActionsRow}>
             {quickActions.map((action) => (
@@ -694,6 +903,120 @@ const HomeScreen: React.FC = () => {
         action={activeAction}
         onDismiss={handleDismissAction}
       />
+      
+      {/* Account Modal */}
+      <Modal
+        transparent
+        visible={accountModalVisible}
+        animationType="fade"
+        onRequestClose={() => setAccountModalVisible(false)}
+      >
+        <Pressable
+          style={styles.accountModalBackdrop}
+          onPress={() => setAccountModalVisible(false)}
+        >
+          <Pressable
+            style={styles.accountSheet}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View style={styles.accountSheetHeader}>
+              <View>
+                <Text style={styles.accountSheetTitle}>Smart Account</Text>
+                <Text
+                  style={[
+                    styles.accountSheetStatus,
+                    !isWalletDeployed && styles.accountSheetStatusWarning,
+                  ]}
+                >
+                  {isWalletDeployed ? "Status: Deployed" : "Status: Not Deployed"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setAccountModalVisible(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Feather name="x" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {accountActionStatus && (
+              <View style={styles.accountStatusBanner}>
+                {(deployingAccount || fundingAccount) && (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                )}
+                <Text style={styles.accountStatusText}>{accountActionStatus}</Text>
+              </View>
+            )}
+
+            <View style={styles.accountPrimaryActions}>
+              {isWalletDeployed ? (
+                <View style={styles.accountDeployedBadge}>
+                  <Feather name="check-circle" size={18} color={colors.success} />
+                  <Text style={styles.accountDeployedText}>Account deployed</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.accountPrimaryButton,
+                    deployingAccount && styles.accountSheetButtonDisabled,
+                  ]}
+                  onPress={handleDeploySmartAccount}
+                  disabled={deployingAccount}
+                  activeOpacity={0.85}
+                >
+                  {deployingAccount ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.accountPrimaryButtonLabel}>Deploy Smart Account</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.accountAddressBlock}>
+              <Text style={styles.accountAddressLabel}>Account address</Text>
+              {smartAccountAddress ? (
+                <Text selectable style={styles.accountAddressValue}>
+                  {smartAccountAddress}
+                </Text>
+              ) : (
+                <Text style={styles.accountAddressPlaceholder}>
+                  Connect or deploy to view your AA address.
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.accountSheetButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.accountSheetButton,
+                  !smartAccountAddress && styles.accountSheetButtonDisabled,
+                ]}
+                onPress={() => {
+                  handleCopyAddress();
+                  setAccountModalVisible(false);
+                }}
+                disabled={!smartAccountAddress}
+                activeOpacity={0.85}
+              >
+                <Feather name="copy" size={18} color={colors.accent} />
+                <Text style={styles.accountSheetButtonLabel}>Copy address</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.accountSheetButton}
+                onPress={() => {
+                  setAccountModalVisible(false);
+                  navigation.navigate("Profile");
+                }}
+                activeOpacity={0.85}
+              >
+                <Feather name="user" size={18} color={colors.accent} />
+                <Text style={styles.accountSheetButtonLabel}>View profile</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </TabScreenContainer>
   );
 };
@@ -1104,6 +1427,35 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 16,
       paddingTop: 8,
     },
+    profileHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      marginHorizontal: -16,
+      marginTop: -8,
+      marginBottom: 8,
+      backgroundColor: withAlpha(colors.textPrimary, 0.02),
+      borderBottomWidth: 1,
+      borderBottomColor: withAlpha(colors.textPrimary, 0.06),
+    },
+    profileInfo: {
+      flex: 1,
+      minWidth: 0,
+    },
+    greetingText: {
+      fontSize: 11,
+      color: withAlpha(colors.textPrimary, 0.5),
+      marginBottom: 2,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    usernameText: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.textPrimary,
+    },
     headerRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -1149,7 +1501,6 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: withAlpha(colors.accent, 0.12),
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 8,
       borderWidth: 1,
       borderColor: withAlpha(colors.accent, 0.25),
     },
@@ -1510,6 +1861,149 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.danger,
       fontSize: 12,
       fontWeight: "600",
+    },
+    accountModalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(6, 10, 20, 0.55)",
+      paddingHorizontal: 18,
+      paddingTop: 60,
+      justifyContent: "flex-start",
+    },
+    accountSheet: {
+      width: "100%",
+      maxWidth: 520,
+      alignSelf: "center",
+      backgroundColor: colors.background,
+      borderRadius: 28,
+      padding: 20,
+      shadowColor: "#000",
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 12,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.border, 0.5),
+    },
+    accountSheetHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16,
+    },
+    accountSheetTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: colors.textPrimary,
+    },
+    accountSheetStatus: {
+      marginTop: 6,
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.success,
+    },
+    accountSheetStatusWarning: {
+      color: colors.warning,
+    },
+    accountAddressBlock: {
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.border, 0.6),
+      backgroundColor: withAlpha(colors.surfaceElevated, 0.7),
+      padding: 16,
+      marginBottom: 18,
+    },
+    accountAddressLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.textSecondary,
+      marginBottom: 6,
+    },
+    accountAddressValue: {
+      fontFamily: "monospace",
+      fontSize: 18,
+      color: colors.textPrimary,
+      lineHeight: 24,
+    },
+    accountAddressPlaceholder: {
+      color: colors.textSecondary,
+      fontSize: 14,
+    },
+    accountSheetButtons: {
+      gap: 12,
+    },
+    accountSheetButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.accent, 0.25),
+      backgroundColor: withAlpha(colors.accent, 0.08),
+    },
+    accountSheetButtonDisabled: {
+      opacity: 0.5,
+    },
+    accountSheetButtonLabel: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    accountPrimaryActions: {
+      gap: 12,
+      marginBottom: 12,
+    },
+    accountPrimaryButton: {
+      backgroundColor: colors.accent,
+      borderRadius: 16,
+      paddingVertical: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: colors.accent,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    accountPrimaryButtonLabel: {
+      color: colors.background,
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    accountDeployedBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 13,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.success, 0.4),
+      backgroundColor: withAlpha(colors.success, 0.12),
+      justifyContent: "center",
+    },
+    accountDeployedText: {
+      color: colors.success,
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    accountStatusBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.accent, 0.4),
+      backgroundColor: withAlpha(colors.accent, 0.1),
+      marginBottom: 12,
+    },
+    accountStatusText: {
+      color: colors.accent,
+      fontWeight: "600",
+      fontSize: 13,
+      flex: 1,
     },
   });
 

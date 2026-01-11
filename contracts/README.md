@@ -1,73 +1,48 @@
-# Smart Contract Wallet — Contracts
+# Trezo Wallet — Contracts
 
-This package contains the on-chain contracts powering our **EVM-compatible smart contract wallet** with **account abstraction (ERC-4337)**.  
+Foundry project powering the Trezo smart wallet. Implements an ERC-4337/7579 smart account with WebAuthn passkey validation and a guardian-based social recovery flow.
 
-It includes the core account, factory, recovery, session, and paymaster modules used by the wallet applications (mobile, web, extension).
+## Architecture
+- **SmartAccount** (`src/account/SmartAccount.sol`) – ERC-4337 entry point integration with ERC-7579 module routing, ERC-1271 signatures, and module install/uninstall helpers.
+- **Factories** – `AccountFactory` for CREATE2 deterministic deployments and `MinimalProxyFactory` for cheap clones.
+- **Storage & Types** – `AccountStorage` and shared `Types` for passkey payloads and module bookkeeping.
 
-## Features
-- **ERC-4337 Smart Account** – upgradeable, deterministic deployment
-- **Factory** – CREATE2 deployments for predictable addresses
-- **Modules**  
-  - Guardians (M-of-N social recovery)  
-  - Session Keys (ephemeral, scoped permissions)  
-  - Spending Limits (per-token caps, daily velocity)  
-  - Upgrade control  
-- **Paymaster** – sponsored transactions with policy verification
-- **Interfaces** – ERC-1271 signatures, module APIs
+## Modules
+- **PasskeyValidator** (`src/modules/passkey/PasskeyValidator.sol`)  
+  - WebAuthn/RIP-7212 signature checks (rpId binding, sign-counter monotonicity)  
+  - Supports ERC-4337 `validateUserOp` and ERC-1271 verification  
+  - Add/remove passkeys per account with enumerable tracking
+- **SocialRecovery** (`src/modules/SocialRecovery/SocialRecovery.sol`)  
+  - Guardian set + threshold configured at install time  
+  - EIP-712 approvals for new passkey payloads  
+  - Timelocked execution and module authorization checks before rotating keys
 
-
-## New Contracts (scaffold)
-- `src/Account.sol`: Modular smart account (Erc 7579) implementing:
-  - ERC-4337 `validateUserOp` (minimal) for EntryPoint integration
-  - ERC-1271 `isValidSignature`
-  - ERC-6492 stub via optional verifier hook (off-chain standard)
-  - Module manager: install/uninstall modules, selector routing, module execution
-- `src/AccountBeacon.sol`: Minimal `AccountBeacon` and `AccountBeaconProxy` for upgradeable accounts.
-- `src/AccountFactory.sol`: Deterministic deployments using `CREATE2`, initializing owner/EntryPoint.
-- `src/modules/ModuleBase.sol`: Lightweight base module demonstrating install/uninstall hooks.
-- `src/modules/ExampleModule.sol`: Simple example module exposing `ping()`.
-
-## Project Structure
+## Layout
 ```
-
 contracts/
 ├─ src/
-│  ├─ Account.sol
-│  ├─ AccountBeacon.sol
-│  ├─ AccountFactory.sol
-│  └─ modules/
-│     ├─ ModuleBase.sol
-│     └─ ExampleModule.sol
+│  ├─ account/          # Smart account + module manager
+│  ├─ factory/          # AccountFactory
+│  ├─ proxy/            # MinimalProxyFactory
+│  ├─ modules/          # Passkey + social recovery modules
+│  ├─ interfaces/       # Public interfaces
+│  └─ utils/            # WebAuthn helpers
+├─ lib/                 # Submodules (OpenZeppelin, modulekit, AA, etc.)
 ├─ script/
 ├─ test/
 └─ foundry.toml
-
-````
+```
 
 ## Development
-Requires [Foundry](https://book.getfoundry.sh/).
+Requires [Foundry](https://book.getfoundry.sh/) and git submodules.
 
 ```bash
-# install
-curl -L https://foundry.paradigm.xyz | bash
-foundryup
-
-# build & test
+git submodule update --init --recursive
 forge build
 forge test -vv
-````
+```
 
-## Notes
-- For production, replace local interfaces with imports from
-  `eth-infinitism/account-abstraction` and OpenZeppelin (Beacon/Proxy, ECDSA, Ownable).
-- ERC-6492 is an off-chain standard. This scaffold includes a verifier hook
-  to support wrapped signatures, but you should plug in a concrete verifier
-  or adjust to your organization’s 6492 flavor.
-
-## Deployment
-
-Example (local anvil):
-
+## Deployment (local)
 ```bash
 anvil &
 forge script script/Deploy.s.sol:Deploy \
@@ -75,7 +50,7 @@ forge script script/Deploy.s.sol:Deploy \
   --broadcast
 ```
 
-## License
-
-MIT
-
+## Notes
+- Bundler integration targets ERC-4337 EntryPoint v0.7 (see mobile bundler config).
+- The passkey module expects SHA-256(RP ID) binding and enforces WebAuthn user verification.
+- Social recovery calls back into the account to add a new passkey; ensure the module is marked as authorized recovery in the account.

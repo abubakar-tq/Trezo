@@ -6,9 +6,16 @@ import { RootStackParamList } from "@/src/types/navigation";
 import { navigationRef } from "@app/navigation/navigationRef";
 import { DeviceVerificationScreen, SplashScreen } from "@features/auth";
 import BrowserSettingsScreen from "@features/profile/screens/BrowserSettingsScreen";
+import BackupRecoveryScreen from "@features/profile/screens/BackupRecoveryScreen";
+import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
+import ProfileEditScreen from "@features/profile/screens/ProfileEditScreen";
+import ContactListScreen from "@features/contacts/screens/ContactListScreen";
+import AddContactScreen from "@features/contacts/screens/AddContactScreen";
+import ContactDetailScreen from "@features/contacts/screens/ContactDetailScreen";
 import AATestScreen from "@features/wallet/screens/AATestScreen";
 import AAWalletDebugScreen from "@features/wallet/screens/AAWalletDebugScreen";
 import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
+import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScreen";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
@@ -124,6 +131,54 @@ const RootNavigation = () => {
 							}}
 						/>
 						<Stack.Screen 
+							name="BackupRecovery" 
+							component={BackupRecoveryScreen}
+							options={{
+								headerShown: false,
+								animation: "slide_from_right",
+							}}
+						/>
+						<Stack.Screen 
+							name="GuardianRecovery" 
+							component={GuardianRecoveryScreen}
+							options={{
+								headerShown: false,
+								animation: "slide_from_right",
+							}}
+						/>
+						<Stack.Screen 
+							name="ProfileEdit" 
+							component={ProfileEditScreen}
+							options={{
+								headerShown: false,
+								animation: "slide_from_right",
+							}}
+						/>
+						<Stack.Screen 
+							name="ContactList" 
+							component={ContactListScreen}
+							options={{
+								headerShown: false,
+								animation: "slide_from_right",
+							}}
+						/>
+						<Stack.Screen 
+							name="AddContact" 
+							component={AddContactScreen}
+							options={{
+								headerShown: false,
+								animation: "slide_from_right",
+							}}
+						/>
+						<Stack.Screen 
+							name="ContactDetail" 
+							component={ContactDetailScreen}
+							options={{
+								headerShown: false,
+								animation: "slide_from_right",
+							}}
+						/>
+						<Stack.Screen 
 							name="AATest" 
 							component={AATestScreen}
 							options={{
@@ -150,6 +205,15 @@ const RootNavigation = () => {
 								animation: "slide_from_right",
 							}}
 						/>
+						<Stack.Screen 
+							name="DevCreateAccount" 
+							component={DevCreateAccountScreen}
+							options={{
+								headerShown: true,
+								headerTitle: "Dev Controls",
+								animation: "slide_from_right",
+							}}
+						/>
 					</>
 				)}
 			</Stack.Navigator>
@@ -158,4 +222,3 @@ const RootNavigation = () => {
 };
 
 export default RootNavigation;
-

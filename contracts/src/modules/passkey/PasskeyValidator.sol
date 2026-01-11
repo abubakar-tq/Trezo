@@ -34,7 +34,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
         uint256 px; // P-256 pubkey X
         uint256 py; // P-256 pubkey Y
         bytes32 rpIdHash; // SHA-256(RP ID)
-        uint32 signCounter; 
+        uint32 signCounter;
     }
 
     // Encoded WebAuthn signature payload carried in signatures
@@ -89,6 +89,8 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
         PasskeyId id = PasskeyId.wrap(idRaw);
         require(!passkeyIds[account].contains(idRaw), "exists");
+        // Initialize with signCounter = 0, first signature must have counter >= 1
+        // However, some authenticators start at 0, so we accept counter >= stored value
         passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0);
         passkeyIds[account].add(idRaw);
         emit PasskeyAdded(account, idRaw);
@@ -100,7 +102,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      * Removes all registered passkeys for the caller. If no passkeys are
      * registered, it is treated as a no-op.
      */
-    function onUninstall(bytes calldata /*data*/) external override {
+    function onUninstall(bytes calldata /*data*/ ) external override {
         address account = msg.sender;
         uint256 len = passkeyIds[account].length();
         if (len == 0) return; // nothing to cleanup
@@ -185,9 +187,12 @@ contract PasskeyValidator is ERC7579ValidatorBase {
             return _packValidationData({sigFailed: true, validUntil: 0, validAfter: 0});
         }
 
-        // 3) Enforce strictly increasing signature counter (clone detection)
+        // 3) Enforce non-decreasing signature counter (clone detection)
+        // WebAuthn spec requires counters to be monotonically increasing, but some
+        // authenticators may reuse the same counter value. We allow equal counters
+        // for the same account to support these devices, but reject decreasing counters.
         PasskeyRecord storage rec = passkeys[userOp.sender][PasskeyId.wrap(idRaw)];
-        if (newCounter <= rec.signCounter) {
+        if (newCounter < rec.signCounter) {
             return _packValidationData({sigFailed: true, validUntil: 0, validAfter: 0});
         }
 
@@ -337,25 +342,16 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     }
 
     function _decodeSig(bytes calldata signature) internal pure returns (SigPayload memory p) {
-        (
-            p.idRaw,
-            p.authenticatorData,
-            p.clientDataJSON,
-            p.challengeIndex,
-            p.typeIndex,
-            p.r,
-            p.s
-        ) = abi.decode(signature, (bytes32, bytes, string, uint256, uint256, uint256, uint256));
+        (p.idRaw, p.authenticatorData, p.clientDataJSON, p.challengeIndex, p.typeIndex, p.r, p.s) =
+            abi.decode(signature, (bytes32, bytes, string, uint256, uint256, uint256, uint256));
     }
 
     /// @dev Parse the 4-byte big-endian signature counter at bytes 33..36 of authenticatorData.
     function _parseSignCounter(bytes memory authenticatorData) internal pure returns (uint32 ctr) {
         // bytes[32] is flags, bytes[33..36] is counter (big-endian)
         unchecked {
-            ctr = (uint32(uint8(authenticatorData[33])) << 24)
-                | (uint32(uint8(authenticatorData[34])) << 16)
-                | (uint32(uint8(authenticatorData[35])) << 8)
-                | uint32(uint8(authenticatorData[36]));
+            ctr = (uint32(uint8(authenticatorData[33])) << 24) | (uint32(uint8(authenticatorData[34])) << 16)
+                | (uint32(uint8(authenticatorData[35])) << 8) | uint32(uint8(authenticatorData[36]));
         }
     }
 

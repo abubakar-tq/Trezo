@@ -1,0 +1,729 @@
+{
+  "abi": [
+    {
+      "type": "function",
+      "name": "addGuardians",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "newGuardians",
+          "type": "address[]",
+          "internalType": "address[]"
+        },
+        {
+          "name": "newThreshold",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "approveHash",
+      "inputs": [
+        {
+          "name": "hash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "approvedHashes",
+      "inputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "cancelRecovery",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "recoveryId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "eip712Domain",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "fields",
+          "type": "bytes1",
+          "internalType": "bytes1"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "internalType": "string"
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "internalType": "string"
+        },
+        {
+          "name": "chainId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "verifyingContract",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "salt",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "extensions",
+          "type": "uint256[]",
+          "internalType": "uint256[]"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "executeRecovery",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "newPassKey",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "rpIdHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "getRecoveryDetails",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "guardians",
+          "type": "address[]",
+          "internalType": "address[]"
+        },
+        {
+          "name": "threshold",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getRecoveryDigest",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "newPassKey",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "rpIdHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getRecoveryNonce",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "nonce",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "isInitialized",
+      "inputs": [
+        {
+          "name": "smartAccount",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "isModuleType",
+      "inputs": [
+        {
+          "name": "typeID",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "pure"
+    },
+    {
+      "type": "function",
+      "name": "onInstall",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "onUninstall",
+      "inputs": [
+        {
+          "name": "",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "rejectHash",
+      "inputs": [
+        {
+          "name": "hash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "removeGuardians",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "exGuardians",
+          "type": "address[]",
+          "internalType": "address[]"
+        },
+        {
+          "name": "newThreshold",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "scheduleRecovery",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "newPassKey",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "rpIdHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "name": "sigs",
+          "type": "tuple[]",
+          "internalType": "struct ISocialRecovery.GuardianSig[]",
+          "components": [
+            {
+              "name": "index",
+              "type": "uint16",
+              "internalType": "uint16"
+            },
+            {
+              "name": "kind",
+              "type": "uint8",
+              "internalType": "enum ISocialRecovery.SigKind"
+            },
+            {
+              "name": "sig",
+              "type": "bytes",
+              "internalType": "bytes"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "recoveryId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "event",
+      "name": "EIP712DomainChanged",
+      "inputs": [],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "GuardiansUpdated",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "threshold",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "HashedApproval",
+      "inputs": [
+        {
+          "name": "guardian",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "hash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "RecoveryCancelled",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "recoveryId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "RecoveryExecuted",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "recoveryId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "RecoveryScheduled",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "recoveryId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "executeAfter",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "RejectHash",
+      "inputs": [
+        {
+          "name": "guardian",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "hash",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "error",
+      "name": "HASH_ALREADY_APPROVED",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "HASH_ALREADY_REJECTED",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "InvalidShortString",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ModuleAlreadyInitialized",
+      "inputs": [
+        {
+          "name": "smartAccount",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "NotInitialized",
+      "inputs": [
+        {
+          "name": "smartAccount",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_DuplicateGuardian",
+      "inputs": [
+        {
+          "name": "guardian",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_GuardianLengthMustBeNonZero",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_GuardianMustBeNonZero",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_GuardianNotFound",
+      "inputs": [
+        {
+          "name": "guardian",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_InvalidEOASignatureLength",
+      "inputs": [
+        {
+          "name": "length",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_InvalidGuardianIndex",
+      "inputs": [
+        {
+          "name": "index",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_InvalidRecoveryId",
+      "inputs": [
+        {
+          "name": "expected",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "provided",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_InvalidRecoveryState",
+      "inputs": [
+        {
+          "name": "recoveryId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "state",
+          "type": "uint8",
+          "internalType": "enum ISocialRecovery.OperationState"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_InvalidSignatures",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_ModuleNotAuthorized",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_NoActiveRecovery",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_OperationAlreadyScheduled",
+      "inputs": [
+        {
+          "name": "recoveryId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_ThresholdMustBeLessThanGuardians",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_ThresholdMustBeNonZero",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_UnknownSignatureKind",
+      "inputs": [
+        {
+          "name": "kind",
+          "type": "uint8",
+          "internalType": "uint8"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "StringTooLong",
+      "inputs": [
+        {
+          "name": "str",
+          "type": "string",
+          "internalType": "string"
+        }
+      ]
+    }
+  ]
+}

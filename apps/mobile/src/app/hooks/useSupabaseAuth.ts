@@ -14,6 +14,8 @@ import {
   supabaseConfigIssue,
 } from "@lib/supabase";
 import { Profile, useUserStore } from "@store/useUserStore";
+import { ProfileSyncService } from "@/src/features/profile/services/ProfileSyncService";
+import { GuardianSyncService } from "@/src/features/profile/services/GuardianSyncService";
 
 const sanitizeUsername = (value: string | null | undefined) => {
 	if (!value) return undefined;
@@ -128,7 +130,7 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 	);
 
 	const applySession = useCallback(
-		(session: Session | null) => {
+		async (session: Session | null) => {
 			setSession(session);
 			setUser(session?.user ?? null);
 			const isAuthenticated = Boolean(session);
@@ -143,13 +145,46 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 				}
 			}
 
-			const profile = normalizeProfile(session?.user);
-			setProfile(profile);
-			setIsOnboarded(Boolean(profile?.username));
+			// Sync profile and guardians from database on login FIRST
+			if (session?.user && isAuthenticated) {
+				try {
+					// Fetch profile from database first (this updates the store)
+					const dbProfile = await ProfileSyncService.fetchAndSyncProfile(session.user.id);
+					
+					// Only use session metadata as fallback if database has no profile
+					if (!dbProfile || !dbProfile.username) {
+						const profile = normalizeProfile(session?.user);
+						setProfile(profile);
+						setIsOnboarded(Boolean(profile?.username));
+						
+						if (profile?.username) {
+							void syncProfileDefaults(session.user, profile);
+						}
+					} else {
+						// Database profile exists, use it
+						setIsOnboarded(true);
+					}
 
-			if (session?.user && profile?.username) {
-				void syncProfileDefaults(session.user, profile);
+					// Check if AA wallet exists and fetch guardians
+					const aaWalletId = await GuardianSyncService.getAAWalletId(session.user.id);
+					if (aaWalletId) {
+						await GuardianSyncService.fetchAndSyncGuardians(aaWalletId);
+						console.log("✅ Guardians synced from database");
+					} else {
+						console.log("📝 No AA wallet found, guardians stored locally only");
+					}
+				} catch (syncError) {
+					console.warn("⚠️  Failed to sync user data from database:", syncError);
+					// Fallback to session metadata on error
+					const profile = normalizeProfile(session?.user);
+					setProfile(profile);
+					setIsOnboarded(Boolean(profile?.username));
+				}
 			} else if (!session?.user) {
+				// User logged out
+				const profile = normalizeProfile(session?.user);
+				setProfile(profile);
+				setIsOnboarded(Boolean(profile?.username));
 				syncedProfileRef.current = null;
 			}
 		},
