@@ -1,66 +1,36 @@
 # Supabase Migrations
 
-This directory contains database migrations for the Trezo Wallet app.
+Database migrations for the Trezo mobile app. Use these to provision auth tables, AA wallet tables, and storage policies.
 
 ## Migration Files
 
-All migrations are in the `migrations/` directory and follow the naming pattern:
-`YYYYMMDDHHMMSS_description.sql`
+All migrations live in `migrations/` and use the pattern `YYYYMMDDHHMMSS_description.sql`.
 
-### Applied Migrations
+Applied migrations:
+1. **20241009000000_init_schema.sql** — Profiles, wallets, assets, transactions, notifications
+2. **20241202000000_aa_wallet_tables.sql** — AA wallets, passkeys, guardians, aa_transactions
+3. **20241212000000_contacts_table.sql** — Contacts with multi-chain addresses
+4. **20241212000001_storage_profiles_bucket.sql** — `profiles` storage bucket policies (create bucket manually first)
 
-1. **20241009000000_init_schema.sql** - Initial database schema
-   - profiles, wallets, assets, transactions, notifications tables
+## How to Use
 
-2. **20241202000000_aa_wallet_tables.sql** - Account Abstraction support
-   - aa_wallets, passkeys, guardians, aa_transactions tables
+```bash
+# Create a new migration
+npx supabase migration new your_description
 
-3. **20241212000000_contacts_table.sql** - Contact management
-   - contacts table with JSONB addresses for multi-chain support
-
-4. **20241212000001_storage_profiles_bucket.sql** - Storage bucket
-   - profiles bucket for avatar uploads (Note: Create bucket via Dashboard first)
-
-## Usage
-
-### Via Supabase CLI (Recommended for new migrations)
-
-```powershell
-# Create new migration
-npx supabase migration new description_here
-
-# Apply migrations to remote
+# Apply migrations to your project (uses config.toml)
 npx supabase db push
 
-# Check migration status
+# List applied/pending migrations
 npx supabase migration list
 ```
 
-### Via Dashboard (For manual fixes)
+### Storage Bucket Setup
+Create the `profiles` bucket in the Supabase dashboard before applying migrations:
+1. Storage → Buckets → New bucket  
+2. Name: `profiles`, Public: enabled  
+3. Run migrations to attach policies.
 
-1. Go to: https://supabase.com/dashboard/project/YOUR_PROJECT_ID/sql/new
-2. Copy migration SQL
-3. Run in SQL Editor
-
-## Storage Bucket Setup
-
-The storage bucket must be created via Supabase Dashboard:
-
-1. Go to Storage > Buckets
-2. Click "New bucket"
-3. Settings:
-   - Name: `profiles`
-   - Public: ✅ Enabled
-4. Policies are applied via migration file
-
-## Verification
-
-Check database schema:
-```powershell
-npx tsx scripts/verify-schema.ts
-```
-
-Check storage bucket:
-```powershell
-npx tsx scripts/check-storage.ts
-```
+### Notes
+- CLI commands read `config.toml`; update it with your project ref before running.
+- Keep database credentials out of git—use environment variables when invoking the CLI.

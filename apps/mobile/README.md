@@ -1,93 +1,67 @@
-# Trezo Wallet 🔐
+# Trezo Wallet (Mobile)
 
-A next-generation Web3 wallet built with React Native Expo, featuring Account Abstraction (ERC-4337) and biometric passkey authentication.
+React Native Expo client for the Trezo smart contract wallet. The app pairs WebAuthn passkeys with ERC-4337 account abstraction and a local AA stack for development.
 
-## Features
+## Feature Highlights
+- **Passkey authentication** (WebAuthn + device biometrics) for login and recovery
+- **ERC-4337 smart account** flows wired to a local bundler/paymaster stack
+- **Supabase** auth, profiles, and storage integration
+- **NativeWind UI** with shared feature modules and viem/ethers tooling
 
-- 🔐 **Account Abstraction (ERC-4337)**: Gasless transactions and smart wallet capabilities
-- 🔑 **Passkey Authentication**: Biometric security using fingerprint/Face ID
-- 🌐 **Multi-chain Support**: Compatible with EVM chains
-- 📱 **Cross-platform**: iOS and Android support
-- 🧪 **Comprehensive Testing**: Local testing infrastructure with Docker bundler
+## Prerequisites
+- Node 18+ and npm
+- Expo CLI (`npx expo`) with iOS/Android SDKs or emulators
+- Docker + Docker Compose for the local AA stack
 
-## Quick Start
-
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npx expo start
-```
-
-For detailed setup, see [docs/QUICKSTART.md](./docs/QUICKSTART.md)
-
-## Documentation
-
-All documentation is in the [docs/](./docs/) folder:
-
-- 📚 [Quick Commands](./docs/QUICK_COMMANDS.md) - Common development commands
-- 🧪 [Testing Instructions](./docs/TESTING_INSTRUCTIONS.md) - Local AA wallet testing
-- 🚀 [Quickstart Guide](./docs/QUICKSTART.md) - Detailed setup guide
-- 🌐 [Environment Setup](./docs/ENV_SETUP.md) - Environment configuration
-- 📱 [Platform Testing](./docs/PLATFORM_TESTING.md) - Platform-specific testing
-- 🏗️ [Architecture](./docs/COMPONENT_ARCHITECTURE.md) - System architecture
-- 🔒 [Security Audit](./docs/SECURITY_AUDIT.md) - Security overview
-
-## Tech Stack
-
-- React Native Expo ~54.0.25
-- viem 2.x, ethers.js 6.x
-- Supabase Authentication
-- ERC-4337 Account Abstraction
-- NativeWind (Tailwind CSS)
-
-## Development
-
-```bash
-# Run on Android
-npx expo run:android
-
-# Run on iOS  
-npx expo run:ios
-
-# Clear cache
-npx expo start -c
-```
-
-## Testing
-
-```bash
-# Start local blockchain & bundler
-cd Bundler
-docker compose up -d
-
-# Run tests in app
-npx expo start
-# Navigate to: Wallet → AA Test
-```
+## Setup
+1) **Environment**
+   ```bash
+   cp .env.example .env
+   # Fill SUPABASE, MORALIS, RP ID, and RPC URLs (see comments in .env.example)
+   ```
+2) **Install dependencies**
+   ```bash
+   npm install
+   ```
+3) **Start the local AA stack**
+   ```bash
+   cd Bundler
+   docker compose up -d
+   ```
+   Services: Anvil (8545), Alto bundler (4337), mock paymaster (3000).
+4) **Run the app**
+   ```bash
+   cd ..
+   npx expo start     # press a/i to launch Android/iOS
+   ```
+5) **Supabase migrations (optional)**
+   ```bash
+   cd supabase
+   npx supabase migration up
+   ```
 
 ## Project Structure
-
 ```
+app/            # Expo router entry
 src/
-├── core/           # Blockchain & AA core
-├── features/       # Feature modules
-├── shared/         # Shared components
-└── theme/          # Theme system
-
-Bundler/            # Docker testing setup
-docs/               # Documentation
-scripts/            # Utility scripts
+├─ core/        # Auth (biometrics/passkeys), wallet key store, network config
+├─ features/    # UI + business features
+├─ integration/ # viem clients, ABIs, chain config
+├─ shared/      # Reusable UI
+└─ theme/       # Design tokens and styling
+Bundler/        # Docker AA stack
+supabase/       # Database migrations/config
 ```
 
-## Contributing
+## Commands
+- `npm start` / `npx expo start` – dev server
+- `npm run android` / `npm run ios` – device builds
+- `npm run lint` – linting
 
-1. Branch from `adeel`
-2. Make changes
-3. Test thoroughly
-4. Create PR to `main`
+## Security Notes
+- Keep `.env` out of version control (already gitignored). Use `.env.example` for sharing.
+- The local `.env` currently holds real Supabase and Moralis keys; rotate before publishing the repo.
+- Passkey RP ID must match your domain and `.well-known` assets for platform binding.
 
 ## License
-
-Private - All rights reserved
+License not set. Choose one (e.g., MIT/Apache-2.0) before releasing publicly.
