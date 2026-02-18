@@ -59,5 +59,4 @@ Passkey-first smart contract wallet built on ERC-4337/7579. This monorepo pairs 
 - Contracts: Foundry + modulekit, OpenZeppelin, WebAuthn-sol
 - Local AA: Docker Compose (Anvil, Pimlico Alto, mock paymaster, contract deployer)
 
-## License
-No license has been declared yet. Pick an OSS license (e.g., MIT/Apache-2.0) before public release if you intend to open source.
+
