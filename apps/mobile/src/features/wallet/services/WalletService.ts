@@ -11,7 +11,7 @@ const getRpcUrl = (chainId: number = 31337): string => {
     // Local Anvil
     return Platform.OS === "android" 
       ? "http://10.0.2.2:8545" 
-      : "http://localhost:8545";
+      : "http://192.168.100.68:8545";
   }
   // Add other chains later
   return "http://10.0.2.2:8545";

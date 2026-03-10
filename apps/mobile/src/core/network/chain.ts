@@ -56,7 +56,7 @@ export const getRpcUrl = (): string => {
   // }
   
   // iOS simulator (development build)
-  const url = 'http://localhost:8545';
+  const url = 'http://192.168.100.68:8545';
   console.log(`🌐 [Chain] RPC URL (iOS Simulator): ${url}`);
   return url;
 };
@@ -71,7 +71,7 @@ export const getBundlerUrl = (): string => {
   // if (Platform.OS === 'android') {
   //   return 'http://10.0.2.2:4337';
   // }
-  return 'http://localhost:4337';
+  return 'http://192.168.100.68:4337';
 };
 
 /**
@@ -81,10 +81,10 @@ export const getPaymasterUrl = (): string => {
   // if (isExpoGo) {
   //   return `http://${CHAIN_CONFIG.LAPTOP_IP}:3000`;
   // }
-  // if (Platform.OS === 'android') {
+  // if (Platform.localhost:8545OS === 'android') {
   //   return 'http://10.0.2.2:3000';
   // }
-  return 'http://localhost:3000';
+  return 'http://192.168.100.68:3000';
 };
 
 /**
