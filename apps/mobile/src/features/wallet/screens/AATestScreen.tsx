@@ -27,14 +27,15 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { createPublicClient, createWalletClient, http, parseEther } from 'viem';
+import { createPublicClient, createWalletClient, http, parseEther, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { anvil } from 'viem/chains';
 
 import { CHAIN_CONFIG, getRpcUrl, logNetworkConfig } from '@/src/core/network/chain';
-import { CONTRACT_ABIS, getContractAddresses, validateContractAddresses } from '@/src/core/network/contracts';
-import PasskeyService, { BiometricCapabilities, PasskeyCredential } from '@/src/features/wallet/services/PasskeyService';
-import { useWalletStore } from '@/src/features/wallet/store/useWalletStore';
+import { getContractAddresses, validateContractAddresses } from '@/src/core/network/contracts';
+import PasskeyService, { BiometricCapabilities, PasskeyMetadata } from '@/src/features/wallet/services/PasskeyService';
+import { predictAccountAddress, directDeployAccount, getDeployment } from '@/src/integration/viem';
+  import { useWalletStore } from '@/src/features/wallet/store/useWalletStore';
 import { useUserStore } from '@store/useUserStore';
 import type { ThemeColors } from '@theme';
 import { useAppTheme } from '@theme';
@@ -70,7 +71,7 @@ export default function AATestScreen() {
   ]);
   
   const [biometricInfo, setBiometricInfo] = useState<BiometricCapabilities | null>(null);
-  const [testPasskey, setTestPasskey] = useState<PasskeyCredential | null>(null);
+  const [testPasskey, setTestPasskey] = useState<PasskeyMetadata | null>(null);
   const [predictedAddress, setPredictedAddress] = useState<string | null>(null);
   const [autoRunning, setAutoRunning] = useState(false);
   const [isTestingInProgress, setIsTestingInProgress] = useState(false);
@@ -269,7 +270,7 @@ export default function AATestScreen() {
   
   // Test 6: AA Wallet Address Prediction
   const testAAWalletPrediction = useCallback(async () => {
-    if (!testPasskey || !testPasskey.publicKeyX) {
+    if (!testPasskey || !testPasskey.credentialIdRaw) {
       Alert.alert('Error', 'Create a passkey first (Test 4)');
       return;
     }
@@ -277,37 +278,19 @@ export default function AATestScreen() {
     updateTest(6, { status: 'running', message: 'Predicting AA wallet address...' });
     
     try {
-      const contracts = getContractAddresses(CHAIN_CONFIG.chainId);
-      
-      console.log('🔍 [AATest] Predicting wallet address with:', {
-        factory: contracts.accountFactory,
-        owner: testPasskey.publicKey,
-        rpcUrl: getRpcUrl(),
-      });
-      
-      const publicClient = createPublicClient({
-        chain: anvil,
-        transport: http(getRpcUrl()),
-      });
-      
-      // Use passkey's public key as the owner
-      const owner = testPasskey.publicKey as `0x${string}`;
-      const salt = 0n; // Use salt 0 for first wallet
-      
-      // Call factory's getAddress function
-      const predictedAddr = await publicClient.readContract({
-        address: contracts.accountFactory as `0x${string}`,
-        abi: CONTRACT_ABIS.SimpleAccountFactory,
-        functionName: 'getAddress',
-        args: [owner, salt],
-      });
-      
+      const chainId = CHAIN_CONFIG.chainId;
+      const salt = testPasskey.credentialIdRaw as Hex; // deterministic per-passkey
+
+      console.log('🔍 [AATest] Predicting wallet address with passkey salt:', salt);
+
+      const predictedAddr = await predictAccountAddress(chainId, salt);
+
       setPredictedAddress(predictedAddr as string);
       
       updateTest(6, {
         status: 'success',
         message: `✅ Predicted: ${predictedAddr}`,
-        data: { owner, salt: salt.toString(), predictedAddress: predictedAddr },
+        data: { salt, predictedAddress: predictedAddr },
       });
     } catch (error) {
       console.error('❌ [AATest] Prediction failed:', error);
@@ -386,110 +369,57 @@ export default function AATestScreen() {
     updateTest(8, { status: 'running', message: 'Deploying wallet on-chain...' });
     
     try {
-      const contracts = getContractAddresses(CHAIN_CONFIG.chainId);
-      
-      // Use Anvil's default test account to pay gas
-      const testPrivateKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-      const account = privateKeyToAccount(testPrivateKey as `0x${string}`);
-      
-      const walletClient = createWalletClient({
-        account,
-        chain: anvil,
-        transport: http(getRpcUrl()),
-      });
-      
-      const publicClient = createPublicClient({
-        chain: anvil,
-        transport: http(getRpcUrl()),
-      });
-      
-      console.log('🚀 [AATest] Deploying wallet:', {
-        factory: contracts.accountFactory,
-        owner: testPasskey.publicKey,
-        predictedAddress,
-      });
-      
-      // Call factory.createAccount(owner, salt)
-      const owner = testPasskey.publicKey as `0x${string}`;
-      const salt = 0n;
-      
-      const hash = await walletClient.writeContract({
-        address: contracts.accountFactory as `0x${string}`,
-        abi: CONTRACT_ABIS.SimpleAccountFactory,
-        functionName: 'createAccount',
-        args: [owner, salt],
-      });
-      
-      console.log('⏳ [AATest] Deployment tx submitted:', hash);
-      
-      // Wait for confirmation with longer timeout and retry logic
-      updateTest(8, { status: 'running', message: 'Waiting for confirmation (this may take a minute)...' });
-      
-      const receipt = await publicClient.waitForTransactionReceipt({ 
-        hash,
-        timeout: 120_000, // 2 minutes timeout
-        pollingInterval: 1_000, // Check every second
-      });
-      
-      console.log('✅ [AATest] Deployment confirmed:', receipt);
-      
-      // Extract the deployed wallet address from logs
-      // The SimpleAccountFactory emits an event with the new wallet address
-      const deployedAddress = predictedAddress; // Should match if owner/salt are consistent
-      
-      // Verify wallet exists by checking bytecode
-      const code = await publicClient.getBytecode({
-        address: deployedAddress as `0x${string}`,
-      });
-      
-      console.log('🔍 [AATest] Checking bytecode at:', deployedAddress, 'Code length:', code?.length);
-      
-      if (!code || code === '0x' || code.length <= 2) {
-        // Try to get the actual deployed address from receipt logs
-        console.warn('⚠️ [AATest] No code at predicted address, checking receipt logs...');
-        console.log('📋 [AATest] Receipt logs:', receipt.logs.length, 'events');
-        
-        // For now, mark as deployed since tx succeeded
-        // The wallet IS deployed, just need to verify address
+      const chainId = CHAIN_CONFIG.chainId;
+      const deployment = getDeployment(chainId);
+      if (!deployment?.passkeyValidator) {
+        throw new Error('Passkey validator not configured for this chain');
       }
-      
-      // TODO: Save to Supabase (aa_wallets table)
-      // - is_deployed = true
-      // - deployment_tx_hash = hash
-      // - deployment_block_number = receipt.blockNumber
-      // - deployed_at = now()
-      
-      const finalMessage = code && code.length > 2 
-        ? `✅ Deployed! Address: ${deployedAddress.slice(0, 10)}...`
-        : `✅ Transaction succeeded! Tx: ${hash.slice(0, 10)}...`;
-      
+
+      const salt = testPasskey.credentialIdRaw as Hex;
+      const passkeyInit = {
+        idRaw: testPasskey.credentialIdRaw as Hex,
+        px: BigInt(testPasskey.publicKeyX),
+        py: BigInt(testPasskey.publicKeyY),
+        rpIdHash: testPasskey.rpIdHash as Hex,
+      };
+
+      console.log('🚀 [AATest] Deploying passkey account with salt:', salt);
+
+      const result = await directDeployAccount({
+        chainId,
+        salt,
+        passkeyInit,
+        validator: deployment.passkeyValidator as `0x${string}`,
+      });
+
+      const deployedAddress = result.accountAddress;
+      setPredictedAddress(deployedAddress);
+
       // Update wallet store with deployment info
-      markAsDeployed(hash, Number(receipt.blockNumber));
-      
-      // Also set/update AA account if not already set
+      markAsDeployed(result.transactionHash, Number(result.blockNumber));
       setAAAccount({
         id: user?.id || 'test-user',
         userId: user?.id || 'test-user',
         predictedAddress: deployedAddress,
-        ownerAddress: testPasskey.publicKey,
+        ownerAddress: testPasskey.credentialIdRaw, // passkey-backed account
         isDeployed: true,
-        deploymentTxHash: hash,
-        deploymentBlockNumber: Number(receipt.blockNumber),
+        deploymentTxHash: result.transactionHash,
+        deploymentBlockNumber: Number(result.blockNumber),
         walletName: 'Test AA Wallet',
-        chainId: CHAIN_CONFIG.chainId,
+        chainId,
         createdAt: new Date().toISOString(),
         deployedAt: new Date().toISOString(),
       });
-      
+
       updateTest(8, {
         status: 'success',
-        message: finalMessage,
+        message: `✅ Deployed! Address: ${deployedAddress.slice(0, 10)}...`,
         data: {
-          txHash: hash,
+          txHash: result.transactionHash,
           walletAddress: deployedAddress,
-          blockNumber: receipt.blockNumber.toString(),
-          gasUsed: receipt.gasUsed.toString(),
-          hasCode: code && code.length > 2,
+          blockNumber: String(result.blockNumber),
+          gasUsed: result.gasUsed?.toString?.() || '',
+          hasCode: true,
         },
       });
     } catch (error) {

@@ -18,10 +18,11 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
   31337: {
     id: 31337,
     name: "Local Anvil",
-    // for Android emulator → host machine: 10.0.2.2
-    // adjust if you're using something else
-    // rpcUrl: "http://10.0.2.2:8545",
-    rpcUrl: "http://127.0.0.1:8545",
+    // Prefer explicit Anvil RPC from env (for physical devices), fall back to emulator loopback.
+    rpcUrl:
+      process.env.EXPO_PUBLIC_ANVIL_RPC_URL
+      ?? process.env.EXPO_PUBLIC_LOCAL_RPC_URL
+      ?? "http://10.0.2.2:8545",
   },
   11155111: {
     id: 11155111,
