@@ -8,16 +8,12 @@ Business logic shared across the Trezo smart wallet.
 - Biometrics: gate access to the local device key via SecureStore
 - Passkeys: WebAuthn helpers for login/recovery with the backend
 
-### `wallet/`
-- Device key generation and persistence
-- Local signer management (EOA stored in SecureStore)
-
 ### `network/`
 - Chain metadata and RPC selection
 - Contract addresses for the AA stack
 
 ## Security Model
-1. **Device Key** is generated on-device and stored in `Expo SecureStore`.
-2. That key owns the smart account on-chain.
-3. **Biometrics** protect access to the device key.
-4. **Passkeys** provide cloud-synced authentication to restore or rotate keys via social recovery on the smart account.
+1. **Passkeys (WebAuthn)** are the sole credential for owning the smart account. The private key lives in the device secure enclave; only public metadata (credentialIdRaw, publicKeyX/Y, rpIdHash) is stored in AsyncStorage.
+2. **Biometrics** (FaceID/TouchID/Android biometrics) gate passkey creation/use via the platform auth prompt.
+3. **No local EOA/seed** is generated or stored; all account ownership flows are passkey-based.
+4. Contract addresses are injected per-network (Anvil via deployment JSON; testnet/mainnet via env) and validated at startup.
