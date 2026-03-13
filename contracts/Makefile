@@ -26,7 +26,8 @@ build:
 deploy-local: build
 	forge script script/DeployAccount.s.sol:DeployAccount \
 	$(ANVIL_NETWORK_ARGS)
-	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL)
+	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL) 
+	$(MAKE) sync-abi	
 
 .PHONY: deploy-sepolia
 deploy-sepolia: build
