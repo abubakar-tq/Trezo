@@ -14,5 +14,5 @@ export {
   encodeSocialRecoveryInitData,
 } from "./userOps";
 export { directDeployAccount, isAccountDeployed } from "./directDeploy";
-export { predictAccountAddress } from "./account";
+export { predictAccountAddress, fundAccount, fundEntryPointDeposit } from "./account";
 export type { PasskeyInit, CreateAccountParams } from "./userOps";

@@ -21,7 +21,10 @@ import { encodeAbiParameters, parseAbiParameters, sha256, toBytes } from 'viem';
 
 const PASSKEY_STORAGE_KEY = 'trezo_passkey_'; // One passkey per device
 const RP_NAME = (Constants?.expoConfig?.extra as any)?.passkeyRpName || 'Trezo Wallet';
-const CONFIGURED_RP_ID = (Constants?.expoConfig?.extra as any)?.passkeyRpId || 'trezo.app';
+const CONFIGURED_RP_ID = (Constants?.expoConfig?.extra as any)?.passkeyRpId || 'abubakar-tq.github.io';
+const P256_N =
+  0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+const P256_HALF_N = P256_N / 2n;
 
 /**
  * Get the Relying Party ID (RP_ID)
@@ -30,7 +33,7 @@ const CONFIGURED_RP_ID = (Constants?.expoConfig?.extra as any)?.passkeyRpId || '
  * - Domain must host: 
  *   - /.well-known/assetlinks.json (Android)
  *   - /.well-known/apple-app-site-association (iOS)
- * - Configure via EXPO_PUBLIC_PASSKEY_RP_ID (default: trezo.app)
+ * - Configure via EXPO_PUBLIC_PASSKEY_RP_ID (default: abubakar-tq.github.io)
  * - Expo Go is not supported because it lacks the native credential APIs
  */
 function getRpId(): string {
@@ -791,9 +794,19 @@ export class PasskeyService {
     rPadded.set(rBytes, 32 - rBytes.length);
     sPadded.set(sBytes, 32 - sBytes.length);
     
+    const rHex = this.uint8ArrayToHex(rPadded);
+    let sBigInt = BigInt(this.uint8ArrayToHex(sPadded));
+
+    // webauthn-sol rejects high-s signatures to avoid malleability, so normalize
+    // the authenticator's DER signature into canonical low-s form before sending.
+    if (sBigInt > P256_HALF_N) {
+      sBigInt = P256_N - sBigInt;
+      console.log('📝 [PasskeyService] Normalized high-s signature to low-s');
+    }
+
     return {
-      r: this.uint8ArrayToHex(rPadded),
-      s: this.uint8ArrayToHex(sPadded),
+      r: rHex,
+      s: `0x${sBigInt.toString(16).padStart(64, '0')}`,
     };
   }
   

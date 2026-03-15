@@ -4,6 +4,7 @@ import {
   encodeAbiParameters,
   parseAbiParameters,
   http,
+  decodeAbiParameters,
   toHex,
   type Address,
   type Hex,
@@ -28,6 +29,70 @@ export type PasskeyInit = {
 const ENTRY_POINT_VERSION = "0.7";
 const MODULE_TYPE_EXECUTOR = 2n;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
+const BUNDLER_GAS_CAP = 20_000_000n; // many bundlers default to 20m max gas per UserOp
+const CREATE_ACCOUNT_MIN_VERIFICATION_GAS = 1_500_000n;
+const DELEGATE_AND_REVERT_SELECTOR = "0x99410554";
+const FAILED_OP_SELECTOR = "0x220266b6";
+const VALIDATIONDATA_ALL_TIME_VALID_SENTINEL = "000000000000ffffffffffff0000000000000000000000000000000000000000";
+
+// ------------ Error decoding helpers (for bundler delegateAndRevert) -------------
+const asHex = (v: any): Hex | undefined =>
+  typeof v === "string" && v.startsWith("0x") ? (v as Hex) : undefined;
+
+const collectErrorData = (err: any): Hex[] => {
+  const candidates = [
+    err?.data,
+    err?.error?.data,
+    err?.cause?.data,
+    err?.cause?.error?.data,
+    (() => {
+      try {
+        const parsed = JSON.parse(err?.body ?? "{}");
+        return parsed?.error?.data;
+      } catch {
+        return undefined;
+      }
+    })(),
+  ];
+  return candidates.map(asHex).filter(Boolean) as Hex[];
+};
+
+const decodeDelegateAndRevert = (raw: Hex) => {
+  if (!raw.startsWith(DELEGATE_AND_REVERT_SELECTOR) || raw.length < 10) return null;
+  try {
+    const data = ("0x" + raw.slice(10)) as Hex;
+    const [ok, inner] = decodeAbiParameters([{ type: "bool" }, { type: "bytes" }], data);
+    return { ok, inner: inner as Hex };
+  } catch {
+    return null;
+  }
+};
+
+const decodeFailedOp = (raw: Hex) => {
+  if (!raw.startsWith(FAILED_OP_SELECTOR) || raw.length < 10) return null;
+  try {
+    const data = ("0x" + raw.slice(10)) as Hex;
+    const [opIndex, reason] = decodeAbiParameters([{ type: "uint256" }, { type: "string" }], data);
+    return { opIndex: Number(opIndex), reason: reason as string };
+  } catch {
+    return null;
+  }
+};
+
+const decodeRevertString = (raw: Hex) => {
+  // Error(string) selector 0x08c379a0
+  if (!raw.startsWith("0x08c379a0") || raw.length < 10) return null;
+  try {
+    const data = ("0x" + raw.slice(10)) as Hex;
+    const [reason] = decodeAbiParameters([{ type: "string" }], data);
+    return reason as string;
+  } catch {
+    return null;
+  }
+};
+
+const containsValidationDataSuccessSentinel = (raw: Hex) =>
+  raw.toLowerCase().includes(VALIDATIONDATA_ALL_TIME_VALID_SENTINEL);
 
 /**
  * Build a dummy WebAuthn signature for gas estimation.
@@ -111,6 +176,22 @@ type BundlerClient = ReturnType<typeof createClient<Transport>>;
 const toBigInt = (value: bigint | number | string): bigint =>
   typeof value === "bigint" ? value : BigInt(value);
 
+// Some bundlers/paymasters may return 0 for gas fields when simulation fails softly.
+// This helper falls back to a sane default to avoid zero gas in the final userOp.
+const ensureNonZeroBigInt = (value: bigint | number | string, fallback: bigint | number): bigint => {
+  const bn = toBigInt(value);
+  const fb = toBigInt(fallback);
+  return bn === 0n ? (fb === 0n ? 1_000_000n : fb) : bn;
+};
+
+const clampGas = (value: bigint, cap: bigint = BUNDLER_GAS_CAP): bigint =>
+  value > cap ? cap : value;
+
+const maxBigInt = (a: bigint, b: bigint): bigint => (a > b ? a : b);
+
+const addGasHeadroom = (value: bigint, percent: bigint, additive: bigint = 0n): bigint =>
+  clampGas((value * (100n + percent)) / 100n + additive);
+
 // Bundlers expect unpacked user ops with hex quantity fields
 const serializeUserOp = (op: UserOperation<typeof ENTRY_POINT_VERSION>) => ({
   ...op,
@@ -185,13 +266,20 @@ export const encodeSocialRecoveryInitData = (guardians: readonly Address[], thre
   return encodeAbiParameters(parseAbiParameters("address[], uint256"), [guardians, normalizedThreshold]);
 };
 
+const toPasskeyTuple = (passkeyInit: PasskeyInit) => [
+  passkeyInit.idRaw,
+  BigInt(passkeyInit.px),
+  BigInt(passkeyInit.py),
+  passkeyInit.rpIdHash,
+] as const;
+
 const buildInitCode = (accountFactory: Hex, passkeyArgs: CreateAccountParams) =>
   concatHex([
     accountFactory,
     encodeFunctionData({
       abi: ABIS.accountFactory,
       functionName: "createAccount",
-      args: [passkeyArgs.salt, passkeyArgs.validator, passkeyArgs.passkeyInit],
+      args: [passkeyArgs.salt, passkeyArgs.validator, toPasskeyTuple(passkeyArgs.passkeyInit)],
     }),
   ]);
 
@@ -286,11 +374,12 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
     factory,
     factoryData,
     callData: "0x",
-    callGasLimit: 100000000n,
-    verificationGasLimit: 100000000n,
-    preVerificationGas: 100000000n,
-    maxFeePerGas: params.maxFeePerGas ?? 100000000n,
-    maxPriorityFeePerGas: params.maxPriorityFeePerGas ?? 100000000n,
+    callGasLimit: 1_000_000n,
+    verificationGasLimit: 1_000_000n,
+    preVerificationGas: 200_000n,
+    // Keep gas price low so total gas stays under common bundler caps (20m)
+    maxFeePerGas: params.maxFeePerGas ?? 10_000_000n,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas ?? 1_000_000n,
     signature: dummySignature,
   };
 
@@ -408,15 +497,30 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
     throw err;
   }
 
+  const estimatedPreVerificationGas = gas.preVerificationGas !== undefined
+    ? ensureNonZeroBigInt(gas.preVerificationGas, userOp.preVerificationGas)
+    : userOp.preVerificationGas;
+  const estimatedVerificationGas = gas.verificationGasLimit !== undefined
+    ? ensureNonZeroBigInt(gas.verificationGasLimit, userOp.verificationGasLimit)
+    : userOp.verificationGasLimit;
+
   const withGas: UserOperation<typeof ENTRY_POINT_VERSION> = {
     ...userOpForEstimation,
-    preVerificationGas: gas.preVerificationGas !== undefined ? toBigInt(gas.preVerificationGas) : userOp.preVerificationGas,
-    verificationGasLimit:
-      gas.verificationGasLimit !== undefined ? toBigInt(gas.verificationGasLimit) : userOp.verificationGasLimit,
-    callGasLimit: gas.callGasLimit !== undefined ? toBigInt(gas.callGasLimit) : userOp.callGasLimit,
-    maxFeePerGas: gas.maxFeePerGas !== undefined ? toBigInt(gas.maxFeePerGas) : userOp.maxFeePerGas,
-    maxPriorityFeePerGas:
-      gas.maxPriorityFeePerGas !== undefined ? toBigInt(gas.maxPriorityFeePerGas) : userOp.maxPriorityFeePerGas,
+    // Estimation uses dummy signature; real passkey validation costs more gas.
+    preVerificationGas: addGasHeadroom(estimatedPreVerificationGas, 20n),
+    verificationGasLimit: maxBigInt(
+      addGasHeadroom(estimatedVerificationGas, 100n, 150_000n),
+      CREATE_ACCOUNT_MIN_VERIFICATION_GAS,
+    ),
+    callGasLimit: gas.callGasLimit !== undefined
+      ? clampGas(ensureNonZeroBigInt(gas.callGasLimit, userOp.callGasLimit))
+      : clampGas(userOp.callGasLimit),
+    maxFeePerGas: gas.maxFeePerGas !== undefined
+      ? ensureNonZeroBigInt(gas.maxFeePerGas, userOp.maxFeePerGas)
+      : userOp.maxFeePerGas,
+    maxPriorityFeePerGas: gas.maxPriorityFeePerGas !== undefined
+      ? ensureNonZeroBigInt(gas.maxPriorityFeePerGas, userOp.maxPriorityFeePerGas)
+      : userOp.maxPriorityFeePerGas,
   };
 
   const userOpHash = getUserOperationHash({
@@ -699,6 +803,7 @@ export async function sendUserOp(
   entryPoint: Hex,
 ) {
   const bundler = getBundlerClient(bundlerUrl, chainId);
+
   try {
     const opHash = await bundler.request({
       method: "eth_sendUserOperation",
@@ -706,12 +811,63 @@ export async function sendUserOp(
     });
     return opHash as Hex;
   } catch (err) {
+    const rawData = collectErrorData(err);
+    let decoded: {
+      delegate?: { ok: boolean; inner: Hex };
+      failedOp?: { opIndex: number; reason: string };
+      reason?: string;
+    } = {};
+
+    for (const raw of rawData) {
+      const delegated = decodeDelegateAndRevert(raw);
+      if (delegated) {
+        decoded.delegate = delegated;
+        const failedOp = decodeFailedOp(delegated.inner);
+        if (failedOp) {
+          decoded.failedOp = failedOp;
+          decoded.reason = failedOp.reason;
+        }
+        const reason = decodeRevertString(delegated.inner);
+        if (reason) decoded.reason = reason;
+        break;
+      }
+      const failedOp = decodeFailedOp(raw);
+      if (failedOp) {
+        decoded.failedOp = failedOp;
+        decoded.reason = failedOp.reason;
+        break;
+      }
+      const reason = decodeRevertString(raw);
+      if (reason) {
+        decoded.reason = reason;
+        break;
+      }
+    }
+
     console.error("[sendUserOp] eth_sendUserOperation failed", {
       bundlerUrl,
       entryPoint,
       signedUserOp: serializeUserOp(signedUserOp),
       error: err,
+      rawData,
+      decoded,
     });
+
+    if (decoded.reason) {
+      throw new Error(`Bundler rejected UserOperation: ${decoded.reason}`);
+    }
+
+    if (decoded.delegate?.ok) {
+      if (containsValidationDataSuccessSentinel(decoded.delegate.inner)) {
+        throw new Error(
+          "Bundler rejected a successful validation result wrapper (DelegateAndRevert ok=true with valid validationData). This is a local bundler decode/compatibility issue, not account deployment failure.",
+        );
+      }
+      throw new Error(
+        "Bundler rejected a successful EntryPoint DelegateAndRevert wrapper. This points to a local bundler/EntryPoint compatibility issue.",
+      );
+    }
+
     throw err;
   }
 }
