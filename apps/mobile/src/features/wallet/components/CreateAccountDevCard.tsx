@@ -7,18 +7,16 @@ import {
   buildCreateAccountUserOp,
   getDeployment,
   sendUserOp,
+  predictAccountAddress,
   type PasskeyInit,
 } from "@/src/integration/viem";
+import { fundEntryPointDeposit } from "@/src/integration/viem/account";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useUserStore } from "@store/useUserStore";
 import { sha256, toBytes } from "viem";
 import type { SupportedChainId } from "@/src/integration/chains";
 import type { UserOperation } from "viem/account-abstraction";
-import type { Hex } from "viem";
-
-// Debug: Log what was imported
-console.log('[CreateAccountDevCard] buildCreateAccountUserOp type:', typeof buildCreateAccountUserOp);
-console.log('[CreateAccountDevCard] getDeployment type:', typeof getDeployment);
+import type { Hex, Address } from "viem";
 
 type Props = {
   chainId?: SupportedChainId;
@@ -47,6 +45,9 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
   const [paymasterUrl, setPaymasterUrl] = useState<string>(() => getPaymasterUrl());
   const [usePaymaster, setUsePaymaster] = useState<boolean>(false);
   const [signature, setSignature] = useState<Hex>("0x");
+  const [funding, setFunding] = useState<"idle" | "funding" | "funded">("idle");
+  const [fundTxHash, setFundTxHash] = useState<Hex | null>(null);
+  const [autoFund, setAutoFund] = useState<boolean>(true);
   const validator = deployment?.passkeyValidator as Hex | undefined;
   const authUser = useUserStore((state) => state.user);
   const userId = useMemo(() => authUser?.id ?? null, [authUser?.id]);
@@ -93,6 +94,26 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
         rpIdHash: passkeyInit.rpIdHash,
       });
 
+      // Predict first so we can optionally prefund before bundler simulation (avoids AA21)
+      const predictedSender = await predictAccountAddress(chainId, salt);
+      setSender(predictedSender as Hex);
+
+      if (!usePaymaster && autoFund) {
+        setFunding("funding");
+        try {
+          const { hash } = await fundEntryPointDeposit({
+            chainId,
+            account: predictedSender as Address,
+            amountEth: 0.05,
+          });
+          setFundTxHash(hash as Hex);
+          setFunding("funded");
+        } catch (fundErr) {
+          setFunding("idle");
+          throw fundErr;
+        }
+      }
+
       const { userOp, userOpHash, sender } = await buildCreateAccountUserOp({
         chainId,
         salt,
@@ -122,16 +143,17 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
       const encodedSig = PasskeyService.encodeSignatureForContract(signed) as Hex;
 
       const signedUserOp = { ...userOp, signature: encodedSig };
-
-      setUserOp(userOp);
       setSignature(encodedSig);
       setUserOpHash(userOpHash as Hex);
       setSender(sender as Hex);
-      // store signed version to send
       setUserOp(signedUserOp);
       setStatus("ready");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to build/sign userOp");
+      const msg = e instanceof Error ? e.message : "Failed to build/sign userOp";
+      const hint = msg.includes("AA21")
+        ? "AA21: prefund required. Fund predicted address (auto-fund toggle) or enable a paymaster."
+        : null;
+      setError(hint ?? msg);
       setStatus("error");
     }
   };
@@ -154,29 +176,30 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
       setOpHash(opHash as Hex);
       setStatus("sent");
     } catch (e) {
-      // Try to decode DelegateAndRevert(bool,bytes) to surface the inner revert
       console.log("[CreateAccountDevCard] sendUserOp error object:", e);
-      const rawCandidates = [
-        (e as any)?.data,
-        (e as any)?.cause?.data,
-        (e as any)?.cause?.error?.data,
-        (e as any)?.error?.data,
-      ].filter((v) => typeof v === "string" && v.startsWith("0x")) as string[];
-      for (const raw of rawCandidates) {
-        try {
-          const [ok, inner] = decodeAbiParameters(
-            [{ type: "bool" }, { type: "bytes" }],
-            raw as `0x${string}`,
-          );
-          console.log("[CreateAccountDevCard] delegateAndRevert ok:", ok);
-          console.log("[CreateAccountDevCard] inner revert data:", inner);
-          break;
-        } catch (decodeErr) {
-          console.warn("[CreateAccountDevCard] Failed to decode inner revert:", decodeErr, "raw:", raw);
-        }
-      }
       setError(e instanceof Error ? e.message : "Failed to send userOp");
       setStatus("error");
+    }
+  };
+
+  const handleFund = async () => {
+    if (!sender) {
+      Alert.alert("No predicted address", "Build first to predict the account address.");
+      return;
+    }
+    setError(null);
+    setFunding("funding");
+    try {
+      const { hash } = await fundEntryPointDeposit({
+        chainId,
+        account: sender as Address,
+        amountEth: 0.05,
+      });
+      setFundTxHash(hash as Hex);
+      setFunding("funded");
+    } catch (e) {
+      setFunding("idle");
+      setError(e instanceof Error ? e.message : "Failed to fund predicted account");
     }
   };
 
@@ -189,6 +212,9 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
     setSender(null);
     setSignature("0x");
     setOpHash(null);
+    setFunding("idle");
+    setFundTxHash(null);
+    setAutoFund(true);
   };
 
   return (
@@ -234,6 +260,16 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
             {usePaymaster ? "✅ Using paymaster" : "Use paymaster"}
           </Text>
         </TouchableOpacity>
+        {!usePaymaster && (
+          <TouchableOpacity
+            onPress={() => setAutoFund((v) => !v)}
+            style={[styles.secondaryButton, autoFund && { borderColor: "#38bdf8", borderWidth: 1 }]}
+          >
+            <Text style={styles.buttonText}>
+              {autoFund ? "✅ Auto-fund 0.05 ETH deposit" : "Auto-fund disabled"}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <TouchableOpacity onPress={handleBuild} style={styles.primaryButton} disabled={status === "building"}>
@@ -242,15 +278,25 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
         </Text>
       </TouchableOpacity>
 
-      <Text>
-        Just For Filling
-        Lorem ipsum dolor sit amet consectetur, adipisicing elit. Minima, nesciunt facilis dolorum commodi consequatur quam eveniet quos, libero voluptatem sunt accusantium ipsa necessitatibus numquam odio doloremque omnis tempore laudantium reiciendis.
-      </Text>
-
       {sender && (
         <>
           <Text style={styles.sectionTitle}>Predicted Account</Text>
           <Text style={styles.value}>{sender}</Text>
+          <TouchableOpacity
+            onPress={handleFund}
+            style={styles.secondaryButton}
+            disabled={funding === "funding"}
+          >
+            <Text style={styles.buttonText}>
+              {funding === "funding" ? "Funding..." : "Fund EntryPoint deposit (0.05 ETH)"}
+            </Text>
+          </TouchableOpacity>
+          {fundTxHash && (
+            <>
+              <Text style={styles.label}>Funding tx</Text>
+              <Text style={styles.value}>{fundTxHash}</Text>
+            </>
+          )}
         </>
       )}
 

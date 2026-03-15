@@ -14,7 +14,7 @@ CHAIN_ID_LOCAL    ?= 31337
 CHAIN_ID_SEPOLIA  ?= 11155111
 
 
-ANVIL_NETWORK_ARGS := --rpc-url http://localhost:8545 --private-key $(DEFAULT_ANVIL_KEY) --broadcast -vvvv
+ANVIL_NETWORK_ARGS := --rpc-url http://192.168.100.68:8545 --private-key $(DEFAULT_ANVIL_KEY) --broadcast -vvvv
 
 .PHONY: build
 build:
@@ -26,7 +26,8 @@ build:
 deploy-local: build
 	forge script script/DeployAccount.s.sol:DeployAccount \
 	$(ANVIL_NETWORK_ARGS)
-	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL)
+	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL) 
+	$(MAKE) sync-abi	
 
 .PHONY: deploy-sepolia
 deploy-sepolia: build

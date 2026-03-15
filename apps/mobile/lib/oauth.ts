@@ -28,7 +28,7 @@ const redirectTo = isExpoGo
     });
 const webReturnUrl = redirectTo;
 // Optional: quick runtime check in development to ensure redirect isn't problematic
-if (__DEV__ && (redirectTo.includes("localhost:3000") || redirectTo.includes("auth.expo.io"))) {
+if (__DEV__ && (redirectTo.includes("192.168.100.68:3000") || redirectTo.includes("auth.expo.io"))) {
   // eslint-disable-next-line no-console
   console.warn(
     `⚠️  Auth redirect using problematic URL (${redirectTo}). This may cause "Something went wrong" errors. Expected: exp://... or trezowallet://...`,

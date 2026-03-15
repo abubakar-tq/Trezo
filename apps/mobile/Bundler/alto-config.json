@@ -1,6 +1,6 @@
 {
   "rpcUrl": "http://anvil:8545",
-  "publicRpcUrl": "http://localhost:8545",
+  "publicRpcUrl": "http://192.168.100.68:8545",
   "entryPoints": [
     "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
   ],

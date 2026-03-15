@@ -13,13 +13,9 @@
 import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { ethers } from "ethers";
-import * as LocalAuthentication from "expo-local-authentication";
-import * as SecureStore from "expo-secure-store";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
-    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -27,17 +23,18 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { type Hex } from "viem";
 
-import { getRpcUrl } from "@/src/core/network/chain";
-import { getAAWalletService } from "@/src/features/wallet/services/AAWalletService";
-import { getSupabaseWalletService } from "@/src/features/wallet/services/SupabaseWalletService";
+import { CHAIN_CONFIG } from "@/src/core/network/chain";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { useUserStore } from "@store/useUserStore";
+import { predictAccountAddress, directDeployAccount, getDeployment } from "@/src/integration/viem";
+import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
 
-type DeployStep = 'intro' | 'cost' | 'balance' | 'passkey' | 'deploying' | 'success' | 'error';
+type DeployStep = 'intro' | 'passkey' | 'deploying' | 'success' | 'error';
 
 export default function DeployAccountScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
@@ -47,16 +44,14 @@ export default function DeployAccountScreen() {
   
   const user = useUserStore((state) => state.user);
   const aaAccount = useWalletStore((state) => state.aaAccount);
-  const activeAccount = useWalletStore((state) => state.activeAccount);
   const setAAAccount = useWalletStore((state) => state.setAAAccount);
   const setDeploymentStatus = useWalletStore((state) => state.setDeploymentStatus);
   const markAsDeployed = useWalletStore((state) => state.markAsDeployed);
   
   const [currentStep, setCurrentStep] = useState<DeployStep>('intro');
-  const [eoaBalance, setEOABalance] = useState<string>('0');
-  const [deploymentCost, setDeploymentCost] = useState<string>('~0.001');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [deployedAddress, setDeployedAddress] = useState<string>('');
+  const [passkeySalt, setPasskeySalt] = useState<Hex | null>(null);
   
   // Check if already deployed
   useEffect(() => {
@@ -66,80 +61,32 @@ export default function DeployAccountScreen() {
     }
   }, [aaAccount]);
   
-  // Fetch EOA balance when on balance check step
-  useEffect(() => {
-    if (currentStep === 'balance' && activeAccount) {
-      fetchBalance();
-    }
-  }, [currentStep, activeAccount]);
-  
-  const fetchBalance = async () => {
-    if (!activeAccount) return;
-    
-    try {
-      const provider = new ethers.JsonRpcProvider(getRpcUrl());
-      const balance = await provider.getBalance(activeAccount.address);
-      setEOABalance(ethers.formatEther(balance));
-    } catch (error) {
-      console.error('Error fetching balance:', error);
-      setEOABalance('0');
-    }
-  };
-  
   const handleNext = useCallback(() => {
     if (currentStep === 'intro') {
-      setCurrentStep('cost');
-    } else if (currentStep === 'cost') {
-      setCurrentStep('balance');
-    } else if (currentStep === 'balance') {
-      // Check if sufficient balance
-      const balance = parseFloat(eoaBalance);
-      const cost = parseFloat(deploymentCost.replace('~', ''));
-      
-      if (balance < cost) {
-        setErrorMessage(`Insufficient balance. You need at least ${deploymentCost} ETH for deployment.`);
-        setCurrentStep('error');
-        return;
-      }
-      
       setCurrentStep('passkey');
     } else if (currentStep === 'passkey') {
       handleCreatePasskey();
     }
-  }, [currentStep, eoaBalance, deploymentCost]);
+  }, [currentStep]);
   
   const handleCreatePasskey = async () => {
     try {
-      // Check if biometric auth is available
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      if (!compatible) {
-        setErrorMessage('Biometric authentication not available on this device.');
+      if (!user) {
+        setErrorMessage('User not authenticated');
         setCurrentStep('error');
         return;
       }
-      
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!enrolled) {
-        setErrorMessage('No biometric credentials enrolled. Please set up fingerprint or face recognition in your device settings.');
-        setCurrentStep('error');
-        return;
-      }
-      
-      // Authenticate with biometric
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Authenticate to secure your AA wallet',
-        cancelLabel: 'Cancel',
-        fallbackLabel: 'Use passcode',
-      });
-      
-      if (!result.success) {
-        setErrorMessage('Biometric authentication failed. Please try again.');
-        setCurrentStep('error');
-        return;
-      }
-      
+
+      // Create passkey (biometric prompt handled inside)
+      const passkey = await PasskeyService.createPasskey(user.id);
+      setPasskeySalt(passkey.credentialIdRaw as Hex);
+
+      // Predict AA address using passkey salt
+      const chainId = CHAIN_CONFIG.chainId;
+      const predictedAddress = await predictAccountAddress(chainId, passkey.credentialIdRaw as Hex);
+
       // Proceed to deployment
-      await handleDeploy();
+      await handleDeploy(passkey, predictedAddress as string);
     } catch (error) {
       console.error('Error creating passkey:', error);
       setErrorMessage(error instanceof Error ? error.message : 'Failed to create passkey');
@@ -147,107 +94,50 @@ export default function DeployAccountScreen() {
     }
   };
   
-  const handleDeploy = async () => {
-    if (!user?.id || !activeAccount) {
-      setErrorMessage('User not authenticated or no active wallet');
-      setCurrentStep('error');
-      return;
-    }
-    
+  const handleDeploy = async (passkey: Awaited<ReturnType<typeof PasskeyService.createPasskey>>, predictedAddress: string) => {
     setCurrentStep('deploying');
     setDeploymentStatus('deploying');
     
     try {
-      const aaService = getAAWalletService();
-      const supabaseService = getSupabaseWalletService();
-      
-      // Step 1: Predict address if not already done
-      let predictedAddress = aaAccount?.predictedAddress;
-      let walletId = aaAccount?.id;
-      
-      if (!predictedAddress) {
-        setDeploymentStatus('predicting');
-        predictedAddress = await aaService.predictAccountAddress({
-          userId: user.id,
-          ownerAddress: activeAccount.address,
-          chainId: 31337, // Anvil
-        });
-        
-        // Save to database
-        const wallet = await supabaseService.saveAAWallet({
-          userId: user.id,
-          predictedAddress,
-          ownerAddress: activeAccount.address,
-          walletName: `${activeAccount.name}'s Smart Account`,
-          chainId: 31337,
-        });
-        
-        walletId = wallet.id;
-        
-        // Update store
-        setAAAccount({
-          id: wallet.id,
-          userId: user.id,
-          predictedAddress,
-          ownerAddress: activeAccount.address,
-          isDeployed: false,
-          walletName: wallet.wallet_name,
-          chainId: 31337,
-          createdAt: wallet.created_at,
-        });
+      const chainId = CHAIN_CONFIG.chainId;
+      const deployment = getDeployment(chainId);
+      if (!deployment?.passkeyValidator) {
+        throw new Error('Passkey validator not configured for this chain');
       }
-      
-      // Step 2: Get private key from secure storage
-      const privateKeyHex = await SecureStore.getItemAsync(`wallet_${activeAccount.address}_key`);
-      if (!privateKeyHex) {
-        throw new Error('Private key not found in secure storage');
-      }
-      
-      // Step 3: Create signer
-      const provider = new ethers.JsonRpcProvider(getRpcUrl());
-      const signer = new ethers.Wallet(privateKeyHex, provider);
-      
-      // Step 4: Deploy account
-      setDeploymentStatus('deploying');
-      const { txHash, address } = await aaService.deployAccount(
-        {
-          userId: user.id,
-          ownerAddress: activeAccount.address,
-          chainId: 31337,
-        },
-        signer
-      );
-      
-      // Step 5: Get receipt for block number
-      const receipt = await provider.getTransactionReceipt(txHash);
-      const blockNumber = receipt?.blockNumber || 0;
-      
-      // Step 6: Update database
-      if (walletId) {
-        await supabaseService.updateDeploymentStatus(walletId, txHash, blockNumber);
-      }
-      
-      // Step 7: Save passkey to database
-      if (walletId) {
-        const deviceName = Platform.select({
-          ios: 'iPhone',
-          android: 'Android Device',
-          default: 'Mobile Device',
-        });
-        
-        await supabaseService.savePasskey({
-          userId: user.id,
-          aaWalletId: walletId,
-          credentialId: `passkey_${user.id}_${Date.now()}`,
-          publicKey: activeAccount.address, // Simplified - in production use actual WebAuthn public key
-          deviceName,
-          deviceType: Platform.OS,
-        });
-      }
-      
-      // Step 8: Update store
-      markAsDeployed(txHash, blockNumber);
-      setDeployedAddress(address);
+
+      const passkeyInit = {
+        idRaw: passkey.credentialIdRaw as Hex,
+        px: BigInt(passkey.publicKeyX),
+        py: BigInt(passkey.publicKeyY),
+        rpIdHash: passkey.rpIdHash as Hex,
+      };
+
+      const result = await directDeployAccount({
+        chainId,
+        salt: passkey.credentialIdRaw as Hex,
+        passkeyInit,
+        validator: deployment.passkeyValidator as `0x${string}`,
+      });
+
+      const deployedAddress = result.accountAddress;
+
+      // Update wallet store with deployment info
+      markAsDeployed(result.transactionHash, Number(result.blockNumber));
+      setAAAccount({
+        id: user?.id || 'passkey-wallet',
+        userId: user?.id || 'passkey-wallet',
+        predictedAddress: deployedAddress,
+        ownerAddress: passkey.credentialIdRaw,
+        isDeployed: true,
+        deploymentTxHash: result.transactionHash,
+        deploymentBlockNumber: Number(result.blockNumber),
+        walletName: 'Passkey Smart Account',
+        chainId,
+        createdAt: new Date().toISOString(),
+        deployedAt: new Date().toISOString(),
+      });
+
+      setDeployedAddress(deployedAddress);
       setCurrentStep('success');
       
     } catch (error) {
@@ -282,7 +172,7 @@ export default function DeployAccountScreen() {
             
             <Text style={styles.stepTitle}>Smart Account Benefits</Text>
             <Text style={styles.stepDescription}>
-              Deploy an Account Abstraction wallet to unlock advanced features:
+              Deploy an Account Abstraction wallet with your passkey:
             </Text>
             
             <View style={styles.benefitsList}>
@@ -303,7 +193,7 @@ export default function DeployAccountScreen() {
                   <Feather name="shield" size={20} color={colors.accent} />
                 </View>
                 <View style={styles.benefitContent}>
-                  <Text style={styles.benefitTitle}>Social Recovery</Text>
+                  <Text style={styles.benefitTitle}>Social Recovery (coming soon)</Text>
                   <Text style={styles.benefitText}>
                     Add trusted guardians to recover your wallet if you lose access
                   </Text>
@@ -329,85 +219,6 @@ export default function DeployAccountScreen() {
             </TouchableOpacity>
           </View>
         );
-      
-      case 'cost':
-        return (
-          <View style={styles.stepContainer}>
-            <View style={styles.iconCircle}>
-              <Feather name="dollar-sign" size={32} color={colors.accent} />
-            </View>
-            
-            <Text style={styles.stepTitle}>Deployment Cost</Text>
-            <Text style={styles.stepDescription}>
-              One-time fee to deploy your smart contract wallet on-chain
-            </Text>
-            
-            <View style={styles.costCard}>
-              <Text style={styles.costLabel}>Estimated Gas Fee</Text>
-              <Text style={styles.costValue}>{deploymentCost} ETH</Text>
-              <Text style={styles.costNote}>
-                Actual cost may vary based on network conditions
-              </Text>
-            </View>
-            
-            <View style={styles.infoBox}>
-              <Feather name="info" size={16} color={colors.accent} />
-              <Text style={styles.infoText}>
-                This is a one-time deployment cost. After deployment, most transactions will be gasless.
-              </Text>
-            </View>
-            
-            <TouchableOpacity style={styles.primaryButton} onPress={handleNext}>
-              <Text style={styles.primaryButtonText}>Check Balance</Text>
-              <Feather name="arrow-right" size={18} color={colors.background} />
-            </TouchableOpacity>
-          </View>
-        );
-      
-      case 'balance':
-        const balance = parseFloat(eoaBalance);
-        const cost = parseFloat(deploymentCost.replace('~', ''));
-        const hasSufficientBalance = balance >= cost;
-        
-        return (
-          <View style={styles.stepContainer}>
-            <View style={styles.iconCircle}>
-              <Feather name="credit-card" size={32} color={colors.accent} />
-            </View>
-            
-            <Text style={styles.stepTitle}>Balance Check</Text>
-            <Text style={styles.stepDescription}>
-              Verifying you have enough ETH for deployment
-            </Text>
-            
-            <View style={styles.balanceCard}>
-              <Text style={styles.balanceLabel}>Your Balance</Text>
-              <Text style={styles.balanceValue}>{parseFloat(eoaBalance).toFixed(4)} ETH</Text>
-              <Text style={styles.balanceAddress}>{activeAccount?.address.slice(0, 10)}...{activeAccount?.address.slice(-8)}</Text>
-            </View>
-            
-            <View style={[styles.statusBox, hasSufficientBalance ? styles.statusSuccess : styles.statusWarning]}>
-              <Feather 
-                name={hasSufficientBalance ? "check-circle" : "alert-circle"} 
-                size={20} 
-                color={hasSufficientBalance ? colors.success : colors.warning} 
-              />
-              <Text style={[styles.statusText, { color: hasSufficientBalance ? colors.success : colors.warning }]}>
-                {hasSufficientBalance 
-                  ? 'Sufficient balance for deployment' 
-                  : `Need ${deploymentCost} ETH. Please add funds to continue.`}
-              </Text>
-            </View>
-            
-            {hasSufficientBalance && (
-              <TouchableOpacity style={styles.primaryButton} onPress={handleNext}>
-                <Text style={styles.primaryButtonText}>Create Passkey</Text>
-                <Feather name="arrow-right" size={18} color={colors.background} />
-              </TouchableOpacity>
-            )}
-          </View>
-        );
-      
       case 'passkey':
         return (
           <View style={styles.stepContainer}>

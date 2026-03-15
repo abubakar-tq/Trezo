@@ -35,6 +35,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
         uint256 py; // P-256 pubkey Y
         bytes32 rpIdHash; // SHA-256(RP ID)
         uint32 signCounter;
+        bool counterInitialized;
     }
 
     // Encoded WebAuthn signature payload carried in signatures
@@ -89,9 +90,10 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
         PasskeyId id = PasskeyId.wrap(idRaw);
         require(!passkeyIds[account].contains(idRaw), "exists");
-        // Initialize with signCounter = 0, first signature must have counter >= 1
-        // However, some authenticators start at 0, so we accept counter >= stored value
-        passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0);
+        // Some authenticators legitimately start at counter 0, so the first
+        // successful assertion initializes the stored counter rather than
+        // requiring it to be strictly greater than zero.
+        passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0, false);
         passkeyIds[account].add(idRaw);
         emit PasskeyAdded(account, idRaw);
     }
@@ -136,7 +138,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
         address account = msg.sender;
         PasskeyId id = PasskeyId.wrap(passkeyId);
         require(!passkeyIds[account].contains(passkeyId), "exists");
-        passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0);
+        passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0, false);
         passkeyIds[account].add(passkeyId); // O(1)
         emit PasskeyAdded(account, passkeyId);
     }
@@ -166,7 +168,8 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      *  - The passkeyId must be registered for `userOp.sender`.
      *  - `authenticatorData.rpIdHash` must match the stored rpIdHash for this passkey.
      *  - The signature must verify per WebAuthn over challenge = `userOpHash` (RIP-7212/FCL).
-     *  - The WebAuthn sign counter in `authenticatorData` must strictly increase.
+     *  - The first successful assertion initializes the stored WebAuthn sign counter.
+     *  - Subsequent assertions must strictly increase the sign counter.
      *  - User Verification (UV) is required.
      *
      * Returns packed ValidationData per ERC-4337 conventions. Does not revert on signature
@@ -187,15 +190,12 @@ contract PasskeyValidator is ERC7579ValidatorBase {
             return _packValidationData({sigFailed: true, validUntil: 0, validAfter: 0});
         }
 
-        // 3) Enforce non-decreasing signature counter (clone detection)
-        // WebAuthn spec requires counters to be monotonically increasing
         PasskeyRecord storage rec = passkeys[userOp.sender][PasskeyId.wrap(idRaw)];
-        if (newCounter <= rec.signCounter) {
+        if (!_isFreshCounter(rec, newCounter)) {
             return _packValidationData({sigFailed: true, validUntil: 0, validAfter: 0});
         }
 
-        // Update stored counter
-        rec.signCounter = newCounter;
+        _recordCounter(rec, newCounter);
 
         // Success: valid for all time (caller may add policy as desired)
         return _packValidationData({sigFailed: false, validUntil: type(uint48).max, validAfter: 0});
@@ -216,7 +216,8 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      * ERC-1271 style signature validation bound to a sender.
      * Leverages the same WebAuthn verification as validateUserOp, without state updates.
      * Requires the passkey to be registered and rpIdHash to match. Also enforces the
-     * sign counter to be strictly greater than the stored counter, but does not update it.
+     * sign counter to be strictly greater than the stored counter once the passkey
+     * has been used statefully at least once, but does not update it.
      *
      * Signature encoding is the same as in validateUserOp.
      *
@@ -236,7 +237,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
         if (!ok) return EIP1271_FAILED;
 
         PasskeyRecord storage rec = passkeys[sender][PasskeyId.wrap(idRaw)];
-        if (newCounter <= rec.signCounter) return EIP1271_FAILED;
+        if (!_isFreshCounter(rec, newCounter)) return EIP1271_FAILED;
         return EIP1271_SUCCESS;
     }
 
@@ -260,7 +261,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      * @param hash The message hash used as the WebAuthn challenge.
      * @param signature ABI-encoded WebAuthn signature payload.
      * @param data Encoded context. Currently expects abi.encode(address sender).
-     * @return validSig True if signature is valid and counter is strictly increasing.
+     * @return validSig True if signature is valid and the counter is fresh for this passkey.
      */
     function validateSignatureWithData(bytes32 hash, bytes calldata signature, bytes calldata data)
         external
@@ -272,7 +273,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
         (bool ok, uint32 newCounter, bytes32 idRaw) = _verifySignature(sender, signature, abi.encodePacked(hash));
         if (!ok) return false;
         PasskeyRecord storage rec = passkeys[sender][PasskeyId.wrap(idRaw)];
-        return newCounter > rec.signCounter;
+        return _isFreshCounter(rec, newCounter);
     }
 
     /*//////////////////////////////////////////////////////////////////////////
@@ -351,6 +352,16 @@ contract PasskeyValidator is ERC7579ValidatorBase {
             ctr = (uint32(uint8(authenticatorData[33])) << 24) | (uint32(uint8(authenticatorData[34])) << 16)
                 | (uint32(uint8(authenticatorData[35])) << 8) | uint32(uint8(authenticatorData[36]));
         }
+    }
+
+    function _isFreshCounter(PasskeyRecord storage rec, uint32 newCounter) internal view returns (bool) {
+        if (!rec.counterInitialized) return true;
+        return newCounter > rec.signCounter;
+    }
+
+    function _recordCounter(PasskeyRecord storage rec, uint32 newCounter) internal {
+        rec.signCounter = newCounter;
+        rec.counterInitialized = true;
     }
 
     /*//////////////////////////////////////////////////////////////////////////
