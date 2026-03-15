@@ -239,6 +239,21 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         );
     }
 
+    function test_validate_user_op_accepts_zero_counter_on_first_use_and_blocks_replay() public {
+        // Arrange
+        (UserOpData memory userOpData, bytes memory signature,) = _prepareUserOpSignature(0);
+        userOpData.userOp.signature = signature;
+
+        // Act
+        uint256 firstResult = _callValidateUserOp(userOpData);
+        uint256 replayResult = _callValidateUserOp(userOpData);
+
+        // Assert
+        uint256 expected = uint256(type(uint48).max) << 160;
+        assertEq(firstResult, expected, "zero-start authenticators should validate on first use");
+        assertEq(replayResult, 1, "replaying the same zero counter must fail");
+    }
+
     function test_validate_user_op_fails_for_unknown_passkey() public {
         // Arrange
         (UserOpData memory userOpData,, SignatureComponents memory components) = _prepareUserOpSignature(1);
@@ -400,6 +415,27 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
 
         // Assert
         assertFalse(stale, "stale counter should fail after stateful validation");
+    }
+
+    function test_is_valid_signature_with_sender_accepts_zero_counter_before_first_stateful_use() public {
+        // Arrange
+        bytes32 messageHash = keccak256("1271-zero-first");
+        SignatureComponents memory components = _buildSignatureComponents(messageHash, 0);
+        bytes memory signature = WebAuthnHelper.encodePasskeySignature(
+            dummyId,
+            components.authenticatorData,
+            components.clientDataJSON,
+            components.challengeIndex,
+            components.typeIndex,
+            components.r,
+            components.s
+        );
+
+        // Act
+        bytes4 result = validator.isValidSignatureWithSender(instance.account, messageHash, signature);
+
+        // Assert
+        assertEq(uint32(result), uint32(0x1626ba7e), "first zero counter should be accepted");
     }
 
     function _prepareUserOpSignature(uint32 counter)

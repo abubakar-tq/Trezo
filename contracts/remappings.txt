@@ -15,6 +15,7 @@ lib/modulekit/:hardhat-deploy/=lib/modulekit/node_modules/hardhat-deploy/
 lib/modulekit/:src/=lib/modulekit/src/
 lib/modulekit/:test/=lib/modulekit/test/
 lib/modulekit/:@ERC4337/=lib/modulekit/node_modules/@ERC4337/
+lib/modulekit/:src/external/ERC4337.sol=lib/modulekit/src/external/ERC4337.sol
 lib/modulekit/:@ERC4337/account-abstraction/contracts/=lib/modulekit/node_modules/@ERC4337/account-abstraction/contracts/
 
 lib/erc7579-implementation/:account-abstraction/=lib/account-abstraction/contracts/
