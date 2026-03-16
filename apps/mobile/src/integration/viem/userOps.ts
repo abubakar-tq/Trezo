@@ -22,7 +22,6 @@ export type PasskeyInit = {
   idRaw: Hex;
   px: bigint;
   py: bigint;
-  rpIdHash: Hex;
 };
 
 // EntryPoint version in use
@@ -270,7 +269,6 @@ const toPasskeyTuple = (passkeyInit: PasskeyInit) => [
   passkeyInit.idRaw,
   BigInt(passkeyInit.px),
   BigInt(passkeyInit.py),
-  passkeyInit.rpIdHash,
 ] as const;
 
 const buildInitCode = (accountFactory: Hex, passkeyArgs: CreateAccountParams) =>
@@ -312,8 +310,8 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
   if (!params.passkeyInit) {
     throw new Error("PasskeyInit is required");
   }
-  if (!params.passkeyInit.idRaw || !params.passkeyInit.rpIdHash) {
-    throw new Error("PasskeyInit.idRaw and rpIdHash are required");
+  if (!params.passkeyInit.idRaw) {
+    throw new Error("PasskeyInit.idRaw is required");
   }
 
   // Defensive checks for required addresses
@@ -677,7 +675,7 @@ export async function buildAddPasskeyUserOp(params: AddPasskeyUserOpParams) {
   const addPasskeyData = encodeFunctionData({
     abi: ABIS.passkeyValidator,
     functionName: "addPasskey",
-    args: [params.newPasskey.idRaw, params.newPasskey.px, params.newPasskey.py, params.newPasskey.rpIdHash],
+    args: [params.newPasskey.idRaw, params.newPasskey.px, params.newPasskey.py],
   });
   const callData = encodeFunctionData({
     abi: ABIS.smartAccount,

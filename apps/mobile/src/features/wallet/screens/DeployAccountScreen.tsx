@@ -109,7 +109,6 @@ export default function DeployAccountScreen() {
         idRaw: passkey.credentialIdRaw as Hex,
         px: BigInt(passkey.publicKeyX),
         py: BigInt(passkey.publicKeyY),
-        rpIdHash: passkey.rpIdHash as Hex,
       };
 
       const result = await directDeployAccount({

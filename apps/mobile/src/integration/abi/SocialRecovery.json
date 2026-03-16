@@ -144,11 +144,6 @@
               "name": "py",
               "type": "uint256",
               "internalType": "uint256"
-            },
-            {
-              "name": "rpIdHash",
-              "type": "bytes32",
-              "internalType": "bytes32"
             }
           ]
         }
@@ -213,11 +208,6 @@
               "name": "py",
               "type": "uint256",
               "internalType": "uint256"
-            },
-            {
-              "name": "rpIdHash",
-              "type": "bytes32",
-              "internalType": "bytes32"
             }
           ]
         }
@@ -378,11 +368,6 @@
               "name": "py",
               "type": "uint256",
               "internalType": "uint256"
-            },
-            {
-              "name": "rpIdHash",
-              "type": "bytes32",
-              "internalType": "bytes32"
             }
           ]
         },

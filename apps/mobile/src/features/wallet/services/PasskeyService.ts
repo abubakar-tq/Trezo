@@ -9,7 +9,6 @@
  * Contract Requirements (PasskeyValidator.sol):
  * - bytes32 passkeyId (credential ID)
  * - uint256 px, py (P-256 public key coordinates)
- * - bytes32 rpIdHash (SHA-256 of relying party ID)
  * - Signature: (authenticatorData, clientDataJSON, challengeIndex, typeIndex, r, s)
  */
 
@@ -17,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import * as Passkey from 'react-native-passkeys';
-import { encodeAbiParameters, parseAbiParameters, sha256, toBytes } from 'viem';
+import { encodeAbiParameters, parseAbiParameters, toBytes } from 'viem';
 
 const PASSKEY_STORAGE_KEY = 'trezo_passkey_'; // One passkey per device
 const RP_NAME = (Constants?.expoConfig?.extra as any)?.passkeyRpName || 'Trezo Wallet';
@@ -69,7 +68,6 @@ export interface PasskeyMetadata {
   publicKeyX: string;         // P-256 public key X coordinate (hex)
   publicKeyY: string;         // P-256 public key Y coordinate (hex)
   rpId: string;               // Relying party ID (e.g., "trezo.app")
-  rpIdHash: string;           // SHA-256(rpId) for contract (hex)
   deviceName: string;         // Device identifier
   deviceType: 'ios' | 'android';
   createdAt: string;          // ISO timestamp
@@ -337,32 +335,27 @@ export class PasskeyService {
     // 6. Extract public key from attestation response
     const publicKey = this.extractPublicKey(result.response);
     
-    // 7. Calculate rpIdHash (SHA-256 of RP ID)
-    const rpIdHash = this.calculateRpIdHash(rpId);
-    
-    // 8. Convert credential ID to bytes32
+    // 7. Convert credential ID to bytes32
     const credentialIdRaw = this.credentialIdToBytes32(result.id);
     
-    // 9. Create metadata (PUBLIC DATA ONLY)
+    // 8. Create metadata (PUBLIC DATA ONLY)
     const metadata: PasskeyMetadata = {
       credentialId: result.id,
       credentialIdRaw,
       publicKeyX: publicKey.x,
       publicKeyY: publicKey.y,
       rpId,
-      rpIdHash,
       deviceName: Platform.OS === 'ios' ? 'iPhone' : 'Android Device',
       deviceType: Platform.OS as 'ios' | 'android',
       createdAt: new Date().toISOString(),
     };
     
-    // 10. Save metadata to AsyncStorage (replaces old passkey if exists)
+    // 9. Save metadata to AsyncStorage (replaces old passkey if exists)
     await this.savePasskey(userId, metadata);
     
     console.log('💾 [PasskeyService] Passkey metadata saved to AsyncStorage');
     console.log('🔑 [PasskeyService] Public Key X:', publicKey.x.slice(0, 20) + '...');
     console.log('🔑 [PasskeyService] Public Key Y:', publicKey.y.slice(0, 20) + '...');
-    console.log('🔑 [PasskeyService] RP ID Hash:', rpIdHash.slice(0, 20) + '...');
     
     return metadata;
   }
@@ -493,7 +486,7 @@ export class PasskeyService {
   
   /**
    * Get passkey data for contract deployment (onInstall format)
-   * Returns: abi.encode(bytes32 passkeyId, uint256 px, uint256 py, bytes32 rpIdHash)
+   * Returns: abi.encode(bytes32 passkeyId, uint256 px, uint256 py)
    */
   static async getPasskeyDataForDeployment(userId: string): Promise<string> {
     const passkey = await this.getPasskey(userId);
@@ -502,12 +495,11 @@ export class PasskeyService {
     }
     
     const encoded = encodeAbiParameters(
-      parseAbiParameters('bytes32, uint256, uint256, bytes32'),
+      parseAbiParameters('bytes32, uint256, uint256'),
       [
         passkey.credentialIdRaw as `0x${string}`,
         BigInt(passkey.publicKeyX),
         BigInt(passkey.publicKeyY),
-        passkey.rpIdHash as `0x${string}`,
       ]
     );
     
@@ -808,15 +800,6 @@ export class PasskeyService {
       r: rHex,
       s: `0x${sBigInt.toString(16).padStart(64, '0')}`,
     };
-  }
-  
-  /**
-   * Calculate SHA-256 hash of RP ID
-   */
-  private static calculateRpIdHash(rpId: string): string {
-    const hash = sha256(toBytes(rpId));
-    console.log('🔐 [PasskeyService] RP ID Hash calculated:', hash.slice(0, 20) + '...');
-    return hash;
   }
   
   /**

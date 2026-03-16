@@ -13,7 +13,7 @@ Business logic shared across the Trezo smart wallet.
 - Contract addresses for the AA stack
 
 ## Security Model
-1. **Passkeys (WebAuthn)** are the sole credential for owning the smart account. The private key lives in the device secure enclave; only public metadata (credentialIdRaw, publicKeyX/Y, rpIdHash) is stored in AsyncStorage.
+1. **Passkeys (WebAuthn)** are the sole credential for owning the smart account. The private key lives in the device secure enclave; only public metadata (credentialIdRaw, publicKeyX/Y) is stored in AsyncStorage.
 2. **Biometrics** (FaceID/TouchID/Android biometrics) gate passkey creation/use via the platform auth prompt.
 3. **No local EOA/seed** is generated or stored; all account ownership flows are passkey-based.
 4. Contract addresses are injected per-network (Anvil via deployment JSON; testnet/mainnet via env) and validated at startup.

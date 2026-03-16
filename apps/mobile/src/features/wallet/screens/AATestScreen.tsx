@@ -380,7 +380,6 @@ export default function AATestScreen() {
         idRaw: testPasskey.credentialIdRaw as Hex,
         px: BigInt(testPasskey.publicKeyX),
         py: BigInt(testPasskey.publicKeyY),
-        rpIdHash: testPasskey.rpIdHash as Hex,
       };
 
       console.log('🚀 [AATest] Deploying passkey account with salt:', salt);

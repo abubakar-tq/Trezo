@@ -12,7 +12,7 @@ import {
   getDeployment,
 } from "@/src/integration/viem";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
-import { sha256, toBytes, type Hex, type Address } from "viem";
+import { type Hex, type Address } from "viem";
 import {
   devFundSmartAccount,
   DEV_FUNDING_AMOUNT_ETH,
@@ -235,9 +235,6 @@ const HomeScreen: React.FC = () => {
         throw new Error("Unable to access passkey credentials on this device.");
       }
 
-      const rpIdHash = passkey.rpIdHash
-        ? (passkey.rpIdHash as Hex)
-        : (sha256(toBytes(passkey.rpId)) as Hex);
       const pxHex = passkey.publicKeyX.startsWith("0x")
         ? (passkey.publicKeyX as Hex)
         : (`0x${passkey.publicKeyX}` as Hex);
@@ -253,7 +250,6 @@ const HomeScreen: React.FC = () => {
         idRaw: passkey.credentialIdRaw as Hex,
         px: BigInt(pxHex),
         py: BigInt(pyHex),
-        rpIdHash,
       };
       const salt = passkey.credentialIdRaw as Hex;
       const deployment = getDeployment(resolvedDeployChainId);

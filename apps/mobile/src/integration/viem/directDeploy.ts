@@ -41,7 +41,6 @@ export async function directDeployAccount(params: DirectDeployParams) {
     params.passkeyInit.idRaw as Hex,
     BigInt(params.passkeyInit.px),
     BigInt(params.passkeyInit.py),
-    params.passkeyInit.rpIdHash as Hex,
   ];
 
   console.log('[directDeploy] Passkey init tuple:', passkeyInitTuple);
