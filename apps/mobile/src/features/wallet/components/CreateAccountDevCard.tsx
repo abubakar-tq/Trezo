@@ -13,7 +13,6 @@ import {
 import { fundEntryPointDeposit } from "@/src/integration/viem/account";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useUserStore } from "@store/useUserStore";
-import { sha256, toBytes } from "viem";
 import type { SupportedChainId } from "@/src/integration/chains";
 import type { UserOperation } from "viem/account-abstraction";
 import type { Hex, Address } from "viem";
@@ -59,9 +58,6 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
       throw new Error("No passkey found on this device. Create one first.");
     }
 
-    // Recompute rpIdHash to avoid using corrupt stored values
-    const rpIdHash = sha256(toBytes(passkey.rpId));
-
     // Ensure coordinates are 32 bytes; if not, throw so user can recreate passkey
     const pxHex = passkey.publicKeyX.startsWith("0x") ? passkey.publicKeyX : (`0x${passkey.publicKeyX}` as Hex);
     const pyHex = passkey.publicKeyY.startsWith("0x") ? passkey.publicKeyY : (`0x${passkey.publicKeyY}` as Hex);
@@ -73,7 +69,6 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
       idRaw: passkey.credentialIdRaw as Hex,
       px: BigInt(pxHex),
       py: BigInt(pyHex),
-      rpIdHash: rpIdHash as Hex,
     };
   };
 
@@ -91,7 +86,6 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
         idRaw: passkeyInit.idRaw,
         px: passkeyInit.px.toString(16),
         py: passkeyInit.py.toString(16),
-        rpIdHash: passkeyInit.rpIdHash,
       });
 
       // Predict first so we can optionally prefund before bundler simulation (avoids AA21)

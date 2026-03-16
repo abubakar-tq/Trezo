@@ -21,19 +21,19 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
+    error InvalidInstallDataLength();
 
     /*//////////////////////////////////////////////////////////////
                                 STRUCTS
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * Minimal-but-safe: rpIdHash (phishing resistance) + signCounter (clone detection)
+     * Passkey public key + monotonic sign counter.
      * Note: bytes32 for px/py is cheaper to store than uint256; cast when calling libs.
      */
     struct PasskeyRecord {
         uint256 px; // P-256 pubkey X
         uint256 py; // P-256 pubkey Y
-        bytes32 rpIdHash; // SHA-256(RP ID)
         uint32 signCounter;
         bool counterInitialized;
     }
@@ -67,7 +67,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      *
      * Data encoding options:
      *  - Empty: installs the module without registering a passkey.
-     *  - abi.encode(bytes32 passkeyId, uint256 px, uint256 py, bytes32 rpIdHash):
+     *  - abi.encode(bytes32 passkeyId, uint256 px, uint256 py):
      *      installs and registers a single passkey for the caller.
      *
      * Reverts if the module is considered initialized (i.e. the caller already
@@ -84,16 +84,18 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
         if (data.length == 0) return;
 
-        // decode one passkey and register
-        (bytes32 idRaw, uint256 px, uint256 py, bytes32 rpIdHash) =
-            abi.decode(data, (bytes32, uint256, uint256, bytes32));
+        // exact payload for (bytes32, uint256, uint256)
+        if (data.length != 96) {
+            revert InvalidInstallDataLength();
+        }
+        (bytes32 idRaw, uint256 px, uint256 py) = abi.decode(data, (bytes32, uint256, uint256));
 
         PasskeyId id = PasskeyId.wrap(idRaw);
         require(!passkeyIds[account].contains(idRaw), "exists");
         // Some authenticators legitimately start at counter 0, so the first
         // successful assertion initializes the stored counter rather than
         // requiring it to be strictly greater than zero.
-        passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0, false);
+        passkeys[account][id] = PasskeyRecord(px, py, 0, false);
         passkeyIds[account].add(idRaw);
         emit PasskeyAdded(account, idRaw);
     }
@@ -134,11 +136,11 @@ contract PasskeyValidator is ERC7579ValidatorBase {
                                      MODULE LOGIC
     //////////////////////////////////////////////////////////////////////////*/
 
-    function addPasskey(bytes32 passkeyId, uint256 px, uint256 py, bytes32 rpIdHash) external {
+    function addPasskey(bytes32 passkeyId, uint256 px, uint256 py) external {
         address account = msg.sender;
         PasskeyId id = PasskeyId.wrap(passkeyId);
         require(!passkeyIds[account].contains(passkeyId), "exists");
-        passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0, false);
+        passkeys[account][id] = PasskeyRecord(px, py, 0, false);
         passkeyIds[account].add(passkeyId); // O(1)
         emit PasskeyAdded(account, passkeyId);
     }
@@ -166,7 +168,6 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      *
      * Validation performed:
      *  - The passkeyId must be registered for `userOp.sender`.
-     *  - `authenticatorData.rpIdHash` must match the stored rpIdHash for this passkey.
      *  - The signature must verify per WebAuthn over challenge = `userOpHash` (RIP-7212/FCL).
      *  - The first successful assertion initializes the stored WebAuthn sign counter.
      *  - Subsequent assertions must strictly increase the sign counter.
@@ -215,7 +216,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     /**
      * ERC-1271 style signature validation bound to a sender.
      * Leverages the same WebAuthn verification as validateUserOp, without state updates.
-     * Requires the passkey to be registered and rpIdHash to match. Also enforces the
+     * Requires the passkey to be registered. Also enforces the
      * sign counter to be strictly greater than the stored counter once the passkey
      * has been used statefully at least once, but does not update it.
      *
@@ -286,7 +287,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      * @param account The account that owns the passkey.
      * @param signature ABI-encoded WebAuthn signature payload as in validateUserOp.
      * @param challenge The challenge bytes to verify (e.g., userOpHash or message hash).
-     * @return ok True if passkey exists, rpIdHash matches and signature verifies.
+     * @return ok True if passkey exists and signature verifies.
      * @return newCounter The parsed WebAuthn sign counter from authenticatorData.
      * @return idRaw The raw passkeyId used for this verification.
      */
@@ -305,18 +306,8 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
         PasskeyRecord storage rec = passkeys[account][PasskeyId.wrap(p.idRaw)];
 
-        // Minimum length: 32 (rpIdHash) + 1 (flags) + 4 (counter)
+        // Minimum length: 32 (rp hash field) + 1 (flags) + 4 (counter)
         if (p.authenticatorData.length < 37) {
-            return (false, 0, idRaw);
-        }
-
-        // Enforce rpIdHash binding to this passkey
-        bytes32 adRpIdHash;
-        bytes memory ad = p.authenticatorData;
-        assembly {
-            adRpIdHash := mload(add(ad, 32))
-        }
-        if (adRpIdHash != rec.rpIdHash) {
             return (false, 0, idRaw);
         }
 

@@ -9,7 +9,7 @@ Foundry project powering the Trezo smart wallet. Implements an ERC-4337/7579 sma
 
 ## Modules
 - **PasskeyValidator** (`src/modules/passkey/PasskeyValidator.sol`)  
-  - WebAuthn/RIP-7212 signature checks (rpId binding, sign-counter monotonicity)  
+  - WebAuthn/RIP-7212 signature checks (user verification, sign-counter monotonicity)  
   - Supports ERC-4337 `validateUserOp` and ERC-1271 verification  
   - Add/remove passkeys per account with enumerable tracking
 - **SocialRecovery** (`src/modules/SocialRecovery/SocialRecovery.sol`)  
@@ -52,5 +52,5 @@ forge script script/Deploy.s.sol:Deploy \
 
 ## Notes
 - Bundler integration targets ERC-4337 EntryPoint v0.7 (see mobile bundler config).
-- The passkey module expects SHA-256(RP ID) binding and enforces WebAuthn user verification.
+- The passkey module enforces WebAuthn user verification and counter freshness.
 - Social recovery calls back into the account to add a new passkey; ensure the module is marked as authorized recovery in the account.

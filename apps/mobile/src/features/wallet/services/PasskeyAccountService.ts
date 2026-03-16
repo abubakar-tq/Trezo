@@ -20,7 +20,6 @@ export type PendingPasskeyRecord = {
   credentialId: string;
   px: string;
   py: string;
-  rpIdHash: Hex;
   deviceName?: string;
   deviceType?: string;
   createdAt: string;
@@ -57,7 +56,6 @@ const toPasskeyInit = (record: PendingPasskeyRecord): PasskeyInit => ({
   idRaw: record.idRaw,
   px: BigInt(normalizeHex(record.px)),
   py: BigInt(normalizeHex(record.py)),
-  rpIdHash: record.rpIdHash,
 });
 
 export class PasskeyAccountService {
@@ -68,7 +66,6 @@ export class PasskeyAccountService {
       credentialId: metadata.credentialId,
       px: normalizeHex(metadata.publicKeyX),
       py: normalizeHex(metadata.publicKeyY),
-      rpIdHash: metadata.rpIdHash as Hex,
       deviceName: metadata.deviceName,
       deviceType: metadata.deviceType,
       createdAt: metadata.createdAt,

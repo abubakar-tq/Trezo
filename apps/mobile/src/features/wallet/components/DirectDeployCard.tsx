@@ -4,7 +4,6 @@ import { PasskeyService } from '../services/PasskeyService';
 import { directDeployAccount, predictAccountAddress, isAccountDeployed } from '../../../integration/viem';
 import type { Hex } from 'viem';
 import { useUserStore } from '@store/useUserStore';
-import { sha256, toBytes } from 'viem';
 
 export const DirectDeployCard = () => {
   const [loading, setLoading] = useState(false);
@@ -43,9 +42,6 @@ export const DirectDeployCard = () => {
 
       console.log('[DirectDeployCard] Using passkey:', passkey.credentialId);
 
-      // Recompute rpIdHash to avoid using corrupt stored values
-      const rpIdHash = sha256(toBytes(passkey.rpId));
-
       // Ensure coordinates are 32 bytes with 0x prefix
       const pxHex = passkey.publicKeyX.startsWith("0x") ? passkey.publicKeyX : (`0x${passkey.publicKeyX}` as Hex);
       const pyHex = passkey.publicKeyY.startsWith("0x") ? passkey.publicKeyY : (`0x${passkey.publicKeyY}` as Hex);
@@ -56,14 +52,12 @@ export const DirectDeployCard = () => {
 
       console.log('[DirectDeployCard] Public key X:', pxHex);
       console.log('[DirectDeployCard] Public key Y:', pyHex);
-      console.log('[DirectDeployCard] RP ID Hash:', rpIdHash);
 
       // Prepare passkey init
       const passkeyInit = {
         idRaw: passkey.credentialIdRaw as Hex,
         px: BigInt(pxHex),
         py: BigInt(pyHex),
-        rpIdHash: rpIdHash as Hex,
       };
 
       // Use a deterministic salt based on the passkey ID

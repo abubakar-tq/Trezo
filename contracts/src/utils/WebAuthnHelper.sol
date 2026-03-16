@@ -10,19 +10,19 @@ library WebAuthnHelper {
     bytes1 internal constant FLAG_UP = 0x01; // User Present
     bytes1 internal constant FLAG_UV = 0x04; // User Verified
 
-    /// @notice Compute rpIdHash = sha256(rpId)
-    function rpIdHash(string memory rpId) internal pure returns (bytes32) {
+    /// @notice Compute rp hash = sha256(rpId)
+    function rpHash(string memory rpId) internal pure returns (bytes32) {
         return sha256(bytes(rpId));
     }
 
-    /// @notice Build authenticatorData = rpIdHash || flags || counter(be)
-    function buildAuthenticatorData(bytes32 _rpIdHash, bool requireUV, uint32 counter)
+    /// @notice Build authenticatorData = rpHash || flags || counter(be)
+    function buildAuthenticatorData(bytes32 _rpHash, bool requireUV, uint32 counter)
         internal
         pure
         returns (bytes memory ad)
     {
         bytes1 flags = requireUV ? (FLAG_UP | FLAG_UV) : FLAG_UP;
-        ad = abi.encodePacked(_rpIdHash, flags, bytes4(counter));
+        ad = abi.encodePacked(_rpHash, flags, bytes4(counter));
     }
 
     /// @notice Build clientDataJSON with base64url-encoded challenge and return indices for type/challenge
@@ -66,13 +66,13 @@ library WebAuthnHelper {
         sig = abi.encode(idRaw, authenticatorData, clientDataJSON, challengeIndex, typeIndex, r, s);
     }
 
-    /// @notice Helper to build onInstall data: abi.encode(idRaw, px, py, rpIdHash)
-    function buildOnInstallData(bytes32 idRaw, uint256 px, uint256 py, bytes32 _rpIdHash)
+    /// @notice Helper to build onInstall data: abi.encode(idRaw, px, py)
+    function buildOnInstallData(bytes32 idRaw, uint256 px, uint256 py)
         internal
         pure
         returns (bytes memory data)
     {
-        data = abi.encode(idRaw, px, py, _rpIdHash);
+        data = abi.encode(idRaw, px, py);
     }
 
     /// @notice Find the index of a needle in a haystack (bytes), or max uint if not found

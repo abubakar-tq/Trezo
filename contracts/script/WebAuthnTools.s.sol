@@ -10,15 +10,15 @@ import {WebAuthnHelper} from "src/utils/WebAuthnHelper.sol";
 ///         from the shared WebAuthnHelper library. Call with `forge script --sig`.
 contract WebAuthnTools is Script {
 
-    // rpIdHash
-    function runRpIdHash(string memory rpId) external pure {
-        bytes32 rpHash = WebAuthnHelper.rpIdHash(rpId);
+    // rpHash
+    function runRpHash(string memory rpId) external pure {
+        bytes32 rpHash = WebAuthnHelper.rpHash(rpId);
         console2.logBytes32(rpHash);
     }
 
     // authenticatorData
-    function runBuildAuthenticatorData(bytes32 rpIdHash, bool requireUV, uint32 counter) external pure {
-        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpIdHash, requireUV, counter);
+    function runBuildAuthenticatorData(bytes32 rpHash, bool requireUV, uint32 counter) external pure {
+        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpHash, requireUV, counter);
         console2.logBytes(ad);
     }
 
@@ -38,8 +38,8 @@ contract WebAuthnTools is Script {
     }
 
     // onInstall data
-    function runBuildOnInstallData(bytes32 idRaw, uint256 px, uint256 py, bytes32 rpIdHash) external pure {
-        bytes memory data = WebAuthnHelper.buildOnInstallData(idRaw, px, py, rpIdHash);
+    function runBuildOnInstallData(bytes32 idRaw, uint256 px, uint256 py) external pure {
+        bytes memory data = WebAuthnHelper.buildOnInstallData(idRaw, px, py);
         console2.logBytes(data);
     }
 

@@ -54,9 +54,9 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
     uint256 internal immutable TIME_LOCK = 1 days;
     bytes4 private constant ERC1271_MAGICVALUE = 0x1626ba7e;
     bytes32 private constant _TYPE_HASH_PASSKEY_INIT =
-        keccak256("PasskeyInit(bytes32 idRaw,uint256 px,uint256 py,bytes32 rpIdHash)");
+        keccak256("PasskeyInit(bytes32 idRaw,uint256 px,uint256 py)");
     bytes32 private constant _TYPE_HASH_SOCIAL_RECOVERY = keccak256(
-        "SocialRecovery(address wallet,uint256 nonce,PasskeyInit newPassKey)PasskeyInit(bytes32 idRaw,uint256 px,uint256 py,bytes32 rpIdHash)"
+        "SocialRecovery(address wallet,uint256 nonce,PasskeyInit newPassKey)PasskeyInit(bytes32 idRaw,uint256 px,uint256 py)"
     );
 
     /*//////////////////////////////////////////////////////////////
@@ -369,7 +369,7 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
     }
 
     function _hashPasskeyInit(PasskeyTypes.PasskeyInit calldata passkey) internal pure returns (bytes32) {
-        return keccak256(abi.encode(_TYPE_HASH_PASSKEY_INIT, passkey.idRaw, passkey.px, passkey.py, passkey.rpIdHash));
+        return keccak256(abi.encode(_TYPE_HASH_PASSKEY_INIT, passkey.idRaw, passkey.px, passkey.py));
     }
 
     function _parseEOASignature(bytes memory signature) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
