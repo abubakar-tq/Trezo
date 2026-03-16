@@ -198,9 +198,7 @@ contract SmartAccount is IAccount, ModuleManager {
         }
         address validator = activeValidator();
         require(validator != address(0), "Account: NO_ACTIVE_VALIDATOR");
-        IPasskeyValidator(validator).addPasskey(
-            newPassKey.idRaw, newPassKey.px, newPassKey.py, newPassKey.rpIdHash
-        );
+        IPasskeyValidator(validator).addPasskey(newPassKey.idRaw, newPassKey.px, newPassKey.py);
         emit PasskeyAddedViaRecovery(newPassKey.idRaw);
     }
 
@@ -282,7 +280,7 @@ contract SmartAccount is IAccount, ModuleManager {
     /// @notice Initialize clone with entryPoint, attach passkey validator, and register first passkey
     /// @param _entryPoint ERC-4337 entry point
     /// @param validator address of the Passkey validator module for this account
-    /// @param passkey PasskeyInit containing idRaw + (px,py,rpIdHash,signCounterFromAuth)
+    /// @param passkey PasskeyInit containing idRaw and public key coordinates.
     function initialize(address _entryPoint, address validator, PasskeyTypes.PasskeyInit calldata passkey) external {
         AccountStorage.Layout storage s = AccountStorage.layout();
         if (s.initialized) revert AlreadyInitialized();
@@ -292,8 +290,8 @@ contract SmartAccount is IAccount, ModuleManager {
         s.entryPoint = _entryPoint;
 
         // 2) install the PasskeyValidator module
-        // Note: this calls the module's onInstall() which registers the initial passkey
-        try this.installModule(MODULE_TYPE_VALIDATOR, validator, abi.encode(passkey)) {
+        // Note: this calls the module's onInstall() and registers the initial passkey.
+        try this.installModule(MODULE_TYPE_VALIDATOR, validator, abi.encode(passkey.idRaw, passkey.px, passkey.py)) {
             // ok
         } catch (bytes memory reason) {
             revert SMARTACCOUNT_INITIALIZATION_FAILED(reason);

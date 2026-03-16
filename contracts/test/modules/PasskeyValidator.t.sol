@@ -37,7 +37,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
     Account owner2;
 
     bytes32 internal dummyId;
-    bytes32 internal rpIdHash;
+    bytes32 internal rpHash;
 
     uint256 internal px;
     uint256 internal py;
@@ -62,17 +62,17 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
 
         // Install PasskeyValidator with a passkey
         // Data encoding expected by onInstall:
-        // abi.encode(bytes32 idRaw, uint256 px, uint256 py, bytes32 rpIdHash)
+        // abi.encode(bytes32 idRaw, uint256 px, uint256 py)
         PassKeyDemo.PasskeyCredential memory passkey = PassKeyDemo.getPasskey(1);
         dummyId = passkey.init.idRaw;
         px = passkey.init.px;
         py = passkey.init.py;
-        rpIdHash = passkey.init.rpIdHash;
+        rpHash = PassKeyDemo.getPasskeyRpHash(1);
         passkeyPrivateKey = uint256(passkey.privateKey);
         instance.installModule({
             moduleTypeId: MODULE_TYPE_VALIDATOR,
             module: address(validator),
-            data: abi.encode(dummyId, px, py, rpIdHash)
+            data: abi.encode(dummyId, px, py)
         });
 
         helperConfig = new HelperConfig();
@@ -91,7 +91,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         UserOpData memory userOpData =
             instance.getExecOps({target: target, value: value, callData: "", txValidator: address(validator)});
 
-        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, 1);
+        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpHash, true, 1);
         (string memory cjson, uint256 cIdx, uint256 tIdx) =
             WebAuthnHelper.buildClientDataJSONAndIndices(userOpData.userOpHash);
         bytes32 msgHash = WebAuthnHelper.webAuthnMessageHash(ad, cjson);
@@ -120,7 +120,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         UserOpData memory userOpData =
             instance.getExecOps({target: target, value: value, callData: "", txValidator: address(validator)});
 
-        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, 1);
+        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpHash, true, 1);
         (string memory cjson, uint256 cIdx, uint256 tIdx) =
             WebAuthnHelper.buildClientDataJSONAndIndices(userOpData.userOpHash);
         bytes32 msgHash = WebAuthnHelper.webAuthnMessageHash(ad, cjson);
@@ -166,7 +166,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         vm.expectEmit(true, true, false, false);
         emit PasskeyValidator.PasskeyAdded(instance.account, additional.init.idRaw);
         vm.prank(instance.account);
-        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py, additional.init.rpIdHash);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
 
         uint256 count = validator.passkeyCount(instance.account);
 
@@ -181,14 +181,14 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         // Act
         vm.expectRevert("exists");
         vm.prank(instance.account);
-        validator.addPasskey(existing.init.idRaw, existing.init.px, existing.init.py, existing.init.rpIdHash);
+        validator.addPasskey(existing.init.idRaw, existing.init.px, existing.init.py);
     }
 
     function test_remove_passkey_emits_event_and_decrements_count() public {
         // Arrange
         PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
         vm.prank(instance.account);
-        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py, additional.init.rpIdHash);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
 
         // Act
         vm.expectEmit(true, true, false, false);
@@ -279,20 +279,25 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         );
     }
 
-    function test_validate_user_op_rejects_wrong_rp_id_hash() public {
+    function test_validate_user_op_accepts_non_stored_rp_id_hash_when_signature_is_valid() public {
         // Arrange
-        (UserOpData memory userOpData,, SignatureComponents memory components) = _prepareUserOpSignature(1);
-        bytes memory wrongAd = abi.encodePacked(
-            bytes32(uint256(999)),
-            components.authenticatorData[32],
-            components.authenticatorData[33],
-            components.authenticatorData[34],
-            components.authenticatorData[35],
-            components.authenticatorData[36]
+        address target = makeAddr("userOpTargetAltRp");
+        UserOpData memory userOpData = instance.getExecOps({
+            target: target,
+            value: 0,
+            callData: "",
+            txValidator: address(validator)
+        });
+
+        bytes32 alternateRpIdHash = bytes32(uint256(999));
+        SignatureComponents memory components = _buildSignatureComponentsWithRpId(
+            userOpData.userOpHash,
+            1,
+            alternateRpIdHash
         );
         bytes memory signature = WebAuthnHelper.encodePasskeySignature(
             dummyId,
-            wrongAd,
+            components.authenticatorData,
             components.clientDataJSON,
             components.challengeIndex,
             components.typeIndex,
@@ -305,10 +310,11 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         uint256 result = _callValidateUserOp(userOpData);
 
         // Assert
+        uint256 expected = uint256(type(uint48).max) << 160;
         assertEq(
             result,
-            1,
-            "rpId mismatch should result in sig failure"
+            expected,
+            "rp hash is not enforced by the validator"
         );
     }
 
@@ -469,7 +475,15 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         view
         returns (SignatureComponents memory components)
     {
-        components.authenticatorData = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, counter);
+        return _buildSignatureComponentsWithRpId(challenge, counter, rpHash);
+    }
+
+    function _buildSignatureComponentsWithRpId(bytes32 challenge, uint32 counter, bytes32 adRpIdHash)
+        internal
+        view
+        returns (SignatureComponents memory components)
+    {
+        components.authenticatorData = WebAuthnHelper.buildAuthenticatorData(adRpIdHash, true, counter);
         (components.clientDataJSON, components.challengeIndex, components.typeIndex) =
             WebAuthnHelper.buildClientDataJSONAndIndices(challenge);
 

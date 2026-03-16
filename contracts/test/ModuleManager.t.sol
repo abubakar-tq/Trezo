@@ -41,8 +41,6 @@ contract ModuleManagerTest is Test {
         0xe869435ccce456e66779f607cad397fd79c6f3bb82d846b121121b128c569715;
 
     bytes32 internal dummyId;
-    bytes32 internal rpIdHash;
-
     uint256 internal px;
     uint256 internal py;
 
@@ -63,7 +61,6 @@ contract ModuleManagerTest is Test {
         HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
         entryPoint = config.entryPoint;
         sendUserOp = new SendPackedUserOp();
-        rpIdHash = 0x638841ea13dd17405349cb4795e780a1105648d79c51e6671af0a66d7597f945;
         dummyId = 0xb976cb58a15d247afc49d3015e7a45b962532a388c5c2d6225ef7ba3bd494b7d;
     }
 
@@ -130,7 +127,7 @@ contract ModuleManagerTest is Test {
 
         // bytes32 digest = IEntryPoint(helperConfig.getConfig().entryPoint).getUserOpHash(userOp);
 
-        // bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, 1);
+        // bytes memory ad = WebAuthnHelper.buildAuthenticatorData(<rpHash>, true, 1);
         // (string memory cjson, uint256 cIdx, uint256 tIdx) = WebAuthnHelper.buildClientDataJSONAndIndices(digest);
         // bytes32 msgHash = WebAuthnHelper.webAuthnMessageHash(ad, cjson);
         // console2.log("Passkey msgHash (sign off-chain and paste r,s)");

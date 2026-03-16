@@ -43,8 +43,7 @@ contract MockSocialRecoveryAccount is ISocialRecoveryAccount {
         _lastPasskey = PasskeyTypes.PasskeyInit({
             idRaw: newPassKey.idRaw,
             px: newPassKey.px,
-            py: newPassKey.py,
-            rpIdHash: newPassKey.rpIdHash
+            py: newPassKey.py
         });
         passkeyAddCount += 1;
     }
@@ -63,7 +62,7 @@ contract SocialRecoveryTest is Test {
     address internal guardian1;
     address internal guardian2;
     bytes32 private constant PASSKEY_TYPE_HASH =
-        keccak256("PasskeyInit(bytes32 idRaw,uint256 px,uint256 py,bytes32 rpIdHash)");
+        keccak256("PasskeyInit(bytes32 idRaw,uint256 px,uint256 py)");
     uint256 private constant TIME_LOCK = 1 days;
 
     function setUp() public {
@@ -258,7 +257,6 @@ contract SocialRecoveryTest is Test {
         assertEq(stored.idRaw, newPassKey.idRaw, "id mismatch");
         assertEq(stored.px, newPassKey.px, "px mismatch");
         assertEq(stored.py, newPassKey.py, "py mismatch");
-        assertEq(stored.rpIdHash, newPassKey.rpIdHash, "rpIdHash mismatch");
 
         vm.expectRevert(SocialRecovery.SocialRecovery_NoActiveRecovery.selector);
         recovery.executeRecovery(address(account), newPassKey);
@@ -318,15 +316,14 @@ contract SocialRecoveryTest is Test {
     }
 
     function _hashPasskey(PasskeyTypes.PasskeyInit memory passkey) internal pure returns (bytes32) {
-        return keccak256(abi.encode(PASSKEY_TYPE_HASH, passkey.idRaw, passkey.px, passkey.py, passkey.rpIdHash));
+        return keccak256(abi.encode(PASSKEY_TYPE_HASH, passkey.idRaw, passkey.px, passkey.py));
     }
 
     function _makePasskey(bytes32 seed) internal pure returns (PasskeyTypes.PasskeyInit memory) {
         return PasskeyTypes.PasskeyInit({
             idRaw: keccak256(abi.encodePacked(seed, bytes32("id"))),
             px: uint256(keccak256(abi.encodePacked(seed, "px"))),
-            py: uint256(keccak256(abi.encodePacked(seed, "py"))),
-            rpIdHash: keccak256(abi.encodePacked(seed, "rp"))
+            py: uint256(keccak256(abi.encodePacked(seed, "py")))
         });
     }
 
