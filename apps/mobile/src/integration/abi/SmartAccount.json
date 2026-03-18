@@ -203,6 +203,24 @@
     },
     {
       "type": "function",
+      "name": "installRecoveryExecutorModule",
+      "inputs": [
+        {
+          "name": "module",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "init",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
       "name": "installValidator",
       "inputs": [
         {
@@ -714,6 +732,17 @@
       "type": "error",
       "name": "MinimalAccount__NotFromEntryPoint",
       "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "RecoveryModuleNotInstalled",
+      "inputs": [
+        {
+          "name": "module",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
     },
     {
       "type": "error",

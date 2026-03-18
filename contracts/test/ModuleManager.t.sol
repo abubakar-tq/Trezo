@@ -14,6 +14,7 @@ import {
 import {ModeLib, ModeCode, CallType, CALLTYPE_SINGLE} from "@ERC7579/src/lib/ModeLib.sol";
 import {ExecutionLib} from "@ERC7579/src/lib/ExecutionLib.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
+import {SocialRecovery} from "src/modules/SocialRecovery/SocialRecovery.sol";
 import {WebAuthnHelper} from "src/utils/WebAuthnHelper.sol";
 import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 
@@ -33,6 +34,7 @@ contract ModuleManagerTest is Test {
     HelperConfig helperConfig;
 
     PasskeyValidator internal validator;
+    SocialRecovery internal recoveryModule;
 
     address internal owner = address(this);
     address internal stranger = makeAddr("stranger");
@@ -62,6 +64,7 @@ contract ModuleManagerTest is Test {
         entryPoint = config.entryPoint;
         sendUserOp = new SendPackedUserOp();
         dummyId = 0xb976cb58a15d247afc49d3015e7a45b962532a388c5c2d6225ef7ba3bd494b7d;
+        recoveryModule = new SocialRecovery();
     }
 
     function testInstallPasskey() public {
@@ -147,6 +150,41 @@ contract ModuleManagerTest is Test {
         // vm.deal(payable(address(account)), 2 ether);
         // IEntryPoint(helperConfig.getConfig().entryPoint).handleOps(ops, payable(helperConfig.getConfig().account));
         // console2.log("User operation validated and executed via PasskeyValidator module");
+    }
+
+    function testInstallExecutorDoesNotAutoEnableRecovery() public {
+        address[] memory guardians = new address[](2);
+        guardians[0] = makeAddr("guardian-1");
+        guardians[1] = makeAddr("guardian-2");
+        bytes memory initData = abi.encode(guardians, uint256(2));
+
+        bytes memory functionData = abi.encodeWithSelector(
+            SmartAccount.installModule.selector, MODULE_TYPE_EXECUTOR, address(recoveryModule), initData
+        );
+        bytes memory executeCalldata =
+            abi.encodeWithSelector(SmartAccount.execute.selector, proxy, 0, functionData);
+
+        PackedUserOperation memory signedUserOp = sendUserOp.generatePasskeySignedUserOperation(
+            executeCalldata, helperConfig.getConfig(), proxy, 0, 1, true, PassKeyDemo.getPasskeyPrivateKey(0)
+        );
+
+        PackedUserOperation[] memory ops = new PackedUserOperation[](1);
+        ops[0] = signedUserOp;
+
+        vm.deal(payable(proxy), 2 ether);
+        vm.deal(address(stranger), 2 ether);
+
+        vm.prank(stranger);
+        IEntryPoint(entryPoint).handleOps(ops, payable(stranger));
+
+        assertTrue(
+            SmartAccount(payable(proxy)).isModuleInstalled(MODULE_TYPE_EXECUTOR, address(recoveryModule), ""),
+            "executor should be installed"
+        );
+        assertFalse(
+            SmartAccount(payable(proxy)).isRecoveryModule(address(recoveryModule)),
+            "generic executor install must not auto-enable recovery"
+        );
     }
 
     // function testOnlyOwnerCanInstallModule() public {
