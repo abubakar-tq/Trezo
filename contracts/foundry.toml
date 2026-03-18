@@ -1,8 +1,19 @@
 [profile.default]
 src = "src"
 out = "out"
-libs = ["lib"]
+libs = ["lib", "node_modules"]
 auto_detect_remappings = false
+ignored_error_codes = [
+    "license",
+    "code-size",
+    "init-code-size",
+    "transient-storage",
+    # Third-party dependency noise:
+    # - 2424: deprecated memory-safe assembly comments in forge-std
+    # - 2519: declaration shadowing in solidity-stringutils
+    2424,
+    2519,
+]
 fs_permissions = [
     { access = "read-write", path = "./deployments" }
 ]

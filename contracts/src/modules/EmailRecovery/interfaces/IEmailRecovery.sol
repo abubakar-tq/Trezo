@@ -2,7 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {PasskeyTypes} from "src/common/Types.sol";
-import {IModule} from "@ERC7579/src/interfaces/IERC7579Module.sol";
+import {IModule} from "lib/modulekit/src/accounts/common/interfaces/IERC7579Module.sol";
 
 interface IEmailRecovery is IModule {
     /**

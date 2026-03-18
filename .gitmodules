@@ -25,6 +25,3 @@
 [submodule "contracts/lib/email-recovery"]
 	path = contracts/lib/email-recovery
 	url = https://github.com/zkemail/email-recovery
-[submodule "contracts/lib/ether-email-auth"]
-	path = contracts/lib/ether-email-auth
-	url = https://github.com/zkemail/ether-email-auth

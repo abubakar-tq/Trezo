@@ -17,12 +17,6 @@
       "rev": "0f321b8544cea7ad3be1b5669c7998329636ef84"
     }
   },
-  "lib/ether-email-auth": {
-    "tag": {
-      "name": "v1.0.0",
-      "rev": "984b5919a9be715b743b08863ab6471c2b5356a6"
-    }
-  },
   "lib/forge-std": {
     "tag": {
       "name": "v1.12.0",
