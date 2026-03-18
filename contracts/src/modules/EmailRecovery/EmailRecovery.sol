@@ -24,6 +24,7 @@ contract EmailRecovery is EmailRecoveryManager, ERC7579ExecutorBase, IEmailRecov
     //////////////////////////////////////////////////////////////*/
     error InvalidOnInstallData();
     error InvalidPasskey(bytes32 id);
+    error InvalidPasskeyCoordinates();
 
     constructor(
         address verifier,
@@ -78,7 +79,9 @@ contract EmailRecovery is EmailRecoveryManager, ERC7579ExecutorBase, IEmailRecov
     function canStartRecoveryRequest(address account) external view override returns (bool) {
         GuardianConfig memory guardianConfig = getGuardianConfig(account);
 
-        return guardianConfig.threshold > 0 && guardianConfig.acceptedWeight >= guardianConfig.threshold;
+        return !killSwitchEnabled && guardianConfig.threshold > 0
+            && guardianConfig.acceptedWeight >= guardianConfig.threshold
+            && recoveryRequests[account].currentWeight == 0;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -96,6 +99,9 @@ contract EmailRecovery is EmailRecoveryManager, ERC7579ExecutorBase, IEmailRecov
 
         if (newPasskey.idRaw == bytes32(0)) {
             revert InvalidPasskey(newPasskey.idRaw);
+        }
+        if (newPasskey.px == 0 || newPasskey.py == 0) {
+            revert InvalidPasskeyCoordinates();
         }
 
         // SmartAccount enforces that only registered recovery modules may call this.
