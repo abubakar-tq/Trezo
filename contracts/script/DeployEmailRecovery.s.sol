@@ -89,18 +89,17 @@ contract DeployEmailRecovery is Script {
     }
 
     function _applyDefaults(Config memory config) internal view {
-        if (block.chainid != LOCAL_CHAIN_ID) {
-            return;
+        if (block.chainid == LOCAL_CHAIN_ID) {
+            if (config.killSwitchAuthorizer == address(0)) {
+                config.killSwitchAuthorizer = ANVIL_DEFAULT_ACCOUNT;
+            }
+            if (config.dkimRegistry == address(0) && config.dkimSigner == address(0)) {
+                config.dkimSigner = ANVIL_DEFAULT_ACCOUNT;
+            }
         }
 
-        if (config.killSwitchAuthorizer == address(0)) {
-            config.killSwitchAuthorizer = ANVIL_DEFAULT_ACCOUNT;
-        }
         if (config.owner == address(0)) {
             config.owner = config.killSwitchAuthorizer;
-        }
-        if (config.dkimRegistry == address(0) && config.dkimSigner == address(0)) {
-            config.dkimSigner = ANVIL_DEFAULT_ACCOUNT;
         }
     }
 
@@ -219,6 +218,9 @@ contract DeployEmailRecovery is Script {
         vm.serializeAddress(root, "zkEmailVerifier", result.zkEmailVerifier);
         vm.serializeAddress(root, "zkEmailDkimRegistry", result.zkEmailDkimRegistry);
         vm.serializeAddress(root, "zkEmailAuthImpl", result.zkEmailAuthImpl);
+        vm.serializeAddress(root, "zkEmailGroth16Verifier", result.zkEmailGroth16Verifier);
+        vm.serializeAddress(root, "zkEmailVerifierImpl", result.zkEmailVerifierImpl);
+        vm.serializeAddress(root, "zkEmailDkimRegistryImpl", result.zkEmailDkimRegistryImpl);
         vm.serializeAddress(root, "emailRecoveryKillSwitchAuthorizer", config.killSwitchAuthorizer);
         vm.serializeUint(root, "emailRecoveryMinimumDelay", config.minimumDelay);
 
@@ -262,6 +264,24 @@ contract DeployEmailRecovery is Script {
                 ".zkEmailDkimRegistry"
             );
             _trySerializeExistingAddress(root, "zkEmailAuthImpl", existingJson, ".zkEmailAuthImpl");
+            _trySerializeExistingAddress(
+                root,
+                "zkEmailGroth16Verifier",
+                existingJson,
+                ".zkEmailGroth16Verifier"
+            );
+            _trySerializeExistingAddress(
+                root,
+                "zkEmailVerifierImpl",
+                existingJson,
+                ".zkEmailVerifierImpl"
+            );
+            _trySerializeExistingAddress(
+                root,
+                "zkEmailDkimRegistryImpl",
+                existingJson,
+                ".zkEmailDkimRegistryImpl"
+            );
             _trySerializeExistingAddress(
                 root,
                 "emailRecoveryKillSwitchAuthorizer",

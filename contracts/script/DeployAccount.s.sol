@@ -78,7 +78,7 @@ contract DeployAccount is Script {
         return (helperConfig, smartAccount, proxyFactory, accountFactory, passkeyValidator, socialRecovery);
     }
 
-   function _writeDeploymentJson(
+    function _writeDeploymentJson(
         HelperConfig.NetworkConfig memory net,
         SmartAccount smartAccount,
         MinimalProxyFactory proxyFactory,
@@ -128,6 +128,24 @@ contract DeployAccount is Script {
                 ".zkEmailDkimRegistry"
             );
             _trySerializeExistingAddress(root, "zkEmailAuthImpl", existingJson, ".zkEmailAuthImpl");
+            _trySerializeExistingAddress(
+                root,
+                "zkEmailGroth16Verifier",
+                existingJson,
+                ".zkEmailGroth16Verifier"
+            );
+            _trySerializeExistingAddress(
+                root,
+                "zkEmailVerifierImpl",
+                existingJson,
+                ".zkEmailVerifierImpl"
+            );
+            _trySerializeExistingAddress(
+                root,
+                "zkEmailDkimRegistryImpl",
+                existingJson,
+                ".zkEmailDkimRegistryImpl"
+            );
             _trySerializeExistingAddress(
                 root,
                 "emailRecoveryKillSwitchAuthorizer",

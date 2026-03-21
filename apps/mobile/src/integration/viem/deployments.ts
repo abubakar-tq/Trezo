@@ -14,6 +14,9 @@ export type DeploymentAddresses = {
   zkEmailVerifier?: `0x${string}`;
   zkEmailDkimRegistry?: `0x${string}`;
   zkEmailAuthImpl?: `0x${string}`;
+  zkEmailGroth16Verifier?: `0x${string}`;
+  zkEmailVerifierImpl?: `0x${string}`;
+  zkEmailDkimRegistryImpl?: `0x${string}`;
   emailRecoveryKillSwitchAuthorizer?: `0x${string}`;
   emailRecoveryMinimumDelay?: number;
   usdc: `0x${string}`;
