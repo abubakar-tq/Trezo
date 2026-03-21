@@ -13,7 +13,6 @@ import {CommandUtils} from "@zk-email/ether-email-auth-contracts/src/libraries/C
 import {UserOverrideableDKIMRegistry} from "@zk-email/contracts/UserOverrideableDKIMRegistry.sol";
 
 import {DeployAccount} from "script/DeployAccount.s.sol";
-import {HelperConfig} from "script/HelperConfig.s.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
@@ -41,8 +40,6 @@ contract EmailRecoveryTest is Test {
 
     string internal constant DKIM_DOMAIN = "gmail.com";
 
-    HelperConfig internal helperConfig;
-    HelperConfig.NetworkConfig internal config;
     AccountFactory internal accountFactory;
     PasskeyValidator internal passkeyValidator;
     EmailRecovery internal emailRecovery;
@@ -69,8 +66,7 @@ contract EmailRecoveryTest is Test {
         proofTimestamp = block.timestamp;
 
         DeployAccount deployScript = new DeployAccount();
-        (helperConfig, , , accountFactory, passkeyValidator,) = deployScript.deployAccount();
-        config = helperConfig.getConfig();
+        (, , , accountFactory, passkeyValidator,) = deployScript.deployAccount();
 
         proxy = accountFactory.createAccount(
             ACCOUNT_SALT, address(passkeyValidator), PassKeyDemo.getPasskeyInit(0)
@@ -185,6 +181,40 @@ contract EmailRecoveryTest is Test {
         assertEq(clearedWeight, 0, "current weight should be cleared");
         assertEq(clearedHash, bytes32(0), "recovery hash should be cleared");
         assertTrue(block.timestamp < executeBefore, "recovery must complete before expiry");
+    }
+
+    function testKillSwitchBlocksRecoveryRequests() public {
+        _acceptThresholdGuardians();
+        assertTrue(emailRecovery.canStartRecoveryRequest(proxy), "threshold should be met");
+
+        vm.prank(killSwitchAuthorizer);
+        emailRecovery.toggleKillSwitch();
+
+        assertFalse(emailRecovery.canStartRecoveryRequest(proxy), "kill switch should block recovery");
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        EmailAuthMsg memory recoveryMessage =
+            _recoveryMessage(0, emailRecovery.recoveryDataHash(newPasskey));
+
+        vm.expectRevert(abi.encodeWithSelector(IGuardianManager.KillSwitchEnabled.selector));
+        emailRecovery.handleRecovery(recoveryMessage, 0);
+    }
+
+    function testCompleteRecoveryRejectsInvalidPasskeyCoordinates() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory invalidPasskey = PassKeyDemo.getPasskeyInit(1);
+        invalidPasskey.px = 0;
+
+        bytes32 recoveryHash = emailRecovery.recoveryDataHash(invalidPasskey);
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+
+        vm.expectRevert(EmailRecovery.InvalidPasskeyCoordinates.selector);
+        emailRecovery.completeRecovery(proxy, abi.encode(invalidPasskey));
     }
 
     function _deployZkEmailInfra() internal {
