@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@zk-email/ether-email-auth-contracts": "^1.1.1"
+  }
+}

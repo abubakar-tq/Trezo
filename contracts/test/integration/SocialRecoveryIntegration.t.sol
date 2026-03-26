@@ -119,8 +119,9 @@ contract SocialRecoveryIntegrationTest is Test {
         guardians[1] = guardian2;
         bytes memory initData = abi.encode(guardians, uint256(2));
 
-        bytes memory functionData =
-            abi.encodeWithSelector(SmartAccount.installModule.selector, 2, address(recoveryModule), initData);
+        bytes memory functionData = abi.encodeWithSelector(
+            SmartAccount.installRecoveryExecutorModule.selector, address(recoveryModule), initData
+        );
         bytes memory executeCalldata =
             abi.encodeWithSelector(SmartAccount.execute.selector, proxy, 0, functionData);
 

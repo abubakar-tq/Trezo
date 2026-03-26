@@ -78,7 +78,7 @@ contract DeployAccount is Script {
         return (helperConfig, smartAccount, proxyFactory, accountFactory, passkeyValidator, socialRecovery);
     }
 
-   function _writeDeploymentJson(
+    function _writeDeploymentJson(
         HelperConfig.NetworkConfig memory net,
         SmartAccount smartAccount,
         MinimalProxyFactory proxyFactory,
@@ -87,6 +87,9 @@ contract DeployAccount is Script {
         SocialRecovery socialRecovery
     ) internal {
         string memory root = "root";
+        string memory path = string.concat("deployments/", vm.toString(block.chainid), ".json");
+
+        _preserveExistingEmailRecoveryDeployment(root, path);
 
         vm.serializeUint(root, "chainId", block.chainid);
         vm.serializeAddress(root, "entryPoint", net.entryPoint);
@@ -101,10 +104,86 @@ contract DeployAccount is Script {
 
         string memory json = vm.serializeBool(root, "success", true);
 
-        // deployments/31337.json, deployments/11155111.json, ...
-        string memory path = string.concat("deployments/", vm.toString(block.chainid), ".json");
         vm.writeJson(json, path);
 
         console2.log("Deployment JSON written:", path);
+    }
+
+    function _preserveExistingEmailRecoveryDeployment(string memory root, string memory path)
+        internal
+    {
+        try vm.readFile(path) returns (string memory existingJson) {
+            _trySerializeExistingAddress(root, "emailRecovery", existingJson, ".emailRecovery");
+            _trySerializeExistingAddress(
+                root,
+                "emailRecoveryCommandHandler",
+                existingJson,
+                ".emailRecoveryCommandHandler"
+            );
+            _trySerializeExistingAddress(root, "zkEmailVerifier", existingJson, ".zkEmailVerifier");
+            _trySerializeExistingAddress(
+                root,
+                "zkEmailDkimRegistry",
+                existingJson,
+                ".zkEmailDkimRegistry"
+            );
+            _trySerializeExistingAddress(root, "zkEmailAuthImpl", existingJson, ".zkEmailAuthImpl");
+            _trySerializeExistingAddress(
+                root,
+                "zkEmailGroth16Verifier",
+                existingJson,
+                ".zkEmailGroth16Verifier"
+            );
+            _trySerializeExistingAddress(
+                root,
+                "zkEmailVerifierImpl",
+                existingJson,
+                ".zkEmailVerifierImpl"
+            );
+            _trySerializeExistingAddress(
+                root,
+                "zkEmailDkimRegistryImpl",
+                existingJson,
+                ".zkEmailDkimRegistryImpl"
+            );
+            _trySerializeExistingAddress(
+                root,
+                "emailRecoveryKillSwitchAuthorizer",
+                existingJson,
+                ".emailRecoveryKillSwitchAuthorizer"
+            );
+            _trySerializeExistingUint(
+                root,
+                "emailRecoveryMinimumDelay",
+                existingJson,
+                ".emailRecoveryMinimumDelay"
+            );
+        } catch { }
+    }
+
+    function _trySerializeExistingAddress(
+        string memory root,
+        string memory key,
+        string memory existingJson,
+        string memory jsonPath
+    )
+        internal
+    {
+        try vm.parseJsonAddress(existingJson, jsonPath) returns (address value) {
+            vm.serializeAddress(root, key, value);
+        } catch { }
+    }
+
+    function _trySerializeExistingUint(
+        string memory root,
+        string memory key,
+        string memory existingJson,
+        string memory jsonPath
+    )
+        internal
+    {
+        try vm.parseJsonUint(existingJson, jsonPath) returns (uint256 value) {
+            vm.serializeUint(root, key, value);
+        } catch { }
     }
 }

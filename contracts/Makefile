@@ -29,9 +29,23 @@ deploy-local: build
 	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL) 
 	$(MAKE) sync-abi	
 
+.PHONY: deploy-email-local
+deploy-email-local: build
+	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
+	$(ANVIL_NETWORK_ARGS)
+	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL)
+	$(MAKE) sync-abi
+
 .PHONY: deploy-sepolia
 deploy-sepolia: build
 	forge script script/DeployAccount.s.sol:DeployAccount \
+		--rpc-url $(SEPOLIA_RPC_URL) \
+		--account sepKey \
+		--broadcast -vvv
+
+.PHONY: deploy-email-sepolia
+deploy-email-sepolia: build
+	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
 		--rpc-url $(SEPOLIA_RPC_URL) \
 		--account sepKey \
 		--broadcast -vvv
@@ -65,3 +79,6 @@ sync-abi:
 
 	jq '{abi: .abi}' out/SocialRecovery.sol/SocialRecovery.json \
 		> $(MOBILE_DIR)/abi/SocialRecovery.json
+
+	jq '{abi: .abi}' out/EmailRecovery.sol/EmailRecovery.json \
+		> $(MOBILE_DIR)/abi/EmailRecovery.json

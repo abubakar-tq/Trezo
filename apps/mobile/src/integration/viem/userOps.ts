@@ -26,7 +26,6 @@ export type PasskeyInit = {
 
 // EntryPoint version in use
 const ENTRY_POINT_VERSION = "0.7";
-const MODULE_TYPE_EXECUTOR = 2n;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
 const BUNDLER_GAS_CAP = 20_000_000n; // many bundlers default to 20m max gas per UserOp
 const CREATE_ACCOUNT_MIN_VERIFICATION_GAS = 1_500_000n;
@@ -545,8 +544,8 @@ export async function buildInstallSocialRecoveryUserOp(params: InstallSocialReco
   const initData = encodeSocialRecoveryInitData(params.guardians, params.threshold);
   const installCalldata = encodeFunctionData({
     abi: ABIS.smartAccount,
-    functionName: "installModule",
-    args: [MODULE_TYPE_EXECUTOR, deployment.socialRecovery, initData],
+    functionName: "installRecoveryExecutorModule",
+    args: [deployment.socialRecovery, initData],
   });
   const callData = encodeFunctionData({
     abi: ABIS.smartAccount,

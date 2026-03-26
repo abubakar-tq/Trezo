@@ -9,6 +9,16 @@ export type DeploymentAddresses = {
   accountFactory: `0x${string}`;
   passkeyValidator: `0x${string}`;
   socialRecovery: `0x${string}`;
+  emailRecovery?: `0x${string}`;
+  emailRecoveryCommandHandler?: `0x${string}`;
+  zkEmailVerifier?: `0x${string}`;
+  zkEmailDkimRegistry?: `0x${string}`;
+  zkEmailAuthImpl?: `0x${string}`;
+  zkEmailGroth16Verifier?: `0x${string}`;
+  zkEmailVerifierImpl?: `0x${string}`;
+  zkEmailDkimRegistryImpl?: `0x${string}`;
+  emailRecoveryKillSwitchAuthorizer?: `0x${string}`;
+  emailRecoveryMinimumDelay?: number;
   usdc: `0x${string}`;
   deployer: `0x${string}`;
   success: boolean;

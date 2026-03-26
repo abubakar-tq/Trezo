@@ -39,6 +39,7 @@ contract SmartAccount is IAccount, ModuleManager {
     error ZeroAddress();
     error SMARTACCOUNT_INITIALIZATION_FAILED(bytes reason);
     error UnauthorizedRecoveryModule(address caller);
+    error RecoveryModuleNotInstalled(address module);
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
@@ -135,11 +136,19 @@ contract SmartAccount is IAccount, ModuleManager {
             this.installValidator(module, init); // external call => msg.sender becomes address(this) in manager
         } else if (moduleType == TYPE_EXECUTOR) {
             this.installExecutor(module, init);
-            this.updateRecoveryModule(module, true);
         } else {
             revert("Account: MODULE_TYPE_UNSUPPORTED");
         }
         emit ModuleInstalled(moduleType, module);
+    }
+
+    /**
+     * @notice Install an executor and explicitly authorize it for recovery actions.
+     * @dev Recovery access is intentionally opt-in; generic executors must not gain it by default.
+     */
+    function installRecoveryExecutorModule(address module, bytes calldata init) external onlySelf {
+        this.installModule(TYPE_EXECUTOR, module, init);
+        this.updateRecoveryModule(module, true);
     }
 
     /**
@@ -171,6 +180,9 @@ contract SmartAccount is IAccount, ModuleManager {
     function updateRecoveryModule(address module, bool enabled) external onlySelf {
         if (module == address(0)) {
             revert ZeroAddress();
+        }
+        if (enabled && !isExecutorInstalled(module)) {
+            revert RecoveryModuleNotInstalled(module);
         }
         AccountStorage.Layout storage s = AccountStorage.layout();
         bool current = s.recoveryModules[module];

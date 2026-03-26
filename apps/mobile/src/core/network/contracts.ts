@@ -10,6 +10,7 @@ export interface ContractAddresses {
   proxyFactory?: string;
   accountImplementation?: string;
   passkeyValidator?: string;
+  emailRecovery?: string;
 }
 
 /**
@@ -21,6 +22,7 @@ export const ANVIL_CONTRACTS: ContractAddresses = {
   proxyFactory: anvilDeployment.proxyFactory,
   accountImplementation: anvilDeployment.smartAccountImpl,
   passkeyValidator: anvilDeployment.passkeyValidator,
+  emailRecovery: anvilDeployment.emailRecovery,
 };
 
 /**
@@ -33,6 +35,7 @@ export const SEPOLIA_CONTRACTS: ContractAddresses = {
   proxyFactory: process.env.EXPO_PUBLIC_SEPOLIA_PROXY_FACTORY,
   accountImplementation: process.env.EXPO_PUBLIC_SEPOLIA_ACCOUNT_IMPL,
   passkeyValidator: process.env.EXPO_PUBLIC_SEPOLIA_PASSKEY_VALIDATOR,
+  emailRecovery: process.env.EXPO_PUBLIC_SEPOLIA_EMAIL_RECOVERY,
 };
 
 /**
