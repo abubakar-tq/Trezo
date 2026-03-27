@@ -217,6 +217,26 @@ contract EmailRecoveryTest is Test {
         emailRecovery.completeRecovery(proxy, abi.encode(invalidPasskey));
     }
 
+    function testActiveRecoveryBlocksNewRequestsUntilCleared() public {
+        _acceptThresholdGuardians();
+        assertTrue(emailRecovery.canStartRecoveryRequest(proxy), "recovery should be startable");
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        bytes32 recoveryHash = emailRecovery.recoveryDataHash(newPasskey);
+
+        _handleRecovery(0, recoveryHash);
+        assertFalse(emailRecovery.canStartRecoveryRequest(proxy), "active request should block new recovery");
+
+        _handleRecovery(1, recoveryHash);
+        assertFalse(emailRecovery.canStartRecoveryRequest(proxy), "ready request should still block new recovery");
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+        emailRecovery.completeRecovery(proxy, abi.encode(newPasskey));
+
+        assertTrue(emailRecovery.canStartRecoveryRequest(proxy), "cleared request should allow new recovery");
+    }
+
     function _deployZkEmailInfra() internal {
         vm.startPrank(killSwitchAuthorizer);
 
