@@ -217,6 +217,25 @@ contract EmailRecoveryTest is Test {
         emailRecovery.completeRecovery(proxy, abi.encode(invalidPasskey));
     }
 
+    function testCompleteRecoveryRejectsZeroPasskeyId() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory invalidPasskey = PassKeyDemo.getPasskeyInit(1);
+        invalidPasskey.idRaw = bytes32(0);
+
+        bytes32 recoveryHash = emailRecovery.recoveryDataHash(invalidPasskey);
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(EmailRecovery.InvalidPasskey.selector, bytes32(0))
+        );
+        emailRecovery.completeRecovery(proxy, abi.encode(invalidPasskey));
+    }
+
     function testActiveRecoveryBlocksNewRequestsUntilCleared() public {
         _acceptThresholdGuardians();
         assertTrue(emailRecovery.canStartRecoveryRequest(proxy), "recovery should be startable");
