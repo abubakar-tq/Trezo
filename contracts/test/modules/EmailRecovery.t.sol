@@ -96,6 +96,11 @@ contract EmailRecoveryTest is Test {
         assertFalse(emailRecovery.canStartRecoveryRequest(proxy), "accepted guardians below threshold");
     }
 
+    function testOnInstallRejectsEmptyData() public {
+        vm.expectRevert(EmailRecovery.InvalidOnInstallData.selector);
+        emailRecovery.onInstall("");
+    }
+
     function testGuardianAcceptanceEnablesRecoveryThreshold() public {
         _acceptGuardian(0);
 
@@ -146,6 +151,22 @@ contract EmailRecoveryTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(
                 IEmailRecoveryManager.DelayNotPassed.selector, block.timestamp, executeAfter
+            )
+        );
+        emailRecovery.completeRecovery(proxy, abi.encode(newPasskey));
+    }
+
+    function testCompleteRecoveryRequiresThresholdWeight() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        bytes32 recoveryHash = emailRecovery.recoveryDataHash(newPasskey);
+
+        _handleRecovery(0, recoveryHash);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEmailRecoveryManager.NotEnoughApprovals.selector, guardianWeights[0], RECOVERY_THRESHOLD
             )
         );
         emailRecovery.completeRecovery(proxy, abi.encode(newPasskey));
@@ -236,6 +257,26 @@ contract EmailRecoveryTest is Test {
         emailRecovery.completeRecovery(proxy, abi.encode(invalidPasskey));
     }
 
+    function testCompleteRecoveryRejectsExpiredRequests() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        bytes32 recoveryHash = emailRecovery.recoveryDataHash(newPasskey);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (, uint256 executeBefore,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeBefore + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEmailRecoveryManager.RecoveryRequestExpired.selector, block.timestamp, executeBefore
+            )
+        );
+        emailRecovery.completeRecovery(proxy, abi.encode(newPasskey));
+    }
+
     function testActiveRecoveryBlocksNewRequestsUntilCleared() public {
         _acceptThresholdGuardians();
         assertTrue(emailRecovery.canStartRecoveryRequest(proxy), "recovery should be startable");
@@ -254,6 +295,19 @@ contract EmailRecoveryTest is Test {
         emailRecovery.completeRecovery(proxy, abi.encode(newPasskey));
 
         assertTrue(emailRecovery.canStartRecoveryRequest(proxy), "cleared request should allow new recovery");
+    }
+
+    function testOnUninstallClearsGuardianConfiguration() public {
+        vm.prank(proxy);
+        emailRecovery.onUninstall("");
+
+        IGuardianManager.GuardianConfig memory guardianConfig = emailRecovery.getGuardianConfig(proxy);
+        assertEq(guardianConfig.guardianCount, 0, "guardian count should be cleared");
+        assertEq(guardianConfig.totalWeight, 0, "guardian weight should be cleared");
+        assertEq(guardianConfig.acceptedWeight, 0, "accepted weight should be cleared");
+        assertEq(guardianConfig.threshold, 0, "threshold should be cleared");
+        assertFalse(emailRecovery.isInitialized(proxy), "module should be uninitialized");
+        assertFalse(emailRecovery.canStartRecoveryRequest(proxy), "uninstalled module cannot start recovery");
     }
 
     function _deployZkEmailInfra() internal {
