@@ -8,11 +8,18 @@ export * from "./directDeploy";
 // Explicit re-exports to ensure proper module resolution
 export {
   buildCreateAccountUserOp,
+  buildInstallEmailRecoveryUserOp,
   buildInstallSocialRecoveryUserOp,
   buildAddPasskeyUserOp,
   sendUserOp,
+  encodeEmailRecoveryInitData,
   encodeSocialRecoveryInitData,
 } from "./userOps";
 export { directDeployAccount, isAccountDeployed } from "./directDeploy";
 export { predictAccountAddress, fundAccount, fundEntryPointDeposit } from "./account";
-export type { PasskeyInit, CreateAccountParams } from "./userOps";
+export type {
+  PasskeyInit,
+  CreateAccountParams,
+  InstallEmailRecoveryParams,
+  InstallSocialRecoveryParams,
+} from "./userOps";

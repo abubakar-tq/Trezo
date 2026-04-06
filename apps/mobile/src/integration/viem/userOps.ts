@@ -151,6 +151,27 @@ export type InstallSocialRecoveryParams = {
   preVerificationGas?: bigint;
 };
 
+export type InstallEmailRecoveryParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  guardians: readonly Address[];
+  weights: readonly (bigint | number)[];
+  threshold: bigint | number;
+  delay: bigint | number;
+  expiry: bigint | number;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+};
+
 export type AddPasskeyUserOpParams = {
   chainId: SupportedChainId;
   bundlerUrl: string;
@@ -262,6 +283,64 @@ export const encodeSocialRecoveryInitData = (guardians: readonly Address[], thre
     seen.add(key);
   });
   return encodeAbiParameters(parseAbiParameters("address[], uint256"), [guardians, normalizedThreshold]);
+};
+
+export const encodeEmailRecoveryInitData = (
+  guardians: readonly Address[],
+  weights: readonly (bigint | number)[],
+  threshold: bigint | number,
+  delay: bigint | number,
+  expiry: bigint | number,
+): Hex => {
+  if (!guardians.length) {
+    throw new Error("At least one guardian is required to initialize Email Recovery");
+  }
+  if (guardians.length !== weights.length) {
+    throw new Error("Guardian and weight counts must match");
+  }
+
+  const normalizedThreshold = toBigInt(threshold);
+  const normalizedDelay = toBigInt(delay);
+  const normalizedExpiry = toBigInt(expiry);
+  if (normalizedThreshold === 0n) {
+    throw new Error("Threshold must be greater than zero");
+  }
+  if (normalizedDelay === 0n) {
+    throw new Error("Recovery delay must be greater than zero");
+  }
+  if (normalizedExpiry < normalizedDelay) {
+    throw new Error("Recovery expiry must be greater than or equal to the recovery delay");
+  }
+
+  const normalizedWeights = weights.map((weight, index) => {
+    const normalizedWeight = toBigInt(weight);
+    if (normalizedWeight === 0n) {
+      throw new Error(`Guardian weight at index ${index} must be greater than zero`);
+    }
+    return normalizedWeight;
+  });
+
+  const totalWeight = normalizedWeights.reduce((sum, weight) => sum + weight, 0n);
+  if (normalizedThreshold > totalWeight) {
+    throw new Error("Threshold cannot exceed total guardian weight");
+  }
+
+  const seen = new Set<string>();
+  guardians.forEach((guardian) => {
+    if (!guardian || guardian === ZERO_ADDRESS) {
+      throw new Error("Guardian address cannot be zero");
+    }
+    const key = guardian.toLowerCase();
+    if (seen.has(key)) {
+      throw new Error(`Duplicate guardian detected: ${guardian}`);
+    }
+    seen.add(key);
+  });
+
+  return encodeAbiParameters(
+    parseAbiParameters("address[], uint256[], uint256, uint256, uint256"),
+    [guardians, normalizedWeights, normalizedThreshold, normalizedDelay, normalizedExpiry],
+  );
 };
 
 const toPasskeyTuple = (passkeyInit: PasskeyInit) => [
@@ -657,6 +736,150 @@ export async function buildInstallSocialRecoveryUserOp(params: InstallSocialReco
     chainId: params.chainId,
   });
   console.log("[buildInstallSocialRecoveryUserOp] userOpHash (post-estimate):", userOpHash);
+
+  return { userOp: withGas, userOpHash };
+}
+
+export async function buildInstallEmailRecoveryUserOp(params: InstallEmailRecoveryParams) {
+  const deployment = getDeployment(params.chainId);
+  if (!deployment) throw new Error(`No deployment found for chain ${params.chainId}`);
+  const missing: string[] = [];
+  if (!deployment.entryPoint || deployment.entryPoint === ZERO_ADDRESS) missing.push("entryPoint");
+  if (!deployment.emailRecovery || deployment.emailRecovery === ZERO_ADDRESS) missing.push("emailRecovery");
+  if (missing.length > 0) {
+    throw new Error(
+      `Deployment config missing required field(s): ${missing.join(", ")} for chain ${params.chainId}. `
+      + "Sync contracts JSON to mobile (make sync-mobile CHAIN_ID=31337) and restart Metro with cache clear.",
+    );
+  }
+  if (!params.passkeyId) {
+    throw new Error("Active passkeyId is required to build the UserOperation signature envelope");
+  }
+
+  const initData = encodeEmailRecoveryInitData(
+    params.guardians,
+    params.weights,
+    params.threshold,
+    params.delay,
+    params.expiry,
+  );
+  const installCalldata = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "installRecoveryExecutorModule",
+    args: [deployment.emailRecovery, initData],
+  });
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.smartAccountAddress, 0n, installCalldata],
+  });
+  const nonceKey = params.nonceKey ?? 0n;
+  const publicClient = getPublicClient(params.chainId);
+  const resolvedNonce = params.nonce
+    ?? (await publicClient.readContract({
+      address: params.smartAccountAddress,
+      abi: ABIS.smartAccount,
+      functionName: "getNonce",
+      args: [nonceKey],
+    })) as bigint;
+
+  const dummySignature = buildDummyPasskeySignature(params.passkeyId);
+  const entryPoint = deployment.entryPoint as Hex;
+
+  const userOp: UserOperation<typeof ENTRY_POINT_VERSION> = {
+    sender: params.smartAccountAddress,
+    nonce: resolvedNonce,
+    callData,
+    callGasLimit: params.callGasLimit ?? 1_000_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 1_200_000n,
+    preVerificationGas: params.preVerificationGas ?? 120_000n,
+    maxFeePerGas: params.maxFeePerGas ?? 1_000_000_000n,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas ?? 1_000_000n,
+    signature: dummySignature,
+  };
+
+  const bundler = getBundlerClient(params.bundlerUrl, params.chainId);
+  let supportedEntryPoints: Hex[];
+  try {
+    supportedEntryPoints = await bundler.request({
+      method: "eth_supportedEntryPoints",
+      params: [],
+    });
+  } catch (err) {
+    console.error("[buildInstallEmailRecoveryUserOp] Failed eth_supportedEntryPoints", err);
+    throw err;
+  }
+  if (!supportedEntryPoints.includes(entryPoint)) {
+    throw new Error(`Bundler does not support EntryPoint ${entryPoint}`);
+  }
+
+  let userOpForEstimation = userOp;
+  if (params.usePaymaster && params.paymasterUrl) {
+    try {
+      const pm = await sponsorUserOp(params.paymasterUrl, params.chainId, entryPoint, userOp);
+      userOpForEstimation = {
+        ...userOp,
+        paymaster: pm.paymaster,
+        paymasterVerificationGasLimit:
+          pm.paymasterVerificationGasLimit !== undefined ? toBigInt(pm.paymasterVerificationGasLimit) : undefined,
+        paymasterPostOpGasLimit:
+          pm.paymasterPostOpGasLimit !== undefined ? toBigInt(pm.paymasterPostOpGasLimit) : undefined,
+        paymasterData: pm.paymasterData || "0x",
+        preVerificationGas:
+          pm.preVerificationGas !== undefined ? toBigInt(pm.preVerificationGas) : userOp.preVerificationGas,
+        verificationGasLimit:
+          pm.verificationGasLimit !== undefined ? toBigInt(pm.verificationGasLimit) : userOp.verificationGasLimit,
+        callGasLimit: pm.callGasLimit !== undefined ? toBigInt(pm.callGasLimit) : userOp.callGasLimit,
+      };
+    } catch (err) {
+      console.error("[buildInstallEmailRecoveryUserOp] Paymaster sponsorship failed", err);
+      throw err;
+    }
+  }
+
+  const provisionalHash = getUserOperationHash({
+    userOperation: userOpForEstimation,
+    entryPointAddress: entryPoint,
+    entryPointVersion: ENTRY_POINT_VERSION,
+    chainId: params.chainId,
+  });
+  console.log("[buildInstallEmailRecoveryUserOp] provisional userOpHash:", provisionalHash);
+
+  let gas;
+  try {
+    gas = await bundler.request({
+      method: "eth_estimateUserOperationGas",
+      params: [serializeUserOp(userOpForEstimation), entryPoint],
+    });
+  } catch (err) {
+    console.error("[buildInstallEmailRecoveryUserOp] eth_estimateUserOperationGas failed", err);
+    throw err;
+  }
+
+  const withGas: UserOperation<typeof ENTRY_POINT_VERSION> = {
+    ...userOpForEstimation,
+    preVerificationGas:
+      gas.preVerificationGas !== undefined ? toBigInt(gas.preVerificationGas) : userOpForEstimation.preVerificationGas,
+    verificationGasLimit:
+      gas.verificationGasLimit !== undefined
+        ? toBigInt(gas.verificationGasLimit)
+        : userOpForEstimation.verificationGasLimit,
+    callGasLimit:
+      gas.callGasLimit !== undefined ? toBigInt(gas.callGasLimit) : userOpForEstimation.callGasLimit,
+    maxFeePerGas: gas.maxFeePerGas !== undefined ? toBigInt(gas.maxFeePerGas) : userOpForEstimation.maxFeePerGas,
+    maxPriorityFeePerGas:
+      gas.maxPriorityFeePerGas !== undefined
+        ? toBigInt(gas.maxPriorityFeePerGas)
+        : userOpForEstimation.maxPriorityFeePerGas,
+  };
+
+  const userOpHash = getUserOperationHash({
+    userOperation: withGas,
+    entryPointAddress: entryPoint,
+    entryPointVersion: ENTRY_POINT_VERSION,
+    chainId: params.chainId,
+  });
+  console.log("[buildInstallEmailRecoveryUserOp] userOpHash (post-estimate):", userOpHash);
 
   return { userOp: withGas, userOpHash };
 }
