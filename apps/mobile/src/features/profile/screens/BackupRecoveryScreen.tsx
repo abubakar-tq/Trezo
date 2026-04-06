@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import React, { useMemo } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { RootStackParamList } from "@/src/types/navigation";
 import type { ThemeColors } from "@theme";
@@ -61,25 +61,21 @@ const BackupRecoveryScreen: React.FC = () => {
           <View style={styles.card}>
             <TouchableOpacity
               style={styles.optionRow}
-              onPress={() =>
-                Alert.alert("Coming Soon", "Email recovery will be available soon")
-              }
+              onPress={() => navigation.navigate("EmailRecovery")}
               activeOpacity={0.85}
             >
               <View style={styles.optionInfo}>
                 <View
                   style={[
                     styles.iconBadge,
-                    { backgroundColor: withAlpha(colors.textMuted, 0.15) },
+                    { backgroundColor: withAlpha(colors.accentAlt, 0.15) },
                   ]}
                 >
-                  <Feather name="mail" size={20} color={colors.textMuted} />
+                  <Feather name="mail" size={20} color={colors.accentAlt} />
                 </View>
                 <View style={styles.optionText}>
-                  <Text style={[styles.optionLabel, { color: colors.textSecondary }]}>
-                    Email Recovery
-                  </Text>
-                  <Text style={styles.optionDesc}>Coming soon</Text>
+                  <Text style={styles.optionLabel}>Email Recovery</Text>
+                  <Text style={styles.optionDesc}>Set up email-based guardians</Text>
                 </View>
               </View>
               <Feather name="chevron-right" size={20} color={colors.textMuted} />

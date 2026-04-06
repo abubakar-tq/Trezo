@@ -36,6 +36,7 @@ export type RootStackParamList = {
   BrowserSettings: undefined;
   BackupRecovery: undefined;
   GuardianRecovery: undefined;
+  EmailRecovery: undefined;
   ProfileEdit: undefined;
   ContactList: undefined;
   AddContact: undefined;
