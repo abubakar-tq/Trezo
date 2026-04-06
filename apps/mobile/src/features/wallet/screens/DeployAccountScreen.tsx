@@ -101,6 +101,15 @@ export default function DeployAccountScreen() {
     try {
       const chainId = CHAIN_CONFIG.chainId;
       const deployment = getDeployment(chainId);
+      if (!deployment) {
+        throw new Error(
+          `No deployment config found for chain ${chainId}. `
+          + 'Run make deploy-local, then sync mobile artifacts.',
+        );
+      }
+      if (!deployment.accountFactory) {
+        throw new Error(`Deployment for chain ${chainId} is missing accountFactory.`);
+      }
       if (!deployment?.passkeyValidator) {
         throw new Error('Passkey validator not configured for this chain');
       }

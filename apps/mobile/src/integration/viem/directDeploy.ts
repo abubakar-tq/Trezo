@@ -28,6 +28,15 @@ export async function directDeployAccount(params: DirectDeployParams) {
   
   const deployment = getDeployment(params.chainId);
   if (!deployment) throw new Error(`No deployment found for chain ${params.chainId}`);
+  if (!deployment.accountFactory || deployment.accountFactory === '0x0000000000000000000000000000000000000000') {
+    throw new Error(
+      `Deployment config missing accountFactory for chain ${params.chainId}. `
+      + 'Run make deploy-local and ensure sync-mobile completed.',
+    );
+  }
+  if (!params.validator || params.validator === '0x0000000000000000000000000000000000000000') {
+    throw new Error('Passkey validator is missing or zero address.');
+  }
 
   // Use existing client utilities
   const publicClient = getPublicClient(params.chainId);

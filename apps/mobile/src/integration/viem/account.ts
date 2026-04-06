@@ -10,6 +10,12 @@ import AccountFactoryABI from '../abi/AccountFactory.json';
 export async function predictAccountAddress(chainId: number, salt: Hex): Promise<Address> {
   const deployment = getDeployment(chainId);
   if (!deployment) throw new Error(`No deployment found for chain ${chainId}`);
+  if (!deployment.accountFactory || deployment.accountFactory === '0x0000000000000000000000000000000000000000') {
+    throw new Error(
+      `Deployment config missing accountFactory for chain ${chainId}. `
+      + 'Run contract deployment and sync mobile artifacts.',
+    );
+  }
 
   const publicClient = getPublicClient(chainId);
 
