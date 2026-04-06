@@ -26,6 +26,8 @@ build:
 deploy-local: build
 	forge script script/DeployAccount.s.sol:DeployAccount \
 	$(ANVIL_NETWORK_ARGS)
+	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
+	$(ANVIL_NETWORK_ARGS)
 	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL) 
 	$(MAKE) sync-abi	
 
@@ -50,6 +52,10 @@ deploy-email-sepolia: build
 		--account sepKey \
 		--broadcast -vvv
 
+.PHONY: ping-anvil
+ping-anvil:
+	@echo "Pinging Anvil network at http://192.168.100.68:8545 ..."
+	cast block-number --rpc-url http://192.168.100.68:8545
 # ---------- Sync artifacts to mobile ----------
 
 # Needs: jq installed
