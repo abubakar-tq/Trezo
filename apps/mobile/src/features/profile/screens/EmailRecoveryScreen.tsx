@@ -81,6 +81,18 @@ const EmailRecoveryScreen: React.FC = () => {
     () => guardianAddresses.map((address) => address.trim()).filter(Boolean),
     [guardianAddresses],
   );
+  const normalizedGuardianWeights = useMemo(
+    () => guardianWeights.map((weight) => Math.max(parseInt(weight, 10) || 0, 0)),
+    [guardianWeights],
+  );
+  const totalGuardianWeight = useMemo(
+    () => normalizedGuardianWeights.reduce((sum, weight) => sum + weight, 0),
+    [normalizedGuardianWeights],
+  );
+  const hasDuplicateGuardians = useMemo(() => {
+    const normalized = trimmedGuardians.map((address) => address.toLowerCase());
+    return new Set(normalized).size !== normalized.length;
+  }, [trimmedGuardians]);
   const guardiansReady = expectedGuardians > 0 && trimmedGuardians.length === expectedGuardians;
 
   useEffect(() => {
@@ -181,6 +193,10 @@ const EmailRecoveryScreen: React.FC = () => {
       Alert.alert("Invalid Threshold", "Threshold must be greater than zero.");
       return;
     }
+    if (hasDuplicateGuardians) {
+      Alert.alert("Duplicate Guardians", "Each guardian address must be unique.");
+      return;
+    }
     if (parsedDelay <= 0 || parsedExpiry <= 0) {
       Alert.alert("Invalid Timing", "Delay and expiry must be greater than zero.");
       return;
@@ -202,6 +218,11 @@ const EmailRecoveryScreen: React.FC = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Guardian weights must be greater than zero.";
       Alert.alert("Invalid Weights", message);
+      return;
+    }
+    const totalWeight = parsedWeights.reduce((sum, weight) => sum + weight, 0n);
+    if (BigInt(parsedThreshold) > totalWeight) {
+      Alert.alert("Invalid Threshold", "Threshold cannot exceed the total guardian weight.");
       return;
     }
 
@@ -262,6 +283,7 @@ const EmailRecoveryScreen: React.FC = () => {
     trimmedGuardians,
     user?.id,
     guardianWeights,
+    hasDuplicateGuardians,
   ]);
 
   return (
@@ -307,6 +329,15 @@ const EmailRecoveryScreen: React.FC = () => {
                 placeholderTextColor={colors.textMuted}
               />
             </View>
+          </View>
+
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryText}>Total weight: {totalGuardianWeight}</Text>
+            {hasDuplicateGuardians && (
+              <Text style={[styles.summaryText, styles.summaryWarning]}>
+                Duplicate addresses detected
+              </Text>
+            )}
           </View>
 
           {guardianAddresses.map((address, index) => (
@@ -521,6 +552,20 @@ const createStyles = (colors: ThemeColors) =>
       padding: 20,
       paddingBottom: 40,
       gap: 16,
+    },
+    summaryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    summaryText: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: "500",
+    },
+    summaryWarning: {
+      color: colors.warning,
     },
     card: {
       backgroundColor: colors.surfaceCard,
