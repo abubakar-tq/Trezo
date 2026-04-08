@@ -3,7 +3,6 @@
  * 
  * Handles ERC-4337 Account Abstraction wallet operations:
  * - Counterfactual address prediction
- * - Account deployment via AccountFactory
  * - UserOperation creation and submission
  * - Bundler communication
  * - Paymaster integration for gasless transactions
@@ -11,11 +10,23 @@
 
 import { CHAIN_CONFIG, getBundlerUrl, getPaymasterUrl, getRpcUrl } from '@/src/core/network/chain';
 import {
-    CONTRACT_ABIS,
     getContractAddresses,
     validateContractAddresses,
 } from '@/src/core/network/contracts';
+import PasskeyService from '@/src/features/wallet/services/PasskeyService';
+import { ABIS } from '@/src/integration/viem/abis';
 import { ethers } from 'ethers';
+
+const entryPointAbi = [
+  'function getNonce(address sender, uint192 key) view returns (uint256)',
+  'function getUserOpHash((address sender,uint256 nonce,bytes initCode,bytes callData,uint256 callGasLimit,uint256 verificationGasLimit,uint256 preVerificationGas,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,bytes paymasterAndData,bytes signature) userOp) view returns (bytes32)',
+] as const;
+
+const CONTRACT_ABIS = {
+  AccountFactory: ABIS.accountFactory as ethers.InterfaceAbi,
+  SmartAccount: ABIS.smartAccount as ethers.InterfaceAbi,
+  EntryPoint: entryPointAbi as ethers.InterfaceAbi,
+} as const;
 
 // UserOperation structure (ERC-4337)
 export interface UserOperation {
@@ -34,7 +45,7 @@ export interface UserOperation {
 
 export interface AAWalletConfig {
   userId: string;
-  ownerAddress: string; // EOA that controls this AA wallet
+  ownerAddress: string; // Legacy field kept for compatibility with older debug screens
   chainId: number;
 }
 
@@ -75,7 +86,8 @@ export class AAWalletService {
   
   /**
    * Predict the counterfactual address for an AA wallet
-   * This address can be used before deployment (send funds to it, etc.)
+   * This address can be used before deployment (send funds to it, etc.).
+   * The passkey credential id is the deterministic salt for current account creation.
    */
   async predictAccountAddress(config: AAWalletConfig): Promise<string> {
     console.log(`📍 [AAWalletService] Predicting address for user ${config.userId}`);
@@ -88,8 +100,12 @@ export class AAWalletService {
         throw new Error('Smart contracts not deployed yet. Please deploy contracts first.');
       }
       
-      // Create salt from userId (deterministic)
-      const salt = ethers.keccak256(ethers.toUtf8Bytes(config.userId));
+      const passkey = await PasskeyService.getPasskey(config.userId);
+      if (!passkey?.credentialIdRaw) {
+        throw new Error('No stored passkey found for this user. Create a passkey before predicting the account address.');
+      }
+
+      const salt = passkey.credentialIdRaw;
       
       // Create AccountFactory contract instance
       const accountFactory = new ethers.Contract(
@@ -124,65 +140,6 @@ export class AAWalletService {
     } catch (error) {
       console.error('❌ [AAWalletService] Error checking deployment:', error);
       return false;
-    }
-  }
-  
-  /**
-   * Deploy an AA wallet via AccountFactory
-   * Returns the transaction hash
-   */
-  async deployAccount(
-    config: AAWalletConfig,
-    signer: ethers.Signer
-  ): Promise<{ txHash: string; address: string }> {
-    console.log(`🚀 [AAWalletService] Deploying account for user ${config.userId}`);
-    
-    try {
-      const contracts = getContractAddresses(this.chainId);
-      
-      if (!validateContractAddresses(contracts)) {
-        throw new Error('Smart contracts not deployed');
-      }
-      
-      // Create salt from userId
-      const salt = ethers.keccak256(ethers.toUtf8Bytes(config.userId));
-      
-      // Predict address first
-      const predictedAddress = await this.predictAccountAddress(config);
-      
-      // Check if already deployed
-      if (await this.isAccountDeployed(predictedAddress)) {
-        console.log(`✅ [AAWalletService] Account already deployed at ${predictedAddress}`);
-        return { txHash: '', address: predictedAddress };
-      }
-      
-      // Create AccountFactory contract instance with signer
-      const accountFactory = new ethers.Contract(
-        contracts.accountFactory,
-        CONTRACT_ABIS.AccountFactory,
-        signer
-      );
-      
-      // Deploy account
-      console.log(`📝 [AAWalletService] Sending deployment transaction...`);
-      const tx = await accountFactory.createAccount(config.ownerAddress, salt);
-      
-      console.log(`⏳ [AAWalletService] Waiting for confirmation... (tx: ${tx.hash})`);
-      const receipt = await tx.wait();
-      
-      console.log(`✅ [AAWalletService] Account deployed!`);
-      console.log(`   Address: ${predictedAddress}`);
-      console.log(`   Tx Hash: ${receipt.hash}`);
-      console.log(`   Block: ${receipt.blockNumber}`);
-      console.log(`   Gas Used: ${receipt.gasUsed.toString()}`);
-      
-      return {
-        txHash: receipt.hash,
-        address: predictedAddress,
-      };
-    } catch (error) {
-      console.error('❌ [AAWalletService] Deployment failed:', error);
-      throw new Error(`Failed to deploy account: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
   

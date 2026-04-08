@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert, Clipboard } from 'reac
 import { Feather } from '@expo/vector-icons';
 import { useUserStore } from '@store/useUserStore';
 import { PasskeyService } from '../services/PasskeyService';
-import { predictAccountAddress, isAccountDeployed } from '../../../integration/viem';
+import { predictAccountAddress, isContractDeployed } from '../../../integration/viem';
 import type { Hex } from 'viem';
 
 export const SmartAccountCard = () => {
@@ -32,11 +32,11 @@ export const SmartAccountCard = () => {
           setSmartAccountAddress(predicted);
           
           // Check if it's deployed
-          const deployed = await isAccountDeployed(chainId, predicted);
+          const deployed = await isContractDeployed(chainId, predicted);
           setSmartAccountDeployed(deployed);
         } else if (!smartAccountDeployed) {
           // If we have an address but don't know if it's deployed, check
-          const deployed = await isAccountDeployed(chainId, smartAccountAddress as Hex);
+          const deployed = await isContractDeployed(chainId, smartAccountAddress as Hex);
           setSmartAccountDeployed(deployed);
         }
       } catch (error) {

@@ -3,11 +3,12 @@ import { getDeployment } from './deployments';
 import { getPublicClient, getWalletClientFromPrivateKey } from './clients';
 import type { SupportedChainId } from '../chains';
 import AccountFactoryABI from '../abi/AccountFactory.json';
+import { ABIS } from './abis';
 
 /**
  * Predict the deterministic address of a smart account before deployment
  */
-export async function predictAccountAddress(chainId: number, salt: Hex): Promise<Address> {
+export async function predictAccountAddress(chainId: SupportedChainId, salt: Hex): Promise<Address> {
   const deployment = getDeployment(chainId);
   if (!deployment) throw new Error(`No deployment found for chain ${chainId}`);
   if (!deployment.accountFactory || deployment.accountFactory === '0x0000000000000000000000000000000000000000') {
@@ -33,11 +34,29 @@ export async function predictAccountAddress(chainId: number, salt: Hex): Promise
 /**
  * Check if code exists at an address (i.e., if contract is deployed)
  */
-export async function isContractDeployed(chainId: number, address: Address): Promise<boolean> {
+export async function isContractDeployed(chainId: SupportedChainId, address: Address): Promise<boolean> {
   const publicClient = getPublicClient(chainId);
 
   const code = await publicClient.getBytecode({ address });
   return code !== undefined && code !== '0x';
+}
+
+export async function isExecutorModuleInstalled({
+  chainId,
+  smartAccountAddress,
+  moduleAddress,
+}: {
+  chainId: SupportedChainId;
+  smartAccountAddress: Address;
+  moduleAddress: Address;
+}): Promise<boolean> {
+  const publicClient = getPublicClient(chainId);
+  return publicClient.readContract({
+    address: smartAccountAddress,
+    abi: ABIS.smartAccount,
+    functionName: 'isModuleInstalled',
+    args: [2n, moduleAddress, '0x'],
+  }) as Promise<boolean>;
 }
 
 /**

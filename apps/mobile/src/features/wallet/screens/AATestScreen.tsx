@@ -33,8 +33,9 @@ import { anvil } from 'viem/chains';
 
 import { CHAIN_CONFIG, getRpcUrl, logNetworkConfig } from '@/src/core/network/chain';
 import { getContractAddresses, validateContractAddresses } from '@/src/core/network/contracts';
+import { AccountDeploymentService } from '@/src/features/wallet/services/AccountDeploymentService';
 import PasskeyService, { BiometricCapabilities, PasskeyMetadata } from '@/src/features/wallet/services/PasskeyService';
-import { predictAccountAddress, directDeployAccount, getDeployment } from '@/src/integration/viem';
+import type { SupportedChainId } from '@/src/integration/chains';
   import { useWalletStore } from '@/src/features/wallet/store/useWalletStore';
 import { useUserStore } from '@store/useUserStore';
 import type { ThemeColors } from '@theme';
@@ -278,12 +279,12 @@ export default function AATestScreen() {
     updateTest(6, { status: 'running', message: 'Predicting AA wallet address...' });
     
     try {
-      const chainId = CHAIN_CONFIG.chainId;
+      const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
       const salt = testPasskey.credentialIdRaw as Hex; // deterministic per-passkey
 
       console.log('🔍 [AATest] Predicting wallet address with passkey salt:', salt);
 
-      const predictedAddr = await predictAccountAddress(chainId, salt);
+      const predictedAddr = await AccountDeploymentService.predictAddress(testPasskey, chainId, salt);
 
       setPredictedAddress(predictedAddr as string);
       
@@ -369,41 +370,29 @@ export default function AATestScreen() {
     updateTest(8, { status: 'running', message: 'Deploying wallet on-chain...' });
     
     try {
-      const chainId = CHAIN_CONFIG.chainId;
-      const deployment = getDeployment(chainId);
-      if (!deployment?.passkeyValidator) {
-        throw new Error('Passkey validator not configured for this chain');
-      }
+      const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
+      console.log('🚀 [AATest] Deploying passkey account through bundler...');
 
-      const salt = testPasskey.credentialIdRaw as Hex;
-      const passkeyInit = {
-        idRaw: testPasskey.credentialIdRaw as Hex,
-        px: BigInt(testPasskey.publicKeyX),
-        py: BigInt(testPasskey.publicKeyY),
-      };
-
-      console.log('🚀 [AATest] Deploying passkey account with salt:', salt);
-
-      const result = await directDeployAccount({
+      const result = await AccountDeploymentService.deployWithPasskeyAuth(user?.id || 'test-user', {
         chainId,
-        salt,
-        passkeyInit,
-        validator: deployment.passkeyValidator as `0x${string}`,
+        passkey: testPasskey,
       });
 
       const deployedAddress = result.accountAddress;
       setPredictedAddress(deployedAddress);
 
       // Update wallet store with deployment info
-      markAsDeployed(result.transactionHash, Number(result.blockNumber));
+      if (!result.alreadyDeployed) {
+        markAsDeployed(result.transactionHash!, Number(result.blockNumber));
+      }
       setAAAccount({
         id: user?.id || 'test-user',
         userId: user?.id || 'test-user',
         predictedAddress: deployedAddress,
-        ownerAddress: testPasskey.credentialIdRaw, // passkey-backed account
+        ownerAddress: testPasskey.credentialIdRaw,
         isDeployed: true,
-        deploymentTxHash: result.transactionHash,
-        deploymentBlockNumber: Number(result.blockNumber),
+        deploymentTxHash: result.alreadyDeployed ? undefined : result.transactionHash,
+        deploymentBlockNumber: result.alreadyDeployed ? undefined : Number(result.blockNumber),
         walletName: 'Test AA Wallet',
         chainId,
         createdAt: new Date().toISOString(),
@@ -412,12 +401,13 @@ export default function AATestScreen() {
 
       updateTest(8, {
         status: 'success',
-        message: `✅ Deployed! Address: ${deployedAddress.slice(0, 10)}...`,
+        message: `✅ ${result.alreadyDeployed ? 'Already deployed' : 'Deployed'}: ${deployedAddress.slice(0, 10)}...`,
         data: {
-          txHash: result.transactionHash,
+          txHash: result.alreadyDeployed ? undefined : result.transactionHash,
+          userOpHash: result.alreadyDeployed ? undefined : result.userOpHash,
           walletAddress: deployedAddress,
-          blockNumber: String(result.blockNumber),
-          gasUsed: result.gasUsed?.toString?.() || '',
+          blockNumber: result.blockNumber !== undefined ? String(result.blockNumber) : undefined,
+          fundingTxHash: result.fundingTxHash,
           hasCode: true,
         },
       });
@@ -475,10 +465,10 @@ export default function AATestScreen() {
     setAutoRunning(true);
     
     // Clean up previous passkey from secure storage
-    if (testPasskey?.credentialId) {
+    if (testPasskey?.credentialId && user?.id) {
       try {
-        await PasskeyService.deletePasskeySilent(testPasskey.credentialId);
-        console.log('🧹 [AATest] Cleaned up previous passkey:', testPasskey.credentialId);
+        await PasskeyService.deletePasskey(user.id);
+        console.log('🧹 [AATest] Cleaned up previous passkey for user:', user.id);
       } catch (error) {
         console.warn('⚠️ [AATest] Failed to clean up previous passkey:', error);
       }

@@ -1,18 +1,16 @@
 import { PortfolioService } from "@/src/features/portfolio/services/PortfolioService";
+import type { TokenBalance } from "@/src/features/portfolio/services/PortfolioService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import type { AAAccount } from "@/src/features/wallet/store/useWalletStore";
-import type { RootStackParamList } from "@/src/types/navigation";
+import type { RootStackParamList, TabStackParamList } from "@/src/types/navigation";
 import { Feather } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, type CompositeNavigationProp } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { AccountDeploymentService } from "@/src/features/wallet/services/AccountDeploymentService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
-import {
-  directDeployAccount,
-  predictAccountAddress,
-  getDeployment,
-} from "@/src/integration/viem";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
-import { type Hex, type Address } from "viem";
+import { type Address } from "viem";
 import {
   devFundSmartAccount,
   DEV_FUNDING_AMOUNT_ETH,
@@ -88,9 +86,13 @@ const quickActions: QuickAction[] = [
 ];
 
 const EMPTY_TOKENS: MarketToken[] = [];
+type HomeScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<TabStackParamList, "Home">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 const HomeScreen: React.FC = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<HomeScreenNavigationProp>();
   const { profile, user } = useUserStore();
   const { theme } = useAppTheme();
   const { colors, gradients } = theme;
@@ -103,7 +105,7 @@ const HomeScreen: React.FC = () => {
   const setSmartAccountAddress = useUserStore((state) => state.setSmartAccountAddress);
   const setSmartAccountDeployed = useUserStore((state) => state.setSmartAccountDeployed);
   const aaAccount = useWalletStore((state) => state.aaAccount);
-  const activeWalletAccount = useWalletStore((state) => state.activeAccount);
+  const markAsDeployed = useWalletStore((state) => state.markAsDeployed);
   const setAAAccount = useWalletStore((state) => state.setAAAccount);
   const isWalletDeployed = smartAccountDeployed;
   const userId = user?.id ?? null;
@@ -235,29 +237,7 @@ const HomeScreen: React.FC = () => {
         throw new Error("Unable to access passkey credentials on this device.");
       }
 
-      const pxHex = passkey.publicKeyX.startsWith("0x")
-        ? (passkey.publicKeyX as Hex)
-        : (`0x${passkey.publicKeyX}` as Hex);
-      const pyHex = passkey.publicKeyY.startsWith("0x")
-        ? (passkey.publicKeyY as Hex)
-        : (`0x${passkey.publicKeyY}` as Hex);
-
-      if (pxHex.length !== 66 || pyHex.length !== 66) {
-        throw new Error("Stored passkey public key is invalid. Please recreate your passkey.");
-      }
-
-      const passkeyInit = {
-        idRaw: passkey.credentialIdRaw as Hex,
-        px: BigInt(pxHex),
-        py: BigInt(pyHex),
-      };
-      const salt = passkey.credentialIdRaw as Hex;
-      const deployment = getDeployment(resolvedDeployChainId);
-      if (!deployment?.passkeyValidator) {
-        throw new Error("Validator address missing for current chain.");
-      }
-
-      const predictedAddress = await predictAccountAddress(resolvedDeployChainId, salt);
+      const predictedAddress = await AccountDeploymentService.predictAddress(passkey, resolvedDeployChainId);
       setSmartAccountAddress(predictedAddress);
 
       const baseAccount: AAAccount =
@@ -266,7 +246,7 @@ const HomeScreen: React.FC = () => {
           id: `local-${userId}`,
           userId,
           predictedAddress,
-          ownerAddress: activeWalletAccount?.address ?? predictedAddress,
+          ownerAddress: passkey.credentialIdRaw,
           isDeployed: false,
           walletName: `${profile?.username ?? "Primary"} Smart Account`,
           chainId: resolvedDeployChainId,
@@ -275,29 +255,30 @@ const HomeScreen: React.FC = () => {
 
       setAAAccount({ ...baseAccount, predictedAddress, chainId: resolvedDeployChainId, isDeployed: false });
 
-      setAccountActionStatus("Deploying smart account…");
-      const result = await directDeployAccount({
+      setAccountActionStatus("Authenticating and sending deployment UserOperation…");
+      const result = await AccountDeploymentService.deployWithPasskeyAuth(userId, {
         chainId: resolvedDeployChainId,
-        salt,
-        passkeyInit,
-        validator: deployment.passkeyValidator as Address,
+        passkey,
       });
 
       const deployedAccount: AAAccount = {
         ...baseAccount,
         predictedAddress: result.accountAddress,
+        ownerAddress: passkey.credentialIdRaw,
         chainId: resolvedDeployChainId,
         isDeployed: true,
-        deploymentTxHash: result.transactionHash,
-        deploymentBlockNumber:
-          typeof result.blockNumber === "bigint"
-            ? Number(result.blockNumber)
-            : result.blockNumber ?? baseAccount.deploymentBlockNumber,
+        deploymentTxHash: result.alreadyDeployed ? baseAccount.deploymentTxHash : result.transactionHash,
+        deploymentBlockNumber: result.alreadyDeployed
+          ? baseAccount.deploymentBlockNumber
+          : result.blockNumber ?? baseAccount.deploymentBlockNumber,
         deployedAt: new Date().toISOString(),
       };
       setAAAccount(deployedAccount);
       setSmartAccountAddress(result.accountAddress);
       setSmartAccountDeployed(true);
+      if (!result.alreadyDeployed) {
+        markAsDeployed(result.transactionHash!, result.blockNumber!);
+      }
 
       let fundingHash: string | null = null;
       try {
@@ -308,8 +289,8 @@ const HomeScreen: React.FC = () => {
       setAccountActionStatus(null);
       Alert.alert(
         "Smart Account Ready",
-        `Deployed at:\n${result.accountAddress}${
-          fundingHash ? `\n\nFunded ${FUNDING_AMOUNT_ETH} ETH\nTx: ${fundingHash.slice(0, 12)}…` : ""
+        `${result.alreadyDeployed ? "Already available at" : "Deployed at"}:\n${result.accountAddress}${
+          fundingHash ? `\n\nFunded ${DEV_FUNDING_AMOUNT_ETH} ETH\nTx: ${fundingHash.slice(0, 12)}…` : ""
         }`,
       );
     } catch (error) {
@@ -323,9 +304,9 @@ const HomeScreen: React.FC = () => {
     }
   }, [
     aaAccount,
-    activeWalletAccount?.address,
     deployingAccount,
     fundSmartAccount,
+    markAsDeployed,
     profile?.username,
     resolvedDeployChainId,
     setAAAccount,
@@ -358,7 +339,7 @@ const HomeScreen: React.FC = () => {
     );
   }, [searchQuery, tokens]);
 
-  const spotlightTokens = useMemo(() => {
+  const spotlightTokens = useMemo<TokenBalance[]>(() => {
     // Only show user's actual token holdings from portfolio
     if (portfolio && portfolio.tokens.length > 0) {
       // Get top 5 holdings by value
@@ -732,48 +713,23 @@ const HomeScreen: React.FC = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 4, columnGap: 14 }}
           >
-            {spotlightTokens.map((token) => {
-              // Check if it's a portfolio token (has amount) or market token (has change24h)
-              const isPortfolioToken = 'amount' in token;
-              const isNegative = isPortfolioToken 
-                ? false // Portfolio tokens don't show change for now
-                : ((token as any).change24h ?? 0) < 0;
-              
-              return (
-                <LinearGradient
-                  key={isPortfolioToken ? token.address : `${(token as any).chain}-${token.address}`}
-                  colors={gradients.card}
-                  style={styles.assetCard}
-                >
-                  <View style={styles.assetHeader}>
-                    <View style={styles.assetBadge}>
-                      <Text style={styles.assetBadgeText}>{token.symbol.toUpperCase()}</Text>
-                    </View>
-                    {isPortfolioToken ? (
-                      <Text style={styles.assetAmount}>
-                        {token.amount.toFixed(4)}
-                      </Text>
-                    ) : (
-                      <Text
-                        style={[
-                          styles.assetChange,
-                          { color: isNegative ? colors.danger : colors.success },
-                        ]}
-                      >
-                        {formatChange((token as any).change24h)}
-                      </Text>
-                    )}
+            {spotlightTokens.map((token) => (
+              <LinearGradient
+                key={token.address}
+                colors={gradients.card}
+                style={styles.assetCard}
+              >
+                <View style={styles.assetHeader}>
+                  <View style={styles.assetBadge}>
+                    <Text style={styles.assetBadgeText}>{token.symbol.toUpperCase()}</Text>
                   </View>
-                  <Text style={styles.assetName}>{token.name}</Text>
-                  <Text style={styles.assetValue}>
-                    {isPortfolioToken ? formatPrice(token.value) : formatPrice((token as any).priceUsd)}
-                  </Text>
-                  <Text style={styles.assetAllocation}>
-                    {isPortfolioToken ? `@${formatPrice(token.price)}` : (token as any).network}
-                  </Text>
-                </LinearGradient>
-              );
-            })}
+                  <Text style={styles.assetAmount}>{token.amount.toFixed(4)}</Text>
+                </View>
+                <Text style={styles.assetName}>{token.name}</Text>
+                <Text style={styles.assetValue}>{formatPrice(token.value)}</Text>
+                <Text style={styles.assetAllocation}>{`@${formatPrice(token.price)}`}</Text>
+              </LinearGradient>
+            ))}
           </ScrollView>
         ) : (
           <View style={styles.noSpotlight}>

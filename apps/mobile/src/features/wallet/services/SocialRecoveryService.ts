@@ -1,17 +1,14 @@
 import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import {
-  ABIS,
-  buildInstallSocialRecoveryUserOp,
+  buildInstallRecoveryModuleUserOp,
   encodeSocialRecoveryInitData,
   getDeployment,
-  getPublicClient,
-  sendUserOp,
+  isExecutorModuleInstalled,
+  submitConfiguredUserOp,
 } from "@/src/integration/viem";
 import type { Address, Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
-
-const MODULE_TYPE_EXECUTOR = 2n;
 
 export type SocialRecoveryInstallRequest = {
   smartAccountAddress: Address;
@@ -55,13 +52,18 @@ export class SocialRecoveryService {
     const paymasterUrl = params.usePaymaster
       ? params.paymasterUrl ?? getPaymasterUrl()
       : params.paymasterUrl;
+    const deployment = getDeployment(chainId);
+    if (!deployment?.socialRecovery) {
+      throw new Error(`No Social Recovery module configured for chain ${chainId}`);
+    }
+    const initData = encodeSocialRecoveryInitData(params.guardians, params.threshold);
 
-    const { userOp, userOpHash } = await buildInstallSocialRecoveryUserOp({
+    const { userOp, userOpHash } = await buildInstallRecoveryModuleUserOp({
       chainId,
       bundlerUrl,
       smartAccountAddress: params.smartAccountAddress,
-      guardians: params.guardians,
-      threshold: params.threshold,
+      moduleAddress: deployment.socialRecovery as Address,
+      initData,
       passkeyId: params.passkeyId,
       nonce: params.nonce,
       nonceKey: params.nonceKey,
@@ -80,14 +82,10 @@ export class SocialRecoveryService {
   static async submitInstallModuleUserOp(params: SocialRecoverySubmitRequest): Promise<Hex> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
     const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
-    const deployment = getDeployment(chainId);
-    if (!deployment?.entryPoint) {
-      throw new Error(`No deployment entry point configured for chain ${chainId}`);
-    }
     if (!params.signedUserOp.signature || params.signedUserOp.signature === "0x") {
       throw new Error("Signed UserOperation must include a signature before submission");
     }
-    return sendUserOp(params.signedUserOp, chainId, bundlerUrl, deployment.entryPoint);
+    return submitConfiguredUserOp(params.signedUserOp, chainId, bundlerUrl);
   }
 
   static async isModuleInstalled(
@@ -98,12 +96,10 @@ export class SocialRecoveryService {
     if (!deployment?.socialRecovery) {
       throw new Error(`No Social Recovery module configured for chain ${chainId}`);
     }
-    const client = getPublicClient(chainId);
-    return client.readContract({
-      address: smartAccountAddress,
-      abi: ABIS.smartAccount,
-      functionName: "isModuleInstalled",
-      args: [MODULE_TYPE_EXECUTOR, deployment.socialRecovery, "0x"],
-    }) as Promise<boolean>;
+    return isExecutorModuleInstalled({
+      chainId,
+      smartAccountAddress,
+      moduleAddress: deployment.socialRecovery as Address,
+    });
   }
 }

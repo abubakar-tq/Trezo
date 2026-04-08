@@ -5,13 +5,19 @@ import {
   parseAbiParameters,
   http,
   decodeAbiParameters,
-  toHex,
   type Address,
   type Hex,
   type Transport,
   createClient,
 } from "viem";
-import { getUserOperationHash, type UserOperation } from "viem/account-abstraction";
+import {
+  formatUserOperationRequest,
+  getUserOperationHash,
+  type RpcEstimateUserOperationGasReturnType,
+  type RpcUserOperation,
+  type UserOperationReceipt,
+  type UserOperation,
+} from "viem/account-abstraction";
 
 import { ABIS } from "./abis";
 import { getDeployment } from "./deployments";
@@ -29,6 +35,7 @@ const ENTRY_POINT_VERSION = "0.7";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
 const BUNDLER_GAS_CAP = 20_000_000n; // many bundlers default to 20m max gas per UserOp
 const CREATE_ACCOUNT_MIN_VERIFICATION_GAS = 1_500_000n;
+const SMART_ACCOUNT_MIN_VERIFICATION_GAS = 500_000n;
 const DELEGATE_AND_REVERT_SELECTOR = "0x99410554";
 const FAILED_OP_SELECTOR = "0x220266b6";
 const VALIDATIONDATA_ALL_TIME_VALID_SENTINEL = "000000000000ffffffffffff0000000000000000000000000000000000000000";
@@ -172,6 +179,25 @@ export type InstallEmailRecoveryParams = {
   preVerificationGas?: bigint;
 };
 
+export type InstallRecoveryModuleUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  moduleAddress: Address;
+  initData: Hex;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+  operationLabel?: string;
+};
+
 export type AddPasskeyUserOpParams = {
   chainId: SupportedChainId;
   bundlerUrl: string;
@@ -190,7 +216,14 @@ export type AddPasskeyUserOpParams = {
   preVerificationGas?: bigint;
 };
 
-type BundlerClient = ReturnType<typeof createClient<Transport>>;
+type RpcRequestClient = {
+  request(args: { method: string; params?: readonly unknown[] }): Promise<any>;
+};
+
+type BundlerGasEstimate = RpcEstimateUserOperationGasReturnType<typeof ENTRY_POINT_VERSION> & {
+  maxFeePerGas?: Hex;
+  maxPriorityFeePerGas?: Hex;
+};
 
 const toBigInt = (value: bigint | number | string): bigint =>
   typeof value === "bigint" ? value : BigInt(value);
@@ -212,22 +245,10 @@ const addGasHeadroom = (value: bigint, percent: bigint, additive: bigint = 0n): 
   clampGas((value * (100n + percent)) / 100n + additive);
 
 // Bundlers expect unpacked user ops with hex quantity fields
-const serializeUserOp = (op: UserOperation<typeof ENTRY_POINT_VERSION>) => ({
-  ...op,
-  nonce: toHex(op.nonce),
-  callGasLimit: toHex(op.callGasLimit),
-  verificationGasLimit: toHex(op.verificationGasLimit),
-  preVerificationGas: toHex(op.preVerificationGas),
-  maxFeePerGas: toHex(op.maxFeePerGas),
-  maxPriorityFeePerGas: toHex(op.maxPriorityFeePerGas),
-  // Handle v0.7 paymaster fields
-  ...(op.paymasterVerificationGasLimit !== undefined && {
-    paymasterVerificationGasLimit: toHex(op.paymasterVerificationGasLimit),
-  }),
-  ...(op.paymasterPostOpGasLimit !== undefined && {
-    paymasterPostOpGasLimit: toHex(op.paymasterPostOpGasLimit),
-  }),
-});
+const serializeUserOp = (
+  op: UserOperation<typeof ENTRY_POINT_VERSION>,
+): RpcUserOperation<typeof ENTRY_POINT_VERSION> =>
+  formatUserOperationRequest(op) as RpcUserOperation<typeof ENTRY_POINT_VERSION>;
 
 const sponsorUserOp = async (
   paymasterUrl: string,
@@ -238,11 +259,11 @@ const sponsorUserOp = async (
   const client = createClient({
     chain: getViemChain(chainId),
     transport: http(paymasterUrl),
-  });
+  }) as unknown as RpcRequestClient;
 
   return client.request({
     method: "pm_sponsorUserOperation",
-    params: [serializeUserOp(userOp), entryPoint] as any,
+    params: [serializeUserOp(userOp), entryPoint],
   }) as Promise<{
     paymaster: Hex;
     paymasterData?: Hex;
@@ -254,11 +275,329 @@ const sponsorUserOp = async (
   }>;
 };
 
-const getBundlerClient = (bundlerUrl: string, chainId: SupportedChainId): BundlerClient =>
+const getBundlerClient = (bundlerUrl: string, chainId: SupportedChainId): RpcRequestClient =>
   createClient({
     chain: getViemChain(chainId),
     transport: http(bundlerUrl),
+  }) as unknown as RpcRequestClient;
+
+const resolveEntryPoint = (chainId: SupportedChainId): Hex => {
+  const deployment = getDeployment(chainId);
+  if (!deployment?.entryPoint || deployment.entryPoint === ZERO_ADDRESS) {
+    throw new Error(`Deployment is missing entry point for chain ${chainId}`);
+  }
+  return deployment.entryPoint as Hex;
+};
+
+const resolveSmartAccountNonce = async ({
+  chainId,
+  smartAccountAddress,
+  nonce,
+  nonceKey,
+}: {
+  chainId: SupportedChainId;
+  smartAccountAddress: Address;
+  nonce?: bigint;
+  nonceKey?: bigint;
+}) => {
+  if (nonce !== undefined) return nonce;
+  const publicClient = getPublicClient(chainId);
+  return (await publicClient.readContract({
+    address: smartAccountAddress,
+    abi: ABIS.smartAccount,
+    functionName: "getNonce",
+    args: [nonceKey ?? 0n],
+  })) as bigint;
+};
+
+const ensureBundlerSupportsEntryPoint = async ({
+  bundler,
+  entryPoint,
+  operationLabel,
+}: {
+  bundler: RpcRequestClient;
+  entryPoint: Hex;
+  operationLabel: string;
+}) => {
+  let supportedEntryPoints: Hex[];
+  try {
+    supportedEntryPoints = await bundler.request({
+      method: "eth_supportedEntryPoints",
+      params: [],
+    });
+  } catch (err) {
+    console.error(`[${operationLabel}] Failed eth_supportedEntryPoints`, err);
+    throw err;
+  }
+  if (!supportedEntryPoints.includes(entryPoint)) {
+    throw new Error(`Bundler does not support EntryPoint ${entryPoint}`);
+  }
+};
+
+const maybeSponsorUserOp = async ({
+  chainId,
+  paymasterUrl,
+  usePaymaster,
+  entryPoint,
+  userOp,
+  operationLabel,
+}: {
+  chainId: SupportedChainId;
+  paymasterUrl?: string;
+  usePaymaster?: boolean;
+  entryPoint: Hex;
+  userOp: UserOperation<typeof ENTRY_POINT_VERSION>;
+  operationLabel: string;
+}) => {
+  if (!usePaymaster || !paymasterUrl) {
+    return userOp;
+  }
+  try {
+    const pm = await sponsorUserOp(paymasterUrl, chainId, entryPoint, userOp);
+    return {
+      ...userOp,
+      paymaster: pm.paymaster,
+      paymasterVerificationGasLimit:
+        pm.paymasterVerificationGasLimit !== undefined ? toBigInt(pm.paymasterVerificationGasLimit) : undefined,
+      paymasterPostOpGasLimit:
+        pm.paymasterPostOpGasLimit !== undefined ? toBigInt(pm.paymasterPostOpGasLimit) : undefined,
+      paymasterData: pm.paymasterData || "0x",
+      preVerificationGas:
+        pm.preVerificationGas !== undefined ? toBigInt(pm.preVerificationGas) : userOp.preVerificationGas,
+      verificationGasLimit:
+        pm.verificationGasLimit !== undefined ? toBigInt(pm.verificationGasLimit) : userOp.verificationGasLimit,
+      callGasLimit: pm.callGasLimit !== undefined ? toBigInt(pm.callGasLimit) : userOp.callGasLimit,
+    } satisfies UserOperation<typeof ENTRY_POINT_VERSION>;
+  } catch (err) {
+    console.error(`[${operationLabel}] Paymaster sponsorship failed`, err);
+    throw err;
+  }
+};
+
+const finalizeUserOpBuild = async ({
+  bundler,
+  userOpForEstimation,
+  entryPoint,
+  chainId,
+  operationLabel,
+  minVerificationGas = 0n,
+  verificationHeadroomPercent = 0n,
+  verificationHeadroomAdditive = 0n,
+  preVerificationHeadroomPercent = 0n,
+  callGasHeadroomPercent = 0n,
+}: {
+  bundler: RpcRequestClient;
+  userOpForEstimation: UserOperation<typeof ENTRY_POINT_VERSION>;
+  entryPoint: Hex;
+  chainId: SupportedChainId;
+  operationLabel: string;
+  minVerificationGas?: bigint;
+  verificationHeadroomPercent?: bigint;
+  verificationHeadroomAdditive?: bigint;
+  preVerificationHeadroomPercent?: bigint;
+  callGasHeadroomPercent?: bigint;
+}) => {
+  const provisionalHash = getUserOperationHash({
+    userOperation: userOpForEstimation,
+    entryPointAddress: entryPoint,
+    entryPointVersion: ENTRY_POINT_VERSION,
+    chainId,
   });
+  console.log(`[${operationLabel}] provisional userOpHash:`, provisionalHash);
+
+  let gas: BundlerGasEstimate;
+  try {
+    gas = await bundler.request({
+      method: "eth_estimateUserOperationGas",
+      params: [serializeUserOp(userOpForEstimation), entryPoint],
+    }) as BundlerGasEstimate;
+  } catch (err) {
+    console.error(`[${operationLabel}] eth_estimateUserOperationGas failed`, err);
+    throw err;
+  }
+
+  const estimatedPreVerificationGas =
+    gas.preVerificationGas !== undefined
+      ? ensureNonZeroBigInt(gas.preVerificationGas, userOpForEstimation.preVerificationGas)
+      : userOpForEstimation.preVerificationGas;
+  const estimatedVerificationGas =
+    gas.verificationGasLimit !== undefined
+      ? ensureNonZeroBigInt(gas.verificationGasLimit, userOpForEstimation.verificationGasLimit)
+      : userOpForEstimation.verificationGasLimit;
+  const estimatedCallGas =
+    gas.callGasLimit !== undefined
+      ? ensureNonZeroBigInt(gas.callGasLimit, userOpForEstimation.callGasLimit)
+      : userOpForEstimation.callGasLimit;
+
+  const withGas: UserOperation<typeof ENTRY_POINT_VERSION> = {
+    ...userOpForEstimation,
+    preVerificationGas:
+      preVerificationHeadroomPercent > 0n
+        ? addGasHeadroom(estimatedPreVerificationGas, preVerificationHeadroomPercent)
+        : estimatedPreVerificationGas,
+    verificationGasLimit:
+      maxBigInt(
+        verificationHeadroomPercent > 0n
+          ? addGasHeadroom(
+              estimatedVerificationGas,
+              verificationHeadroomPercent,
+              verificationHeadroomAdditive,
+            )
+          : estimatedVerificationGas,
+        minVerificationGas,
+      ),
+    callGasLimit:
+      callGasHeadroomPercent > 0n
+        ? clampGas(addGasHeadroom(estimatedCallGas, callGasHeadroomPercent))
+        : clampGas(estimatedCallGas),
+    maxFeePerGas: gas.maxFeePerGas !== undefined ? toBigInt(gas.maxFeePerGas) : userOpForEstimation.maxFeePerGas,
+    maxPriorityFeePerGas:
+      gas.maxPriorityFeePerGas !== undefined
+        ? toBigInt(gas.maxPriorityFeePerGas)
+        : userOpForEstimation.maxPriorityFeePerGas,
+  };
+
+  const userOpHash = getUserOperationHash({
+    userOperation: withGas,
+    entryPointAddress: entryPoint,
+    entryPointVersion: ENTRY_POINT_VERSION,
+    chainId,
+  });
+  console.log(`[${operationLabel}] userOpHash (post-estimate):`, userOpHash);
+
+  return { userOp: withGas, userOpHash };
+};
+
+const refreshSponsoredUserOp = async ({
+  chainId,
+  paymasterUrl,
+  usePaymaster,
+  entryPoint,
+  userOp,
+  operationLabel,
+}: {
+  chainId: SupportedChainId;
+  paymasterUrl?: string;
+  usePaymaster?: boolean;
+  entryPoint: Hex;
+  userOp: UserOperation<typeof ENTRY_POINT_VERSION>;
+  operationLabel: string;
+}) => {
+  if (!usePaymaster || !paymasterUrl) {
+    return userOp;
+  }
+
+  return maybeSponsorUserOp({
+    chainId,
+    paymasterUrl,
+    usePaymaster,
+    entryPoint,
+    userOp,
+    operationLabel: `${operationLabel}:refreshPaymaster`,
+  });
+};
+
+const buildSmartAccountExecuteUserOp = async ({
+  chainId,
+  bundlerUrl,
+  smartAccountAddress,
+  callData,
+  passkeyId,
+  nonce,
+  nonceKey,
+  usePaymaster,
+  paymasterUrl,
+  maxFeePerGas,
+  maxPriorityFeePerGas,
+  callGasLimit,
+  verificationGasLimit,
+  preVerificationGas,
+  operationLabel,
+}: {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  callData: Hex;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit: bigint;
+  verificationGasLimit: bigint;
+  preVerificationGas: bigint;
+  operationLabel: string;
+}) => {
+  if (!passkeyId) {
+    throw new Error("Active passkeyId is required to build the UserOperation signature envelope");
+  }
+
+  const entryPoint = resolveEntryPoint(chainId);
+  const resolvedNonce = await resolveSmartAccountNonce({
+    chainId,
+    smartAccountAddress,
+    nonce,
+    nonceKey,
+  });
+
+  const userOp: UserOperation<typeof ENTRY_POINT_VERSION> = {
+    sender: smartAccountAddress,
+    nonce: resolvedNonce,
+    callData,
+    callGasLimit,
+    verificationGasLimit,
+    preVerificationGas,
+    maxFeePerGas: maxFeePerGas ?? 1_000_000_000n,
+    maxPriorityFeePerGas: maxPriorityFeePerGas ?? 1_000_000n,
+    signature: buildDummyPasskeySignature(passkeyId),
+  };
+
+  const bundler = getBundlerClient(bundlerUrl, chainId);
+  await ensureBundlerSupportsEntryPoint({ bundler, entryPoint, operationLabel });
+
+  const userOpForEstimation = await maybeSponsorUserOp({
+    chainId,
+    paymasterUrl,
+    usePaymaster,
+    entryPoint,
+    userOp,
+    operationLabel,
+  });
+
+  const finalized = await finalizeUserOpBuild({
+    bundler,
+    userOpForEstimation,
+    entryPoint,
+    chainId,
+    operationLabel,
+    minVerificationGas: SMART_ACCOUNT_MIN_VERIFICATION_GAS,
+    verificationHeadroomPercent: 100n,
+    verificationHeadroomAdditive: 100_000n,
+    preVerificationHeadroomPercent: 20n,
+    callGasHeadroomPercent: 20n,
+  });
+
+  const refreshedUserOp = await refreshSponsoredUserOp({
+    chainId,
+    paymasterUrl,
+    usePaymaster,
+    entryPoint,
+    userOp: finalized.userOp,
+    operationLabel,
+  });
+
+  const userOpHash = getUserOperationHash({
+    userOperation: refreshedUserOp,
+    entryPointAddress: entryPoint,
+    entryPointVersion: ENTRY_POINT_VERSION,
+    chainId,
+  });
+  console.log(`[${operationLabel}] userOpHash (post-paymaster):`, userOpHash);
+
+  return { userOp: refreshedUserOp, userOpHash };
+};
 
 export const encodeSocialRecoveryInitData = (guardians: readonly Address[], threshold: bigint | number): Hex => {
   if (!guardians.length) {
@@ -461,73 +800,27 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
 
   const bundler = getBundlerClient(params.bundlerUrl, params.chainId);
 
-  // Check supported entry point early
-  let supportedEntryPoints: Hex[];
-  try {
-    supportedEntryPoints = await bundler.request({
-      method: "eth_supportedEntryPoints",
-      params: [],
-    });
-  } catch (err) {
-    console.error("[buildCreateAccountUserOp] Failed eth_supportedEntryPoints", {
-      bundlerUrl: params.bundlerUrl,
-      error: err,
-    });
-    throw err;
-  }
-
-  if (!supportedEntryPoints.includes(entryPoint)) {
-    throw new Error(
-      `Bundler does not support the required EntryPoint ${entryPoint}. Supported: ${supportedEntryPoints.join(
-        ", ",
-      )}`,
-    );
-  }
-
-  console.log("[buildCreateAccountUserOp] EntryPoint supported by bundler.", supportedEntryPoints);
+  await ensureBundlerSupportsEntryPoint({
+    bundler,
+    entryPoint,
+    operationLabel: "buildCreateAccountUserOp",
+  });
 
   let userOpForEstimation = userOp;
 
   // Optional paymaster sponsorship - call before gas estimation
   if (params.usePaymaster && params.paymasterUrl) {
-    try {
-      console.log("[buildCreateAccountUserOp] Requesting paymaster sponsorship...", {
-        paymasterUrl: params.paymasterUrl,
-      });
-      
-      const pm = await sponsorUserOp(params.paymasterUrl, params.chainId, entryPoint, userOp);
-      
-      // For v0.7, paymaster fields are: paymaster, paymasterVerificationGasLimit, paymasterPostOpGasLimit, paymasterData
-      // The pm_sponsorUserOperation response should provide paymasterAndData which we need to parse
-      userOpForEstimation = {
-        ...userOp,
-        paymaster: pm.paymaster,
-        paymasterVerificationGasLimit: pm.paymasterVerificationGasLimit !== undefined 
-          ? toBigInt(pm.paymasterVerificationGasLimit) 
-          : undefined,
-        paymasterPostOpGasLimit: pm.paymasterPostOpGasLimit !== undefined
-          ? toBigInt(pm.paymasterPostOpGasLimit)
-          : undefined,
-        paymasterData: pm.paymasterData || "0x",
-        preVerificationGas:
-          pm.preVerificationGas !== undefined ? toBigInt(pm.preVerificationGas) : userOp.preVerificationGas,
-        verificationGasLimit:
-          pm.verificationGasLimit !== undefined
-            ? toBigInt(pm.verificationGasLimit)
-            : userOp.verificationGasLimit,
-        callGasLimit: pm.callGasLimit !== undefined ? toBigInt(pm.callGasLimit) : userOp.callGasLimit,
-      };
-      console.log("[buildCreateAccountUserOp] Sponsored by paymaster", {
-        paymaster: pm.paymaster,
-        paymasterData: pm.paymasterData,
-      });
-    } catch (err) {
-      console.error("[buildCreateAccountUserOp] Paymaster sponsorship failed", {
-        paymasterUrl: params.paymasterUrl,
-        error: err,
-      });
-      throw err;
-    }
+    console.log("[buildCreateAccountUserOp] Requesting paymaster sponsorship...", {
+      paymasterUrl: params.paymasterUrl,
+    });
+    userOpForEstimation = await maybeSponsorUserOp({
+      chainId: params.chainId,
+      paymasterUrl: params.paymasterUrl,
+      usePaymaster: params.usePaymaster,
+      entryPoint,
+      userOp,
+      operationLabel: "buildCreateAccountUserOp",
+    });
   }
 
   // Log critical values before getUserOperationHash
@@ -557,12 +850,12 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
     throw err;
   }
 
-  let gas;
+  let gas: BundlerGasEstimate;
   try {
     gas = await bundler.request({
       method: "eth_estimateUserOperationGas",
       params: [serializeUserOp(userOpForEstimation), entryPoint],
-    });
+    }) as BundlerGasEstimate;
   } catch (err) {
     console.error("[buildCreateAccountUserOp] eth_estimateUserOperationGas failed", {
       bundlerUrl: params.bundlerUrl,
@@ -599,152 +892,79 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
       : userOp.maxPriorityFeePerGas,
   };
 
+  const refreshedUserOp = await refreshSponsoredUserOp({
+    chainId: params.chainId,
+    paymasterUrl: params.paymasterUrl,
+    usePaymaster: params.usePaymaster,
+    entryPoint,
+    userOp: withGas,
+    operationLabel: "buildCreateAccountUserOp",
+  });
+
   const userOpHash = getUserOperationHash({
-    userOperation: withGas,
+    userOperation: refreshedUserOp,
     entryPointAddress: entryPoint,
     entryPointVersion: ENTRY_POINT_VERSION,
     chainId: params.chainId,
   });
 
-  console.log("[buildCreateAccountUserOp] userOpHash (post-estimate):", userOpHash);
+  console.log("[buildCreateAccountUserOp] userOpHash (post-paymaster):", userOpHash);
 
-  return { userOp: withGas, userOpHash, sender };
+  return { userOp: refreshedUserOp, userOpHash, sender };
 }
 
-export async function buildInstallSocialRecoveryUserOp(params: InstallSocialRecoveryParams) {
-  const deployment = getDeployment(params.chainId);
-  if (!deployment) throw new Error(`No deployment found for chain ${params.chainId}`);
-  if (!deployment.entryPoint || !deployment.socialRecovery) {
-    throw new Error("Deployment is missing entry point or SocialRecovery module address");
+export async function buildInstallRecoveryModuleUserOp(params: InstallRecoveryModuleUserOpParams) {
+  if (!params.moduleAddress || params.moduleAddress === ZERO_ADDRESS) {
+    throw new Error("A valid recovery module address is required to build the installation UserOperation");
   }
-  if (!params.passkeyId) {
-    throw new Error("Active passkeyId is required to build the UserOperation signature envelope");
-  }
-  const initData = encodeSocialRecoveryInitData(params.guardians, params.threshold);
   const installCalldata = encodeFunctionData({
     abi: ABIS.smartAccount,
     functionName: "installRecoveryExecutorModule",
-    args: [deployment.socialRecovery, initData],
+    args: [params.moduleAddress, params.initData],
   });
   const callData = encodeFunctionData({
     abi: ABIS.smartAccount,
     functionName: "execute",
     args: [params.smartAccountAddress, 0n, installCalldata],
   });
-  const nonceKey = params.nonceKey ?? 0n;
-  const publicClient = getPublicClient(params.chainId);
-  const resolvedNonce = params.nonce
-    ?? (await publicClient.readContract({
-      address: params.smartAccountAddress,
-      abi: ABIS.smartAccount,
-      functionName: "getNonce",
-      args: [nonceKey],
-    })) as bigint;
-
-  const dummySignature = buildDummyPasskeySignature(params.passkeyId);
-  const entryPoint = deployment.entryPoint as Hex;
-
-  const userOp: UserOperation<typeof ENTRY_POINT_VERSION> = {
-    sender: params.smartAccountAddress,
-    nonce: resolvedNonce,
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
     callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
     callGasLimit: params.callGasLimit ?? 1_000_000n,
     verificationGasLimit: params.verificationGasLimit ?? 1_000_000n,
     preVerificationGas: params.preVerificationGas ?? 100_000n,
-    maxFeePerGas: params.maxFeePerGas ?? 1_000_000_000n,
-    maxPriorityFeePerGas: params.maxPriorityFeePerGas ?? 1_000_000n,
-    signature: dummySignature,
-  };
-
-  const bundler = getBundlerClient(params.bundlerUrl, params.chainId);
-  let supportedEntryPoints: Hex[];
-  try {
-    supportedEntryPoints = await bundler.request({
-      method: "eth_supportedEntryPoints",
-      params: [],
-    });
-  } catch (err) {
-    console.error("[buildInstallSocialRecoveryUserOp] Failed eth_supportedEntryPoints", err);
-    throw err;
-  }
-  if (!supportedEntryPoints.includes(entryPoint)) {
-    throw new Error(`Bundler does not support EntryPoint ${entryPoint}`);
-  }
-
-  let userOpForEstimation = userOp;
-  if (params.usePaymaster && params.paymasterUrl) {
-    try {
-      const pm = await sponsorUserOp(params.paymasterUrl, params.chainId, entryPoint, userOp);
-      userOpForEstimation = {
-        ...userOp,
-        paymaster: pm.paymaster,
-        paymasterVerificationGasLimit:
-          pm.paymasterVerificationGasLimit !== undefined ? toBigInt(pm.paymasterVerificationGasLimit) : undefined,
-        paymasterPostOpGasLimit:
-          pm.paymasterPostOpGasLimit !== undefined ? toBigInt(pm.paymasterPostOpGasLimit) : undefined,
-        paymasterData: pm.paymasterData || "0x",
-        preVerificationGas:
-          pm.preVerificationGas !== undefined ? toBigInt(pm.preVerificationGas) : userOp.preVerificationGas,
-        verificationGasLimit:
-          pm.verificationGasLimit !== undefined ? toBigInt(pm.verificationGasLimit) : userOp.verificationGasLimit,
-        callGasLimit: pm.callGasLimit !== undefined ? toBigInt(pm.callGasLimit) : userOp.callGasLimit,
-      };
-    } catch (err) {
-      console.error("[buildInstallSocialRecoveryUserOp] Paymaster sponsorship failed", err);
-      throw err;
-    }
-  }
-
-  const provisionalHash = getUserOperationHash({
-    userOperation: userOpForEstimation,
-    entryPointAddress: entryPoint,
-    entryPointVersion: ENTRY_POINT_VERSION,
-    chainId: params.chainId,
+    operationLabel: params.operationLabel ?? "buildInstallRecoveryModuleUserOp",
   });
-  console.log("[buildInstallSocialRecoveryUserOp] provisional userOpHash:", provisionalHash);
+}
 
-  let gas;
-  try {
-    gas = await bundler.request({
-      method: "eth_estimateUserOperationGas",
-      params: [serializeUserOp(userOpForEstimation), entryPoint],
-    });
-  } catch (err) {
-    console.error("[buildInstallSocialRecoveryUserOp] eth_estimateUserOperationGas failed", err);
-    throw err;
+export async function buildInstallSocialRecoveryUserOp(params: InstallSocialRecoveryParams) {
+  const deployment = getDeployment(params.chainId);
+  if (!deployment) throw new Error(`No deployment found for chain ${params.chainId}`);
+  if (!deployment.socialRecovery || deployment.socialRecovery === ZERO_ADDRESS) {
+    throw new Error("Deployment is missing SocialRecovery module address");
   }
-
-  const withGas: UserOperation<typeof ENTRY_POINT_VERSION> = {
-    ...userOpForEstimation,
-    preVerificationGas:
-      gas.preVerificationGas !== undefined ? toBigInt(gas.preVerificationGas) : userOpForEstimation.preVerificationGas,
-    verificationGasLimit:
-      gas.verificationGasLimit !== undefined ? toBigInt(gas.verificationGasLimit) : userOpForEstimation.verificationGasLimit,
-    callGasLimit:
-      gas.callGasLimit !== undefined ? toBigInt(gas.callGasLimit) : userOpForEstimation.callGasLimit,
-    maxFeePerGas: gas.maxFeePerGas !== undefined ? toBigInt(gas.maxFeePerGas) : userOpForEstimation.maxFeePerGas,
-    maxPriorityFeePerGas:
-      gas.maxPriorityFeePerGas !== undefined
-        ? toBigInt(gas.maxPriorityFeePerGas)
-        : userOpForEstimation.maxPriorityFeePerGas,
-  };
-
-  const userOpHash = getUserOperationHash({
-    userOperation: withGas,
-    entryPointAddress: entryPoint,
-    entryPointVersion: ENTRY_POINT_VERSION,
-    chainId: params.chainId,
+  const initData = encodeSocialRecoveryInitData(params.guardians, params.threshold);
+  return buildInstallRecoveryModuleUserOp({
+    ...params,
+    moduleAddress: deployment.socialRecovery as Address,
+    initData,
+    operationLabel: "buildInstallSocialRecoveryUserOp",
   });
-  console.log("[buildInstallSocialRecoveryUserOp] userOpHash (post-estimate):", userOpHash);
-
-  return { userOp: withGas, userOpHash };
 }
 
 export async function buildInstallEmailRecoveryUserOp(params: InstallEmailRecoveryParams) {
   const deployment = getDeployment(params.chainId);
   if (!deployment) throw new Error(`No deployment found for chain ${params.chainId}`);
   const missing: string[] = [];
-  if (!deployment.entryPoint || deployment.entryPoint === ZERO_ADDRESS) missing.push("entryPoint");
   if (!deployment.emailRecovery || deployment.emailRecovery === ZERO_ADDRESS) missing.push("emailRecovery");
   if (missing.length > 0) {
     throw new Error(
@@ -763,125 +983,14 @@ export async function buildInstallEmailRecoveryUserOp(params: InstallEmailRecove
     params.delay,
     params.expiry,
   );
-  const installCalldata = encodeFunctionData({
-    abi: ABIS.smartAccount,
-    functionName: "installRecoveryExecutorModule",
-    args: [deployment.emailRecovery, initData],
-  });
-  const callData = encodeFunctionData({
-    abi: ABIS.smartAccount,
-    functionName: "execute",
-    args: [params.smartAccountAddress, 0n, installCalldata],
-  });
-  const nonceKey = params.nonceKey ?? 0n;
-  const publicClient = getPublicClient(params.chainId);
-  const resolvedNonce = params.nonce
-    ?? (await publicClient.readContract({
-      address: params.smartAccountAddress,
-      abi: ABIS.smartAccount,
-      functionName: "getNonce",
-      args: [nonceKey],
-    })) as bigint;
-
-  const dummySignature = buildDummyPasskeySignature(params.passkeyId);
-  const entryPoint = deployment.entryPoint as Hex;
-
-  const userOp: UserOperation<typeof ENTRY_POINT_VERSION> = {
-    sender: params.smartAccountAddress,
-    nonce: resolvedNonce,
-    callData,
-    callGasLimit: params.callGasLimit ?? 1_000_000n,
+  return buildInstallRecoveryModuleUserOp({
+    ...params,
+    moduleAddress: deployment.emailRecovery as Address,
+    initData,
     verificationGasLimit: params.verificationGasLimit ?? 1_200_000n,
     preVerificationGas: params.preVerificationGas ?? 120_000n,
-    maxFeePerGas: params.maxFeePerGas ?? 1_000_000_000n,
-    maxPriorityFeePerGas: params.maxPriorityFeePerGas ?? 1_000_000n,
-    signature: dummySignature,
-  };
-
-  const bundler = getBundlerClient(params.bundlerUrl, params.chainId);
-  let supportedEntryPoints: Hex[];
-  try {
-    supportedEntryPoints = await bundler.request({
-      method: "eth_supportedEntryPoints",
-      params: [],
-    });
-  } catch (err) {
-    console.error("[buildInstallEmailRecoveryUserOp] Failed eth_supportedEntryPoints", err);
-    throw err;
-  }
-  if (!supportedEntryPoints.includes(entryPoint)) {
-    throw new Error(`Bundler does not support EntryPoint ${entryPoint}`);
-  }
-
-  let userOpForEstimation = userOp;
-  if (params.usePaymaster && params.paymasterUrl) {
-    try {
-      const pm = await sponsorUserOp(params.paymasterUrl, params.chainId, entryPoint, userOp);
-      userOpForEstimation = {
-        ...userOp,
-        paymaster: pm.paymaster,
-        paymasterVerificationGasLimit:
-          pm.paymasterVerificationGasLimit !== undefined ? toBigInt(pm.paymasterVerificationGasLimit) : undefined,
-        paymasterPostOpGasLimit:
-          pm.paymasterPostOpGasLimit !== undefined ? toBigInt(pm.paymasterPostOpGasLimit) : undefined,
-        paymasterData: pm.paymasterData || "0x",
-        preVerificationGas:
-          pm.preVerificationGas !== undefined ? toBigInt(pm.preVerificationGas) : userOp.preVerificationGas,
-        verificationGasLimit:
-          pm.verificationGasLimit !== undefined ? toBigInt(pm.verificationGasLimit) : userOp.verificationGasLimit,
-        callGasLimit: pm.callGasLimit !== undefined ? toBigInt(pm.callGasLimit) : userOp.callGasLimit,
-      };
-    } catch (err) {
-      console.error("[buildInstallEmailRecoveryUserOp] Paymaster sponsorship failed", err);
-      throw err;
-    }
-  }
-
-  const provisionalHash = getUserOperationHash({
-    userOperation: userOpForEstimation,
-    entryPointAddress: entryPoint,
-    entryPointVersion: ENTRY_POINT_VERSION,
-    chainId: params.chainId,
+    operationLabel: "buildInstallEmailRecoveryUserOp",
   });
-  console.log("[buildInstallEmailRecoveryUserOp] provisional userOpHash:", provisionalHash);
-
-  let gas;
-  try {
-    gas = await bundler.request({
-      method: "eth_estimateUserOperationGas",
-      params: [serializeUserOp(userOpForEstimation), entryPoint],
-    });
-  } catch (err) {
-    console.error("[buildInstallEmailRecoveryUserOp] eth_estimateUserOperationGas failed", err);
-    throw err;
-  }
-
-  const withGas: UserOperation<typeof ENTRY_POINT_VERSION> = {
-    ...userOpForEstimation,
-    preVerificationGas:
-      gas.preVerificationGas !== undefined ? toBigInt(gas.preVerificationGas) : userOpForEstimation.preVerificationGas,
-    verificationGasLimit:
-      gas.verificationGasLimit !== undefined
-        ? toBigInt(gas.verificationGasLimit)
-        : userOpForEstimation.verificationGasLimit,
-    callGasLimit:
-      gas.callGasLimit !== undefined ? toBigInt(gas.callGasLimit) : userOpForEstimation.callGasLimit,
-    maxFeePerGas: gas.maxFeePerGas !== undefined ? toBigInt(gas.maxFeePerGas) : userOpForEstimation.maxFeePerGas,
-    maxPriorityFeePerGas:
-      gas.maxPriorityFeePerGas !== undefined
-        ? toBigInt(gas.maxPriorityFeePerGas)
-        : userOpForEstimation.maxPriorityFeePerGas,
-  };
-
-  const userOpHash = getUserOperationHash({
-    userOperation: withGas,
-    entryPointAddress: entryPoint,
-    entryPointVersion: ENTRY_POINT_VERSION,
-    chainId: params.chainId,
-  });
-  console.log("[buildInstallEmailRecoveryUserOp] userOpHash (post-estimate):", userOpHash);
-
-  return { userOp: withGas, userOpHash };
 }
 
 export async function buildAddPasskeyUserOp(params: AddPasskeyUserOpParams) {
@@ -904,113 +1013,65 @@ export async function buildAddPasskeyUserOp(params: AddPasskeyUserOpParams) {
     functionName: "execute",
     args: [validatorAddress, 0n, addPasskeyData],
   });
-  const nonceKey = params.nonceKey ?? 0n;
-  const publicClient = getPublicClient(params.chainId);
-  const resolvedNonce = params.nonce
-    ?? (await publicClient.readContract({
-      address: params.smartAccountAddress,
-      abi: ABIS.smartAccount,
-      functionName: "getNonce",
-      args: [nonceKey],
-    })) as bigint;
-
-  const dummySignature = buildDummyPasskeySignature(params.signingPasskeyId);
-  const entryPoint = deployment.entryPoint as Hex;
-
-  const userOp: UserOperation<typeof ENTRY_POINT_VERSION> = {
-    sender: params.smartAccountAddress,
-    nonce: resolvedNonce,
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
     callData,
+    passkeyId: params.signingPasskeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
     callGasLimit: params.callGasLimit ?? 800_000n,
     verificationGasLimit: params.verificationGasLimit ?? 900_000n,
     preVerificationGas: params.preVerificationGas ?? 100_000n,
-    maxFeePerGas: params.maxFeePerGas ?? 1_000_000_000n,
-    maxPriorityFeePerGas: params.maxPriorityFeePerGas ?? 1_000_000n,
-    signature: dummySignature,
-  };
+    operationLabel: "buildAddPasskeyUserOp",
+  });
+}
 
-  const bundler = getBundlerClient(params.bundlerUrl, params.chainId);
-  let supportedEntryPoints: Hex[];
-  try {
-    supportedEntryPoints = await bundler.request({
-      method: "eth_supportedEntryPoints",
-      params: [],
-    });
-  } catch (err) {
-    console.error("[buildAddPasskeyUserOp] Failed eth_supportedEntryPoints", err);
-    throw err;
-  }
-  if (!supportedEntryPoints.includes(entryPoint)) {
-    throw new Error(`Bundler does not support EntryPoint ${entryPoint}`);
-  }
+export async function submitConfiguredUserOp(
+  signedUserOp: UserOperation<typeof ENTRY_POINT_VERSION>,
+  chainId: SupportedChainId,
+  bundlerUrl: string,
+) {
+  const entryPoint = resolveEntryPoint(chainId);
+  return sendUserOp(signedUserOp, chainId, bundlerUrl, entryPoint);
+}
 
-  let userOpForEstimation = userOp;
-  if (params.usePaymaster && params.paymasterUrl) {
-    try {
-      const pm = await sponsorUserOp(params.paymasterUrl, params.chainId, entryPoint, userOp);
-      userOpForEstimation = {
-        ...userOp,
-        paymaster: pm.paymaster,
-        paymasterVerificationGasLimit:
-          pm.paymasterVerificationGasLimit !== undefined ? toBigInt(pm.paymasterVerificationGasLimit) : undefined,
-        paymasterPostOpGasLimit:
-          pm.paymasterPostOpGasLimit !== undefined ? toBigInt(pm.paymasterPostOpGasLimit) : undefined,
-        paymasterData: pm.paymasterData || "0x",
-        preVerificationGas:
-          pm.preVerificationGas !== undefined ? toBigInt(pm.preVerificationGas) : userOp.preVerificationGas,
-        verificationGasLimit:
-          pm.verificationGasLimit !== undefined ? toBigInt(pm.verificationGasLimit) : userOp.verificationGasLimit,
-        callGasLimit: pm.callGasLimit !== undefined ? toBigInt(pm.callGasLimit) : userOp.callGasLimit,
-      };
-    } catch (err) {
-      console.error("[buildAddPasskeyUserOp] Paymaster sponsorship failed", err);
-      throw err;
+export async function getUserOperationReceipt(
+  userOpHash: Hex,
+  chainId: SupportedChainId,
+  bundlerUrl: string,
+): Promise<UserOperationReceipt<typeof ENTRY_POINT_VERSION> | null> {
+  const bundler = getBundlerClient(bundlerUrl, chainId);
+  const receipt = await bundler.request({
+    method: "eth_getUserOperationReceipt",
+    params: [userOpHash],
+  });
+  return (receipt ?? null) as UserOperationReceipt<typeof ENTRY_POINT_VERSION> | null;
+}
+
+export async function waitForUserOperationReceipt(
+  userOpHash: Hex,
+  chainId: SupportedChainId,
+  bundlerUrl: string,
+  timeoutMs = 60_000,
+  pollIntervalMs = 2_000,
+): Promise<UserOperationReceipt<typeof ENTRY_POINT_VERSION>> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const receipt = await getUserOperationReceipt(userOpHash, chainId, bundlerUrl);
+    if (receipt) {
+      return receipt;
     }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 
-  const provisionalHash = getUserOperationHash({
-    userOperation: userOpForEstimation,
-    entryPointAddress: entryPoint,
-    entryPointVersion: ENTRY_POINT_VERSION,
-    chainId: params.chainId,
-  });
-  console.log("[buildAddPasskeyUserOp] provisional userOpHash:", provisionalHash);
-
-  let gas;
-  try {
-    gas = await bundler.request({
-      method: "eth_estimateUserOperationGas",
-      params: [serializeUserOp(userOpForEstimation), entryPoint],
-    });
-  } catch (err) {
-    console.error("[buildAddPasskeyUserOp] eth_estimateUserOperationGas failed", err);
-    throw err;
-  }
-
-  const withGas: UserOperation<typeof ENTRY_POINT_VERSION> = {
-    ...userOpForEstimation,
-    preVerificationGas:
-      gas.preVerificationGas !== undefined ? toBigInt(gas.preVerificationGas) : userOpForEstimation.preVerificationGas,
-    verificationGasLimit:
-      gas.verificationGasLimit !== undefined ? toBigInt(gas.verificationGasLimit) : userOpForEstimation.verificationGasLimit,
-    callGasLimit:
-      gas.callGasLimit !== undefined ? toBigInt(gas.callGasLimit) : userOpForEstimation.callGasLimit,
-    maxFeePerGas: gas.maxFeePerGas !== undefined ? toBigInt(gas.maxFeePerGas) : userOpForEstimation.maxFeePerGas,
-    maxPriorityFeePerGas:
-      gas.maxPriorityFeePerGas !== undefined
-        ? toBigInt(gas.maxPriorityFeePerGas)
-        : userOpForEstimation.maxPriorityFeePerGas,
-  };
-
-  const userOpHash = getUserOperationHash({
-    userOperation: withGas,
-    entryPointAddress: entryPoint,
-    entryPointVersion: ENTRY_POINT_VERSION,
-    chainId: params.chainId,
-  });
-  console.log("[buildAddPasskeyUserOp] userOpHash (post-estimate):", userOpHash);
-
-  return { userOp: withGas, userOpHash };
+  throw new Error(`Timed out waiting for UserOperation receipt: ${userOpHash}`);
 }
 
 /**
