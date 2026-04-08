@@ -66,6 +66,28 @@ Passkey-first smart contract wallet built on ERC-4337 and ERC-7579-style modules
 - **EmailRecovery** uses zk-email infra (`Verifier`, `UserOverrideableDKIMRegistry`, `EmailAuth`) plus Trezo's custom recovery executor.
 - The repo deploys the custom module itself. The email relayer / prover stack is separate from this repo.
 
+## Current Milestone
+- The current delivery slice is **email recovery on reusable AA seams**.
+- Mobile code owns:
+  - guardian configuration input
+  - module installation / status checks
+  - UserOp building, signing, and bundler submission
+- We are deliberately **not** building the full wallet orchestrator or backend MVP yet.
+- The shared install-module path in the mobile AA layer is intended to be reused later by social recovery, add-passkey, and other wallet flows.
+
+## Email Recovery Boundary
+- **Mobile app**
+  - configures guardians, threshold, delay, and expiry
+  - installs the `EmailRecovery` module
+  - shows module status and submission diagnostics
+- **External relayer / prover**
+  - receives guardian emails
+  - generates / coordinates zk-email proofs
+  - submits `handleAcceptance(...)` and `handleRecovery(...)`
+  - triggers `completeRecovery(...)` after the delay window
+- **This repo**
+  - owns the onchain contracts, local deployment flow, mobile install flow, and test coverage
+
 ## Security & Secrets
 - `.env` files stay out of git; use examples/templates where available.
 - Dev keys in the local bundler stack are public test keys only.
@@ -75,4 +97,3 @@ Passkey-first smart contract wallet built on ERC-4337 and ERC-7579-style modules
 - Mobile: Expo SDK 54 / React Native 0.81, NativeWind, viem/ethers, Supabase JS
 - Contracts: Foundry, modulekit, OpenZeppelin, WebAuthn-sol, zk-email contracts
 - Local AA: Docker Compose (Anvil, Pimlico Alto, mock paymaster, contract deployer)
-

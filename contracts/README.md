@@ -110,6 +110,22 @@ If `VERIFIER`, `DKIM_REGISTRY`, `EMAIL_AUTH_IMPL`, or `COMMAND_HANDLER` are omit
 - Trezo uses a **custom** `EmailRecovery` module, not zk-email's upstream `UniversalEmailRecoveryModule`.
 - The repo deploys the onchain contracts only. The **email relayer / prover stack** is separate and not part of this Foundry project.
 - Recovery execution still depends on the account explicitly trusting the module as a recovery executor.
+- The current milestone is to make email recovery work end-to-end onchain and in the mobile install flow while keeping the AA integration reusable for future wallet orchestration work.
+
+## Email Recovery Boundary
+- **Contracts in this repo**
+  - deploy or reuse zk-email infra
+  - deploy Trezo's `EmailRecovery` module
+  - expose the onchain entrypoints used by recovery
+- **Mobile app**
+  - prepares guardian configuration
+  - installs the module on the smart account
+  - displays status and diagnostics
+- **External relayer / prover**
+  - owns email intake, proof generation, and transaction submission for
+    - `handleAcceptance(...)`
+    - `handleRecovery(...)`
+    - delayed `completeRecovery(...)`
 
 ## Useful Tests
 ```bash
