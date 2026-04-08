@@ -20,7 +20,8 @@ import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
-import { isAddress, type Address, type Hex } from "viem";
+import { isValidEmail } from "@utils/validation";
+import { type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
 
 const shortenHex = (value: string | null | undefined, chars = 6) => {
@@ -55,7 +56,7 @@ const EmailRecoveryScreen: React.FC = () => {
   const defaultGuardianCount = 3;
   const [guardianCountValue, setGuardianCountValue] = useState("3");
   const [thresholdValue, setThresholdValue] = useState("2");
-  const [guardianAddresses, setGuardianAddresses] = useState<string[]>(
+  const [guardianEmails, setGuardianEmails] = useState<string[]>(
     () => Array(defaultGuardianCount).fill(""),
   );
   const [guardianWeights, setGuardianWeights] = useState<string[]>(
@@ -72,14 +73,15 @@ const EmailRecoveryScreen: React.FC = () => {
   const [lastUserOpHash, setLastUserOpHash] = useState<Hex | null>(null);
   const [lastOperationHash, setLastOperationHash] = useState<Hex | null>(null);
   const [lastInstallPayload, setLastInstallPayload] = useState<UserOperation<"0.7"> | null>(null);
+  const [derivedGuardians, setDerivedGuardians] = useState<{ email: string; guardianAddress: Address }[]>([]);
 
   const expectedGuardians = useMemo(
     () => Math.max(parseInt(guardianCountValue, 10) || 0, 0),
     [guardianCountValue],
   );
   const trimmedGuardians = useMemo(
-    () => guardianAddresses.map((address) => address.trim()).filter(Boolean),
-    [guardianAddresses],
+    () => guardianEmails.map((email) => EmailRecoveryService.normalizeGuardianEmail(email)).filter(Boolean),
+    [guardianEmails],
   );
   const normalizedGuardianWeights = useMemo(
     () => guardianWeights.map((weight) => Math.max(parseInt(weight, 10) || 0, 0)),
@@ -90,7 +92,7 @@ const EmailRecoveryScreen: React.FC = () => {
     [normalizedGuardianWeights],
   );
   const hasDuplicateGuardians = useMemo(() => {
-    const normalized = trimmedGuardians.map((address) => address.toLowerCase());
+    const normalized = trimmedGuardians.map((email) => email.toLowerCase());
     return new Set(normalized).size !== normalized.length;
   }, [trimmedGuardians]);
   const guardiansReady = expectedGuardians > 0 && trimmedGuardians.length === expectedGuardians;
@@ -130,7 +132,8 @@ const EmailRecoveryScreen: React.FC = () => {
   const handleGuardianCountChange = useCallback((value: string) => {
     const parsed = parseInt(value, 10) || 0;
     setGuardianCountValue(value);
-    setGuardianAddresses((current) => {
+    setDerivedGuardians([]);
+    setGuardianEmails((current) => {
       if (parsed > current.length) {
         return [...current, ...Array(parsed - current.length).fill("")];
       }
@@ -144,8 +147,9 @@ const EmailRecoveryScreen: React.FC = () => {
     });
   }, []);
 
-  const handleAddressChange = useCallback((index: number, value: string) => {
-    setGuardianAddresses((prev) => {
+  const handleGuardianEmailChange = useCallback((index: number, value: string) => {
+    setDerivedGuardians([]);
+    setGuardianEmails((prev) => {
       const updated = [...prev];
       updated[index] = value;
       return updated;
@@ -153,6 +157,7 @@ const EmailRecoveryScreen: React.FC = () => {
   }, []);
 
   const handleWeightChange = useCallback((index: number, value: string) => {
+    setDerivedGuardians([]);
     setGuardianWeights((prev) => {
       const updated = [...prev];
       updated[index] = value;
@@ -175,13 +180,13 @@ const EmailRecoveryScreen: React.FC = () => {
       return;
     }
     if (!guardiansReady) {
-      Alert.alert("Add Guardians", "Fill in all guardian addresses before installing.");
+      Alert.alert("Add Guardians", "Fill in all guardian emails before installing.");
       return;
     }
 
-    const invalidGuardian = trimmedGuardians.find((address) => !isAddress(address));
+    const invalidGuardian = trimmedGuardians.find((email) => !isValidEmail(email));
     if (invalidGuardian) {
-      Alert.alert("Invalid Address", `${invalidGuardian} is not a valid Ethereum address.`);
+      Alert.alert("Invalid Email", `${invalidGuardian} is not a valid email address.`);
       return;
     }
 
@@ -194,7 +199,7 @@ const EmailRecoveryScreen: React.FC = () => {
       return;
     }
     if (hasDuplicateGuardians) {
-      Alert.alert("Duplicate Guardians", "Each guardian address must be unique.");
+      Alert.alert("Duplicate Guardians", "Each guardian email must be unique.");
       return;
     }
     if (parsedDelay <= 0 || parsedExpiry <= 0) {
@@ -237,9 +242,18 @@ const EmailRecoveryScreen: React.FC = () => {
         throw new Error("No passkey found on this device. Create a passkey first.");
       }
 
+      const derivedGuardians = await EmailRecoveryService.deriveGuardianAddresses(
+        smartAccountAddress,
+        trimmedGuardians,
+        resolvedChainId,
+      );
+      setDerivedGuardians(
+        derivedGuardians.map(({ email, guardianAddress }) => ({ email, guardianAddress })),
+      );
+
       const { userOp, userOpHash } = await EmailRecoveryService.buildInstallModuleUserOp({
         smartAccountAddress,
-        guardians: trimmedGuardians.map((address) => address as Address),
+        guardians: derivedGuardians.map(({ guardianAddress }) => guardianAddress),
         weights: parsedWeights,
         threshold: BigInt(parsedThreshold),
         delay: BigInt(parsedDelay) * 86400n,
@@ -304,8 +318,8 @@ const EmailRecoveryScreen: React.FC = () => {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Guardian Configuration</Text>
           <Text style={styles.cardDesc}>
-            Configure guardians and weights for email-based recovery. Use the same guardian
-            addresses that will verify recovery emails.
+            Enter guardian email addresses and weights. The app deterministically derives the
+            on-chain EmailAuth guardian contracts from these emails before installing the module.
           </Text>
 
           <View style={styles.inputRow}>
@@ -335,23 +349,26 @@ const EmailRecoveryScreen: React.FC = () => {
             <Text style={styles.summaryText}>Total weight: {totalGuardianWeight}</Text>
             {hasDuplicateGuardians && (
               <Text style={[styles.summaryText, styles.summaryWarning]}>
-                Duplicate addresses detected
+                Duplicate emails detected
               </Text>
             )}
           </View>
 
-          {guardianAddresses.map((address, index) => (
+          {guardianEmails.map((email, index) => (
             <View key={`guardian-${index}`} style={styles.guardianRow}>
               <View style={styles.guardianColumn}>
-                <Text style={styles.inputLabel}>Guardian {index + 1} Address</Text>
+                <Text style={styles.inputLabel}>Guardian {index + 1} Email</Text>
                 <TextInput
                   style={styles.textInput}
-                  value={address}
-                  onChangeText={(value) => handleAddressChange(index, value)}
-                  placeholder="0x..."
+                  value={email}
+                  onChangeText={(value) => handleGuardianEmailChange(index, value)}
+                  placeholder="guardian@example.com"
                   placeholderTextColor={colors.textMuted}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
                 />
               </View>
               <View style={styles.weightColumn}>
@@ -366,6 +383,17 @@ const EmailRecoveryScreen: React.FC = () => {
               </View>
             </View>
           ))}
+          {derivedGuardians.length > 0 && (
+            <View style={styles.payloadBox}>
+              <Text style={styles.payloadTitle}>Derived Guardian Contracts</Text>
+              {derivedGuardians.map(({ email, guardianAddress }) => (
+                <View key={email} style={styles.payloadRow}>
+                  <Text style={styles.payloadLabel}>{email}</Text>
+                  <Text style={styles.payloadValue}>{shortenHex(guardianAddress)}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.card}>
@@ -626,8 +654,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 14,
       paddingVertical: 12,
       color: colors.textPrimary,
-      fontSize: 13,
-      fontFamily: "monospace",
+      fontSize: 15,
     },
     guardianRow: {
       flexDirection: "row",
