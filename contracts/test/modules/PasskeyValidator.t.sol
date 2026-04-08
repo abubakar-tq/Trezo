@@ -239,19 +239,36 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         );
     }
 
-    function test_validate_user_op_accepts_zero_counter_on_first_use_and_blocks_replay() public {
+    function test_validate_user_op_accepts_zero_counter_on_repeated_use_for_zero_counter_authenticators() public {
         // Arrange
         (UserOpData memory userOpData, bytes memory signature,) = _prepareUserOpSignature(0);
         userOpData.userOp.signature = signature;
 
         // Act
         uint256 firstResult = _callValidateUserOp(userOpData);
-        uint256 replayResult = _callValidateUserOp(userOpData);
+        uint256 secondResult = _callValidateUserOp(userOpData);
 
         // Assert
         uint256 expected = uint256(type(uint48).max) << 160;
         assertEq(firstResult, expected, "zero-start authenticators should validate on first use");
-        assertEq(replayResult, 1, "replaying the same zero counter must fail");
+        assertEq(secondResult, expected, "zero-counter authenticators should remain usable");
+    }
+
+    function test_validate_user_op_rejects_zero_counter_after_positive_counter_initialization() public {
+        // Arrange
+        (UserOpData memory freshUserOp, bytes memory freshSignature,) = _prepareUserOpSignature(1);
+        freshUserOp.userOp.signature = freshSignature;
+        uint256 expected = uint256(type(uint48).max) << 160;
+
+        // Act
+        uint256 firstResult = _callValidateUserOp(freshUserOp);
+        (UserOpData memory zeroCounterUserOp, bytes memory zeroCounterSignature,) = _prepareUserOpSignature(0);
+        zeroCounterUserOp.userOp.signature = zeroCounterSignature;
+        uint256 zeroCounterResult = _callValidateUserOp(zeroCounterUserOp);
+
+        // Assert
+        assertEq(firstResult, expected, "positive counter should validate");
+        assertEq(zeroCounterResult, 1, "falling back to zero after positive initialization must fail");
     }
 
     function test_validate_user_op_fails_for_unknown_passkey() public {

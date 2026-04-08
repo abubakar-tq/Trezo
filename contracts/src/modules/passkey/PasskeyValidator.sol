@@ -28,7 +28,12 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * Passkey public key + monotonic sign counter.
+     * Passkey public key + WebAuthn sign counter state.
+     *
+     * Some authenticators always report a zero signature counter. In that case replay
+     * protection is unavailable and the validator keeps the passkey in "zero-counter mode".
+     * Authenticators that emit a positive counter are still required to increase it
+     * strictly on each successful assertion.
      * Note: bytes32 for px/py is cheaper to store than uint256; cast when calling libs.
      */
     struct PasskeyRecord {
@@ -170,7 +175,8 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      *  - The passkeyId must be registered for `userOp.sender`.
      *  - The signature must verify per WebAuthn over challenge = `userOpHash` (RIP-7212/FCL).
      *  - The first successful assertion initializes the stored WebAuthn sign counter.
-     *  - Subsequent assertions must strictly increase the sign counter.
+     *  - Authenticators that always report zero remain usable in zero-counter mode.
+     *  - Once a positive counter is observed, subsequent assertions must strictly increase it.
      *  - User Verification (UV) is required.
      *
      * Returns packed ValidationData per ERC-4337 conventions. Does not revert on signature
@@ -217,8 +223,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      * ERC-1271 style signature validation bound to a sender.
      * Leverages the same WebAuthn verification as validateUserOp, without state updates.
      * Requires the passkey to be registered. Also enforces the
-     * sign counter to be strictly greater than the stored counter once the passkey
-     * has been used statefully at least once, but does not update it.
+     * sign counter rules used by validateUserOp, but does not update state.
      *
      * Signature encoding is the same as in validateUserOp.
      *
@@ -347,6 +352,8 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
     function _isFreshCounter(PasskeyRecord storage rec, uint32 newCounter) internal view returns (bool) {
         if (!rec.counterInitialized) return true;
+        if (rec.signCounter == 0 && newCounter == 0) return true;
+        if (newCounter == 0) return false;
         return newCounter > rec.signCounter;
     }
 
