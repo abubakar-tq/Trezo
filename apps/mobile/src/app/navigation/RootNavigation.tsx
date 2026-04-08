@@ -8,6 +8,7 @@ import { DeviceVerificationScreen, SplashScreen } from "@features/auth";
 import BrowserSettingsScreen from "@features/profile/screens/BrowserSettingsScreen";
 import BackupRecoveryScreen from "@features/profile/screens/BackupRecoveryScreen";
 import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
+import EmailRecoveryScreen from "@features/profile/screens/EmailRecoveryScreen";
 import ProfileEditScreen from "@features/profile/screens/ProfileEditScreen";
 import ContactListScreen from "@features/contacts/screens/ContactListScreen";
 import AddContactScreen from "@features/contacts/screens/AddContactScreen";
@@ -141,6 +142,14 @@ const RootNavigation = () => {
 						<Stack.Screen 
 							name="GuardianRecovery" 
 							component={GuardianRecoveryScreen}
+							options={{
+								headerShown: false,
+								animation: "slide_from_right",
+							}}
+						/>
+						<Stack.Screen 
+							name="EmailRecovery" 
+							component={EmailRecoveryScreen}
 							options={{
 								headerShown: false,
 								animation: "slide_from_right",

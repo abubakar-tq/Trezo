@@ -13,16 +13,27 @@ export interface ContractAddresses {
   emailRecovery?: string;
 }
 
+type DeploymentContractAddresses = {
+  entryPoint: string;
+  accountFactory: string;
+  proxyFactory?: string;
+  smartAccountImpl?: string;
+  passkeyValidator?: string;
+  emailRecovery?: string;
+};
+
+const anvilDeploymentContracts = anvilDeployment as DeploymentContractAddresses;
+
 /**
  * Contract addresses for local Anvil (read from the shared deployment json)
  */
 export const ANVIL_CONTRACTS: ContractAddresses = {
-  entryPoint: anvilDeployment.entryPoint,
-  accountFactory: anvilDeployment.accountFactory,
-  proxyFactory: anvilDeployment.proxyFactory,
-  accountImplementation: anvilDeployment.smartAccountImpl,
-  passkeyValidator: anvilDeployment.passkeyValidator,
-  emailRecovery: anvilDeployment.emailRecovery,
+  entryPoint: anvilDeploymentContracts.entryPoint,
+  accountFactory: anvilDeploymentContracts.accountFactory,
+  proxyFactory: anvilDeploymentContracts.proxyFactory,
+  accountImplementation: anvilDeploymentContracts.smartAccountImpl,
+  passkeyValidator: anvilDeploymentContracts.passkeyValidator,
+  emailRecovery: anvilDeploymentContracts.emailRecovery,
 };
 
 /**

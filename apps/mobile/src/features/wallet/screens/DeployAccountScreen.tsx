@@ -6,7 +6,7 @@
  * 2. Show deployment cost estimate
  * 3. Check EOA balance (ensure enough for gas)
  * 4. Create passkey with biometric prompt
- * 5. Deploy contract via AccountFactory
+ * 5. Deploy via ERC-4337 bundler + passkey-authenticated UserOperation
  * 6. Show success screen with deployed address
  */
 
@@ -16,6 +16,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
+    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -23,13 +24,13 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { type Hex } from "viem";
 
 import { CHAIN_CONFIG } from "@/src/core/network/chain";
+import { AccountDeploymentService } from "@/src/features/wallet/services/AccountDeploymentService";
+import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { useUserStore } from "@store/useUserStore";
-import { predictAccountAddress, directDeployAccount, getDeployment } from "@/src/integration/viem";
-import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import type { SupportedChainId } from "@/src/integration/chains";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
@@ -51,7 +52,6 @@ export default function DeployAccountScreen() {
   const [currentStep, setCurrentStep] = useState<DeployStep>('intro');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [deployedAddress, setDeployedAddress] = useState<string>('');
-  const [passkeySalt, setPasskeySalt] = useState<Hex | null>(null);
   
   // Check if already deployed
   useEffect(() => {
@@ -79,11 +79,10 @@ export default function DeployAccountScreen() {
 
       // Create passkey (biometric prompt handled inside)
       const passkey = await PasskeyService.createPasskey(user.id);
-      setPasskeySalt(passkey.credentialIdRaw as Hex);
 
       // Predict AA address using passkey salt
-      const chainId = CHAIN_CONFIG.chainId;
-      const predictedAddress = await predictAccountAddress(chainId, passkey.credentialIdRaw as Hex);
+      const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
+      const predictedAddress = await AccountDeploymentService.predictAddress(passkey, chainId);
 
       // Proceed to deployment
       await handleDeploy(passkey, predictedAddress as string);
@@ -99,44 +98,41 @@ export default function DeployAccountScreen() {
     setDeploymentStatus('deploying');
     
     try {
-      const chainId = CHAIN_CONFIG.chainId;
-      const deployment = getDeployment(chainId);
-      if (!deployment?.passkeyValidator) {
-        throw new Error('Passkey validator not configured for this chain');
+      const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
+      if (!user?.id) {
+        throw new Error("User not authenticated");
       }
 
-      const passkeyInit = {
-        idRaw: passkey.credentialIdRaw as Hex,
-        px: BigInt(passkey.publicKeyX),
-        py: BigInt(passkey.publicKeyY),
-      };
-
-      const result = await directDeployAccount({
+      const result = await AccountDeploymentService.deployWithPasskeyAuth(user.id, {
         chainId,
-        salt: passkey.credentialIdRaw as Hex,
-        passkeyInit,
-        validator: deployment.passkeyValidator as `0x${string}`,
+        passkey,
       });
 
-      const deployedAddress = result.accountAddress;
+      const accountAddress = result.accountAddress;
 
       // Update wallet store with deployment info
-      markAsDeployed(result.transactionHash, Number(result.blockNumber));
+      if (!result.alreadyDeployed) {
+        markAsDeployed(result.transactionHash!, Number(result.blockNumber));
+      } else {
+        setDeploymentStatus("deployed");
+      }
       setAAAccount({
         id: user?.id || 'passkey-wallet',
         userId: user?.id || 'passkey-wallet',
-        predictedAddress: deployedAddress,
+        predictedAddress: accountAddress,
         ownerAddress: passkey.credentialIdRaw,
         isDeployed: true,
-        deploymentTxHash: result.transactionHash,
-        deploymentBlockNumber: Number(result.blockNumber),
+        deploymentTxHash: result.alreadyDeployed ? aaAccount?.deploymentTxHash : result.transactionHash,
+        deploymentBlockNumber: result.alreadyDeployed
+          ? aaAccount?.deploymentBlockNumber
+          : Number(result.blockNumber),
         walletName: 'Passkey Smart Account',
         chainId,
         createdAt: new Date().toISOString(),
         deployedAt: new Date().toISOString(),
       });
 
-      setDeployedAddress(deployedAddress);
+      setDeployedAddress(accountAddress);
       setCurrentStep('success');
       
     } catch (error) {
