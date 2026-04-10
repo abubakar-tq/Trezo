@@ -64,6 +64,7 @@ Passkey-first smart contract wallet built on ERC-4337 and ERC-7579-style modules
 ## Recovery Model
 - **SocialRecovery** is fully onchain and guardian-signature based.
 - **EmailRecovery** uses zk-email infra (`Verifier`, `UserOverrideableDKIMRegistry`, `EmailAuth`) plus Trezo's custom recovery executor.
+- **Storage shape** differs by recovery type: social recovery stores raw guardian addresses onchain, while email recovery stores derived guardian `EmailAuth` addresses and keeps raw emails offchain.
 - The repo deploys the custom module itself. The email relayer / prover stack is separate from this repo.
 
 ## Current Milestone
