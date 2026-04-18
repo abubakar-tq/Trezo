@@ -1,21 +1,10 @@
 import { formatEther, JsonRpcProvider, parseEther, Wallet } from "ethers";
 import * as SecureStore from "expo-secure-store";
-import { Platform } from "react-native";
+
+import { getRpcUrl } from "@/src/core/network/chain";
 
 const WALLET_KEY_PREFIX = "trezo_wallet_";
 const MNEMONIC_KEY = "trezo_wallet_mnemonic";
-
-// RPC URLs for Android/iOS
-const getRpcUrl = (chainId: number = 31337): string => {
-  if (chainId === 31337) {
-    // Local Anvil
-    return Platform.OS === "android" 
-      ? "http://10.0.2.2:8545" 
-      : "http://192.168.100.68:8545";
-  }
-  // Add other chains later
-  return "http://10.0.2.2:8545";
-};
 
 export class WalletService {
   private provider: JsonRpcProvider;
@@ -23,7 +12,7 @@ export class WalletService {
 
   constructor(chainId: number = 31337) {
     this.chainId = chainId;
-    const rpcUrl = getRpcUrl(chainId);
+    const rpcUrl = getRpcUrl();
     this.provider = new JsonRpcProvider(rpcUrl);
     console.log(`🔗 [WalletService] Connected to RPC: ${rpcUrl}`);
   }

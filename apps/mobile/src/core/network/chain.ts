@@ -3,18 +3,18 @@ import { Platform } from 'react-native';
 
 /**
  * Chain Configuration for Local Anvil Testnet
- * 
- * IMPORTANT: Update LAPTOP_IP with your actual WiFi IP address
- * Find it with: ipconfig (Windows) or ifconfig (Mac/Linux)
- * Current value should match your network IP
+ *
+ * Dev services run on the development laptop by default. Set
+ * EXPO_PUBLIC_LOCAL_SERVICE_HOST or the per-service EXPO_PUBLIC_ANVIL_* URLs
+ * when the Anvil/bundler/paymaster host changes.
  */
 export const CHAIN_CONFIG = {
   chainId: 31337, // Anvil default
   name: 'Anvil Local Testnet',
-  // Your laptop's WiFi IP address (MUST UPDATE THIS!)
-  // Use the WiFi adapter IP, not VirtualBox/WSL IPs
-  LAPTOP_IP: '192.168.100.68', // ✅ Update when your WiFi IP changes
 };
+
+const DEFAULT_LOCAL_SERVICE_HOST =
+  process.env.EXPO_PUBLIC_LOCAL_SERVICE_HOST?.trim() || '192.168.100.68';
 
 // Detect device/simulator
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -22,30 +22,38 @@ const isPhysicalDevice = Constants.isDevice ?? true;
 const isIOSSimulator = Platform.OS === 'ios' && !isPhysicalDevice;
 const isAndroidEmulator = Platform.OS === 'android' && !isPhysicalDevice;
 
+const getEnvUrl = (value?: string): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const debugLog = (message: string) => {
+  if (__DEV__) {
+    console.log(message);
+  }
+};
+
+const resolveLocalServiceUrl = (
+  configuredUrl: string | undefined,
+  fallbackUrl: string,
+): string => {
+  if (configuredUrl) return configuredUrl;
+  return fallbackUrl;
+};
+
+const buildDefaultServiceUrl = (port: number) => `http://${DEFAULT_LOCAL_SERVICE_HOST}:${port}`;
+
 /**
  * Get RPC URL based on platform and environment
  *
- * Physical devices (dev clients/installed APK/IPA) must hit your laptop IP.
- * Emulator/simulator use their loopback helpers.
+ * Devices, simulators, and emulators use the configured dev host by default.
  */
 export const getRpcUrl = (): string => {
-  // Android emulator
-  if (isAndroidEmulator) {
-    const url = 'http://10.0.2.2:8545';
-    console.log(`🌐 [Chain] RPC URL (Android Emulator): ${url}`);
-    return url;
-  }
-
-  // iOS simulator
-  if (isIOSSimulator) {
-    const url = 'http://localhost:8545';
-    console.log(`🌐 [Chain] RPC URL (iOS Simulator): ${url}`);
-    return url;
-  }
-
-  // Physical device or Expo Go
-  const url = `http://${CHAIN_CONFIG.LAPTOP_IP}:8545`;
-  console.log(`🌐 [Chain] RPC URL (Physical Device): ${url}`);
+  const url = resolveLocalServiceUrl(
+    getEnvUrl(process.env.EXPO_PUBLIC_ANVIL_RPC_URL),
+    buildDefaultServiceUrl(8545),
+  );
+  debugLog(`🌐 [Chain] RPC URL: ${url}`);
   return url;
 };
 
@@ -53,27 +61,32 @@ export const getRpcUrl = (): string => {
  * Get Bundler URL (ERC-4337)
  */
 export const getBundlerUrl = (): string => {
-  if (isAndroidEmulator) return 'http://10.0.2.2:4337';
-  if (isIOSSimulator) return 'http://localhost:4337';
-  return `http://${CHAIN_CONFIG.LAPTOP_IP}:4337`;
+  return resolveLocalServiceUrl(
+    getEnvUrl(process.env.EXPO_PUBLIC_ANVIL_BUNDLER_URL),
+    buildDefaultServiceUrl(4337),
+  );
 };
 
 /**
  * Get Paymaster URL (Gasless transactions)
  */
 export const getPaymasterUrl = (): string => {
-  if (isAndroidEmulator) return 'http://10.0.2.2:3000';
-  if (isIOSSimulator) return 'http://localhost:3000';
-  return `http://${CHAIN_CONFIG.LAPTOP_IP}:3000`;
+  return resolveLocalServiceUrl(
+    getEnvUrl(process.env.EXPO_PUBLIC_ANVIL_PAYMASTER_URL),
+    buildDefaultServiceUrl(3000),
+  );
 };
 
 /**
  * Log current network configuration
  */
 export const logNetworkConfig = () => {
+  if (!__DEV__) return;
   console.log('📡 [Chain Config]', {
     platform: Platform.OS,
     isPhysicalDevice,
+    isAndroidEmulator,
+    isIOSSimulator,
     isExpoGo,
     chainId: CHAIN_CONFIG.chainId,
     rpcUrl: getRpcUrl(),
