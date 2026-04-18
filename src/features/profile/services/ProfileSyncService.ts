@@ -391,12 +391,25 @@ export class ProfileSyncService {
 
       if (error) throw error;
 
-      // Update local store
+      // Update Auth metadata to prevent fallback
+      const { data: authData, error: authError } = await this.supabase.auth.updateUser({
+        data: { avatar_url: null }
+      });
+
+      if (authError) {
+        console.warn(`⚠️  [ProfileSync] Failed to clear user metadata:`, authError);
+      }
+
+      // Update local store explicitly nulling it out
       useUserStore.getState().setProfile({
         ...currentProfile,
         username: currentProfile?.username ?? undefined,
-        avatarUrl: undefined,
+        avatarUrl: null, // explicitly null so it doesn't fall back to auth
       });
+
+      if (authData?.user) {
+        useUserStore.getState().setUser(authData.user);
+      }
 
       console.log(`✅ [ProfileSync] Avatar removed`);
       return true;
