@@ -11,7 +11,7 @@ import {
   type PasskeyInit,
 } from "@/src/integration/viem";
 import { fundEntryPointDeposit } from "@/src/integration/viem/account";
-import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import { PasskeyService as WalletPasskeyService } from "@/src/features/wallet/services/PasskeyService";
 import { useUserStore } from "@store/useUserStore";
 import type { SupportedChainId } from "@/src/integration/chains";
 import type { UserOperation } from "viem/account-abstraction";
@@ -26,6 +26,12 @@ const randomHex = (bytes: number): Hex => {
   // global crypto is available via react-native-get-random-values polyfill
   globalThis.crypto.getRandomValues(arr);
   return ("0x" + Buffer.from(arr).toString("hex")) as Hex;
+};
+
+const debugLog = (...args: unknown[]) => {
+  if (__DEV__) {
+    console.log(...args);
+  }
 };
 
 export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_ID }) => {
@@ -53,7 +59,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
 
   const fetchPasskeyInit = async (): Promise<PasskeyInit> => {
     if (!userId) throw new Error("No authenticated user found. Please sign in first.");
-    const passkey = await PasskeyService.getPasskey(userId);
+    const passkey = await WalletPasskeyService.getPasskey(userId);
     if (!passkey) {
       throw new Error("No passkey found on this device. Create one first.");
     }
@@ -82,11 +88,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
 
       const passkeyInit = await fetchPasskeyInit();
       
-      console.log('[CreateAccountDevCard] PasskeyInit for account creation:', {
-        idRaw: passkeyInit.idRaw,
-        px: passkeyInit.px.toString(16),
-        py: passkeyInit.py.toString(16),
-      });
+      debugLog('[CreateAccountDevCard] PasskeyInit prepared for account creation');
 
       // Predict first so we can optionally prefund before bundler simulation (avoids AA21)
       const predictedSender = await predictAccountAddress(chainId, salt);
@@ -119,22 +121,11 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
       });
 
       // Prompt biometric to sign the userOp hash with the stored passkey
-      const signed = await PasskeyService.signWithPasskey(userId, userOpHash);
+      const signed = await WalletPasskeyService.signWithPasskey(userId, userOpHash);
       
-      console.log('[CreateAccountDevCard] Signature passkeyId:', signed.passkeyId);
-      console.log('[CreateAccountDevCard] Match?', signed.passkeyId === passkeyInit.idRaw);
-      console.log("Signed userOpHash:", signed);
-      console.log('[CreateAccountDevCard] Signature details:', {
-        authenticatorData: signed.authenticatorData.slice(0, 80) + '...',
-        authenticatorDataLength: signed.authenticatorData.length,
-        clientDataJSON: signed.clientDataJSON,
-        challengeIndex: signed.challengeIndex,
-        typeIndex: signed.typeIndex,
-        r: signed.r.slice(0, 20) + '...',
-        s: signed.s.slice(0, 20) + '...',
-      });
+      debugLog('[CreateAccountDevCard] Signature passkey matches account passkey:', signed.passkeyId === passkeyInit.idRaw);
       
-      const encodedSig = PasskeyService.encodeSignatureForContract(signed) as Hex;
+      const encodedSig = WalletPasskeyService.encodeSignatureForContract(signed) as Hex;
 
       const signedUserOp = { ...userOp, signature: encodedSig };
       setSignature(encodedSig);
@@ -170,7 +161,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
       setOpHash(opHash as Hex);
       setStatus("sent");
     } catch (e) {
-      console.log("[CreateAccountDevCard] sendUserOp error object:", e);
+      debugLog("[CreateAccountDevCard] sendUserOp error object:", e);
       setError(e instanceof Error ? e.message : "Failed to send userOp");
       setStatus("error");
     }

@@ -25,6 +25,15 @@ const P256_N =
   0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
 const P256_HALF_N = P256_N / 2n;
 
+const debugLog = (...args: unknown[]) => {
+  if (__DEV__) {
+    console.log(...args);
+  }
+};
+
+const shortValue = (value: string, chars = 12) =>
+  value.length > chars * 2 ? `${value.slice(0, chars)}...${value.slice(-chars)}` : value;
+
 /**
  * Get the Relying Party ID (RP_ID)
  * 
@@ -268,15 +277,14 @@ export class PasskeyService {
       },
     };
     
-    console.log('📝 [PasskeyService] Registration options:', {
+    debugLog('📝 [PasskeyService] Registration options:', {
       rpId,
       platform: Platform.OS,
       userId: userId.slice(0, 8),
       userIdEncoded: userIdBase64Url.slice(0, 20) + '...',
-      challenge: challenge.slice(0, 20) + '...',
     });
     
-    console.log('🔍 [PasskeyService] Full registration options:', JSON.stringify({
+    debugLog('🔍 [PasskeyService] Registration options:', JSON.stringify({
       challenge: challenge.slice(0, 50),
       rp: registrationOptions.rp,
       user: { ...registrationOptions.user, id: registrationOptions.user.id.slice(0, 30) + '...' },
@@ -354,8 +362,7 @@ export class PasskeyService {
     await this.savePasskey(userId, metadata);
     
     console.log('💾 [PasskeyService] Passkey metadata saved to AsyncStorage');
-    console.log('🔑 [PasskeyService] Public Key X:', publicKey.x.slice(0, 20) + '...');
-    console.log('🔑 [PasskeyService] Public Key Y:', publicKey.y.slice(0, 20) + '...');
+    debugLog('🔑 [PasskeyService] Public key metadata created');
     
     return metadata;
   }
@@ -369,7 +376,7 @@ export class PasskeyService {
     userOpHash: string
   ): Promise<PasskeySignature> {
     console.log('✍️ [PasskeyService] Signing with passkey');
-    console.log('📝 [PasskeyService] UserOp hash:', userOpHash);
+    debugLog('📝 [PasskeyService] UserOp hash:', shortValue(userOpHash));
     
     // 1. Get passkey for this device
     const passkey = await this.getPasskey(userId);
@@ -377,7 +384,7 @@ export class PasskeyService {
       throw new Error('No passkey found on this device. Please create a passkey first.');
     }
     
-    console.log('🔑 [PasskeyService] Using passkey:', passkey.credentialId);
+    debugLog('🔑 [PasskeyService] Using passkey:', shortValue(passkey.credentialId));
     
     // 2. Prepare authentication challenge (userOpHash as base64url)
     const challengeBytes = toBytes(userOpHash as `0x${string}`);
@@ -427,8 +434,7 @@ export class PasskeyService {
     const signature = this.parseWebAuthnSignature(authResult.response, passkey.credentialIdRaw);
     
     console.log('✅ [PasskeyService] Signature created');
-    console.log('📝 [PasskeyService] Signature r:', signature.r.slice(0, 20) + '...');
-    console.log('📝 [PasskeyService] Signature s:', signature.s.slice(0, 20) + '...');
+    debugLog('📝 [PasskeyService] Signature parsed');
     
     return signature;
   }
@@ -452,7 +458,7 @@ export class PasskeyService {
       ]
     );
     
-    console.log('📦 [PasskeyService] Encoded signature for contract:', encoded.slice(0, 50) + '...');
+    debugLog('📦 [PasskeyService] Encoded signature for contract:', shortValue(encoded, 16));
     return encoded;
   }
   
@@ -525,7 +531,7 @@ export class PasskeyService {
    */
   private static extractPublicKey(response: any): { x: string; y: string } {
     console.log('📝 [PasskeyService] Extracting public key from response...');
-    console.log('📝 [PasskeyService] Response keys:', Object.keys(response));
+    debugLog('📝 [PasskeyService] Response keys:', Object.keys(response));
     
     try {
       // react-native-passkeys returns the public key in response.publicKey
@@ -538,8 +544,7 @@ export class PasskeyService {
         const parsed = this.normalizePublicKey(publicKeyBytes);
         
         console.log('✅ [PasskeyService] Extracted P-256 coordinates');
-        console.log('🔑 [PasskeyService] X:', parsed.x.slice(0, 20) + '...');
-        console.log('🔑 [PasskeyService] Y:', parsed.y.slice(0, 20) + '...');
+        debugLog('🔑 [PasskeyService] P-256 coordinates extracted');
         
         return parsed;
       }
@@ -554,7 +559,7 @@ export class PasskeyService {
       throw new Error('No public key found in response');
     } catch (error) {
       console.error('❌ [PasskeyService] Failed to extract public key:', error);
-      console.log('📝 [PasskeyService] Full response:', JSON.stringify(response, null, 2));
+      debugLog('📝 [PasskeyService] Public key response keys:', Object.keys(response));
       throw new Error(`Failed to extract public key: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -585,10 +590,10 @@ export class PasskeyService {
         const chunk = coseKey.slice(i + 2, i + 34);
         if (!xCoord) {
           xCoord = chunk;
-          console.log('🔑 [PasskeyService] Found x coordinate at offset', i);
+          debugLog('🔑 [PasskeyService] Found x coordinate at offset', i);
         } else if (!yCoord) {
           yCoord = chunk;
-          console.log('🔑 [PasskeyService] Found y coordinate at offset', i);
+          debugLog('🔑 [PasskeyService] Found y coordinate at offset', i);
           break;
         }
       }
@@ -657,8 +662,8 @@ export class PasskeyService {
    * Parse WebAuthn authentication response into contract signature format
    */
   private static parseWebAuthnSignature(response: any, passkeyIdRaw: string): PasskeySignature {
-    console.log('📝 [PasskeyService] Parsing WebAuthn signature...');
-    console.log('📝 [PasskeyService] Response keys:', Object.keys(response));
+    debugLog('📝 [PasskeyService] Parsing WebAuthn signature');
+    debugLog('📝 [PasskeyService] Response keys:', Object.keys(response));
 
     try {
       // Extract authenticatorData (base64url)
@@ -668,7 +673,7 @@ export class PasskeyService {
       const authenticatorDataBytes = this.base64UrlToUint8Array(response.authenticatorData);
       const authenticatorData = this.uint8ArrayToHex(authenticatorDataBytes);
       
-      console.log('✅ [PasskeyService] Authenticator data length:', authenticatorDataBytes.length);
+      debugLog('✅ [PasskeyService] Authenticator data length:', authenticatorDataBytes.length);
       
       // Extract clientDataJSON (base64url)
       if (!response.clientDataJSON) {
@@ -677,11 +682,11 @@ export class PasskeyService {
       const clientDataBytes = this.base64UrlToUint8Array(response.clientDataJSON);
       const clientDataJSON = new TextDecoder().decode(clientDataBytes);
       
-      console.log('✅ [PasskeyService] Client data JSON:', clientDataJSON);
+      debugLog('✅ [PasskeyService] Client data JSON length:', clientDataJSON.length);
       
       // Parse clientDataJSON to find challenge and type indices
       // Solidity expects: index of '"challenge":"' and '"type":"' patterns (where the key starts)
-      const clientData = JSON.parse(clientDataJSON);
+      JSON.parse(clientDataJSON);
       
       // Find the index of the pattern '"challenge":"' (where "challenge" key starts)
       const challengeIndex = clientDataJSON.indexOf('"challenge"');
@@ -689,10 +694,8 @@ export class PasskeyService {
       // Find the index of the pattern '"type":"' (where "type" key starts)
       const typeIndex = clientDataJSON.indexOf('"type"');
       
-      console.log('📝 [PasskeyService] Challenge index:', challengeIndex);
-      console.log('📝 [PasskeyService] Type index:', typeIndex);
-      console.log('📝 [PasskeyService] Challenge pattern check:', clientDataJSON.substring(challengeIndex, challengeIndex + 25));
-      console.log('📝 [PasskeyService] Type pattern check:', clientDataJSON.substring(typeIndex, typeIndex + 20));
+      debugLog('📝 [PasskeyService] Challenge index:', challengeIndex);
+      debugLog('📝 [PasskeyService] Type index:', typeIndex);
       
       // Extract signature (DER-encoded P-256 signature)
       if (!response.signature) {
@@ -700,13 +703,12 @@ export class PasskeyService {
       }
       const signatureBytes = this.base64UrlToUint8Array(response.signature);
       
-      console.log('✅ [PasskeyService] Signature length:', signatureBytes.length);
+      debugLog('✅ [PasskeyService] Signature length:', signatureBytes.length);
       
       // Parse DER-encoded signature to extract r and s
       const { r, s } = this.parseDERSignature(signatureBytes);
       
-      console.log('✅ [PasskeyService] Signature r:', r.slice(0, 20) + '...');
-      console.log('✅ [PasskeyService] Signature s:', s.slice(0, 20) + '...');
+      debugLog('✅ [PasskeyService] Signature components parsed');
       
       return {
         passkeyId: passkeyIdRaw,
@@ -719,7 +721,7 @@ export class PasskeyService {
       };
     } catch (error) {
       console.error('❌ [PasskeyService] Failed to parse signature:', error);
-      console.log('📝 [PasskeyService] Full response:', JSON.stringify(response, null, 2));
+      debugLog('📝 [PasskeyService] Signature response keys:', Object.keys(response));
       throw new Error(`Failed to parse signature: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -739,7 +741,7 @@ export class PasskeyService {
    * DER format: 0x30 [total-length] 0x02 [r-length] [r] 0x02 [s-length] [s]
    */
   private static parseDERSignature(der: Uint8Array): { r: string; s: string } {
-    console.log('📝 [PasskeyService] Parsing DER signature, length:', der.length);
+    debugLog('📝 [PasskeyService] Parsing DER signature, length:', der.length);
     
     if (der[0] !== 0x30) {
       throw new Error('Invalid DER signature: missing sequence marker');

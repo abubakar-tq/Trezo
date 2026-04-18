@@ -7,7 +7,6 @@ import {
   decodeAbiParameters,
   type Address,
   type Hex,
-  type Transport,
   createClient,
 } from "viem";
 import {
@@ -39,6 +38,20 @@ const SMART_ACCOUNT_MIN_VERIFICATION_GAS = 500_000n;
 const DELEGATE_AND_REVERT_SELECTOR = "0x99410554";
 const FAILED_OP_SELECTOR = "0x220266b6";
 const VALIDATIONDATA_ALL_TIME_VALID_SENTINEL = "000000000000ffffffffffff0000000000000000000000000000000000000000";
+
+const debugLog = (...args: unknown[]) => {
+  if (__DEV__) {
+    console.log(...args);
+  }
+};
+
+const logRpcError = (label: string, err: unknown, context?: Record<string, unknown>) => {
+  if (__DEV__) {
+    console.error(label, context ? { ...context, error: err } : err);
+    return;
+  }
+  console.error(label, err instanceof Error ? err.message : String(err));
+};
 
 // ------------ Error decoding helpers (for bundler delegateAndRevert) -------------
 const asHex = (v: any): Hex | undefined =>
@@ -403,7 +416,7 @@ const finalizeUserOpBuild = async ({
     entryPointVersion: ENTRY_POINT_VERSION,
     chainId,
   });
-  console.log(`[${operationLabel}] provisional userOpHash:`, provisionalHash);
+  debugLog(`[${operationLabel}] provisional userOpHash:`, provisionalHash);
 
   let gas: BundlerGasEstimate;
   try {
@@ -412,7 +425,7 @@ const finalizeUserOpBuild = async ({
       params: [serializeUserOp(userOpForEstimation), entryPoint],
     }) as BundlerGasEstimate;
   } catch (err) {
-    console.error(`[${operationLabel}] eth_estimateUserOperationGas failed`, err);
+    logRpcError(`[${operationLabel}] eth_estimateUserOperationGas failed`, err);
     throw err;
   }
 
@@ -463,7 +476,7 @@ const finalizeUserOpBuild = async ({
     entryPointVersion: ENTRY_POINT_VERSION,
     chainId,
   });
-  console.log(`[${operationLabel}] userOpHash (post-estimate):`, userOpHash);
+  debugLog(`[${operationLabel}] userOpHash (post-estimate):`, userOpHash);
 
   return { userOp: withGas, userOpHash };
 };
@@ -594,7 +607,7 @@ const buildSmartAccountExecuteUserOp = async ({
     entryPointVersion: ENTRY_POINT_VERSION,
     chainId,
   });
-  console.log(`[${operationLabel}] userOpHash (post-paymaster):`, userOpHash);
+  debugLog(`[${operationLabel}] userOpHash (post-paymaster):`, userOpHash);
 
   return { userOp: refreshedUserOp, userOpHash };
 };
@@ -721,7 +734,7 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
   const deployment = getDeployment(params.chainId);
   if (!deployment) throw new Error(`No deployment found for chain ${params.chainId}`);
 
-  console.log("Deployment : ", deployment);
+  debugLog("Deployment : ", deployment);
 
   // Defensive checks for passkey struct to avoid encode errors
   if (!params.passkeyInit) {
@@ -743,7 +756,7 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
   const accountFactory = deployment.accountFactory as Hex;
   const validator = params.validator as Hex;
 
-  console.log("[buildCreateAccountUserOp] Validated addresses:", {
+  debugLog("[buildCreateAccountUserOp] Validated addresses:", {
     entryPoint,
     accountFactory,
     validator,
@@ -751,37 +764,35 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
 
   const sender = await predictAccountAddress(params.chainId, params.salt);
 
-  console.log("[buildCreateAccountUserOp] Predicted sender address:", sender);
+  debugLog("[buildCreateAccountUserOp] Predicted sender address:", sender);
 
   let initCode: Hex;
   try {
     initCode = buildInitCode(accountFactory, params);
   } catch (err) {
-    console.error("[buildCreateAccountUserOp] buildInitCode failed", {
+    logRpcError("[buildCreateAccountUserOp] buildInitCode failed", err, {
       accountFactory,
       salt: params.salt,
       validator,
-      passkeyInit: params.passkeyInit,
-      error: err,
     });
     throw err;
   }
 
-  console.log("[buildCreateAccountUserOp] initCode built:", initCode);
+  debugLog("[buildCreateAccountUserOp] initCode built:", `${initCode.slice(0, 66)}...`);
 
   // For v0.7, extract factory and factoryData from initCode
   // initCode format: factory (20 bytes) + factoryData (remaining bytes)
   const factory = ("0x" + initCode.slice(2, 42)) as Hex;
   const factoryData = ("0x" + initCode.slice(42)) as Hex;
 
-  console.log("[buildCreateAccountUserOp] Extracted factory and factoryData:", {
+  debugLog("[buildCreateAccountUserOp] Extracted factory and factoryData:", {
     factory,
     factoryData: factoryData.slice(0, 66) + "...", // truncate for logging
   });
 
   // Build a properly formatted dummy signature for gas estimation
   const dummySignature = buildDummyPasskeySignature(params.passkeyInit.idRaw);
-  console.log("[buildCreateAccountUserOp] Dummy signature length:", dummySignature.length);
+  debugLog("[buildCreateAccountUserOp] Dummy signature length:", dummySignature.length);
 
   const userOp: UserOperation<typeof ENTRY_POINT_VERSION> = {
     sender,
@@ -810,7 +821,7 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
 
   // Optional paymaster sponsorship - call before gas estimation
   if (params.usePaymaster && params.paymasterUrl) {
-    console.log("[buildCreateAccountUserOp] Requesting paymaster sponsorship...", {
+    debugLog("[buildCreateAccountUserOp] Requesting paymaster sponsorship...", {
       paymasterUrl: params.paymasterUrl,
     });
     userOpForEstimation = await maybeSponsorUserOp({
@@ -824,7 +835,7 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
   }
 
   // Log critical values before getUserOperationHash
-  console.log("[buildCreateAccountUserOp] About to compute provisional hash with:", {
+  debugLog("[buildCreateAccountUserOp] About to compute provisional hash with:", {
     entryPoint: entryPoint,
     chainId: params.chainId,
     sender: userOpForEstimation.sender,
@@ -839,13 +850,11 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
       entryPointVersion: ENTRY_POINT_VERSION,
       chainId: params.chainId,
     });
-    console.log("[buildCreateAccountUserOp] provisional userOpHash (pre-estimate):", provisionalHash);
+    debugLog("[buildCreateAccountUserOp] provisional userOpHash (pre-estimate):", provisionalHash);
   } catch (err) {
-    console.error("[buildCreateAccountUserOp] getUserOperationHash failed", {
+    logRpcError("[buildCreateAccountUserOp] getUserOperationHash failed", err, {
       entryPoint: entryPoint,
       chainId: params.chainId,
-      userOp: userOpForEstimation,
-      error: err,
     });
     throw err;
   }
@@ -857,11 +866,9 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
       params: [serializeUserOp(userOpForEstimation), entryPoint],
     }) as BundlerGasEstimate;
   } catch (err) {
-    console.error("[buildCreateAccountUserOp] eth_estimateUserOperationGas failed", {
+    logRpcError("[buildCreateAccountUserOp] eth_estimateUserOperationGas failed", err, {
       bundlerUrl: params.bundlerUrl,
       entryPoint: entryPoint,
-      userOp: serializeUserOp(userOpForEstimation),
-      error: err,
     });
     throw err;
   }
@@ -908,7 +915,7 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
     chainId: params.chainId,
   });
 
-  console.log("[buildCreateAccountUserOp] userOpHash (post-paymaster):", userOpHash);
+  debugLog("[buildCreateAccountUserOp] userOpHash (post-paymaster):", userOpHash);
 
   return { userOp: refreshedUserOp, userOpHash, sender };
 }
@@ -1125,12 +1132,9 @@ export async function sendUserOp(
       }
     }
 
-    console.error("[sendUserOp] eth_sendUserOperation failed", {
+    logRpcError("[sendUserOp] eth_sendUserOperation failed", err, {
       bundlerUrl,
       entryPoint,
-      signedUserOp: serializeUserOp(signedUserOp),
-      error: err,
-      rawData,
       decoded,
     });
 

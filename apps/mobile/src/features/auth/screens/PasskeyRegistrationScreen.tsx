@@ -1,50 +1,49 @@
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { SigninIcon } from '@/assets/components'; // Using SigninIcon as placeholder
-import { PasskeyService } from '@/src/core/auth/passkeys';
-import { AuthStackParamList } from '@/src/types/navigation';
+import { PasskeyService as WalletPasskeyService } from '@/src/features/wallet/services/PasskeyService';
 import { AuthGradientButton, AuthScaffold } from '@features/auth/components';
+import { useUserStore } from '@store/useUserStore';
 import { useAppTheme } from '@theme';
 
-type NavigationProp = NativeStackNavigationProp<AuthStackParamList, 'PasskeyRegistration'>;
-
 const PasskeyRegistrationScreen = () => {
-  const navigation = useNavigation<NavigationProp>();
   const { theme } = useAppTheme();
+  const user = useUserStore((state) => state.user);
   const [loading, setLoading] = useState(false);
   const [passkeySupported, setPasskeySupported] = useState<boolean | null>(null);
 
   // Check passkey support on mount
   React.useEffect(() => {
-    PasskeyService.isSupported().then(setPasskeySupported);
+    WalletPasskeyService.checkBiometricCapabilities()
+      .then((capabilities) => setPasskeySupported(capabilities.hasHardware && capabilities.isEnrolled))
+      .catch(() => setPasskeySupported(false));
   }, []);
 
   const handleCreatePasskey = async () => {
     setLoading(true);
     try {
-      const isSupported = await PasskeyService.isSupported();
-      if (!isSupported) {
+      const capabilities = await WalletPasskeyService.checkBiometricCapabilities();
+      if (!capabilities.hasHardware || !capabilities.isEnrolled) {
         Alert.alert(
           'Not Available', 
-          'Passkeys require a development build. You can skip this step and test other features.',
+          'Passkeys require a development build and device credential support. You can skip this step and test other features.',
           [{ text: 'OK' }]
         );
         return;
       }
 
-      const username = 'user@example.com'; 
+      const userId = user?.id ?? user?.email;
+      if (!userId) {
+        Alert.alert('Sign in required', 'Please sign in before creating a passkey.', [{ text: 'OK' }]);
+        return;
+      }
       
-      await PasskeyService.register(username);
+      await WalletPasskeyService.createPasskey(userId);
       
       Alert.alert('Success', 'Passkey created successfully!', [
         { 
-          text: 'Continue', 
-          onPress: () => {
-            console.log('Navigate to next step');
-          } 
+          text: 'Continue'
         }
       ]);
     } catch (error: any) {
@@ -55,7 +54,7 @@ const PasskeyRegistrationScreen = () => {
   };
 
   const handleSkip = () => {
-    console.log('Skipped Passkey');
+    Alert.alert('Passkey skipped', 'You can create a passkey later from your wallet settings.', [{ text: 'OK' }]);
   };
 
   return (
@@ -69,13 +68,12 @@ const PasskeyRegistrationScreen = () => {
           {passkeySupported === false && (
             <View style={[styles.warningBox, { backgroundColor: theme.colors.warning + '20', borderColor: theme.colors.warning }]}>
               <Text style={[styles.warningText, { color: theme.colors.warning }]}>
-                ⚠️ Running in Expo Go - Passkeys unavailable. Use "Skip" to test other features.
+                {'Running in Expo Go - Passkeys unavailable. Use "Skip" to test other features.'}
               </Text>
             </View>
           )}
           <Text style={[styles.infoText, { color: theme.colors.textSecondary }]}>
-            Passkeys use your device's biometrics (FaceID/TouchID) to secure your account. 
-            They are safer than passwords and cannot be phished.
+            {"Passkeys use your device's biometrics (FaceID/TouchID) to secure your account. They are safer than passwords and cannot be phished."}
           </Text>
         </View>
 

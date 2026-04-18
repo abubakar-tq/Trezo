@@ -9,6 +9,7 @@ import {
   isExecutorModuleInstalled,
   submitConfiguredUserOp,
 } from "@/src/integration/viem";
+import * as SecureStore from "expo-secure-store";
 import { keccak256, stringToHex, type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
 
@@ -50,7 +51,19 @@ export type DerivedGuardianAddress = {
   guardianAddress: Address;
 };
 
+export type EmailRecoveryTemplate = {
+  guardianEmails: string[];
+  guardianWeights: number[];
+  threshold: number;
+  delayDays: number;
+  expiryDays: number;
+  updatedAt: string;
+};
+
 const normalizeGuardianEmail = (email: string) => email.trim().toLowerCase();
+
+const templateStorageKey = (userId: string, smartAccountAddress: Address) =>
+  `trezo_email_recovery_template:${userId}:${smartAccountAddress.toLowerCase()}`;
 
 export class EmailRecoveryService {
   static normalizeGuardianEmail(email: string): string {
@@ -94,6 +107,53 @@ export class EmailRecoveryService {
         } satisfies DerivedGuardianAddress;
       }),
     );
+  }
+
+  static async saveTemplate(
+    userId: string,
+    smartAccountAddress: Address,
+    template: Omit<EmailRecoveryTemplate, "updatedAt">,
+  ): Promise<void> {
+    const normalizedEmails = template.guardianEmails.map((email) => normalizeGuardianEmail(email)).filter(Boolean);
+    const payload: EmailRecoveryTemplate = {
+      ...template,
+      guardianEmails: normalizedEmails,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await SecureStore.setItemAsync(templateStorageKey(userId, smartAccountAddress), JSON.stringify(payload), {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+  }
+
+  static async loadTemplate(
+    userId: string,
+    smartAccountAddress: Address,
+  ): Promise<EmailRecoveryTemplate | null> {
+    const raw = await SecureStore.getItemAsync(templateStorageKey(userId, smartAccountAddress));
+    if (!raw) return null;
+
+    try {
+      const parsed = JSON.parse(raw) as EmailRecoveryTemplate;
+      if (!Array.isArray(parsed.guardianEmails) || !Array.isArray(parsed.guardianWeights)) return null;
+      if (
+        typeof parsed.threshold !== "number" ||
+        typeof parsed.delayDays !== "number" ||
+        typeof parsed.expiryDays !== "number"
+      ) {
+        return null;
+      }
+      return {
+        ...parsed,
+        guardianEmails: parsed.guardianEmails.map((e) => normalizeGuardianEmail(e)).filter(Boolean),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  static async clearTemplate(userId: string, smartAccountAddress: Address): Promise<void> {
+    await SecureStore.deleteItemAsync(templateStorageKey(userId, smartAccountAddress));
   }
 
   static encodeInitData(

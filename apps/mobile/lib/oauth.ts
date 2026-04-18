@@ -28,8 +28,7 @@ const redirectTo = isExpoGo
     });
 const webReturnUrl = redirectTo;
 // Optional: quick runtime check in development to ensure redirect isn't problematic
-if (__DEV__ && (redirectTo.includes("192.168.100.68:3000") || redirectTo.includes("auth.expo.io"))) {
-  // eslint-disable-next-line no-console
+if (__DEV__ && (redirectTo.includes("localhost:3000") || redirectTo.includes("auth.expo.io"))) {
   console.warn(
     `⚠️  Auth redirect using problematic URL (${redirectTo}). This may cause "Something went wrong" errors. Expected: exp://... or trezowallet://...`,
   );
@@ -38,11 +37,8 @@ if (__DEV__ && (redirectTo.includes("192.168.100.68:3000") || redirectTo.include
 export const authRedirectUri = redirectTo;
 // Dev helper: see the exact redirect URI to add in Supabase Redirect URLs
 if (__DEV__) {
-  // eslint-disable-next-line no-console
   console.log("🔐 [OAuth] redirectTo:", redirectTo);
-  // eslint-disable-next-line no-console
   console.log("📱 [OAuth] isExpoGo:", isExpoGo);
-  // eslint-disable-next-line no-console
   console.log("🏗️  [OAuth] appOwnership:", Constants.appOwnership);
 }
 
@@ -97,7 +93,6 @@ export const startSupabaseOAuth = async (
   });
 
   if (__DEV__) {
-    // eslint-disable-next-line no-console
     console.log("[OAuth] supabase auth url:", data?.url);
   }
 
