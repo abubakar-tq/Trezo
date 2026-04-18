@@ -6,7 +6,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 export type Profile = {
 	username?: string;
-	avatarUrl?: string;
+	avatarUrl?: string | null;
 };
 
 type UserStore = {

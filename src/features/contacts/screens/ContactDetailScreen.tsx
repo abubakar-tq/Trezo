@@ -161,7 +161,8 @@ const ContactDetailScreen: React.FC = () => {
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >        <View style={{ flex: 1 }}>
+      >
+        <View style={{ flex: 1 }}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>

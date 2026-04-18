@@ -268,8 +268,7 @@ export class ProfileSyncService {
         }
       }
 
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
+      const filePath = `avatars/${userId}`;
 
       console.log(`📤 [ProfileSync] Uploading to: ${filePath}`);
       console.log(`📊 [ProfileSync] File size: ${arrayBuffer.byteLength} bytes`);
@@ -318,9 +317,11 @@ export class ProfileSyncService {
       }
 
       // Get public URL
-      const { data: { publicUrl } } = this.supabase.storage
+      const { data: { publicUrl: rawPublicUrl } } = this.supabase.storage
         .from('profiles')
         .getPublicUrl(filePath);
+
+      const publicUrl = rawPublicUrl + "?t=" + Date.now();
 
       console.log(`✅ [ProfileSync] File uploaded, URL: ${publicUrl}`);
 
@@ -366,24 +367,15 @@ export class ProfileSyncService {
     
     try {
       const currentProfile = useUserStore.getState().profile;
-      const avatarUrl = currentProfile?.avatarUrl;
+      const filePath = `avatars/${userId}`;
+      
+      // Delete from storage
+      const { error: deleteError } = await this.supabase.storage
+        .from('profiles')
+        .remove([filePath]);
 
-      if (avatarUrl) {
-        // Extract file path from URL
-        const urlParts = avatarUrl.split('/');
-        const bucketIndex = urlParts.findIndex(part => part === 'profiles');
-        if (bucketIndex !== -1 && bucketIndex < urlParts.length - 1) {
-          const filePath = urlParts.slice(bucketIndex + 1).join('/');
-          
-          // Delete from storage
-          const { error: deleteError } = await this.supabase.storage
-            .from('profiles')
-            .remove([filePath]);
-
-          if (deleteError) {
-            console.warn(`⚠️  [ProfileSync] Failed to delete file from storage:`, deleteError);
-          }
-        }
+      if (deleteError) {
+        console.warn(`⚠️  [ProfileSync] Failed to delete file from storage:`, deleteError);
       }
 
       // Update profile to remove avatar_url
@@ -402,6 +394,7 @@ export class ProfileSyncService {
       // Update local store
       useUserStore.getState().setProfile({
         ...currentProfile,
+        username: currentProfile?.username ?? undefined,
         avatarUrl: undefined,
       });
 

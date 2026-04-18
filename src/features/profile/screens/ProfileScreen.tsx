@@ -76,6 +76,11 @@ const ProfileScreen: React.FC = () => {
     user?.email?.split("@")[0]?.replace(/[^a-zA-Z0-9]/g, " ") ??
     "Explorer";
 
+  const avatarUri =
+    profile !== null
+      ? (profile?.avatarUrl ?? null)
+      : ((user?.user_metadata?.avatar_url as string | undefined) ?? null);
+
   const handleToggleTheme = useCallback(() => {
     setMode(resolvedMode === "dark" ? "light" : "dark");
   }, [resolvedMode, setMode]);
@@ -129,15 +134,7 @@ const ProfileScreen: React.FC = () => {
                 onPress={() => navigation.navigate("ProfileEdit")}
                 activeOpacity={0.85}
               >
-                <Avatar
-                  size={72}
-                  uri={
-                    profile?.avatarUrl ??
-                    (user?.user_metadata?.avatar_url as string | undefined) ??
-                    null
-                  }
-                  label={displayName}
-                />
+                <Avatar size={72} uri={avatarUri} label={displayName} />
               </TouchableOpacity>
               <View style={styles.heroInfo}>
                 <TouchableOpacity

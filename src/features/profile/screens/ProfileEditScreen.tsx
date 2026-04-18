@@ -30,12 +30,14 @@ const ProfileEditScreen: React.FC = () => {
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const { user, profile, setProfile } = useUserStore();
+  const { user, profile } = useUserStore();
+  const baselineAvatarUrl =
+    profile !== null
+      ? (profile?.avatarUrl ?? null)
+      : ((user?.user_metadata?.avatar_url as string | undefined) ?? null);
 
   const [username, setUsername] = useState(profile?.username || "");
-  const [avatarUri, setAvatarUri] = useState<string | null>(
-    profile?.avatarUrl || null,
-  );
+  const [avatarUri, setAvatarUri] = useState<string | null>(baselineAvatarUrl);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -97,12 +99,17 @@ const ProfileEditScreen: React.FC = () => {
       });
 
       // Basic client-side validation - allow anything that starts with image/
-      const mimeType = asset.mimeType || (asset as any).type;
+      const mimeType = asset.mimeType;
+      const type = asset.type;
+
       if (mimeType && !mimeType.startsWith("image/")) {
         showAlert(
           "Invalid File Type",
           `File type "${mimeType}" is not supported. Please select an image.`,
         );
+        return;
+      } else if (!mimeType && type && type !== "image") {
+        showAlert("Invalid File Type", "Please select a valid image.");
         return;
       }
 
@@ -144,28 +151,18 @@ const ProfileEditScreen: React.FC = () => {
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
 
-      // Basic client-side validation - comprehensive image support
-      const allowedTypes = [
-        "image/jpeg",
-        "image/jpg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-        "image/heic",
-        "image/heif",
-        "image/bmp",
-        "image/tiff",
-        "image/svg+xml",
-        "image/x-icon",
-        "image/vnd.microsoft.icon",
-        "image/vnd.adobe.photoshop",
-        "image/x-photoshop",
-      ];
-      if (asset.type && !allowedTypes.includes(asset.type)) {
+      // Basic client-side validation - allow anything that starts with image/
+      const mimeType = asset.mimeType;
+      const type = asset.type;
+
+      if (mimeType && !mimeType.startsWith("image/")) {
         showAlert(
           "Invalid File Type",
-          "Please capture a valid image (JPEG, PNG, GIF, WebP, HEIC, BMP, TIFF, SVG, ICO, PSD).",
+          `File type "${mimeType}" is not supported. Please capture an image.`,
         );
+        return;
+      } else if (!mimeType && type && type !== "image") {
+        showAlert("Invalid File Type", "Please capture a valid image.");
         return;
       }
 
@@ -190,18 +187,74 @@ const ProfileEditScreen: React.FC = () => {
       "Remove Profile Picture",
       "Are you sure you want to remove your profile picture?",
       [
-        { text: "Cancel", style: "cancel", onPress: () => {} },
+        { text: "Cancel", style: "cancel", onPress: dismissAlert },
         {
           text: "Remove",
           style: "destructive",
-          onPress: () => {
-            setAvatarUri(null);
-            setHasChanges(true);
+          onPress: async () => {
+            if (!user?.id) {
+              dismissAlert();
+              showAlert("Error", "User not authenticated");
+              return;
+            }
+
+            // If no persisted avatar exists, only clear local preview state.
+            if (!baselineAvatarUrl) {
+              dismissAlert();
+              setAvatarUri(null);
+              setHasChanges(username.trim() !== (profile?.username || ""));
+              return;
+            }
+
+            try {
+              setIsSaving(true);
+              setIsUploading(true);
+
+              const success = await ProfileSyncService.removeAvatar(user.id);
+
+              // Dismiss the confirmation alert
+              dismissAlert();
+
+              if (!success) {
+                showAlert(
+                  "Error",
+                  "Failed to remove avatar from database. Please try again.",
+                );
+                setIsSaving(false);
+                setIsUploading(false);
+                return;
+              }
+
+              // Success: stay on the screen but clear local state
+              setAvatarUri(null);
+              setHasChanges(username.trim() !== (profile?.username || ""));
+              setIsSaving(false);
+              setIsUploading(false);
+
+              // No need to go back, the UI will reflect the removed avatar
+            } catch (error) {
+              console.error("Failed to remove avatar:", error);
+              dismissAlert();
+              showAlert(
+                "Error",
+                `Failed to remove avatar: ${error instanceof Error ? error.message : "Unknown error"}`,
+              );
+              setIsSaving(false);
+              setIsUploading(false);
+            }
           },
         },
       ],
     );
-  }, []);
+  }, [
+    baselineAvatarUrl,
+    profile?.username,
+    showAlert,
+    dismissAlert,
+    user?.id,
+    username,
+    navigation,
+  ]);
 
   const showImageOptions = useCallback(() => {
     const options: ThemedAlertButton[] = [
@@ -253,7 +306,7 @@ const ProfileEditScreen: React.FC = () => {
       }
 
       // Handle avatar changes
-      const currentAvatarUrl = profile?.avatarUrl || null;
+      const currentAvatarUrl = baselineAvatarUrl;
       const isNewAvatar = avatarUri && avatarUri !== currentAvatarUrl;
       const isRemovedAvatar = !avatarUri && currentAvatarUrl;
 
@@ -310,7 +363,7 @@ const ProfileEditScreen: React.FC = () => {
       setIsSaving(false);
       setIsUploading(false);
     }
-  }, [user?.id, username, avatarUri, profile, navigation]);
+  }, [user?.id, username, avatarUri, baselineAvatarUrl, profile, navigation]);
 
   return (
     <View style={styles.container}>
@@ -367,7 +420,7 @@ const ProfileEditScreen: React.FC = () => {
           {isUploading && (
             <View style={styles.uploadingIndicator}>
               <ActivityIndicator size="small" color={colors.accentAlt} />
-              <Text style={styles.uploadingText}>Uploading...</Text>
+              <Text style={styles.uploadingText}>Updating...</Text>
             </View>
           )}
         </View>

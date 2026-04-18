@@ -1,18 +1,18 @@
-import * as Crypto from "expo-crypto";
-import * as SecureStore from "expo-secure-store";
-import { decode as atob, encode as btoa } from "base64-arraybuffer";
+import { getSupabaseClient } from "@/lib/supabase";
 import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import {
-  ABIS,
-  buildInstallRecoveryModuleUserOp,
-  encodeEmailRecoveryInitData,
-  getPublicClient,
-  getDeployment,
-  isExecutorModuleInstalled,
-  submitConfiguredUserOp,
+    ABIS,
+    buildInstallRecoveryModuleUserOp,
+    encodeEmailRecoveryInitData,
+    getDeployment,
+    getPublicClient,
+    isExecutorModuleInstalled,
+    submitConfiguredUserOp,
 } from "@/src/integration/viem";
-import { getSupabaseClient } from "@/lib/supabase";
+import { decode as atob, encode as btoa } from "base64-arraybuffer";
+import * as Crypto from "expo-crypto";
+import * as SecureStore from "expo-secure-store";
 import { keccak256, stringToHex, type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
 
@@ -55,6 +55,7 @@ export type DerivedGuardianAddress = {
 };
 
 export type EmailRecoveryInstallStatus = "not_installed" | "pending" | "installed" | "failed";
+export type EmailRecoverySecurityMode = "none" | "extra";
 
 export type PersistEmailRecoveryMetadataRequest = {
   userId: string;
@@ -65,6 +66,7 @@ export type PersistEmailRecoveryMetadataRequest = {
   threshold: number | bigint;
   delaySeconds: number | bigint;
   expirySeconds: number | bigint;
+  securityMode?: EmailRecoverySecurityMode;
   installStatus: EmailRecoveryInstallStatus;
   installUserOpHash?: Hex;
   installedAt?: string;
@@ -75,15 +77,19 @@ export type EmailRecoveryConfigView = {
   threshold: number;
   delaySeconds: number;
   expirySeconds: number;
+  securityMode: EmailRecoverySecurityMode;
   createdAt: string;
   updatedAt: string;
 };
 
 export type EmailRecoveryGuardianView = {
   emailHash: Hex;
+  normalizedEmailEncrypted: string;
   maskedEmail: string;
   displayLabel: string | null;
   weight: number;
+  resolvedEmail: string | null;
+  isLocked: boolean;
 };
 
 export type EmailRecoveryChainInstallView = {
@@ -95,7 +101,7 @@ export type EmailRecoveryChainInstallView = {
 };
 
 export type LoadEmailRecoveryMetadataRequest = {
-  userId: string;
+  userId?: string;
   smartAccountAddress: Address;
 };
 
@@ -107,6 +113,25 @@ export type LoadedEmailRecoveryMetadata = {
 
 const normalizeGuardianEmail = (email: string) => email.trim().toLowerCase();
 const RECOVERY_VAULT_KEY_PREFIX = "trezo_recovery_vault_";
+const PLAINTEXT_PREFIX = "plain-v1:";
+
+const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
+  const copy = new Uint8Array(bytes.length);
+  copy.set(bytes);
+  return copy.buffer;
+};
+
+const hasSubtleCrypto = (): boolean => {
+  return typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.subtle !== "undefined";
+};
+
+const xorWithKey = (input: Uint8Array, keyMaterial: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(input.length);
+  for (let i = 0; i < input.length; i += 1) {
+    out[i] = input[i] ^ keyMaterial[i % keyMaterial.length];
+  }
+  return out;
+};
 
 export class EmailRecoveryService {
   private static supabase = getSupabaseClient();
@@ -145,8 +170,40 @@ export class EmailRecoveryService {
     }
 
     const newKey = await Crypto.getRandomBytesAsync(32);
-    await SecureStore.setItemAsync(keyName, btoa(newKey.buffer));
+    await SecureStore.setItemAsync(keyName, btoa(toArrayBuffer(newKey)));
     return newKey;
+  }
+
+  static async getVaultKeyBase64(smartAccountAddress: Address): Promise<string | null> {
+    const keyName = `${RECOVERY_VAULT_KEY_PREFIX}${smartAccountAddress.toLowerCase()}`;
+    return await SecureStore.getItemAsync(keyName);
+  }
+
+  static async hasVaultKey(smartAccountAddress: Address): Promise<boolean> {
+    const key = await this.getVaultKeyBase64(smartAccountAddress);
+    return Boolean(key);
+  }
+
+  static async importVaultKeyBase64(
+    smartAccountAddress: Address,
+    vaultKeyBase64: string,
+  ): Promise<void> {
+    const trimmed = vaultKeyBase64.trim();
+    if (!trimmed) throw new Error("Vault key is required.");
+
+    let decoded: Uint8Array;
+    try {
+      decoded = new Uint8Array(atob(trimmed));
+    } catch {
+      throw new Error("Vault key format is invalid.");
+    }
+
+    if (decoded.length !== 32) {
+      throw new Error("Vault key must decode to 32 bytes.");
+    }
+
+    const keyName = `${RECOVERY_VAULT_KEY_PREFIX}${smartAccountAddress.toLowerCase()}`;
+    await SecureStore.setItemAsync(keyName, trimmed);
   }
 
   /**
@@ -156,19 +213,32 @@ export class EmailRecoveryService {
   private static async encryptEmailForStorage(
     normalizedEmail: string,
     smartAccountAddress: Address,
+    securityMode: EmailRecoverySecurityMode,
   ): Promise<string> {
+    if (securityMode === "none") {
+      return `${PLAINTEXT_PREFIX}${normalizedEmail}`;
+    }
+
     const key = await this.getOrCreateVaultKey(smartAccountAddress);
     const iv = await Crypto.getRandomBytesAsync(12);
     const data = new TextEncoder().encode(normalizedEmail);
+
+    if (!hasSubtleCrypto()) {
+      const keyMaterial = new Uint8Array(key.length + iv.length);
+      keyMaterial.set(key, 0);
+      keyMaterial.set(iv, key.length);
+      const obfuscated = xorWithKey(data, keyMaterial);
+      return `xor-v1:${btoa(toArrayBuffer(iv))}:${btoa(toArrayBuffer(obfuscated))}`;
+    }
 
     // Using expo-crypto to perform encryption
     // Note: older versions of expo-crypto didn't support AES-GCM directly in a broad way,
     // but modern standard WebCrypto API is available in most environments or via polyfills.
     // For this implementation, we assume a standard WebCrypto compatible environment provided by Expo/React Native.
-    const cryptoKey = await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["encrypt"]);
-    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, cryptoKey, data);
+    const cryptoKey = await crypto.subtle.importKey("raw", toArrayBuffer(key), "AES-GCM", false, ["encrypt"]);
+    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: toArrayBuffer(iv) }, cryptoKey, toArrayBuffer(data));
 
-    const ivB64 = btoa(iv.buffer);
+    const ivB64 = btoa(toArrayBuffer(iv));
     const cipherB64 = btoa(ciphertext);
 
     return `aes-gcm-v1:${ivB64}:${cipherB64}`;
@@ -181,7 +251,13 @@ export class EmailRecoveryService {
     encryptedPayload: string,
     smartAccountAddress: Address,
   ): Promise<string | null> {
-    if (!encryptedPayload.startsWith("aes-gcm-v1:")) {
+    if (encryptedPayload.startsWith(PLAINTEXT_PREFIX)) {
+      return encryptedPayload.slice(PLAINTEXT_PREFIX.length);
+    }
+
+    const isAesPayload = encryptedPayload.startsWith("aes-gcm-v1:");
+    const isXorPayload = encryptedPayload.startsWith("xor-v1:");
+    if (!isAesPayload && !isXorPayload) {
       return null;
     }
 
@@ -191,8 +267,16 @@ export class EmailRecoveryService {
       const ciphertext = new Uint8Array(atob(cipherB64!));
       const key = await this.getOrCreateVaultKey(smartAccountAddress);
 
-      const cryptoKey = await crypto.subtle.importKey("raw", key, "AES-GCM", false, ["decrypt"]);
-      const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, ciphertext);
+      if (isXorPayload || !hasSubtleCrypto()) {
+        const keyMaterial = new Uint8Array(key.length + iv.length);
+        keyMaterial.set(key, 0);
+        keyMaterial.set(iv, key.length);
+        const plainBytes = xorWithKey(ciphertext, keyMaterial);
+        return new TextDecoder().decode(plainBytes);
+      }
+
+      const cryptoKey = await crypto.subtle.importKey("raw", toArrayBuffer(key), "AES-GCM", false, ["decrypt"]);
+      const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: toArrayBuffer(iv) }, cryptoKey, toArrayBuffer(ciphertext));
 
       return new TextDecoder().decode(decrypted);
     } catch (e) {
@@ -203,6 +287,7 @@ export class EmailRecoveryService {
 
   static async persistMetadata(request: PersistEmailRecoveryMetadataRequest): Promise<string | null> {
     const lowerAddress = request.smartAccountAddress.toLowerCase();
+    const securityMode: EmailRecoverySecurityMode = request.securityMode ?? "none";
 
     // 1. Upsert config (Group level)
     const { data: existingConfig, error: existingConfigError } = await this.supabase
@@ -231,6 +316,7 @@ export class EmailRecoveryService {
           threshold,
           delay_seconds: delaySeconds,
           expiry_seconds: expirySeconds,
+          security_mode: securityMode,
           is_active: true,
         })
         .select("id")
@@ -246,6 +332,7 @@ export class EmailRecoveryService {
           threshold,
           delay_seconds: delaySeconds,
           expiry_seconds: expirySeconds,
+          security_mode: securityMode,
           updated_at: new Date().toISOString(),
         })
         .eq("id", configId);
@@ -258,7 +345,11 @@ export class EmailRecoveryService {
       request.guardianEmails.map(async (email, index) => {
         const normalized = normalizeGuardianEmail(email);
         const emailHash = keccak256(stringToHex(normalized));
-        const encrypted = await this.encryptEmailForStorage(normalized, request.smartAccountAddress);
+        const encrypted = await this.encryptEmailForStorage(
+          normalized,
+          request.smartAccountAddress,
+          securityMode,
+        );
 
         return {
           config_id: configId,
@@ -311,10 +402,12 @@ export class EmailRecoveryService {
         threshold,
         delay_seconds,
         expiry_seconds,
+        security_mode,
         created_at,
         updated_at,
         email_recovery_guardians (
           email_hash,
+          normalized_email_encrypted,
           masked_email,
           display_label,
           weight
@@ -335,12 +428,40 @@ export class EmailRecoveryService {
     if (configError) throw configError;
     if (!config) return null;
 
-    const guardians = (config.email_recovery_guardians as any[]).map((g) => ({
-      emailHash: g.email_hash,
-      maskedEmail: g.masked_email,
-      displayLabel: g.display_label,
-      weight: g.weight,
-    }));
+    const securityMode = (config.security_mode ?? "none") as EmailRecoverySecurityMode;
+    const hasVaultKey = await this.hasVaultKey(request.smartAccountAddress);
+
+    const guardians = await Promise.all(
+      (config.email_recovery_guardians as any[]).map(async (g) => {
+        const encryptedPayload = String(g.normalized_email_encrypted ?? "");
+        let resolvedEmail: string | null = null;
+        let isLocked = false;
+
+        if (encryptedPayload.startsWith(PLAINTEXT_PREFIX)) {
+          resolvedEmail = encryptedPayload.slice(PLAINTEXT_PREFIX.length);
+        } else if (securityMode === "extra") {
+          if (hasVaultKey) {
+            resolvedEmail = await this.decryptEmail(
+              encryptedPayload,
+              request.smartAccountAddress,
+            );
+            isLocked = !resolvedEmail;
+          } else {
+            isLocked = true;
+          }
+        }
+
+        return {
+          emailHash: g.email_hash,
+          normalizedEmailEncrypted: encryptedPayload,
+          maskedEmail: g.masked_email,
+          displayLabel: g.display_label,
+          weight: g.weight,
+          resolvedEmail,
+          isLocked,
+        } satisfies EmailRecoveryGuardianView;
+      }),
+    );
 
     const installations = (config.email_recovery_chain_installs as any[]).map((i) => ({
       chainId: i.chain_id,
@@ -356,6 +477,7 @@ export class EmailRecoveryService {
         threshold: config.threshold,
         delaySeconds: config.delay_seconds,
         expirySeconds: config.expiry_seconds,
+        securityMode,
         createdAt: config.created_at,
         updatedAt: config.updated_at,
       },
