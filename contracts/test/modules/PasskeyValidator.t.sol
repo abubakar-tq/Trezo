@@ -202,6 +202,12 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         assertEq(count, 1, "removing extra passkey should restore count");
     }
 
+    function test_remove_passkey_reverts_when_removing_only_passkey() public {
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_CannotRemoveLastPasskey.selector);
+        vm.prank(instance.account);
+        validator.removePasskey(dummyId);
+    }
+
     function test_remove_passkey_reverts_when_missing() public {
         // Arrange
         bytes32 missingId = keccak256("missing-passkey");

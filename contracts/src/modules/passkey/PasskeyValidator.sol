@@ -22,6 +22,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
     error InvalidInstallDataLength();
+    error PasskeyValidator_CannotRemoveLastPasskey();
 
     /*//////////////////////////////////////////////////////////////
                                 STRUCTS
@@ -154,6 +155,9 @@ contract PasskeyValidator is ERC7579ValidatorBase {
         address account = msg.sender;
         PasskeyId id = PasskeyId.wrap(passkeyId);
         require(passkeyIds[account].contains(passkeyId), "no such key");
+        if (passkeyIds[account].length() == 1) {
+            revert PasskeyValidator_CannotRemoveLastPasskey();
+        }
         delete passkeys[account][id];
         passkeyIds[account].remove(passkeyId); // O(1), internally swap-and-pop
         emit PasskeyRemoved(account, passkeyId);
