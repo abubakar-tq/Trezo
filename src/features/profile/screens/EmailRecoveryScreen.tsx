@@ -2,26 +2,26 @@ import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import {
-    EmailRecoveryService,
-    type EmailRecoverySecurityMode,
-    type LoadedEmailRecoveryMetadata,
+  EmailRecoveryService,
+  type EmailRecoverySecurityMode,
+  type LoadedEmailRecoveryMetadata,
 } from "@/src/features/wallet/services/EmailRecoveryService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import {
-    DEFAULT_CHAIN_ID,
-    type SupportedChainId,
+  DEFAULT_CHAIN_ID,
+  type SupportedChainId,
 } from "@/src/integration/chains";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useUserStore } from "@store/useUserStore";
@@ -309,7 +309,7 @@ const EmailRecoveryScreen: React.FC = () => {
     const parsed = parseInt(value, 10) || 0;
     setGuardianCountValue(value);
     setDerivedGuardians([]);
-    
+
     // Instead of deleting extra rows, we just hide them in UI, or expand if more are needed
     setGuardianEmails((current) => {
       if (parsed > current.length) {
@@ -328,7 +328,7 @@ const EmailRecoveryScreen: React.FC = () => {
   const handleDeleteGuardian = useCallback((index: number) => {
     setGuardianEmails((prev) => prev.filter((_, i) => i !== index));
     setGuardianWeights((prev) => prev.filter((_, i) => i !== index));
-    
+
     setGuardianCountValue((prev) => {
       const currentVal = parseInt(prev, 10) || 0;
       return String(Math.max(0, currentVal - 1));
@@ -371,10 +371,7 @@ const EmailRecoveryScreen: React.FC = () => {
       return;
     }
     if (!user?.id) {
-      Alert.alert(
-        "Authentication Required",
-        "Please sign in to sync.",
-      );
+      Alert.alert("Authentication Required", "Please sign in to sync.");
       return;
     }
     if (!guardiansReady) {
@@ -404,7 +401,7 @@ const EmailRecoveryScreen: React.FC = () => {
       Alert.alert("Invalid Threshold", "Threshold must be greater than zero.");
       return;
     }
-    
+
     const computedTotalWeight = guardianWeights
       .slice(0, expectedGuardians)
       .reduce((sum, weight) => sum + (parseInt(weight, 10) || 0), 0);
@@ -412,7 +409,7 @@ const EmailRecoveryScreen: React.FC = () => {
     if (parsedThreshold > computedTotalWeight) {
       Alert.alert(
         "Threshold Too High",
-        "Threshold cannot exceed the total sum of guardian validation weights."
+        "Threshold cannot exceed the total sum of guardian validation weights.",
       );
       return;
     }
@@ -478,7 +475,8 @@ const EmailRecoveryScreen: React.FC = () => {
         expirySeconds: BigInt(parsedExpiry) * 86400n,
         securityMode,
         installStatus: moduleInstalledState ? "installed" : "pending",
-        installUserOpHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+        installUserOpHash:
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
       });
 
       const refreshedMetadata = await EmailRecoveryService.loadMetadata({
@@ -554,7 +552,7 @@ const EmailRecoveryScreen: React.FC = () => {
       Alert.alert("Invalid Threshold", "Threshold must be greater than zero.");
       return;
     }
-    
+
     const computedTotalWeight = guardianWeights
       .slice(0, expectedGuardians)
       .reduce((sum, weight) => sum + (parseInt(weight, 10) || 0), 0);
@@ -562,7 +560,7 @@ const EmailRecoveryScreen: React.FC = () => {
     if (parsedThreshold > computedTotalWeight) {
       Alert.alert(
         "Threshold Too High",
-        "Threshold cannot exceed the total sum of guardian validation weights."
+        "Threshold cannot exceed the total sum of guardian validation weights.",
       );
       return;
     }
@@ -1028,7 +1026,7 @@ const EmailRecoveryScreen: React.FC = () => {
                   />
                 </View>
               </View>
-              
+
               {/* Optional Delete Button */}
               {guardianEmails.length > 1 && (
                 <TouchableOpacity
@@ -1037,7 +1035,11 @@ const EmailRecoveryScreen: React.FC = () => {
                   accessibilityRole="button"
                   accessibilityLabel={`Remove guardian ${index + 1}`}
                 >
-                  <Feather name="trash-2" size={20} color={theme.colors.danger} />
+                  <Feather
+                    name="trash-2"
+                    size={20}
+                    color={theme.colors.danger}
+                  />
                 </TouchableOpacity>
               )}
             </View>
@@ -1250,7 +1252,9 @@ const EmailRecoveryScreen: React.FC = () => {
             {installingModule ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <Text style={styles.installButtonText}>Save / Sync Cloud Metadata</Text>
+              <Text style={styles.installButtonText}>
+                Save / Sync Cloud Metadata
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -1538,4 +1542,3 @@ const createStyles = (colors: ThemeColors) =>
   });
 
 export default EmailRecoveryScreen;
-

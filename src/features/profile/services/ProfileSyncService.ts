@@ -16,6 +16,8 @@ import { useUserStore } from '@store/useUserStore';
 export interface ProfileData {
   username: string | null;
   avatar_url: string | null;
+  avatar_removed?: boolean;
+  avatar_deleted_at?: string | null;
 }
 
 // File validation constants
@@ -89,7 +91,7 @@ export class ProfileSyncService {
     try {
       const { data, error } = await this.supabase
         .from('profiles')
-        .select('username, avatar_url')
+        .select('username, avatar_url, avatar_removed, avatar_deleted_at')
         .eq('id', userId)
         .single();
 
@@ -106,6 +108,8 @@ export class ProfileSyncService {
       useUserStore.getState().setProfile({
         username: data.username,
         avatarUrl: data.avatar_url,
+        avatarRemoved: data.avatar_removed,
+        avatarDeletedAt: data.avatar_deleted_at,
       });
 
       console.log(`✅ [ProfileSync] Profile synced from database`);
@@ -341,11 +345,26 @@ export class ProfileSyncService {
         throw new Error('Failed to update profile with new avatar');
       }
 
-      // Update local store
+      // Also update the database to mark avatar as not removed
+      const { error: flagError } = await this.supabase
+        .from('profiles')
+        .update({
+          avatar_removed: false,
+          avatar_deleted_at: null,
+        })
+        .eq('id', userId);
+
+      if (flagError) {
+        console.warn(`⚠️  [ProfileSync] Failed to update avatar_removed flag:`, flagError);
+      }
+
+      // Update local store and mark avatar as explicitly set
       const currentProfile = useUserStore.getState().profile;
       useUserStore.getState().setProfile({
         ...currentProfile,
         avatarUrl: publicUrl,
+        avatarRemoved: false,
+        avatarDeletedAt: undefined,
       });
 
       console.log(`✅ [ProfileSync] Avatar uploaded: ${publicUrl}`);
@@ -363,8 +382,6 @@ export class ProfileSyncService {
    * Remove avatar from storage and profile
    */
   static async removeAvatar(userId: string): Promise<boolean> {
-    console.log(`🔄 [ProfileSync] Removing avatar...`);
-    
     try {
       const currentProfile = useUserStore.getState().profile;
       const filePath = `avatars/${userId}`;
@@ -378,40 +395,46 @@ export class ProfileSyncService {
         console.warn(`⚠️  [ProfileSync] Failed to delete file from storage:`, deleteError);
       }
 
-      // Update profile to remove avatar_url
+      // Update profile to remove avatar_url and set explicit intent flags
       const { error } = await this.supabase
         .from('profiles')
         .upsert({
           id: userId,
           avatar_url: null,
+          avatar_removed: true,
+          avatar_deleted_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'id'
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error(`❌ [ProfileSync] Error updating profiles table:`, error);
+        throw error;
+      }
 
       // Update Auth metadata to prevent fallback
       const { data: authData, error: authError } = await this.supabase.auth.updateUser({
-        data: { avatar_url: null }
+        data: { avatar_url: null, avatarUrl: null, picture: null }
       });
 
       if (authError) {
         console.warn(`⚠️  [ProfileSync] Failed to clear user metadata:`, authError);
       }
 
-      // Update local store explicitly nulling it out
+      // Update local store explicitly nulling it out and setting the intent flag
       useUserStore.getState().setProfile({
         ...currentProfile,
         username: currentProfile?.username ?? undefined,
-        avatarUrl: null, // explicitly null so it doesn't fall back to auth
+        avatarUrl: null,
+        avatarRemoved: true,
+        avatarDeletedAt: new Date().toISOString(),
       });
 
       if (authData?.user) {
         useUserStore.getState().setUser(authData.user);
       }
 
-      console.log(`✅ [ProfileSync] Avatar removed`);
       return true;
     } catch (error) {
       console.error(`❌ [ProfileSync] Failed to remove avatar:`, error);

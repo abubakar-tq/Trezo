@@ -76,10 +76,7 @@ const ProfileScreen: React.FC = () => {
     user?.email?.split("@")[0]?.replace(/[^a-zA-Z0-9]/g, " ") ??
     "Explorer";
 
-  const avatarUri =
-    profile !== null
-      ? (profile?.avatarUrl ?? null)
-      : ((user?.user_metadata?.avatar_url as string | undefined) ?? null);
+  const avatarUri = profile?.avatarUrl ?? null;
 
   const handleToggleTheme = useCallback(() => {
     setMode(resolvedMode === "dark" ? "light" : "dark");

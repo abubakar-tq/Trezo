@@ -4,18 +4,18 @@ import { AuthError, Session } from "@supabase/supabase-js";
 
 import * as Linking from "expo-linking";
 
+import { GuardianSyncService } from "@/src/features/profile/services/GuardianSyncService";
+import { ProfileSyncService } from "@/src/features/profile/services/ProfileSyncService";
 import { AuthVerificationFlow } from "@/src/types/navigation";
 import { navigate } from "@app/navigation/navigationRef";
 import { authRedirectUri } from "@lib/oauth";
 import {
-  SupabaseConfigurationError,
-  getSupabaseClient,
-  isSupabaseConfigured,
-  supabaseConfigIssue,
+    SupabaseConfigurationError,
+    getSupabaseClient,
+    isSupabaseConfigured,
+    supabaseConfigIssue,
 } from "@lib/supabase";
 import { Profile, useUserStore } from "@store/useUserStore";
-import { ProfileSyncService } from "@/src/features/profile/services/ProfileSyncService";
-import { GuardianSyncService } from "@/src/features/profile/services/GuardianSyncService";
 
 const sanitizeUsername = (value: string | null | undefined) => {
 	if (!value) return undefined;
@@ -56,12 +56,23 @@ const fallbackAvatarUrl = (user: Session["user"], metadata: Record<string, unkno
 	return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.id)}`;
 };
 
-const normalizeProfile = (user: Session["user"] | null | undefined): Profile | null => {
-	if (!user) return null;
-	const metadata = user.user_metadata ?? {};
-	const username = fallbackUsername(user, metadata);
-	const avatarUrl = fallbackAvatarUrl(user, metadata);
-	return { username, avatarUrl };
+const normalizeProfile = (
+  user: Session["user"] | null | undefined,
+  forceNoAvatar: boolean = false,
+  avatarRemoved: boolean = false
+): Profile | null => {
+  if (!user) return null;
+  const metadata = user.user_metadata ?? {};
+  const username = fallbackUsername(user, metadata);
+  
+  // 🔑 CRITICAL: If user explicitly removed avatar, respect that choice completely
+  if (avatarRemoved) {
+    return { username, avatarUrl: null, avatarRemoved: true };
+  }
+  
+  // Otherwise, use the normal fallback logic
+  const avatarUrl = forceNoAvatar ? null : fallbackAvatarUrl(user, metadata);
+  return { username, avatarUrl, avatarRemoved: false };
 };
 
 type UseSupabaseAuthResult = {
@@ -153,7 +164,10 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 					
 					// Only use session metadata as fallback if database has no profile
 					if (!dbProfile || !dbProfile.username) {
-						const profile = normalizeProfile(session?.user);
+						// Profile from db might exist with no username but explicit null avatar_url
+						const isAvatarExplicitlyNull = dbProfile ? (dbProfile.avatar_url === null) : false;
+						const isAvatarRemoved = dbProfile?.avatar_removed ?? false;
+						const profile = normalizeProfile(session?.user, isAvatarExplicitlyNull, isAvatarRemoved);
 						setProfile(profile);
 						setIsOnboarded(Boolean(profile?.username));
 						
@@ -176,13 +190,13 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 				} catch (syncError) {
 					console.warn("⚠️  Failed to sync user data from database:", syncError);
 					// Fallback to session metadata on error
-					const profile = normalizeProfile(session?.user);
-					setProfile(profile);
-					setIsOnboarded(Boolean(profile?.username));
-				}
-			} else if (!session?.user) {
-				// User logged out
-				const profile = normalizeProfile(session?.user);
+				const profile = normalizeProfile(session?.user, false, false);
+				setProfile(profile);
+				setIsOnboarded(Boolean(profile?.username));
+			}
+		} else if (!session?.user) {
+			// User logged out
+			const profile = normalizeProfile(session?.user, false, false);
 				setProfile(profile);
 				setIsOnboarded(Boolean(profile?.username));
 				syncedProfileRef.current = null;
