@@ -1,0 +1,5 @@
+-- Seed data for Trezo Wallet local development
+-- This file is optional. Uncomment and adjust inserts once you have user ids to target.
+-- Example usage:
+-- insert into public.wallets (id, user_id, name, type)
+-- values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'Primary Wallet', 'crypto');
