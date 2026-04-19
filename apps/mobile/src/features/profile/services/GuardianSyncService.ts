@@ -8,7 +8,7 @@
  * 2. If no AA wallet yet: Keep guardians in local store only, sync when wallet is deployed
  */
 
-import { getSupabaseClient } from '@/lib/supabase';
+import { getSupabaseClient } from '@lib/supabase';
 import { useWalletStore } from '@/src/features/wallet/store/useWalletStore';
 import { useRecoveryStatusStore } from '@store/useRecoveryStatusStore';
 

@@ -10,7 +10,7 @@
  * - Supabase: Configured to allow all image/* MIME types with 2MB size limit
  */
 
-import { getSupabaseClient } from '@/lib/supabase';
+import { getSupabaseClient } from '@lib/supabase';
 import { useUserStore } from '@store/useUserStore';
 
 export interface ProfileData {
