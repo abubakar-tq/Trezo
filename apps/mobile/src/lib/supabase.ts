@@ -16,10 +16,6 @@ const getConfigValue = (key: string): string | undefined => {
 	if (typeof extraValue === "string" && extraValue.length > 0) {
 		return extraValue;
 	}
-	const envValue = process.env[`EXPO_PUBLIC_${key.toUpperCase()}`];
-	if (typeof envValue === "string" && envValue.length > 0) {
-		return envValue;
-	}
 	return undefined;
 };
 

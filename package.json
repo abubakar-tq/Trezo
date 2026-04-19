@@ -3,12 +3,5 @@
   "private": true,
   "workspaces": [
     "apps/*"
-  ],
-  "scripts": {
-    "start": "npm run start -w trezo_wallet",
-    "android": "npm run android -w trezo_wallet",
-    "ios": "npm run ios -w trezo_wallet",
-    "web": "npm run web -w trezo_wallet",
-    "lint": "npm run lint -w trezo_wallet"
-  }
+  ]
 }

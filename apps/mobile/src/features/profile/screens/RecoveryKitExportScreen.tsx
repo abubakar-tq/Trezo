@@ -125,7 +125,7 @@ const RecoveryKitExportScreen: React.FC = () => {
         <Text style={styles.infoText}>
           Your recovery email is stored encrypted in the cloud. Only this Vault
           Key can decrypt it. Without this key or access to this device, you
-          won't be able to initiate a recovery.
+          won&apos;t be able to initiate a recovery.
         </Text>
       </View>
     </ScrollView>

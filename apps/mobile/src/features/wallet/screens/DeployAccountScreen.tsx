@@ -1,6 +1,6 @@
 /**
  * Deploy Account Screen
- * 
+ *
  * Guides users through the AA wallet deployment process:
  * 1. Explain benefits of Account Abstraction
  * 2. Show deployment cost estimate
@@ -29,51 +29,53 @@ import { CHAIN_CONFIG } from "@/src/core/network/chain";
 import { AccountDeploymentService } from "@/src/features/wallet/services/AccountDeploymentService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
-import { useUserStore } from "@store/useUserStore";
 import type { SupportedChainId } from "@/src/integration/chains";
+import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
 
-type DeployStep = 'intro' | 'passkey' | 'deploying' | 'success' | 'error';
+type DeployStep = "intro" | "passkey" | "deploying" | "success" | "error";
 
 export default function DeployAccountScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
-  
+
   const user = useUserStore((state) => state.user);
   const aaAccount = useWalletStore((state) => state.aaAccount);
   const setAAAccount = useWalletStore((state) => state.setAAAccount);
-  const setDeploymentStatus = useWalletStore((state) => state.setDeploymentStatus);
+  const setDeploymentStatus = useWalletStore(
+    (state) => state.setDeploymentStatus,
+  );
   const markAsDeployed = useWalletStore((state) => state.markAsDeployed);
-  
-  const [currentStep, setCurrentStep] = useState<DeployStep>('intro');
-  const [errorMessage, setErrorMessage] = useState<string>('');
-  const [deployedAddress, setDeployedAddress] = useState<string>('');
-  
+
+  const [currentStep, setCurrentStep] = useState<DeployStep>("intro");
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [deployedAddress, setDeployedAddress] = useState<string>("");
+
   // Check if already deployed
   useEffect(() => {
     if (aaAccount?.isDeployed) {
-      setCurrentStep('success');
+      setCurrentStep("success");
       setDeployedAddress(aaAccount.predictedAddress);
     }
   }, [aaAccount]);
-  
+
   const handleNext = useCallback(() => {
-    if (currentStep === 'intro') {
-      setCurrentStep('passkey');
-    } else if (currentStep === 'passkey') {
+    if (currentStep === "intro") {
+      setCurrentStep("passkey");
+    } else if (currentStep === "passkey") {
       handleCreatePasskey();
     }
   }, [currentStep]);
-  
+
   const handleCreatePasskey = async () => {
     try {
       if (!user) {
-        setErrorMessage('User not authenticated');
-        setCurrentStep('error');
+        setErrorMessage("User not authenticated");
+        setCurrentStep("error");
         return;
       }
 
@@ -82,31 +84,42 @@ export default function DeployAccountScreen() {
 
       // Predict AA address using passkey salt
       const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
-      const predictedAddress = await AccountDeploymentService.predictAddress(passkey, chainId);
+      const predictedAddress = await AccountDeploymentService.predictAddress(
+        passkey,
+        chainId,
+      );
 
       // Proceed to deployment
       await handleDeploy(passkey, predictedAddress as string);
     } catch (error) {
-      console.error('Error creating passkey:', error);
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to create passkey');
-      setCurrentStep('error');
+      console.error("Error creating passkey:", error);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to create passkey",
+      );
+      setCurrentStep("error");
     }
   };
-  
-  const handleDeploy = async (passkey: Awaited<ReturnType<typeof PasskeyService.createPasskey>>, predictedAddress: string) => {
-    setCurrentStep('deploying');
-    setDeploymentStatus('deploying');
-    
+
+  const handleDeploy = async (
+    passkey: Awaited<ReturnType<typeof PasskeyService.createPasskey>>,
+    predictedAddress: string,
+  ) => {
+    setCurrentStep("deploying");
+    setDeploymentStatus("deploying");
+
     try {
       const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
       if (!user?.id) {
         throw new Error("User not authenticated");
       }
 
-      const result = await AccountDeploymentService.deployWithPasskeyAuth(user.id, {
-        chainId,
-        passkey,
-      });
+      const result = await AccountDeploymentService.deployWithPasskeyAuth(
+        user.id,
+        {
+          chainId,
+          passkey,
+        },
+      );
 
       const accountAddress = result.accountAddress;
 
@@ -117,59 +130,65 @@ export default function DeployAccountScreen() {
         setDeploymentStatus("deployed");
       }
       setAAAccount({
-        id: user?.id || 'passkey-wallet',
-        userId: user?.id || 'passkey-wallet',
+        id: user?.id || "passkey-wallet",
+        userId: user?.id || "passkey-wallet",
         predictedAddress: accountAddress,
         ownerAddress: passkey.credentialIdRaw,
         isDeployed: true,
-        deploymentTxHash: result.alreadyDeployed ? aaAccount?.deploymentTxHash : result.transactionHash,
+        deploymentTxHash: result.alreadyDeployed
+          ? aaAccount?.deploymentTxHash
+          : result.transactionHash,
         deploymentBlockNumber: result.alreadyDeployed
           ? aaAccount?.deploymentBlockNumber
           : Number(result.blockNumber),
-        walletName: 'Passkey Smart Account',
+        walletName: "Passkey Smart Account",
         chainId,
         createdAt: new Date().toISOString(),
         deployedAt: new Date().toISOString(),
       });
 
       setDeployedAddress(accountAddress);
-      setCurrentStep('success');
-      
+      setCurrentStep("success");
     } catch (error) {
-      console.error('Deployment error:', error);
-      setErrorMessage(error instanceof Error ? error.message : 'Deployment failed');
-      setDeploymentStatus('failed', error instanceof Error ? error.message : undefined);
-      setCurrentStep('error');
+      console.error("Deployment error:", error);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Deployment failed",
+      );
+      setDeploymentStatus(
+        "failed",
+        error instanceof Error ? error.message : undefined,
+      );
+      setCurrentStep("error");
     }
   };
-  
+
   const handleRetry = useCallback(() => {
-    setCurrentStep('intro');
-    setErrorMessage('');
-    setDeploymentStatus('idle');
+    setCurrentStep("intro");
+    setErrorMessage("");
+    setDeploymentStatus("idle");
   }, [setDeploymentStatus]);
-  
+
   const handleGoHome = useCallback(() => {
     navigation.reset({
       index: 0,
-      routes: [{ name: 'TabNavigation' }],
+      routes: [{ name: "TabNavigation" }],
     });
   }, [navigation]);
-  
+
   const renderStep = () => {
     switch (currentStep) {
-      case 'intro':
+      case "intro":
         return (
           <View style={styles.stepContainer}>
             <View style={styles.iconCircle}>
               <Feather name="zap" size={32} color={colors.accent} />
             </View>
-            
+
             <Text style={styles.stepTitle}>Smart Account Benefits</Text>
             <Text style={styles.stepDescription}>
               Deploy an Account Abstraction wallet with your passkey:
             </Text>
-            
+
             <View style={styles.benefitsList}>
               <View style={styles.benefitItem}>
                 <View style={styles.benefitIcon}>
@@ -178,23 +197,27 @@ export default function DeployAccountScreen() {
                 <View style={styles.benefitContent}>
                   <Text style={styles.benefitTitle}>Gasless Transactions</Text>
                   <Text style={styles.benefitText}>
-                    Send transactions without paying gas fees thanks to paymaster sponsorship
+                    Send transactions without paying gas fees thanks to
+                    paymaster sponsorship
                   </Text>
                 </View>
               </View>
-              
+
               <View style={styles.benefitItem}>
                 <View style={styles.benefitIcon}>
                   <Feather name="shield" size={20} color={colors.accent} />
                 </View>
                 <View style={styles.benefitContent}>
-                  <Text style={styles.benefitTitle}>Social Recovery (coming soon)</Text>
+                  <Text style={styles.benefitTitle}>
+                    Social Recovery (coming soon)
+                  </Text>
                   <Text style={styles.benefitText}>
-                    Add trusted guardians to recover your wallet if you lose access
+                    Add trusted guardians to recover your wallet if you lose
+                    access
                   </Text>
                 </View>
               </View>
-              
+
               <View style={styles.benefitItem}>
                 <View style={styles.benefitIcon}>
                   <Feather name="smartphone" size={20} color={colors.warning} />
@@ -202,62 +225,69 @@ export default function DeployAccountScreen() {
                 <View style={styles.benefitContent}>
                   <Text style={styles.benefitTitle}>Multi-Device Access</Text>
                   <Text style={styles.benefitText}>
-                    Use biometric authentication across multiple devices securely
+                    Use biometric authentication across multiple devices
+                    securely
                   </Text>
                 </View>
               </View>
             </View>
-            
+
             <TouchableOpacity style={styles.primaryButton} onPress={handleNext}>
               <Text style={styles.primaryButtonText}>Continue</Text>
               <Feather name="arrow-right" size={18} color={colors.background} />
             </TouchableOpacity>
           </View>
         );
-      case 'passkey':
+      case "passkey":
         return (
           <View style={styles.stepContainer}>
             <View style={styles.iconCircle}>
               <Feather name="lock" size={32} color={colors.accent} />
             </View>
-            
+
             <Text style={styles.stepTitle}>Secure with Biometrics</Text>
             <Text style={styles.stepDescription}>
-              Create a passkey using your device's biometric authentication
+              Create a passkey using your device&apos;s biometric authentication
             </Text>
-            
+
             <View style={styles.passkeyCard}>
-              <Feather name="shield-off" size={48} color={colors.accent} style={{ opacity: 0.3 }} />
+              <Feather
+                name="shield-off"
+                size={48}
+                color={colors.accent}
+                style={{ opacity: 0.3 }}
+              />
               <Text style={styles.passkeyTitle}>Touch to Authenticate</Text>
               <Text style={styles.passkeyText}>
                 Use your fingerprint or face ID to secure your smart account
               </Text>
             </View>
-            
+
             <View style={styles.infoBox}>
               <Feather name="lock" size={16} color={colors.success} />
               <Text style={styles.infoText}>
-                Your biometric data stays on your device. We only store a cryptographic public key.
+                Your biometric data stays on your device. We only store a
+                cryptographic public key.
               </Text>
             </View>
-            
+
             <TouchableOpacity style={styles.primaryButton} onPress={handleNext}>
               <Feather name="unlock" size={18} color={colors.background} />
               <Text style={styles.primaryButtonText}>Authenticate</Text>
             </TouchableOpacity>
           </View>
         );
-      
-      case 'deploying':
+
+      case "deploying":
         return (
           <View style={styles.stepContainer}>
             <ActivityIndicator size="large" color={colors.accent} />
-            
+
             <Text style={styles.stepTitle}>Deploying Your Smart Account</Text>
             <Text style={styles.stepDescription}>
               Please wait while we deploy your account on-chain...
             </Text>
-            
+
             <View style={styles.progressSteps}>
               <View style={styles.progressStep}>
                 <View style={[styles.progressDot, styles.progressDotActive]}>
@@ -265,44 +295,55 @@ export default function DeployAccountScreen() {
                 </View>
                 <Text style={styles.progressLabel}>Predicting address</Text>
               </View>
-              
+
               <View style={styles.progressLine} />
-              
+
               <View style={styles.progressStep}>
                 <View style={[styles.progressDot, styles.progressDotActive]}>
                   <ActivityIndicator size="small" color={colors.background} />
                 </View>
                 <Text style={styles.progressLabel}>Deploying contract</Text>
               </View>
-              
+
               <View style={styles.progressLine} />
-              
+
               <View style={styles.progressStep}>
                 <View style={styles.progressDot} />
-                <Text style={[styles.progressLabel, styles.progressLabelInactive]}>Confirming transaction</Text>
+                <Text
+                  style={[styles.progressLabel, styles.progressLabelInactive]}
+                >
+                  Confirming transaction
+                </Text>
               </View>
             </View>
-            
+
             <Text style={styles.deployNote}>
               This may take 10-30 seconds depending on network congestion
             </Text>
           </View>
         );
-      
-      case 'success':
+
+      case "success":
         return (
           <View style={styles.stepContainer}>
-            <View style={[styles.iconCircle, { backgroundColor: withAlpha(colors.success, 0.15) }]}>
+            <View
+              style={[
+                styles.iconCircle,
+                { backgroundColor: withAlpha(colors.success, 0.15) },
+              ]}
+            >
               <Feather name="check-circle" size={32} color={colors.success} />
             </View>
-            
+
             <Text style={styles.stepTitle}>Smart Account Deployed! 🎉</Text>
             <Text style={styles.stepDescription}>
               Your Account Abstraction wallet is now live on-chain
             </Text>
-            
+
             <View style={styles.addressCard}>
-              <Text style={styles.addressLabel}>Your Smart Account Address</Text>
+              <Text style={styles.addressLabel}>
+                Your Smart Account Address
+              </Text>
               <Text style={styles.addressValue}>
                 {deployedAddress || aaAccount?.predictedAddress}
               </Text>
@@ -310,78 +351,106 @@ export default function DeployAccountScreen() {
                 You can now send gasless transactions and enjoy all AA benefits
               </Text>
             </View>
-            
+
             <View style={styles.successFeatures}>
               <View style={styles.successFeature}>
                 <Feather name="check" size={16} color={colors.success} />
-                <Text style={styles.successFeatureText}>Gasless transactions enabled</Text>
+                <Text style={styles.successFeatureText}>
+                  Gasless transactions enabled
+                </Text>
               </View>
               <View style={styles.successFeature}>
                 <Feather name="check" size={16} color={colors.success} />
-                <Text style={styles.successFeatureText}>Biometric authentication active</Text>
+                <Text style={styles.successFeatureText}>
+                  Biometric authentication active
+                </Text>
               </View>
               <View style={styles.successFeature}>
                 <Feather name="check" size={16} color={colors.success} />
-                <Text style={styles.successFeatureText}>Ready for guardians & recovery</Text>
+                <Text style={styles.successFeatureText}>
+                  Ready for guardians & recovery
+                </Text>
               </View>
             </View>
-            
-            <TouchableOpacity style={styles.primaryButton} onPress={handleGoHome}>
+
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleGoHome}
+            >
               <Feather name="home" size={18} color={colors.background} />
               <Text style={styles.primaryButtonText}>Go to Home</Text>
             </TouchableOpacity>
           </View>
         );
-      
-      case 'error':
+
+      case "error":
         return (
           <View style={styles.stepContainer}>
-            <View style={[styles.iconCircle, { backgroundColor: withAlpha(colors.danger, 0.15) }]}>
+            <View
+              style={[
+                styles.iconCircle,
+                { backgroundColor: withAlpha(colors.danger, 0.15) },
+              ]}
+            >
               <Feather name="alert-triangle" size={32} color={colors.danger} />
             </View>
-            
+
             <Text style={styles.stepTitle}>Deployment Failed</Text>
             <Text style={styles.stepDescription}>
               Something went wrong during the deployment process
             </Text>
-            
+
             <View style={styles.errorCard}>
               <Text style={styles.errorTitle}>Error Details</Text>
               <Text style={styles.errorMessage}>{errorMessage}</Text>
             </View>
-            
+
             <View style={styles.buttonRow}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={handleGoHome}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleGoHome}
+              >
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.primaryButton} onPress={handleRetry}>
-                <Feather name="refresh-ccw" size={18} color={colors.background} />
+
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={handleRetry}
+              >
+                <Feather
+                  name="refresh-ccw"
+                  size={18}
+                  color={colors.background}
+                />
                 <Text style={styles.primaryButtonText}>Try Again</Text>
               </TouchableOpacity>
             </View>
           </View>
         );
-      
+
       default:
         return null;
     }
   };
-  
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        {currentStep !== 'deploying' && currentStep !== 'success' && (
-          <Pressable onPress={() => navigation.goBack()} style={styles.backButton} hitSlop={12}>
+        {currentStep !== "deploying" && currentStep !== "success" && (
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+            hitSlop={12}
+          >
             <Feather name="arrow-left" size={20} color={colors.textPrimary} />
           </Pressable>
         )}
         <Text style={styles.headerTitle}>Deploy Smart Account</Text>
         <View style={{ width: 32 }} />
       </View>
-      
-      <ScrollView 
-        style={styles.content} 
+
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
@@ -398,9 +467,9 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.background,
     },
     header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
       paddingHorizontal: 16,
       paddingTop: 60,
       paddingBottom: 16,
@@ -412,12 +481,12 @@ const createStyles = (colors: ThemeColors) =>
       height: 32,
       borderRadius: 16,
       backgroundColor: withAlpha(colors.surfaceElevated, 0.6),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     headerTitle: {
       fontSize: 18,
-      fontWeight: '700',
+      fontWeight: "700",
       color: colors.textPrimary,
     },
     content: {
@@ -427,7 +496,7 @@ const createStyles = (colors: ThemeColors) =>
       padding: 24,
     },
     stepContainer: {
-      alignItems: 'center',
+      alignItems: "center",
       gap: 20,
     },
     iconCircle: {
@@ -435,32 +504,32 @@ const createStyles = (colors: ThemeColors) =>
       height: 80,
       borderRadius: 40,
       backgroundColor: withAlpha(colors.accent, 0.15),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       borderWidth: 2,
       borderColor: withAlpha(colors.accent, 0.3),
       marginTop: 20,
     },
     stepTitle: {
       fontSize: 24,
-      fontWeight: '800',
+      fontWeight: "800",
       color: colors.textPrimary,
-      textAlign: 'center',
+      textAlign: "center",
     },
     stepDescription: {
       fontSize: 15,
       color: colors.textSecondary,
-      textAlign: 'center',
+      textAlign: "center",
       lineHeight: 22,
       paddingHorizontal: 10,
     },
     benefitsList: {
-      width: '100%',
+      width: "100%",
       gap: 16,
       marginTop: 10,
     },
     benefitItem: {
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 14,
       backgroundColor: withAlpha(colors.surfaceElevated, 0.5),
       padding: 16,
@@ -473,8 +542,8 @@ const createStyles = (colors: ThemeColors) =>
       height: 40,
       borderRadius: 20,
       backgroundColor: withAlpha(colors.success, 0.15),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     benefitContent: {
       flex: 1,
@@ -482,7 +551,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     benefitTitle: {
       fontSize: 15,
-      fontWeight: '700',
+      fontWeight: "700",
       color: colors.textPrimary,
     },
     benefitText: {
@@ -491,39 +560,39 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 18,
     },
     costCard: {
-      width: '100%',
+      width: "100%",
       backgroundColor: withAlpha(colors.accent, 0.08),
       borderWidth: 1.5,
       borderColor: withAlpha(colors.accent, 0.3),
       borderRadius: 20,
       padding: 24,
-      alignItems: 'center',
+      alignItems: "center",
       gap: 8,
     },
     costLabel: {
       fontSize: 14,
       color: colors.textSecondary,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     costValue: {
       fontSize: 36,
-      fontWeight: '800',
+      fontWeight: "800",
       color: colors.accent,
     },
     costNote: {
       fontSize: 12,
       color: colors.textMuted,
-      textAlign: 'center',
+      textAlign: "center",
     },
     infoBox: {
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 10,
       backgroundColor: withAlpha(colors.accent, 0.08),
       padding: 14,
       borderRadius: 14,
       borderWidth: 1,
       borderColor: withAlpha(colors.accent, 0.2),
-      alignItems: 'flex-start',
+      alignItems: "flex-start",
     },
     infoText: {
       flex: 1,
@@ -532,38 +601,38 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 18,
     },
     balanceCard: {
-      width: '100%',
+      width: "100%",
       backgroundColor: withAlpha(colors.surfaceElevated, 0.6),
       borderWidth: 1,
       borderColor: withAlpha(colors.border, 0.4),
       borderRadius: 20,
       padding: 24,
-      alignItems: 'center',
+      alignItems: "center",
       gap: 8,
     },
     balanceLabel: {
       fontSize: 14,
       color: colors.textSecondary,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     balanceValue: {
       fontSize: 32,
-      fontWeight: '800',
+      fontWeight: "800",
       color: colors.textPrimary,
     },
     balanceAddress: {
       fontSize: 12,
       color: colors.textMuted,
-      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+      fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
     },
     statusBox: {
-      width: '100%',
-      flexDirection: 'row',
+      width: "100%",
+      flexDirection: "row",
       gap: 10,
       padding: 14,
       borderRadius: 14,
       borderWidth: 1.5,
-      alignItems: 'center',
+      alignItems: "center",
     },
     statusSuccess: {
       backgroundColor: withAlpha(colors.success, 0.1),
@@ -576,38 +645,38 @@ const createStyles = (colors: ThemeColors) =>
     statusText: {
       flex: 1,
       fontSize: 13,
-      fontWeight: '600',
+      fontWeight: "600",
       lineHeight: 18,
     },
     passkeyCard: {
-      width: '100%',
+      width: "100%",
       backgroundColor: withAlpha(colors.surfaceElevated, 0.5),
       borderWidth: 2,
       borderColor: withAlpha(colors.accent, 0.3),
       borderRadius: 20,
       padding: 32,
-      alignItems: 'center',
+      alignItems: "center",
       gap: 12,
     },
     passkeyTitle: {
       fontSize: 18,
-      fontWeight: '700',
+      fontWeight: "700",
       color: colors.textPrimary,
     },
     passkeyText: {
       fontSize: 14,
       color: colors.textSecondary,
-      textAlign: 'center',
+      textAlign: "center",
       lineHeight: 20,
     },
     progressSteps: {
-      width: '100%',
-      alignItems: 'center',
+      width: "100%",
+      alignItems: "center",
       gap: 0,
       marginVertical: 20,
     },
     progressStep: {
-      alignItems: 'center',
+      alignItems: "center",
       gap: 8,
     },
     progressDot: {
@@ -617,8 +686,8 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: withAlpha(colors.textMuted, 0.2),
       borderWidth: 2,
       borderColor: withAlpha(colors.border, 0.4),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     progressDotActive: {
       backgroundColor: colors.accent,
@@ -626,7 +695,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     progressLabel: {
       fontSize: 13,
-      fontWeight: '600',
+      fontWeight: "600",
       color: colors.textPrimary,
     },
     progressLabelInactive: {
@@ -640,54 +709,54 @@ const createStyles = (colors: ThemeColors) =>
     deployNote: {
       fontSize: 12,
       color: colors.textMuted,
-      textAlign: 'center',
+      textAlign: "center",
       marginTop: 10,
     },
     addressCard: {
-      width: '100%',
+      width: "100%",
       backgroundColor: withAlpha(colors.success, 0.08),
       borderWidth: 1.5,
       borderColor: withAlpha(colors.success, 0.3),
       borderRadius: 20,
       padding: 20,
-      alignItems: 'center',
+      alignItems: "center",
       gap: 10,
     },
     addressLabel: {
       fontSize: 13,
       color: colors.textSecondary,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     addressValue: {
       fontSize: 13,
-      fontWeight: '700',
+      fontWeight: "700",
       color: colors.textPrimary,
-      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-      textAlign: 'center',
+      fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+      textAlign: "center",
     },
     addressNote: {
       fontSize: 12,
       color: colors.textSecondary,
-      textAlign: 'center',
+      textAlign: "center",
       lineHeight: 17,
     },
     successFeatures: {
-      width: '100%',
+      width: "100%",
       gap: 10,
     },
     successFeature: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 10,
       paddingVertical: 8,
     },
     successFeatureText: {
       fontSize: 14,
       color: colors.textSecondary,
-      fontWeight: '500',
+      fontWeight: "500",
     },
     errorCard: {
-      width: '100%',
+      width: "100%",
       backgroundColor: withAlpha(colors.danger, 0.08),
       borderWidth: 1.5,
       borderColor: withAlpha(colors.danger, 0.3),
@@ -697,7 +766,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     errorTitle: {
       fontSize: 14,
-      fontWeight: '700',
+      fontWeight: "700",
       color: colors.danger,
     },
     errorMessage: {
@@ -706,15 +775,15 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 19,
     },
     primaryButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
       gap: 8,
       backgroundColor: colors.accent,
       paddingHorizontal: 32,
       paddingVertical: 16,
       borderRadius: 16,
-      width: '100%',
+      width: "100%",
       marginTop: 10,
       shadowColor: colors.accent,
       shadowOffset: { width: 0, height: 4 },
@@ -724,14 +793,14 @@ const createStyles = (colors: ThemeColors) =>
     },
     primaryButtonText: {
       fontSize: 16,
-      fontWeight: '700',
+      fontWeight: "700",
       color: colors.background,
       letterSpacing: 0.5,
     },
     secondaryButton: {
       flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       backgroundColor: withAlpha(colors.textMuted, 0.15),
       paddingVertical: 16,
       borderRadius: 16,
@@ -740,13 +809,13 @@ const createStyles = (colors: ThemeColors) =>
     },
     secondaryButtonText: {
       fontSize: 15,
-      fontWeight: '600',
+      fontWeight: "600",
       color: colors.textSecondary,
     },
     buttonRow: {
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 12,
-      width: '100%',
+      width: "100%",
       marginTop: 10,
     },
   });
