@@ -67,14 +67,11 @@ Passkey-first smart contract wallet built on ERC-4337 and ERC-7579-style modules
 - **Storage shape** differs by recovery type: social recovery stores raw guardian addresses onchain, while email recovery stores derived guardian `EmailAuth` addresses and keeps raw emails offchain.
 - The repo deploys the custom module itself. The email relayer / prover stack is separate from this repo.
 
-## Current Milestone
-- The current delivery slice is **email recovery on reusable AA seams**.
-- Mobile code owns:
-  - guardian configuration input
-  - module installation / status checks
-  - UserOp building, signing, and bundler submission
-- We are deliberately **not** building the full wallet orchestrator or backend MVP yet.
-- The shared install-module path in the mobile AA layer is intended to be reused later by social recovery, add-passkey, and other wallet flows.
+## Development Focus
+- The active app flow centers on **email recovery setup and module installation**.
+- Mobile code currently covers guardian configuration, module status checks, and UserOp submission through the local bundler.
+- The shared AA module-install path is designed to support later wallet flows such as social recovery, add-passkey, and other recovery modules.
+- Backend orchestration, relayer automation, and production recovery operations remain outside this repo's current scope.
 
 ## Email Recovery Boundary
 - **Mobile app**
