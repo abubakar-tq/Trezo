@@ -1,0 +1,13 @@
+{
+  "chainId": 31337,
+  "infraVersion": "TREZO_INFRA_V2",
+  "rootFactory": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+  "entryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+  "portable": false,
+  "smartAccountImpl": "0x603D601aF9260a7647d15133F9423270136F63D4",
+  "proxyFactory": "0xdc30d3e424d23F7419c88EdcEFDf4E6Ceb0e2b88",
+  "accountFactory": "0x2E504478837ee50cbCE8Fa4E480E71622d629365",
+  "passkeyValidator": "0x41352ca01307F0c3E31D35189B08A55b7593281d",
+  "socialRecovery": "0xCB0dBDdB106d97Af0a3997A4a816C0091e7Abc9e",
+  "note": "Local dev uses Foundry's CREATE2 deployer for tests and local scripts. Production portable chains must use the Safe Singleton Factory."
+}

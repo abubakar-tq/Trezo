@@ -3,6 +3,8 @@ pragma solidity ^0.8.30;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
+import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
+import {DeployConstants} from "./common/DeployConstants.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
@@ -39,21 +41,31 @@ contract DeployAccount is Script {
         helperConfig = new HelperConfig();
 
         HelperConfig.NetworkConfig memory networkConfig = helperConfig.getConfig();
+        address rootDeployer = deterministicRootDeployer();
 
         vm.startBroadcast(networkConfig.account);
 
-        // Deploy implementation (SmartAccount) - do not initialize here
-        smartAccount = new SmartAccount();
+        smartAccount = new SmartAccount{salt: DeployConstants.SMART_ACCOUNT_IMPL_SALT}();
 
-        // Deploy proxy factory using proxy template
-        proxyFactory = new MinimalProxyFactory(address(smartAccount));
+        address predictedAccountFactory =
+            _predictAccountFactory(rootDeployer, address(smartAccount), networkConfig.entryPoint);
 
-        // Deploy account factory
-        accountFactory = new AccountFactory(address(proxyFactory), networkConfig.entryPoint);
+        proxyFactory = new MinimalProxyFactory{salt: DeployConstants.MINIMAL_PROXY_FACTORY_SALT}(
+            address(smartAccount),
+            predictedAccountFactory
+        );
 
-        passkeyValidator = new PasskeyValidator();
+        accountFactory = new AccountFactory{salt: DeployConstants.ACCOUNT_FACTORY_SALT}(
+            address(smartAccount),
+            rootDeployer,
+            DeployConstants.MINIMAL_PROXY_FACTORY_SALT,
+            networkConfig.entryPoint
+        );
+        require(address(accountFactory) == predictedAccountFactory, "unexpected AccountFactory address");
+        require(address(proxyFactory) == accountFactory.proxyFactory(), "unexpected MinimalProxyFactory address");
 
-        socialRecovery = new SocialRecovery();
+        passkeyValidator = new PasskeyValidator{salt: DeployConstants.PASSKEY_VALIDATOR_SALT}();
+        socialRecovery = new SocialRecovery{salt: DeployConstants.SOCIAL_RECOVERY_SALT}();
 
         console2.log("=== DeployAccount ===");
         console2.log("chainId:", block.chainid);
@@ -78,6 +90,18 @@ contract DeployAccount is Script {
         return (helperConfig, smartAccount, proxyFactory, accountFactory, passkeyValidator, socialRecovery);
     }
 
+    function _predictAccountFactory(address deployer, address smartAccount, address entryPoint)
+        internal
+        pure
+        returns (address)
+    {
+        bytes memory initCode = abi.encodePacked(
+            type(AccountFactory).creationCode,
+            abi.encode(smartAccount, deployer, DeployConstants.MINIMAL_PROXY_FACTORY_SALT, entryPoint)
+        );
+        return Create2.computeAddress(DeployConstants.ACCOUNT_FACTORY_SALT, keccak256(initCode), deployer);
+    }
+
     function _writeDeploymentJson(
         HelperConfig.NetworkConfig memory net,
         SmartAccount smartAccount,
@@ -95,6 +119,9 @@ contract DeployAccount is Script {
         vm.serializeAddress(root, "entryPoint", net.entryPoint);
         vm.serializeAddress(root, "usdc", net.usdc);
         vm.serializeAddress(root, "deployer", net.account);
+        vm.serializeString(root, "infraVersion", DeployConstants.TREZO_INFRA_VERSION);
+        vm.serializeAddress(root, "rootFactory", deterministicRootDeployer());
+        vm.serializeBool(root, "portable", DeployConstants.isPortableChain(block.chainid));
 
         vm.serializeAddress(root, "smartAccountImpl", address(smartAccount));
         vm.serializeAddress(root, "proxyFactory", address(proxyFactory));
@@ -109,9 +136,7 @@ contract DeployAccount is Script {
         console2.log("Deployment JSON written:", path);
     }
 
-    function _preserveExistingEmailRecoveryDeployment(string memory root, string memory path)
-        internal
-    {
+    function _preserveExistingEmailRecoveryDeployment(string memory root, string memory path) internal {
         try vm.readFile(path) returns (string memory existingJson) {
             _trySerializeExistingAddress(root, "emailRecovery", existingJson, ".emailRecovery");
             _trySerializeExistingAddress(
@@ -185,5 +210,9 @@ contract DeployAccount is Script {
         try vm.parseJsonUint(existingJson, jsonPath) returns (uint256 value) {
             vm.serializeUint(root, key, value);
         } catch { }
+    }
+
+    function deterministicRootDeployer() internal pure returns (address) {
+        return 0x4e59b44847b379578588920cA78FbF26c0B4956C;
     }
 }
