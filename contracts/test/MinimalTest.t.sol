@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {console2} from "forge-std/Test.sol";
+import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
@@ -12,7 +13,7 @@ import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
 import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 import {PackedUserOperation} from "lib/account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
-contract MinimalTest is Test {
+contract MinimalTest is AccountFactoryTestHelper {
 
     SmartAccount implementation;
     MinimalProxyFactory factory;
@@ -27,7 +28,13 @@ contract MinimalTest is Test {
         (helperConfig, implementation,  factory, accountFactory,passkeyValidator, ) = deployer.deployAccount();
 
 
-        proxy = accountFactory.createAccount(keccak256("user1"), address(passkeyValidator), PassKeyDemo.getPasskeyInit(0));
+        proxy = _createAuthorizedAccount(
+            accountFactory,
+            keccak256("user1"),
+            0,
+            address(passkeyValidator),
+            PassKeyDemo.getPasskeyInit(0)
+        );
         sendUserOp = new SendPackedUserOp();
         
         console2.log("Setup complete");

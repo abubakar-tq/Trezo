@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {console2} from "forge-std/Test.sol";
+import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
 import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
@@ -14,7 +15,7 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
 
-contract UserOperationTest is Test {
+contract UserOperationTest is AccountFactoryTestHelper {
     AccountFactory accountFactory;
     HelperConfig helperConfig;
     address usdc;
@@ -42,8 +43,12 @@ contract UserOperationTest is Test {
         sendScript = new SendPackedUserOp();
         config = helperConfig.getConfig();
 
-        proxy = accountFactory.createAccount(
-            keccak256("userop-setup"), address(_passkeyValidator), PassKeyDemo.getPasskeyInit(0)
+        proxy = _createAuthorizedAccount(
+            accountFactory,
+            keccak256("userop-setup"),
+            0,
+            address(_passkeyValidator),
+            PassKeyDemo.getPasskeyInit(0)
         );
     }
 

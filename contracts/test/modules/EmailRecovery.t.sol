@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test} from "forge-std/Test.sol";
+import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {
@@ -28,7 +28,7 @@ import {
     GuardianStatus
 } from "lib/email-recovery/src/libraries/EnumerableGuardianMap.sol";
 
-contract EmailRecoveryTest is Test {
+contract EmailRecoveryTest is AccountFactoryTestHelper {
     using Strings for uint256;
 
     bytes32 internal constant ACCOUNT_SALT = keccak256("email-recovery-account");
@@ -68,8 +68,12 @@ contract EmailRecoveryTest is Test {
         DeployAccount deployScript = new DeployAccount();
         (, , , accountFactory, passkeyValidator,) = deployScript.deployAccount();
 
-        proxy = accountFactory.createAccount(
-            ACCOUNT_SALT, address(passkeyValidator), PassKeyDemo.getPasskeyInit(0)
+        proxy = _createAuthorizedAccount(
+            accountFactory,
+            ACCOUNT_SALT,
+            0,
+            address(passkeyValidator),
+            PassKeyDemo.getPasskeyInit(0)
         );
 
         _deployZkEmailInfra();
