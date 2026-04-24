@@ -9,6 +9,9 @@ export type DeploymentAddresses = {
   accountFactory: `0x${string}`;
   passkeyValidator: `0x${string}`;
   socialRecovery: `0x${string}`;
+  infraVersion?: string;
+  rootFactory?: `0x${string}`;
+  portable?: boolean;
   emailRecovery?: `0x${string}`;
   emailRecoveryCommandHandler?: `0x${string}`;
   zkEmailVerifier?: `0x${string}`;

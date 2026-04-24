@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
-import { DEFAULT_CHAIN_ID } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, isPortableChain } from "@/src/integration/chains";
 import {
   buildCreateAccountUserOp,
   getDeployment,
@@ -25,11 +25,18 @@ const randomHex = (bytes: number): Hex => {
   const arr = new Uint8Array(bytes);
   // global crypto is available via react-native-get-random-values polyfill
   globalThis.crypto.getRandomValues(arr);
-  return ("0x" + Buffer.from(arr).toString("hex")) as Hex;
+  return (`0x${Array.from(arr, (byte) => byte.toString(16).padStart(2, "0")).join("")}`) as Hex;
+};
+
+const shortHex = (value: Hex, head = 18, tail = 8) =>
+  value.length > head + tail ? `${value.slice(0, head)}...${value.slice(-tail)}` : value;
+
+const debugLog = (...args: unknown[]) => {
+  if (__DEV__) console.log(...args);
 };
 
 export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_ID }) => {
-  const [salt, setSalt] = useState<Hex>(() => randomHex(32));
+  const [walletId, setWalletId] = useState<Hex>(() => randomHex(32));
   const [status, setStatus] = useState<"idle" | "building" | "ready" | "sending" | "error" | "sent">(
     "idle",
   );
@@ -82,14 +89,23 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
 
       const passkeyInit = await fetchPasskeyInit();
       
-      console.log('[CreateAccountDevCard] PasskeyInit for account creation:', {
-        idRaw: passkeyInit.idRaw,
-        px: passkeyInit.px.toString(16),
-        py: passkeyInit.py.toString(16),
+      debugLog('[CreateAccountDevCard] PasskeyInit for account creation:', {
+        idRaw: shortHex(passkeyInit.idRaw),
+        hasPublicKey: Boolean(passkeyInit.px && passkeyInit.py),
       });
 
+      const walletIndex = 0n;
+      const mode = isPortableChain(chainId) ? "portable" : "chain-specific";
+
       // Predict first so we can optionally prefund before bundler simulation (avoids AA21)
-      const predictedSender = await predictAccountAddress(chainId, salt);
+      const predictedSender = await predictAccountAddress(
+        chainId,
+        walletId,
+        validator as Address,
+        passkeyInit,
+        walletIndex,
+        mode,
+      );
       setSender(predictedSender as Hex);
 
       if (!usePaymaster && autoFund) {
@@ -110,7 +126,9 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
 
       const { userOp, userOpHash, sender } = await buildCreateAccountUserOp({
         chainId,
-        salt,
+        walletId,
+        walletIndex,
+        mode,
         validator,
         passkeyInit,
         bundlerUrl,
@@ -121,17 +139,15 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
       // Prompt biometric to sign the userOp hash with the stored passkey
       const signed = await PasskeyService.signWithPasskey(userId, userOpHash);
       
-      console.log('[CreateAccountDevCard] Signature passkeyId:', signed.passkeyId);
-      console.log('[CreateAccountDevCard] Match?', signed.passkeyId === passkeyInit.idRaw);
-      console.log("Signed userOpHash:", signed);
-      console.log('[CreateAccountDevCard] Signature details:', {
-        authenticatorData: signed.authenticatorData.slice(0, 80) + '...',
+      debugLog('[CreateAccountDevCard] Signature passkeyId:', shortHex(signed.passkeyId as Hex));
+      debugLog('[CreateAccountDevCard] Match?', signed.passkeyId === passkeyInit.idRaw);
+      debugLog('[CreateAccountDevCard] Signature details:', {
         authenticatorDataLength: signed.authenticatorData.length,
-        clientDataJSON: signed.clientDataJSON,
+        clientDataJSONLength: signed.clientDataJSON.length,
         challengeIndex: signed.challengeIndex,
         typeIndex: signed.typeIndex,
-        r: signed.r.slice(0, 20) + '...',
-        s: signed.s.slice(0, 20) + '...',
+        r: shortHex(signed.r as Hex),
+        s: shortHex(signed.s as Hex),
       });
       
       const encodedSig = PasskeyService.encodeSignatureForContract(signed) as Hex;
@@ -170,7 +186,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
       setOpHash(opHash as Hex);
       setStatus("sent");
     } catch (e) {
-      console.log("[CreateAccountDevCard] sendUserOp error object:", e);
+      debugLog("[CreateAccountDevCard] sendUserOp error object:", e);
       setError(e instanceof Error ? e.message : "Failed to send userOp");
       setStatus("error");
     }
@@ -198,7 +214,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
   };
 
   const reset = () => {
-    setSalt(randomHex(32));
+    setWalletId(randomHex(32));
     setStatus("idle");
     setError(null);
     setUserOp(null);
@@ -229,10 +245,10 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
       />
       <Text style={styles.label}>Validator</Text>
       <Text style={styles.value}>{validator ?? "N/A"}</Text>
-      <Text style={styles.label}>Salt</Text>
-      <Text style={styles.value}>{salt}</Text>
+      <Text style={styles.label}>Wallet ID</Text>
+      <Text style={styles.value}>{walletId}</Text>
       <TouchableOpacity onPress={reset} style={styles.secondaryButton}>
-        <Text style={styles.buttonText}>Regenerate Salt / Reset</Text>
+        <Text style={styles.buttonText}>Regenerate Wallet ID / Reset</Text>
       </TouchableOpacity>
 
       <View style={styles.paymasterSection}>
@@ -301,7 +317,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
           {signature !== "0x" && (
             <>
               <Text style={styles.sectionTitle}>Passkey Signature</Text>
-              <Text style={styles.value}>{signature}</Text>
+              <Text style={styles.value}>{shortHex(signature, 22, 10)}</Text>
             </>
           )}
         </>

@@ -37,6 +37,9 @@ export type Transaction = {
 export type AAAccount = {
   id: string; // Database ID
   userId: string;
+  walletId: string;
+  walletIndex: number;
+  deploymentMode: "portable" | "chain-specific";
   predictedAddress: string; // Counterfactual address
   ownerAddress: string; // EOA that controls this AA
   isDeployed: boolean;

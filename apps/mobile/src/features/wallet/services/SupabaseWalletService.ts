@@ -16,6 +16,9 @@ const supabase = getSupabaseClient();
 export interface AAWallet {
   id: string;
   user_id: string;
+  wallet_identity?: string;
+  wallet_index: number;
+  deployment_mode: 'portable' | 'chain-specific';
   predicted_address: string;
   owner_address: string;
   is_deployed: boolean;
@@ -84,6 +87,9 @@ export class SupabaseWalletService {
     ownerAddress: string;
     walletName: string;
     chainId: number;
+    walletId?: string;
+    walletIndex?: number;
+    deploymentMode?: 'portable' | 'chain-specific';
   }): Promise<AAWallet> {
     console.log(`💾 [SupabaseWalletService] Saving AA wallet for user ${data.userId}`);
     
@@ -92,6 +98,9 @@ export class SupabaseWalletService {
         .from('aa_wallets')
         .insert({
           user_id: data.userId,
+          wallet_identity: data.walletId,
+          wallet_index: data.walletIndex ?? 0,
+          deployment_mode: data.deploymentMode ?? 'chain-specific',
           predicted_address: data.predictedAddress.toLowerCase(),
           owner_address: data.ownerAddress.toLowerCase(),
           wallet_name: data.walletName,

@@ -579,6 +579,17 @@
     },
     {
       "type": "error",
+      "name": "SocialRecovery_DuplicateGuardianSignature",
+      "inputs": [
+        {
+          "name": "index",
+          "type": "uint16",
+          "internalType": "uint16"
+        }
+      ]
+    },
+    {
+      "type": "error",
       "name": "SocialRecovery_GuardianLengthMustBeNonZero",
       "inputs": []
     },
@@ -666,6 +677,22 @@
       "type": "error",
       "name": "SocialRecovery_NoActiveRecovery",
       "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_OnlyWallet",
+      "inputs": [
+        {
+          "name": "caller",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
     },
     {
       "type": "error",

@@ -26,10 +26,13 @@ import {
 } from "react-native";
 
 import { CHAIN_CONFIG } from "@/src/core/network/chain";
-import { AccountDeploymentService } from "@/src/features/wallet/services/AccountDeploymentService";
+import {
+  AccountDeploymentService,
+  deriveDefaultWalletId,
+} from "@/src/features/wallet/services/AccountDeploymentService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
-import type { SupportedChainId } from "@/src/integration/chains";
+import { isPortableChain, type SupportedChainId } from "@/src/integration/chains";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
@@ -82,15 +85,21 @@ export default function DeployAccountScreen() {
       // Create passkey (biometric prompt handled inside)
       const passkey = await PasskeyService.createPasskey(user.id);
 
-      // Predict AA address using passkey salt
+      // Predict AA address from stable wallet identity; passkey state stays outside the address formula.
       const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
+      const walletIndex = aaAccount?.walletIndex ?? 0;
+      const walletId = (aaAccount?.walletId ?? deriveDefaultWalletId(user.id)) as `0x${string}`;
+      const deploymentMode = aaAccount?.deploymentMode ?? (isPortableChain(chainId) ? "portable" : "chain-specific");
       const predictedAddress = await AccountDeploymentService.predictAddress(
+        walletId,
         passkey,
         chainId,
+        walletIndex,
+        deploymentMode,
       );
 
       // Proceed to deployment
-      await handleDeploy(passkey, predictedAddress as string);
+      await handleDeploy(passkey, predictedAddress as string, walletId, walletIndex, deploymentMode);
     } catch (error) {
       console.error("Error creating passkey:", error);
       setErrorMessage(
@@ -103,6 +112,9 @@ export default function DeployAccountScreen() {
   const handleDeploy = async (
     passkey: Awaited<ReturnType<typeof PasskeyService.createPasskey>>,
     predictedAddress: string,
+    walletId: `0x${string}`,
+    walletIndex: number,
+    deploymentMode: "portable" | "chain-specific",
   ) => {
     setCurrentStep("deploying");
     setDeploymentStatus("deploying");
@@ -118,6 +130,9 @@ export default function DeployAccountScreen() {
         {
           chainId,
           passkey,
+          walletId: walletId as `0x${string}`,
+          walletIndex,
+          mode: deploymentMode,
         },
       );
 
@@ -132,6 +147,9 @@ export default function DeployAccountScreen() {
       setAAAccount({
         id: user?.id || "passkey-wallet",
         userId: user?.id || "passkey-wallet",
+        walletId,
+        walletIndex,
+        deploymentMode,
         predictedAddress: accountAddress,
         ownerAddress: passkey.credentialIdRaw,
         isDeployed: true,

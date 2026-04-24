@@ -1,14 +1,29 @@
-import { encodeFunctionData, parseEther, type Hex, type Address } from 'viem';
+import { parseEther, type Hex, type Address } from 'viem';
 import { getDeployment } from './deployments';
 import { getPublicClient, getWalletClientFromPrivateKey } from './clients';
 import type { SupportedChainId } from '../chains';
 import AccountFactoryABI from '../abi/AccountFactory.json';
 import { ABIS } from './abis';
+import type { DeploymentMode, PasskeyInit } from './userOps';
+
+const toPasskeyTuple = (passkeyInit: PasskeyInit) => [
+  passkeyInit.idRaw,
+  BigInt(passkeyInit.px),
+  BigInt(passkeyInit.py),
+] as const;
 
 /**
- * Predict the deterministic address of a smart account before deployment
+ * Predict the deterministic address of a smart account before deployment.
+ * Prediction is bound to the full deployment snapshot.
  */
-export async function predictAccountAddress(chainId: SupportedChainId, salt: Hex): Promise<Address> {
+export async function predictAccountAddress(
+  chainId: SupportedChainId,
+  walletId: Hex,
+  validator: Address,
+  passkeyInit: PasskeyInit,
+  walletIndex: bigint | number = 0n,
+  mode: DeploymentMode = "portable",
+): Promise<Address> {
   const deployment = getDeployment(chainId);
   if (!deployment) throw new Error(`No deployment found for chain ${chainId}`);
   if (!deployment.accountFactory || deployment.accountFactory === '0x0000000000000000000000000000000000000000') {
@@ -19,13 +34,11 @@ export async function predictAccountAddress(chainId: SupportedChainId, salt: Hex
   }
 
   const publicClient = getPublicClient(chainId);
-
-  // Call predictAccount on the AccountFactory
   const address = await publicClient.readContract({
     address: deployment.accountFactory as Address,
     abi: AccountFactoryABI.abi,
-    functionName: 'predictAccount',
-    args: [salt],
+    functionName: mode === "chain-specific" ? 'predictChainSpecificAccount' : 'predictAccount',
+    args: [walletId, BigInt(walletIndex), validator, toPasskeyTuple(passkeyInit)],
   });
 
   return address as Address;
@@ -112,11 +125,9 @@ export async function fundEntryPointDeposit({
 }) {
   const walletClient = getWalletClientFromPrivateKey(DEV_FUNDER_PRIVATE_KEY, chainId);
   const publicClient = getPublicClient(chainId);
-  const deployment = getDeployment(chainId);
-  if (!deployment?.entryPoint) throw new Error(`EntryPoint missing for chain ${chainId}`);
 
   const hash = await walletClient.writeContract({
-    address: deployment.entryPoint as Address,
+    address: getDeployment(chainId)?.entryPoint as Address,
     abi: entryPointAbi,
     functionName: 'depositTo',
     args: [account],

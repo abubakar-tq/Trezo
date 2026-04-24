@@ -7,9 +7,27 @@
           "name": "_template",
           "type": "address",
           "internalType": "address"
+        },
+        {
+          "name": "_accountFactory",
+          "type": "address",
+          "internalType": "address"
         }
       ],
       "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "accountFactory",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
     },
     {
       "type": "function",
@@ -106,6 +124,27 @@
           "internalType": "uint256"
         }
       ]
+    },
+    {
+      "type": "error",
+      "name": "MinimalProxyFactory_OnlyAccountFactory",
+      "inputs": [
+        {
+          "name": "caller",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "accountFactory",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "MinimalProxyFactory_ZeroAddress",
+      "inputs": []
     }
   ]
 }

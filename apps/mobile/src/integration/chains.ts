@@ -49,6 +49,12 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
 
 export const DEFAULT_CHAIN_ID: SupportedChainId = 31337;
 
+export const PORTABLE_CHAIN_IDS = [1, 11155111, 10, 8453, 42161, 137] as const;
+
+export function isPortableChain(chainId: number): boolean {
+  return (PORTABLE_CHAIN_IDS as readonly number[]).includes(chainId);
+}
+
 export function getChainConfig(chainId: SupportedChainId = DEFAULT_CHAIN_ID): ChainConfig {
   return CHAINS[chainId];
 }

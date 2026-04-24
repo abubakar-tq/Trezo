@@ -11,10 +11,12 @@
 import { CHAIN_CONFIG, getBundlerUrl, getPaymasterUrl, getRpcUrl } from '@/src/core/network/chain';
 import {
     getContractAddresses,
-    validateContractAddresses,
 } from '@/src/core/network/contracts';
+import { deriveDefaultWalletId } from '@/src/features/wallet/services/AccountDeploymentService';
+import { AccountDeploymentService } from '@/src/features/wallet/services/AccountDeploymentService';
 import PasskeyService from '@/src/features/wallet/services/PasskeyService';
 import { ABIS } from '@/src/integration/viem/abis';
+import { isPortableChain } from '@/src/integration/chains';
 import { ethers } from 'ethers';
 
 const entryPointAbi = [
@@ -23,7 +25,6 @@ const entryPointAbi = [
 ] as const;
 
 const CONTRACT_ABIS = {
-  AccountFactory: ABIS.accountFactory as ethers.InterfaceAbi,
   SmartAccount: ABIS.smartAccount as ethers.InterfaceAbi,
   EntryPoint: entryPointAbi as ethers.InterfaceAbi,
 } as const;
@@ -87,35 +88,24 @@ export class AAWalletService {
   /**
    * Predict the counterfactual address for an AA wallet
    * This address can be used before deployment (send funds to it, etc.).
-   * The passkey credential id is the deterministic salt for current account creation.
+   * The wallet id is the deterministic identity for current account creation.
    */
   async predictAccountAddress(config: AAWalletConfig): Promise<string> {
     console.log(`📍 [AAWalletService] Predicting address for user ${config.userId}`);
     
     try {
-      const contracts = getContractAddresses(this.chainId);
-      
-      // Validate contracts are deployed
-      if (!validateContractAddresses(contracts)) {
-        throw new Error('Smart contracts not deployed yet. Please deploy contracts first.');
-      }
-      
+      const walletId = deriveDefaultWalletId(config.userId);
       const passkey = await PasskeyService.getPasskey(config.userId);
-      if (!passkey?.credentialIdRaw) {
-        throw new Error('No stored passkey found for this user. Create a passkey before predicting the account address.');
+      if (!passkey) {
+        throw new Error("No local passkey is available for snapshot-based prediction.");
       }
-
-      const salt = passkey.credentialIdRaw;
-      
-      // Create AccountFactory contract instance
-      const accountFactory = new ethers.Contract(
-        contracts.accountFactory,
-        CONTRACT_ABIS.AccountFactory,
-        this.provider
+      const predictedAddress = await AccountDeploymentService.predictAddress(
+        walletId as `0x${string}`,
+        passkey,
+        this.chainId as any,
+        0n,
+        isPortableChain(this.chainId) ? "portable" : "chain-specific",
       );
-      
-      // Call predictAccount function
-      const predictedAddress = await accountFactory.predictAccount(salt);
       
       console.log(`✅ [AAWalletService] Predicted address: ${predictedAddress}`);
       
@@ -176,22 +166,9 @@ export class AAWalletService {
       // If not deployed, include initCode
       let initCode = '0x';
       if (!isDeployed) {
-        // InitCode = AccountFactory address + createAccount calldata
-        const accountFactory = new ethers.Contract(
-          contracts.accountFactory,
-          CONTRACT_ABIS.AccountFactory,
-          this.provider
+        throw new Error(
+          'Legacy EOA deployment path is disabled. Use AccountDeploymentService for snapshot-based first deployment.',
         );
-        
-        const ownerAddress = await params.signer.getAddress();
-        const salt = ethers.keccak256(ethers.toUtf8Bytes(params.sender)); // Use sender as salt
-        
-        const createAccountData = accountFactory.interface.encodeFunctionData(
-          'createAccount',
-          [ownerAddress, salt]
-        );
-        
-        initCode = ethers.concat([contracts.accountFactory, createAccountData]);
       }
       
       // Encode the call to the target

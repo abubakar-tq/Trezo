@@ -1,6 +1,9 @@
 import type { TokenBalance } from "@/src/features/portfolio/services/PortfolioService";
 import { PortfolioService } from "@/src/features/portfolio/services/PortfolioService";
-import { AccountDeploymentService } from "@/src/features/wallet/services/AccountDeploymentService";
+import {
+    AccountDeploymentService,
+    deriveDefaultWalletId,
+} from "@/src/features/wallet/services/AccountDeploymentService";
 import {
     DEV_FUNDING_AMOUNT_ETH,
     devFundSmartAccount,
@@ -10,6 +13,7 @@ import type { AAAccount } from "@/src/features/wallet/store/useWalletStore";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import {
     DEFAULT_CHAIN_ID,
+    isPortableChain,
     type SupportedChainId,
 } from "@/src/integration/chains";
 import type {
@@ -280,9 +284,16 @@ const HomeScreen: React.FC = () => {
         throw new Error("Unable to access passkey credentials on this device.");
       }
 
+      const walletIndex = aaAccount?.walletIndex ?? 0;
+      const walletId = (aaAccount?.walletId ?? deriveDefaultWalletId(userId)) as `0x${string}`;
+      const deploymentMode =
+        aaAccount?.deploymentMode ?? (isPortableChain(resolvedDeployChainId) ? "portable" : "chain-specific");
       const predictedAddress = await AccountDeploymentService.predictAddress(
+        walletId,
         passkey,
         resolvedDeployChainId,
+        walletIndex,
+        deploymentMode,
       );
       setSmartAccountAddress(predictedAddress);
 
@@ -291,6 +302,9 @@ const HomeScreen: React.FC = () => {
         ({
           id: `local-${userId}`,
           userId,
+          walletId,
+          walletIndex,
+          deploymentMode,
           predictedAddress,
           ownerAddress: passkey.credentialIdRaw,
           isDeployed: false,
@@ -302,8 +316,11 @@ const HomeScreen: React.FC = () => {
       setAAAccount({
         ...baseAccount,
         predictedAddress,
-        chainId: resolvedDeployChainId,
-        isDeployed: false,
+          chainId: resolvedDeployChainId,
+          walletId,
+          walletIndex,
+          deploymentMode,
+          isDeployed: false,
       });
 
       setAccountActionStatus(
@@ -314,12 +331,18 @@ const HomeScreen: React.FC = () => {
         {
           chainId: resolvedDeployChainId,
           passkey,
+          walletId,
+          walletIndex,
+          mode: deploymentMode,
         },
       );
 
       const deployedAccount: AAAccount = {
         ...baseAccount,
         predictedAddress: result.accountAddress,
+        walletId,
+        walletIndex,
+        deploymentMode,
         ownerAddress: passkey.credentialIdRaw,
         chainId: resolvedDeployChainId,
         isDeployed: true,
