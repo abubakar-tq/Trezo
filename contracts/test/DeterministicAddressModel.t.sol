@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
-
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
@@ -20,8 +18,7 @@ contract DeterministicAddressModelTest is AccountFactoryTestHelper {
     uint256 internal constant WALLET_INDEX = 0;
 
     function setUp() public {
-        DeployAccount deployScript = new DeployAccount();
-        (helperConfig,, proxyFactory, accountFactory, validator,) = deployScript.deployAccount();
+        (helperConfig,, proxyFactory, accountFactory, validator,) = _deployLegacyAccountStack();
     }
 
     function testSameSnapshotKeepsPortablePredictionStable() public view {

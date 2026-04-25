@@ -4,7 +4,6 @@ pragma solidity ^0.8.30;
 import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 
@@ -41,14 +40,13 @@ contract SocialRecoveryIntegrationTest is AccountFactoryTestHelper {
     address internal spender = makeAddr("spender");
 
     function setUp() public {
-        DeployAccount deployScript = new DeployAccount();
         (
             HelperConfig _helperConfig,
             ,
             ,
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator,
-        ) = deployScript.deployAccount();
+        ) = _deployLegacyAccountStack();
         helperConfig = _helperConfig;
         accountFactory = _accountFactory;
         passkeyValidator = _passkeyValidator;

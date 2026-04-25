@@ -22,7 +22,6 @@ import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
 import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
@@ -48,14 +47,10 @@ contract ModuleManagerTest is AccountFactoryTestHelper {
     uint256 internal py;
 
     SendPackedUserOp internal sendUserOp;
-    DeployAccount deployScript;
-
     address entryPoint;
 
     function setUp() public {
-        deployScript = new DeployAccount();
-
-        (helperConfig, account, factory, accountFactory, validator,) = deployScript.deployAccount();
+        (helperConfig, account, factory, accountFactory, validator,) = _deployLegacyAccountStack();
 
         proxy = _createAuthorizedAccount(
             accountFactory,
