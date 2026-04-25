@@ -60,8 +60,8 @@ forge build
 forge test -vv
 ```
 
-## Local Deployment
-This repo has separate deploy steps for the account stack and the email-recovery stack.
+## Legacy Local/Test Flow
+This repo keeps a legacy local/test deployment flow for Anvil-based development.
 
 ```bash
 cd contracts
@@ -71,9 +71,10 @@ make deploy-email-local
 
 What they do:
 - `deploy-local`
+  - aliases the legacy local/test flow
   - deploys `SmartAccount`, `AccountFactory`, `MinimalProxyFactory`, `PasskeyValidator`, and `SocialRecovery`
-  - writes `deployments/31337.json`
-  - syncs ABIs and deployment JSON into the mobile app
+  - writes the derived compatibility manifest `deployments/31337.json`
+  - syncs ABIs and the derived mobile deployment JSON
 - `deploy-email-local`
   - deploys or reuses zk-email infra:
     - `UserOverrideableDKIMRegistry`
@@ -82,15 +83,22 @@ What they do:
     - `EmailAuth`
     - `EmailRecoveryCommandHandler`
   - deploys Trezo's custom `EmailRecovery`
-  - appends the new addresses into `deployments/31337.json`
+  - appends the new addresses into the derived compatibility manifest `deployments/31337.json`
   - syncs updated artifacts into the mobile app
 
-## Testnet Deployment
+`DeployAccount.s.sol` is local-only and uses the legacy `0x4e59...` CREATE2 root. It is retained as a fixture for local development and tests.
+
+## Canonical Portable/Release Flow
 ```bash
 cd contracts
 make deploy-sepolia
 make deploy-email-sepolia
 ```
+
+- `make deploy-sepolia` is a compatibility alias for the canonical `make deploy-infra-sepolia` flow.
+- Sepolia is portable and must use `DeployInfra`, not `DeployAccount`.
+- Canonical release artifacts live in `deployments/releases/*` and `deployments/chains/*`.
+- `deployments/<chainId>.json` and the synced mobile JSON are derived outputs, not the source of truth.
 
 For `DeployEmailRecovery.s.sol`, the key environment variables are:
 - `KILL_SWITCH_AUTHORIZER`
@@ -137,5 +145,5 @@ forge test --match-contract SocialRecoveryIntegrationTest -vv
 
 ## Notes
 - Bundler integration targets EntryPoint v0.7.
-- `DeployAccount.s.sol` preserves existing email-recovery fields in the deployment manifest when the account stack is redeployed.
-- `DeployEmailRecovery.s.sol` preserves the core account deployment fields and appends the zk-email deployment metadata.
+- `DeployAccount.s.sol` preserves existing email-recovery fields in the derived compatibility manifest when the account stack is redeployed locally.
+- `DeployEmailRecovery.s.sol` preserves the core deployment metadata and appends the zk-email deployment metadata.

@@ -31,6 +31,35 @@ forge script script/CheckChainSupport.s.sol:CheckChainSupport --rpc-url <rpc>
 
 `DeployInfra` expects `PRIVATE_KEY`. `ENTRYPOINT` is the only optional override.
 
+## Canonical Portable/Release Flow
+
+Use this flow for every portable release chain, including Sepolia:
+
+```bash
+make check-root-factory RPC_URL=<rpc>
+make predict-infra RPC_URL=<rpc> [ENTRYPOINT=...]
+make deploy-infra RPC_URL=<rpc> PRIVATE_KEY=<pk> [ENTRYPOINT=...]
+make verify-infra RPC_URL=<rpc> [ENTRYPOINT=...]
+make predict-wallet RPC_URL=<rpc> ACCOUNT_FACTORY=<factory> ...
+```
+
+- `SAFE_SINGLETON_FACTORY` is the only canonical portable root.
+- `deployments/releases/*` and `deployments/chains/*` are the canonical release artifacts.
+- `make deploy-sepolia` is a compatibility alias for `make deploy-infra-sepolia`.
+
+## Legacy Local/Test Flow
+
+`DeployAccount.s.sol` remains a legacy local/test fixture rooted at `0x4e59...`.
+
+```bash
+make deploy-local
+make deploy-email-local
+```
+
+- This flow is local-only and must not be used for Sepolia, mainnet, or any other non-local chain.
+- `deployments/<chainId>.json` is a derived compatibility manifest for local/mobile workflows.
+- The synced mobile JSON is derived output and must not be treated as the canonical release source of truth.
+
 ## Wallet Prediction
 
 Prediction now requires the full deployment snapshot:
@@ -50,6 +79,7 @@ make predict-wallet \
 ## Release Rules
 
 - Never deploy portable infra outside the scripted Safe Singleton Factory path.
+- Never use `DeployAccount.s.sol` for Sepolia, mainnet, or other non-local chains.
 - Never change salts after a release is cut.
 - Never reuse a salt for materially different bytecode.
 - Add a chain to portable mode only after root factory, infra prediction, infra verification, and wallet prediction all pass.
