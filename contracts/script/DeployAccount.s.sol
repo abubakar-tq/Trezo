@@ -13,6 +13,11 @@ import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 
 contract DeployAccount is Script {
+    error LegacyDeployAccountUnsupportedChain(uint256 chainId);
+
+    uint256 internal constant LEGACY_LOCAL_CHAIN_ID = 31_337;
+    address internal constant LEGACY_ROOT_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+
     function run()
         external
         returns (
@@ -38,6 +43,11 @@ contract DeployAccount is Script {
             SocialRecovery socialRecovery
         )
     {
+        _assertLegacyLocalChain();
+        console2.log("WARNING: DeployAccount is a legacy local/test fixture.");
+        console2.log("WARNING: Use DeployInfra for portable or non-local deployments.");
+        console2.log("legacyRootDeployer:", LEGACY_ROOT_DEPLOYER);
+
         helperConfig = new HelperConfig();
 
         HelperConfig.NetworkConfig memory networkConfig = helperConfig.getConfig();
@@ -213,6 +223,14 @@ contract DeployAccount is Script {
     }
 
     function deterministicRootDeployer() internal pure returns (address) {
-        return 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+        return LEGACY_ROOT_DEPLOYER;
+    }
+
+    function _assertLegacyLocalChain() internal {
+        if (block.chainid != LEGACY_LOCAL_CHAIN_ID) {
+            console2.log("DeployAccount is a legacy local/test fixture.");
+            console2.log("Use DeployInfra for portable or non-local deployments.");
+            revert LegacyDeployAccountUnsupportedChain(block.chainid);
+        }
     }
 }
