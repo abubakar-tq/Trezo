@@ -1046,7 +1046,7 @@ export async function buildInstallEmailRecoveryUserOp(params: InstallEmailRecove
   if (missing.length > 0) {
     throw new Error(
       `Deployment config missing required field(s): ${missing.join(", ")} for chain ${params.chainId}. `
-      + "Sync contracts JSON to mobile (make sync-mobile CHAIN_ID=31337) and restart Metro with cache clear.",
+      + "Generate contracts/deployments/31337.json (make deploy-local, make validate-local-portable, or make deploy-email-local) and restart Metro with cache clear.",
     );
   }
   if (!params.passkeyId) {

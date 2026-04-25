@@ -22,6 +22,7 @@ pnpm-debug.log*
 !/deployments/releases/*.json
 !/deployments/chains/
 !/deployments/chains/*.json
+/deployments/chains/31337.json
 
 
 # Docs

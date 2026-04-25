@@ -1,6 +1,7 @@
-import deployment31337 from "../contracts/deployment.31337.json";
+import deployment31337 from "../../../../../contracts/deployments/31337.json";
 import type { SupportedChainId } from "../chains";
 
+// Local mobile reads the derived compatibility manifest generated under contracts/deployments/<chainId>.json.
 export type DeploymentAddresses = {
   chainId: number;
   entryPoint: `0x${string}`;

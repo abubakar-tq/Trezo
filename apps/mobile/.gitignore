@@ -36,3 +36,6 @@ Thumbs.db
 *.p12
 *.key
 *.mobileprovision
+
+# Generated local deployment artifact
+src/integration/contracts/deployment.31337.json
