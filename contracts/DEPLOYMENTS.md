@@ -47,18 +47,20 @@ make predict-wallet RPC_URL=<rpc> ACCOUNT_FACTORY=<factory> ...
 - `deployments/releases/*` and `deployments/chains/*` are the canonical release artifacts.
 - `make deploy-sepolia` is a compatibility alias for `make deploy-infra-sepolia`.
 
-## Legacy Local/Test Flow
-
-`DeployAccount.s.sol` remains a legacy local/test fixture rooted at `0x4e59...`.
+## Local Safe-Root Validation Flow
 
 ```bash
 make deploy-local
-make deploy-email-local
 ```
 
-- This flow is local-only and must not be used for Sepolia, mainnet, or any other non-local chain.
+- This flow is local-only and uses the same Safe-root deployer family as the release path.
+- `DeployInfra.s.sol` is still the entrypoint; `make deploy-local` sets `DEPLOYMENT_NAMESPACE=local`.
+- Local validation artifacts live under:
+  - `deployments/local/releases/*`
+  - `deployments/local/chains/*`
 - `deployments/<chainId>.json` is a derived compatibility manifest for local/mobile workflows.
 - The synced mobile JSON is derived output and must not be treated as the canonical release source of truth.
+- `make deploy-email-local` remains available when you only need to refresh the email-recovery portion of the local stack.
 
 ## Wallet Prediction
 
@@ -79,7 +81,7 @@ make predict-wallet \
 ## Release Rules
 
 - Never deploy portable infra outside the scripted Safe Singleton Factory path.
-- Never use `DeployAccount.s.sol` for Sepolia, mainnet, or other non-local chains.
+- Never introduce an alternate root deployer path for local or release infra.
 - Never change salts after a release is cut.
 - Never reuse a salt for materially different bytecode.
 - Add a chain to portable mode only after root factory, infra prediction, infra verification, and wallet prediction all pass.
