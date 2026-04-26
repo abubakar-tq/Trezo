@@ -31,7 +31,7 @@ contract UserOperationTest is AccountFactoryTestHelper {
             , // proxyFactory
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator,
-        ) = _deployLegacyAccountStack();
+        ) = _deployAccountStack();
         accountFactory = _accountFactory;
         helperConfig = _helperConfig;
         usdc = helperConfig.getConfig().usdc;

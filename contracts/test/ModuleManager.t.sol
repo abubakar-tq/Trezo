@@ -50,7 +50,7 @@ contract ModuleManagerTest is AccountFactoryTestHelper {
     address entryPoint;
 
     function setUp() public {
-        (helperConfig, account, factory, accountFactory, validator,) = _deployLegacyAccountStack();
+        (helperConfig, account, factory, accountFactory, validator,) = _deployAccountStack();
 
         proxy = _createAuthorizedAccount(
             accountFactory,

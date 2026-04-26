@@ -6,8 +6,7 @@ DEFAULT_ANVIL_KEY := 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6
 DEFAULT_ANVIL_ACCOUNT := 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
 
 ANVIL_RPC_URL = http://192.168.100.68:8545
-LOCAL_PORTABLE_RPC_URL ?= $(ANVIL_RPC_URL)
-LOCAL_PORTABLE_PRIVATE_KEY ?= $(DEFAULT_ANVIL_KEY)
+LOCAL_PRIVATE_KEY ?= $(DEFAULT_ANVIL_KEY)
 
 # Where the Expo app lives (relative to contracts/)
 MOBILE_DIR ?= ../apps/mobile/src/integration
@@ -21,11 +20,14 @@ RPC_URL ?= $(ANVIL_RPC_URL)
 CHAIN_ID ?= $(CHAIN_ID_LOCAL)
 SCRIPT_VERBOSITY ?= -vvvv
 
-ANVIL_NETWORK_ARGS := --rpc-url $(ANVIL_RPC_URL) --private-key $(DEFAULT_ANVIL_KEY) --broadcast $(SCRIPT_VERBOSITY)
+ANVIL_NETWORK_ARGS := --rpc-url $(ANVIL_RPC_URL) --private-key $(LOCAL_PRIVATE_KEY) --broadcast $(SCRIPT_VERBOSITY)
 
 DEPLOY_SCRIPT_ENV := \
 	$(if $(PRIVATE_KEY),PRIVATE_KEY=$(PRIVATE_KEY)) \
-	$(if $(ENTRYPOINT),ENTRYPOINT=$(ENTRYPOINT))
+	$(if $(ENTRYPOINT),ENTRYPOINT=$(ENTRYPOINT)) \
+	$(if $(DEPLOYMENT_NAMESPACE),DEPLOYMENT_NAMESPACE=$(DEPLOYMENT_NAMESPACE))
+
+OPTIONAL_ENTRYPOINT_MAKE := $(if $(ENTRYPOINT),ENTRYPOINT=$(ENTRYPOINT))
 
 PREDICT_WALLET_ENV := \
 	$(if $(ACCOUNT_FACTORY),ACCOUNT_FACTORY=$(ACCOUNT_FACTORY)) \
@@ -41,8 +43,8 @@ help:
 	@echo "Common targets:"
 	@echo "  make build"
 	@echo "  make deploy-local"
-	@echo "  make deploy-local-portable"
-	@echo "  make deploy-local-legacy"
+	@echo "  make predict-local"
+	@echo "  make verify-local"
 	@echo "  make deploy-email-local"
 	@echo ""
 	@echo "Deterministic infra flow:"
@@ -51,7 +53,6 @@ help:
 	@echo "  make predict-infra RPC_URL=<rpc> [ENTRYPOINT=...]"
 	@echo "  make deploy-infra RPC_URL=<rpc> PRIVATE_KEY=<pk> [ENTRYPOINT=...]"
 	@echo "  make deploy-sepolia   # compatibility alias for make deploy-infra-sepolia"
-	@echo "  make validate-local-portable [LOCAL_PORTABLE_RPC_URL=<rpc>] [LOCAL_PORTABLE_PRIVATE_KEY=<pk>] [ENTRYPOINT=...]"
 	@echo "  make verify-infra RPC_URL=<rpc> [ENTRYPOINT=...]"
 	@echo "  make predict-wallet RPC_URL=<rpc> ACCOUNT_FACTORY=<addr> WALLET_ID=<bytes32> VALIDATOR=<addr> PASSKEY_ID_RAW=<bytes32> PASSKEY_PX=<uint256> PASSKEY_PY=<uint256> [WALLET_INDEX=0]"
 	@echo ""
@@ -68,24 +69,13 @@ build:
 
 .PHONY: deploy-local
 deploy-local:
-	@echo "deploy-local is a compatibility alias for the canonical local portable flow."
-	@echo "Use make deploy-local-legacy only when you explicitly need the old 0x4e59 path."
-	$(MAKE) deploy-local-portable
-
-.PHONY: deploy-local-portable
-deploy-local-portable:
-	@echo "Deploying the local stack through the canonical Safe-root infra flow."
-	$(MAKE) validate-local-portable
+	@echo "Deploying the local stack through the canonical Safe-root flow."
+	@echo "Note: 31337 is not allowlisted as a portable release chain, so deploy-local skips check-chain-support."
+	$(MAKE) check-root-factory RPC_URL=$(ANVIL_RPC_URL)
+	$(MAKE) predict-local $(OPTIONAL_ENTRYPOINT_MAKE)
+	$(MAKE) deploy-infra RPC_URL=$(ANVIL_RPC_URL) PRIVATE_KEY=$(LOCAL_PRIVATE_KEY) DEPLOYMENT_NAMESPACE=local $(OPTIONAL_ENTRYPOINT_MAKE)
+	$(MAKE) verify-local $(OPTIONAL_ENTRYPOINT_MAKE)
 	$(MAKE) deploy-email-local
-
-.PHONY: deploy-local-legacy
-deploy-local-legacy: build
-	forge script script/DeployAccount.s.sol:DeployAccount \
-	$(ANVIL_NETWORK_ARGS)
-	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
-	$(ANVIL_NETWORK_ARGS)
-	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL) 
-	$(MAKE) sync-abi	
 
 .PHONY: deploy-email-local
 deploy-email-local: build
@@ -98,7 +88,7 @@ deploy-email-local: build
 deploy-sepolia:
 	@echo "deploy-sepolia is a compatibility alias for the canonical portable infra flow."
 	@echo "For the full Sepolia stack, run make deploy-sepolia then make deploy-email-sepolia."
-	$(MAKE) deploy-infra-sepolia PRIVATE_KEY=$(PRIVATE_KEY) ENTRYPOINT=$(ENTRYPOINT)
+	$(MAKE) deploy-infra-sepolia PRIVATE_KEY=$(PRIVATE_KEY) $(OPTIONAL_ENTRYPOINT_MAKE)
 
 .PHONY: deploy-email-sepolia
 deploy-email-sepolia: build
@@ -156,21 +146,14 @@ predict-wallet:
 deploy-infra-sepolia:
 	$(MAKE) deploy-infra RPC_URL=$(SEPOLIA_RPC_URL)
 
-.PHONY: deploy-infra-local-portable
-deploy-infra-local-portable: build
-	$(DEPLOY_SCRIPT_ENV) forge script script/DeployInfraLocalPortable.s.sol:DeployInfraLocalPortable \
-		--rpc-url $(RPC_URL) \
-		--broadcast \
-		$(SCRIPT_VERBOSITY)
+.PHONY: predict-local
+predict-local:
+	$(MAKE) predict-infra RPC_URL=$(ANVIL_RPC_URL) $(OPTIONAL_ENTRYPOINT_MAKE)
 
-.PHONY: validate-local-portable
-validate-local-portable:
-	@echo "Validating canonical Safe-root infra flow against local Anvil."
-	@echo "Note: 31337 is not allowlisted as a portable release chain, so this target skips check-chain-support."
-	$(MAKE) check-root-factory RPC_URL=$(LOCAL_PORTABLE_RPC_URL)
-	$(MAKE) predict-infra RPC_URL=$(LOCAL_PORTABLE_RPC_URL) ENTRYPOINT=$(ENTRYPOINT)
-	$(MAKE) deploy-infra-local-portable RPC_URL=$(LOCAL_PORTABLE_RPC_URL) PRIVATE_KEY=$(LOCAL_PORTABLE_PRIVATE_KEY) ENTRYPOINT=$(ENTRYPOINT)
-	$(MAKE) verify-infra RPC_URL=$(LOCAL_PORTABLE_RPC_URL) ENTRYPOINT=$(ENTRYPOINT)
+.PHONY: verify-local
+verify-local:
+	$(MAKE) check-root-factory RPC_URL=$(ANVIL_RPC_URL)
+	$(MAKE) verify-infra RPC_URL=$(ANVIL_RPC_URL) $(OPTIONAL_ENTRYPOINT_MAKE)
 
 .PHONY: predict-infra-sepolia
 predict-infra-sepolia:

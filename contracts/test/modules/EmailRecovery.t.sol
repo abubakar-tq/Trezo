@@ -64,7 +64,7 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         killSwitchAuthorizer = makeAddr("kill-switch-authorizer");
         proofTimestamp = block.timestamp;
 
-        (, , , accountFactory, passkeyValidator,) = _deployLegacyAccountStack();
+        (, , , accountFactory, passkeyValidator,) = _deployAccountStack();
 
         proxy = _createAuthorizedAccount(
             accountFactory,

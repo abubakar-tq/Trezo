@@ -29,7 +29,7 @@ contract AccountStorageTest is AccountFactoryTestHelper {
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator
             ,
-        ) = _deployLegacyAccountStack();
+        ) = _deployAccountStack();
 
         accountFactory = _accountFactory;
         passkeyValidator = _passkeyValidator;

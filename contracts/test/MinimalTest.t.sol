@@ -23,7 +23,7 @@ contract MinimalTest is AccountFactoryTestHelper {
     SendPackedUserOp sendUserOp;
 
     function setUp() public {
-        (helperConfig, implementation, factory, accountFactory, passkeyValidator,) = _deployLegacyAccountStack();
+        (helperConfig, implementation, factory, accountFactory, passkeyValidator,) = _deployAccountStack();
 
 
         proxy = _createAuthorizedAccount(

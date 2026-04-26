@@ -77,7 +77,7 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
             ,
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator,
-        ) = _deployLegacyAccountStack();
+        ) = _deployAccountStack();
         helperConfig = _helperConfig;
         accountFactory = _accountFactory;
         passkeyValidator = _passkeyValidator;

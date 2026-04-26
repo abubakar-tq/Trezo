@@ -77,8 +77,9 @@ contract DeployInfra is Script {
     }
 
     function _writeArtifacts(PredictInfra.InfraAddresses memory deployed, address entryPoint) internal virtual {
-        vm.createDir("deployments/releases", true);
-        vm.createDir("deployments/chains", true);
+        vm.createDir("deployments", true);
+        vm.createDir(string.concat(_artifactRootPath(), "/releases"), true);
+        vm.createDir(string.concat(_artifactRootPath(), "/chains"), true);
 
         string memory releaseRoot = "release";
         vm.serializeString(releaseRoot, "release", DeployConstants.TREZO_INFRA_VERSION);
@@ -118,12 +119,28 @@ contract DeployInfra is Script {
         console2.log("SocialRecovery:", deployed.socialRecovery);
     }
 
-    function _releaseManifestPath() internal pure virtual returns (string memory) {
-        return "deployments/releases/trezo-infra-v2.json";
+    function _artifactRootPath() internal view virtual returns (string memory) {
+        string memory namespace = _deploymentNamespace();
+        if (bytes(namespace).length == 0) {
+            return "deployments";
+        }
+        return string.concat("deployments/", namespace);
+    }
+
+    function _deploymentNamespace() internal view virtual returns (string memory) {
+        try vm.envString("DEPLOYMENT_NAMESPACE") returns (string memory namespace) {
+            return namespace;
+        } catch {
+            return "";
+        }
+    }
+
+    function _releaseManifestPath() internal view virtual returns (string memory) {
+        return string.concat(_artifactRootPath(), "/releases/trezo-infra-v2.json");
     }
 
     function _chainManifestPath() internal view virtual returns (string memory) {
-        return string.concat("deployments/chains/", vm.toString(block.chainid), ".json");
+        return string.concat(_artifactRootPath(), "/chains/", vm.toString(block.chainid), ".json");
     }
 
     function _flatManifestPath() internal view virtual returns (string memory) {

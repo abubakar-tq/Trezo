@@ -18,7 +18,7 @@ contract DeterministicAddressModelTest is AccountFactoryTestHelper {
     uint256 internal constant WALLET_INDEX = 0;
 
     function setUp() public {
-        (helperConfig,, proxyFactory, accountFactory, validator,) = _deployLegacyAccountStack();
+        (helperConfig,, proxyFactory, accountFactory, validator,) = _deployAccountStack();
     }
 
     function testSameSnapshotKeepsPortablePredictionStable() public view {
