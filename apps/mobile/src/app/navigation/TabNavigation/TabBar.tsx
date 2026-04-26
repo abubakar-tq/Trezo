@@ -24,7 +24,7 @@ const TAB_ICON_MAP: Record<string, React.ComponentProps<typeof Feather>["name"]>
   Home: "home",
   Browser: "globe",
   Portfolio: "pie-chart",
-  Dex: "hexagon",
+  Dex: "repeat",
   Profile: "user",
 };
 

@@ -17,6 +17,7 @@ export type ThemeColors = {
   secondaryText: string;
   textMuted: string;
   textOnAccent: string;
+  textOnHero: string;
   accent: string;
   accentAlt: string;
   success: string;

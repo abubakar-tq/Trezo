@@ -5,23 +5,25 @@ import { AuthStackParamList } from "@/src/types/navigation";
 import {
     AuthResultScreen,
     ForgotPasswordScreen,
-    IntroductionScreen,
     LoginScreen,
+    OnboardingScreen,
     RegisterScreen,
     ResetPasswordScreen,
     SplashScreen,
     VerifyEmailScreen,
-    WelcomeScreen,
 } from "@features/auth";
+import { useUserStore } from "@store/useUserStore";
+import { useAppLockStore } from "@store/useAppLockStore";
+import { CommonActions } from "@react-navigation/native";
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 const AuthNavigation = () => {
   console.log('🔐 [AuthNavigation] Rendering');
-  
+
   return (
 		<Stack.Navigator
-			initialRouteName="Introduction"
+			initialRouteName="Onboarding"
 			screenOptions={{
 				headerShown: false,
 				animation: "slide_from_right",
@@ -37,11 +39,10 @@ const AuthNavigation = () => {
 	  	listeners={{ focus: () => console.log('👀 [AuthNav] Splash focused') }}
 	  />
 	  <Stack.Screen 
-	  	name="Introduction" 
-	  	component={IntroductionScreen}
-	  	listeners={{ focus: () => console.log('👀 [AuthNav] Introduction focused') }}
+	  	name="Onboarding" 
+	  	component={OnboardingScreen}
+	  	listeners={{ focus: () => console.log('👀 [AuthNav] Onboarding focused') }}
 	  />
-	  <Stack.Screen name="Welcome" component={WelcomeScreen} />
 	  <Stack.Screen name="Login" component={LoginScreen} />
 	  <Stack.Screen name="Register" component={RegisterScreen} />
 	  <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />

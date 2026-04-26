@@ -12,8 +12,8 @@ const extra = {
 };
 
 const config: ExpoConfig = {
-  name: "Trezo_Wallet",
-  slug: "Trezo_Wallet",
+  name: "Trezo",
+  slug: "trezo",
   owner: "bakar00009",
   version: "1.0.0",
   orientation: "portrait",
@@ -31,7 +31,7 @@ const config: ExpoConfig = {
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
+      backgroundColor: "#050505",
       foregroundImage: "./assets/images/icon.png",
     },
     icon: "./assets/images/icon.png",
@@ -50,10 +50,10 @@ const config: ExpoConfig = {
         image: "./assets/images/icon.png",
         imageWidth: 200,
         resizeMode: "contain",
-        backgroundColor: "#E6F4FE",
+        backgroundColor: "#050505",
         dark: {
           image: "./assets/images/icon.png",
-          backgroundColor: "#0A1929",
+          backgroundColor: "#050505",
         },
       },
     ],

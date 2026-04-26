@@ -17,9 +17,10 @@ const darkColors: ThemeColors = {
   textSecondary: "#cbd5f5",
   secondaryText: "#cbd5f5", // Added missing secondaryText color
   textMuted: "#94a3b8",
-  textOnAccent: "#0f172a",
-  accent: "#38bdf8",
-  accentAlt: "#6366f1",
+  textOnAccent: "#ffffff", // Changed to white as accent is usually vibrant
+  textOnHero: "#f9fafb",
+  accent: "#A855F7", // Purple
+  accentAlt: "#8B5CF6", // Violet
   success: "#22c55e",
   warning: "#facc15",
   danger: "#f43f5e",
@@ -39,21 +40,22 @@ const lightColors: ThemeColors = {
   secondaryText: "#1e293b", // Added missing secondaryText color
   textMuted: "#64748b",
   textOnAccent: "#ffffff",
-  accent: "#2563eb",
-  accentAlt: "#7c3aed",
+  textOnHero: "#0f172a",
+  accent: "#7C3AED", // Indigo
+  accentAlt: "#A855F7", // Purple
   success: "#16a34a",
   warning: "#ca8a04",
   danger: "#dc2626",
 };
 
 const darkGradients: ThemeGradients = {
-  hero: ["#1d1b4f", "#11182a"],
-  heroAlt: ["#1d1b4f", "#0f172a"],
-  card: ["#1f2937", "#111827"],
-  cardAlt: ["#111827", "#0b1120"],
-  dexHero: ["#0f172a", "#020617"],
-  dexInfo: ["#111827", "#0b1120"],
-  profileHero: ["#1d1b4f", "#101528"],
+  hero: ["#2e1065", "#04030a"], // Deep Purple to Black
+  heroAlt: ["#4c1d95", "#04030a"], // Violet to Black
+  card: ["#1e1b4b", "#04030a"],
+  cardAlt: ["#1e1b4b", "#0f172a"],
+  dexHero: ["#2e1065", "#020617"],
+  dexInfo: ["#1e1b4b", "#0b1120"],
+  profileHero: ["#4c1d95", "#04030a"],
   tabBar: ["rgba(12,10,18,0.96)", "rgba(15,23,42,0.85)"],
 };
 

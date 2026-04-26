@@ -12,8 +12,11 @@ import BackupRecoveryScreen from "@features/profile/screens/BackupRecoveryScreen
 import BrowserSettingsScreen from "@features/profile/screens/BrowserSettingsScreen";
 import EmailRecoveryScreen from "@features/profile/screens/EmailRecoveryScreen";
 import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
+import ConnectedDevicesScreen from "@features/profile/screens/ConnectedDevicesScreen";
+import NotificationsScreen from "@features/profile/screens/NotificationsScreen";
 import ProfileEditScreen from "@features/profile/screens/ProfileEditScreen";
 import RecoveryKitExportScreen from "@features/profile/screens/RecoveryKitExportScreen";
+import SecurityPrivacyScreen from "@features/profile/screens/SecurityPrivacyScreen";
 import AATestScreen from "@features/wallet/screens/AATestScreen";
 import AAWalletDebugScreen from "@features/wallet/screens/AAWalletDebugScreen";
 import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
@@ -44,10 +47,9 @@ const RootNavigation = () => {
 
   // Set guard navigation based on initial auth state
   useEffect(() => {
-    // If user is logged in, require device verification
-    // If not logged in, don't guard navigation
-    setGuardNavigation(initialAuthState);
-  }, [initialAuthState, setGuardNavigation]);
+    // Disable guard navigation as we now use immediate biometric prompt via LockScreen
+    setGuardNavigation(false);
+  }, [setGuardNavigation]);
 
   // Ensure splash shows for minimum duration
   useEffect(() => {
@@ -62,23 +64,9 @@ const RootNavigation = () => {
 
   // Determine the redirect target after splash
   const getRedirectTarget = () => {
-    console.log(
-      "🎯 [RootNavigation] Getting redirect target, isLoggedIn:",
-      initialAuthState,
-    );
-    if (!initialAuthState) {
-      // User not logged in - go to Auth stack, will show Introduction
-      console.log(
-        "👤 [RootNavigation] User not logged in, showing AuthNavigation",
-      );
-      return null; // Will stay in AuthNavigation which has Introduction as initial
-    }
-
-    // User is logged in - show device verification screen
-    console.log(
-      "🔒 [RootNavigation] User logged in, redirecting to DeviceVerification",
-    );
-    return "DeviceVerification";
+    // Per user request: Always show the WelcomeScreen (in AuthNavigation) first.
+    // Logged-in users will see a "Quick Login" button and biometric prompt.
+    return "AuthNavigation";
   };
 
   const splashKey = initialAuthState ? "tabs" : "auth";
@@ -100,9 +88,7 @@ const RootNavigation = () => {
         initialRouteName={
           showingSplash
             ? "AppSplash"
-            : initialAuthState
-              ? "DeviceVerification"
-              : "AuthNavigation"
+            : "AuthNavigation"
         }
         screenOptions={{
           headerShown: false,
@@ -224,6 +210,30 @@ const RootNavigation = () => {
             <Stack.Screen
               name="ContactDetail"
               component={ContactDetailScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="SecurityPrivacy"
+              component={SecurityPrivacyScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="ConnectedDevices"
+              component={ConnectedDevicesScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="Notifications"
+              component={NotificationsScreen}
               options={{
                 headerShown: false,
                 animation: "slide_from_right",

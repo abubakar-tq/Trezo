@@ -42,11 +42,11 @@ const AuthScaffold: React.FC<AuthScaffoldProps> = ({
   icon,
   children,
   footer,
-  glowColor = "#0088ff",
+  glowColor = "#D946EF",
   overlayOpacity = 0.4,
   cardGradient = [
-    "rgba(121, 85, 160, 0.18)",
-    "rgba(0, 136, 255, 0.24)",
+    "rgba(217, 70, 239, 0.18)",
+    "rgba(6, 182, 212, 0.24)",
   ] as const,
 }) => {
   const { width, height } = Dimensions.get("screen");

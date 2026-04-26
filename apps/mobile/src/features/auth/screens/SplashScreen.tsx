@@ -44,7 +44,7 @@ const SplashScreen: React.FC = () => {
       return rawRedirect;
     }
 
-    return { name: "Introduction" };
+    return { name: "Onboarding" };
   }, [rawRedirect]);
 
   const glowScale = useSharedValue(1);
@@ -135,7 +135,7 @@ const SplashScreen: React.FC = () => {
                     width: 12,
                     height: 12,
                     borderRadius: 6,
-                    backgroundColor: "#1877f2",
+                    backgroundColor: "#A855F7", // Purple
                   },
                 ]}
               />
@@ -149,7 +149,7 @@ const SplashScreen: React.FC = () => {
                     width: 8,
                     height: 8,
                     borderRadius: 4,
-                    backgroundColor: "#6945ed",
+                    backgroundColor: "#9D50BB", // Original Purple
                   },
                 ]}
               />
@@ -163,7 +163,7 @@ const SplashScreen: React.FC = () => {
                     width: 10,
                     height: 10,
                     borderRadius: 5,
-                    backgroundColor: "#1877f2",
+                    backgroundColor: "#8B5CF6", // Violet
                   },
                 ]}
               />
@@ -177,7 +177,7 @@ const SplashScreen: React.FC = () => {
                     width: 6,
                     height: 6,
                     borderRadius: 3,
-                    backgroundColor: "#6945ed",
+                    backgroundColor: "#7C3AED", // Indigo
                   },
                 ]}
               />
@@ -191,7 +191,7 @@ const SplashScreen: React.FC = () => {
                     width: 100,
                     height: 100,
                     borderRadius: 50,
-                    backgroundColor: "#1877f2",
+                    backgroundColor: "#A855F7",
                   },
                   glowStyle,
                 ]}
@@ -203,7 +203,7 @@ const SplashScreen: React.FC = () => {
                     width: 115,
                     height: 115,
                     borderRadius: 57.5,
-                    backgroundColor: "#6945ed",
+                    backgroundColor: "#9D50BB",
                     opacity: 0.15,
                   },
                   glowStyle,
@@ -235,15 +235,11 @@ const SplashScreen: React.FC = () => {
               end={{ x: 1, y: 1 }}
               style={{
                 borderRadius: 8,
-                paddingHorizontal: 16,
-                paddingVertical: 4,
+                paddingHorizontal: 24,
+                paddingVertical: 6,
               }}
             >
-              <Text
-                style={styles.titleText}
-              >
-                <Text style={{ color: "#1f2937" }}>Trezo Wallet</Text>
-              </Text>
+              <Text style={styles.titleText}>TREZO</Text>
             </LinearGradient>
 
             <View style={styles.taglineContainer}>

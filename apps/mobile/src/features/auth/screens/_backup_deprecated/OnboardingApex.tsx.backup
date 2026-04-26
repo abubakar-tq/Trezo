@@ -1,0 +1,291 @@
+import React, { useRef } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  Dimensions,
+  TouchableOpacity,
+} from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  interpolate,
+  Extrapolate,
+  useDerivedValue,
+  runOnJS,
+  SharedValue,
+} from 'react-native-reanimated';
+import {
+  useImage,
+  Image as SkiaImage,
+  Canvas,
+  Group,
+  Shadow,
+  rect,
+  Blur,
+  BlendMode,
+} from '@shopify/react-native-skia';
+import * as Haptics from 'expo-haptics';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { AuthStackParamList } from '@/types/navigation';
+import { LiquidBlob } from '../components/LiquidBlob';
+
+const { width, height } = Dimensions.get('window');
+
+const ASSETS = {
+  core: require("@/assets/images/onboarding/mercury_core.png"),
+  network: require("@/assets/images/onboarding/network.png"),
+  security: require("@/assets/images/onboarding/security_v2.png"),
+};
+
+const PAGES = [
+  {
+    id: "1",
+    title: "YOUR ASSETS.\nPROTECTED.",
+    image: ASSETS.core,
+    accent: "#A855F7",
+    kicker: "SECURE VAULT",
+  },
+  {
+    id: "2",
+    title: "TRADE ANY\nTOKEN ON CHAIN.",
+    image: ASSETS.network,
+    accent: "#8B5CF6",
+    kicker: "MULTI-CHAIN",
+  },
+  {
+    id: "3",
+    title: "SOCIAL RECOVERY\nSIMPLIFIED.",
+    image: ASSETS.security,
+    accent: "#9D50BB",
+    kicker: "GUARDIAN CIRCLE",
+  },
+];
+
+interface OnboardingItemProps {
+  item: any;
+  index: number;
+  scrollX: SharedValue<number>;
+}
+
+const OnboardingItem: React.FC<OnboardingItemProps> = ({ item, index, scrollX }) => {
+  const image = useImage(item.image);
+  const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+
+  // 3D Matrix Transform Values
+  const matrixScale = useDerivedValue(() => interpolate(scrollX.value, inputRange, [0.4, 1, 0.4], Extrapolate.CLAMP));
+  const matrixRotateY = useDerivedValue(() => interpolate(scrollX.value, inputRange, [0.6, 0, -0.6], Extrapolate.CLAMP));
+  const matrixTranslateY = useDerivedValue(() => interpolate(scrollX.value, inputRange, [50, 0, 50], Extrapolate.CLAMP));
+  const matrixOpacity = useDerivedValue(() => interpolate(scrollX.value, inputRange, [0, 1, 0], Extrapolate.CLAMP));
+
+  const assetStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { perspective: 1000 },
+        { scale: matrixScale.value },
+        { rotateY: `${matrixRotateY.value * 50}deg` },
+        { translateY: matrixTranslateY.value },
+      ],
+      opacity: matrixOpacity.value,
+    };
+  });
+
+  const skiaTransform = useDerivedValue(() => [
+    { scale: matrixScale.value },
+    { translateY: matrixTranslateY.value }
+  ]);
+
+  const textStyle = useAnimatedStyle(() => {
+    return {
+      opacity: matrixOpacity.value,
+      transform: [{ translateY: interpolate(scrollX.value, inputRange, [20, 0, 20], Extrapolate.CLAMP) }]
+    };
+  });
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.illustrationWrapper}>
+         <LiquidBlob scrollX={scrollX} index={index} accent={item.accent} />
+         
+         <Canvas style={styles.skiaCanvas}>
+            <Group>
+               {image && (
+                 <Group 
+                   origin={{ x: width / 2, y: height / 2.5 }}
+                   transform={skiaTransform}
+                 >
+                   <Shadow dx={0} dy={20} blur={40} color="rgba(0,0,0,0.5)" />
+                   
+                   <SkiaImage
+                     image={image}
+                     x={(width - 280) / 2}
+                     y={(height / 2.5) - 140}
+                     width={280}
+                     height={280}
+                     fit="contain"
+                     blendMode={BlendMode.Screen}
+                   />
+                 </Group>
+               )}
+            </Group>
+         </Canvas>
+      </View>
+
+      <Animated.View style={[styles.textContainer, textStyle]}>
+        <Text style={[styles.kicker, { color: item.accent }]}>{item.kicker}</Text>
+        <Text style={styles.title}>{item.title}</Text>
+      </Animated.View>
+    </View>
+  );
+};
+
+export const OnboardingApex = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
+  const scrollX = useSharedValue(0);
+  const flatListRef = useRef<Animated.FlatList<any>>(null);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollX.value = event.contentOffset.x;
+    },
+  });
+
+  const lastIndex = useSharedValue(0);
+  const currentIndex = useDerivedValue(() => {
+    return Math.round(scrollX.value / width);
+  });
+
+  useDerivedValue(() => {
+    if (currentIndex.value !== lastIndex.value) {
+      lastIndex.value = currentIndex.value;
+      runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Heavy);
+    }
+  });
+
+  return (
+    <View style={styles.container}>
+      <Animated.FlatList
+        ref={flatListRef}
+        data={PAGES}
+        renderItem={({ item, index }) => (
+          <OnboardingItem item={item} index={index} scrollX={scrollX} />
+        )}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        keyExtractor={(item) => item.id}
+      />
+
+      <View style={styles.footer}>
+        <TouchableOpacity 
+          style={styles.primaryButton}
+          onPress={() => navigation.navigate("Register")}
+        >
+          <Text style={styles.primaryButtonText}>GET STARTED</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.secondaryButton}
+          onPress={() => navigation.navigate("Login")}
+        >
+          <Text style={styles.secondaryButtonText}>I ALREADY HAVE A WALLET</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  page: {
+    width,
+    height,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  skiaCanvas: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+  },
+  illustrationWrapper: {
+    width: '100%',
+    height: height * 0.6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  imageContainer: {
+    width: width * 0.7,
+    height: width * 0.7,
+    zIndex: 10,
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  textContainer: {
+    paddingHorizontal: 40,
+    alignItems: 'center',
+    marginTop: -20,
+  },
+  kicker: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 4,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    opacity: 0.8,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#FFF",
+    textAlign: 'center',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    lineHeight: 32,
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 50,
+    width: '100%',
+    paddingHorizontal: 30,
+    gap: 12,
+  },
+  primaryButton: {
+    backgroundColor: '#FFF',
+    height: 56,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: "#FFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  primaryButtonText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  secondaryButton: {
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+});
