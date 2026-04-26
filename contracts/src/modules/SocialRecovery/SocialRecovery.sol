@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ISocialRecovery} from "./interfaces/ISocialRecovery.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
 import {ERC7579ModuleBase} from "lib/modulekit/src/module-bases/ERC7579ModuleBase.sol";
@@ -44,6 +45,8 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
     error SocialRecovery_GuardianNotFound(address guardian);
     error SocialRecovery_InvalidRecoveryId(bytes32 expected, bytes32 provided);
     error SocialRecovery_ModuleNotAuthorized();
+    error SocialRecovery_OnlyWallet(address caller, address wallet);
+    error SocialRecovery_DuplicateGuardianSignature(uint16 index);
 
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
@@ -180,16 +183,24 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         bytes32 digest = _hashTypedDataV4(
             keccak256(abi.encode(_TYPE_HASH_SOCIAL_RECOVERY, wallet, nonce, _hashPasskeyInit(newPassKey)))
         );
+        bool[] memory seen = new bool[](details.guardians.length);
         for (uint256 i = 0; i < sigs.length; i++) {
             GuardianSig calldata sig = sigs[i];
             if (sig.index >= details.guardians.length) {
                 revert SocialRecovery_InvalidGuardianIndex(sig.index);
             }
+            if (seen[sig.index]) {
+                revert SocialRecovery_DuplicateGuardianSignature(sig.index);
+            }
+            seen[sig.index] = true;
             address guardian = details.guardians[sig.index];
 
             if (sig.kind == SigKind.EOA_ECDSA) {
                 (uint8 v, bytes32 r, bytes32 s) = _parseEOASignature(sig.sig);
-                address recovered = ecrecover(digest, v, r, s);
+                (address recovered, ECDSA.RecoverError error,) = ECDSA.tryRecover(digest, v, r, s);
+                if (error != ECDSA.RecoverError.NoError) {
+                    return false;
+                }
                 if (recovered != guardian) {
                     return false;
                 }
@@ -249,9 +260,7 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         if (!isInitialized(wallet)) {
             revert NotInitialized(wallet);
         }
-        if (!ISocialRecoveryAccount(wallet).isRecoveryModule(address(this))) {
-            revert SocialRecovery_ModuleNotAuthorized();
-        }
+        _requireWalletAuthorized(wallet);
         RecoveryDetails storage details = _recoveryDetails[wallet];
         bytes32 activeId = details.activeRecoveryId;
         if (activeId == bytes32(0)) {
@@ -272,6 +281,7 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         if (!isInitialized(wallet)) {
             revert NotInitialized(wallet);
         }
+        _requireWalletAuthorized(wallet);
         RecoveryDetails storage details = _recoveryDetails[wallet];
         for (uint256 i = 0; i < newGuardians.length; i++) {
             address guardian = newGuardians[i];
@@ -300,6 +310,7 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         if (!isInitialized(wallet)) {
             revert NotInitialized(wallet);
         }
+        _requireWalletAuthorized(wallet);
         RecoveryDetails storage details = _recoveryDetails[wallet];
         for (uint256 i = 0; i < exGuardians.length; i++) {
             address guardian = exGuardians[i];
@@ -366,6 +377,15 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
 
     function _applyRecoveryResult(address wallet, PasskeyTypes.PasskeyInit calldata newPassKey) internal {
         ISocialRecoveryAccount(wallet).addPasskeyFromRecovery(newPassKey);
+    }
+
+    function _requireWalletAuthorized(address wallet) internal view {
+        if (msg.sender != wallet) {
+            revert SocialRecovery_OnlyWallet(msg.sender, wallet);
+        }
+        if (!ISocialRecoveryAccount(wallet).isRecoveryModule(address(this))) {
+            revert SocialRecovery_ModuleNotAuthorized();
+        }
     }
 
     function _hashPasskeyInit(PasskeyTypes.PasskeyInit calldata passkey) internal pure returns (bytes32) {

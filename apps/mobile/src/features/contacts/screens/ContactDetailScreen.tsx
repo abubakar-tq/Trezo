@@ -1,20 +1,23 @@
 import { Feather } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import {
+    ThemedAlert,
+    type ThemedAlertButton,
+} from "@shared/components/ui/ThemedAlert";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Clipboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Clipboard,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ThemedAlert, type ThemedAlertButton } from "@shared/components/ui/ThemedAlert";
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
@@ -42,7 +45,11 @@ const ContactDetailScreen: React.FC = () => {
   }>({ visible: false, title: "", message: "" });
 
   // Themed alert helper
-  const showAlert = (title: string, message: string, buttons?: ThemedAlertButton[]) => {
+  const showAlert = (
+    title: string,
+    message: string,
+    buttons?: ThemedAlertButton[],
+  ) => {
     setAlertConfig({ visible: true, title, message, buttons });
   };
 
@@ -123,7 +130,11 @@ const ContactDetailScreen: React.FC = () => {
               const success = await ContactService.deleteContact(contact.id);
               if (success) {
                 showAlert("Success", "Contact deleted", [
-                  { text: "OK", onPress: () => navigation.goBack(), style: "default" },
+                  {
+                    text: "OK",
+                    onPress: () => navigation.goBack(),
+                    style: "default",
+                  },
                 ]);
               } else {
                 showAlert("Error", "Failed to delete contact");
@@ -131,7 +142,7 @@ const ContactDetailScreen: React.FC = () => {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -157,147 +168,173 @@ const ContactDetailScreen: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAvoidingView 
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >        <View style={{ flex: 1 }}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Contact Details</Text>
-          {isEditing ? (
-            <View style={styles.headerButtons}>
-              <TouchableOpacity onPress={handleCancelEdit} style={styles.headerButton}>
-                <Feather name="x" size={20} color={withAlpha(colors.textPrimary, 0.6)} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
-                <Feather name="check" size={20} color={colors.accentAlt} />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.headerButtons}>
-              <TouchableOpacity onPress={handleEdit} style={styles.headerButton}>
-                <Feather name="edit-2" size={20} color={colors.accentAlt} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDelete} style={styles.headerButton}>
-                <Feather name="trash-2" size={20} color={withAlpha(colors.textPrimary, 0.6)} />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Name */}
-          <View style={styles.nameContainer}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {(isEditing ? editedName : contact.name).charAt(0).toUpperCase()}
-              </Text>
-            </View>
+      >
+        <View style={{ flex: 1 }}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Feather name="arrow-left" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Contact Details</Text>
             {isEditing ? (
-              <TextInput
-                style={styles.nameInput}
-                value={editedName}
-                onChangeText={setEditedName}
-                placeholder="Contact name"
-                placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
-                autoCapitalize="words"
-              />
-            ) : (
-              <Text style={styles.name}>{contact.name}</Text>
-            )}
-          </View>
-
-          {/* Addresses */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Addresses</Text>
-          {contact.addresses && contact.addresses.length > 0 ? (
-            contact.addresses.map((addr, index) => (
-              <View key={index} style={styles.addressItem}>
-                <View style={styles.addressInfo}>
-                  <Text style={styles.addressLabel}>{addr.label}</Text>
-                  <Text style={styles.addressText} numberOfLines={1}>
-                    {addr.address}
-                  </Text>
-                </View>
+              <View style={styles.headerButtons}>
                 <TouchableOpacity
-                  onPress={() => handleCopyAddress(addr.address)}
-                  style={styles.copyButton}
+                  onPress={handleCancelEdit}
+                  style={styles.headerButton}
                 >
-                  <Feather name="copy" size={18} color={colors.accentAlt} />
+                  <Feather
+                    name="x"
+                    size={20}
+                    color={withAlpha(colors.textPrimary, 0.6)}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSave}
+                  style={styles.headerButton}
+                >
+                  <Feather name="check" size={20} color={colors.accentAlt} />
                 </TouchableOpacity>
               </View>
-            ))
-          ) : (
-            <Text style={styles.memoText}>No addresses added</Text>
-          )}
-        </View>
-
-          {/* Tags */}
-          {contact.tags && contact.tags.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Tags</Text>
-              <View style={styles.tagsContainer}>
-                {contact.tags.map((tag, index) => (
-                  <View key={index} style={styles.tag}>
-                    <Text style={styles.tagText}>{tag}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Notes */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Notes</Text>
-            {isEditing ? (
-              <TextInput
-                style={styles.memoInput}
-                value={editedMemo}
-                onChangeText={setEditedMemo}
-                placeholder="Add notes about this contact"
-                placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
             ) : (
-              <View style={styles.memoContainer}>
-                <Text style={styles.memoText}>
-                  {contact.memo || "No notes added yet"}
-                </Text>
+              <View style={styles.headerButtons}>
+                <TouchableOpacity
+                  onPress={handleEdit}
+                  style={styles.headerButton}
+                >
+                  <Feather name="edit-2" size={20} color={colors.accentAlt} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleDelete}
+                  style={styles.headerButton}
+                >
+                  <Feather
+                    name="trash-2"
+                    size={20}
+                    color={withAlpha(colors.textPrimary, 0.6)}
+                  />
+                </TouchableOpacity>
               </View>
             )}
           </View>
 
-        {/* Metadata */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Information</Text>
-          <View style={styles.metadataContainer}>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Created</Text>
-              <Text style={styles.metadataValue}>
-                {new Date(contact.created_at).toLocaleDateString()}
-              </Text>
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Name */}
+            <View style={styles.nameContainer}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {(isEditing ? editedName : contact.name)
+                    .charAt(0)
+                    .toUpperCase()}
+                </Text>
+              </View>
+              {isEditing ? (
+                <TextInput
+                  style={styles.nameInput}
+                  value={editedName}
+                  onChangeText={setEditedName}
+                  placeholder="Contact name"
+                  placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+                  autoCapitalize="words"
+                />
+              ) : (
+                <Text style={styles.name}>{contact.name}</Text>
+              )}
             </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>Updated</Text>
-              <Text style={styles.metadataValue}>
-                {new Date(contact.updated_at).toLocaleDateString()}
-              </Text>
+
+            {/* Addresses */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Addresses</Text>
+              {contact.addresses && contact.addresses.length > 0 ? (
+                contact.addresses.map((addr, index) => (
+                  <View key={index} style={styles.addressItem}>
+                    <View style={styles.addressInfo}>
+                      <Text style={styles.addressLabel}>{addr.label}</Text>
+                      <Text style={styles.addressText} numberOfLines={1}>
+                        {addr.address}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleCopyAddress(addr.address)}
+                      style={styles.copyButton}
+                    >
+                      <Feather name="copy" size={18} color={colors.accentAlt} />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.memoText}>No addresses added</Text>
+              )}
             </View>
-            <View style={styles.metadataRow}>
-              <Text style={styles.metadataLabel}>ID</Text>
-              <Text style={styles.metadataValue} numberOfLines={1}>
-                {contact.id.slice(0, 8)}...
-              </Text>
+
+            {/* Tags */}
+            {contact.tags && contact.tags.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Tags</Text>
+                <View style={styles.tagsContainer}>
+                  {contact.tags.map((tag, index) => (
+                    <View key={index} style={styles.tag}>
+                      <Text style={styles.tagText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Notes */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Notes</Text>
+              {isEditing ? (
+                <TextInput
+                  style={styles.memoInput}
+                  value={editedMemo}
+                  onChangeText={setEditedMemo}
+                  placeholder="Add notes about this contact"
+                  placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+              ) : (
+                <View style={styles.memoContainer}>
+                  <Text style={styles.memoText}>
+                    {contact.memo || "No notes added yet"}
+                  </Text>
+                </View>
+              )}
             </View>
-          </View>
-        </View>
-      </ScrollView>
+
+            {/* Metadata */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Information</Text>
+              <View style={styles.metadataContainer}>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Created</Text>
+                  <Text style={styles.metadataValue}>
+                    {new Date(contact.created_at).toLocaleDateString()}
+                  </Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>Updated</Text>
+                  <Text style={styles.metadataValue}>
+                    {new Date(contact.updated_at).toLocaleDateString()}
+                  </Text>
+                </View>
+                <View style={styles.metadataRow}>
+                  <Text style={styles.metadataLabel}>ID</Text>
+                  <Text style={styles.metadataValue} numberOfLines={1}>
+                    {contact.id.slice(0, 8)}...
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
       <ThemedAlert

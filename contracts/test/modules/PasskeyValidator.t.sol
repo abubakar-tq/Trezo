@@ -202,6 +202,12 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         assertEq(count, 1, "removing extra passkey should restore count");
     }
 
+    function test_remove_passkey_reverts_when_removing_only_passkey() public {
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_CannotRemoveLastPasskey.selector);
+        vm.prank(instance.account);
+        validator.removePasskey(dummyId);
+    }
+
     function test_remove_passkey_reverts_when_missing() public {
         // Arrange
         bytes32 missingId = keccak256("missing-passkey");
@@ -459,6 +465,33 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
 
         // Assert
         assertEq(uint32(result), uint32(0x1626ba7e), "first zero counter should be accepted");
+    }
+
+    function test_is_valid_signature_with_sender_accepts_repeated_zero_counter_for_zero_counter_authenticators()
+        public
+    {
+        // Arrange
+        (UserOpData memory userOpData, bytes memory opSignature,) = _prepareUserOpSignature(0);
+        userOpData.userOp.signature = opSignature;
+        _callValidateUserOp(userOpData);
+
+        bytes32 messageHash = keccak256("1271-zero-repeat");
+        SignatureComponents memory components = _buildSignatureComponents(messageHash, 0);
+        bytes memory signature = WebAuthnHelper.encodePasskeySignature(
+            dummyId,
+            components.authenticatorData,
+            components.clientDataJSON,
+            components.challengeIndex,
+            components.typeIndex,
+            components.r,
+            components.s
+        );
+
+        // Act
+        bytes4 result = validator.isValidSignatureWithSender(instance.account, messageHash, signature);
+
+        // Assert
+        assertEq(uint32(result), uint32(0x1626ba7e), "zero-counter authenticators should remain usable");
     }
 
     function _prepareUserOpSignature(uint32 counter)

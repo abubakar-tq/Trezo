@@ -8,9 +8,9 @@
  * 2. If no AA wallet yet: Keep guardians in local store only, sync when wallet is deployed
  */
 
-import { getSupabaseClient } from '@/lib/supabase';
-import { useRecoveryStatusStore } from '@store/useRecoveryStatusStore';
+import { getSupabaseClient } from '@lib/supabase';
 import { useWalletStore } from '@/src/features/wallet/store/useWalletStore';
+import { useRecoveryStatusStore } from '@store/useRecoveryStatusStore';
 
 export interface GuardianData {
   address: string;
@@ -89,7 +89,10 @@ export class GuardianSyncService {
 
       // Update local store
       useRecoveryStatusStore.getState().setGuardians(
-        guardians.map(g => g.address),
+        guardians.map((g) => ({
+          id: g.address,
+          address: g.address,
+        })),
         threshold,
         totalGuardians
       );
@@ -129,7 +132,7 @@ export class GuardianSyncService {
 
       // Get local guardian config
       const localConfig = useRecoveryStatusStore.getState();
-      const { guardians, m, n } = localConfig;
+      const { guardians, requiredSignatures: m, totalGuardians: n } = localConfig;
 
       if (!guardians || guardians.length === 0) {
         console.warn(`⚠️  [GuardianSync] No guardians configured locally`);
@@ -148,9 +151,9 @@ export class GuardianSyncService {
       if (deactivateError) throw deactivateError;
 
       // Insert new guardians
-      const guardianData = guardians.map((address, index) => ({
+      const guardianData = guardians.map((guardian) => ({
         aa_wallet_id: aaWalletId,
-        guardian_address: address,
+        guardian_address: guardian.address,
         weight: 1, // Equal weight for all guardians
         threshold: m,
         is_active: true,
@@ -186,10 +189,13 @@ export class GuardianSyncService {
     try {
       // Add to local store first
       const localConfig = useRecoveryStatusStore.getState();
-      const newGuardians = [...(localConfig.guardians || []), address];
+      const newGuardians = [
+        ...(localConfig.guardians || []),
+        { id: address, address },
+      ];
       useRecoveryStatusStore.getState().setGuardians(
         newGuardians,
-        localConfig.m || 1,
+        localConfig.requiredSignatures || 1,
         newGuardians.length
       );
 
@@ -229,10 +235,12 @@ export class GuardianSyncService {
     try {
       // Remove from local store first
       const localConfig = useRecoveryStatusStore.getState();
-      const newGuardians = (localConfig.guardians || []).filter(g => g !== address);
+      const newGuardians = (localConfig.guardians || []).filter(
+        (guardian) => guardian.address !== address,
+      );
       useRecoveryStatusStore.getState().setGuardians(
         newGuardians,
-        Math.min(localConfig.m || 1, newGuardians.length),
+        Math.min(localConfig.requiredSignatures || 1, newGuardians.length),
         newGuardians.length
       );
 
@@ -275,7 +283,7 @@ export class GuardianSyncService {
       useRecoveryStatusStore.getState().setGuardians(
         localConfig.guardians || [],
         newThreshold,
-        localConfig.n || 0
+        localConfig.totalGuardians || 0
       );
 
       // Try to sync to database if AA wallet exists

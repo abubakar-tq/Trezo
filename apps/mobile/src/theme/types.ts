@@ -5,13 +5,16 @@ export type Mode = "light" | "dark";
 
 export type ThemeColors = {
   background: string;
+  surface: string;
   surfaceCard: string;
   surfaceElevated: string;
   surfaceMuted: string;
   border: string;
   borderMuted: string;
+  text: string;
   textPrimary: string;
   textSecondary: string;
+  secondaryText: string;
   textMuted: string;
   textOnAccent: string;
   accent: string;

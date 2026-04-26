@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { NavigationProp, useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,10 +12,18 @@ import {
   View,
 } from "react-native";
 
-import { EmailRecoveryService } from "@/src/features/wallet/services/EmailRecoveryService";
+import {
+  EmailRecoveryService,
+  type EmailRecoverySecurityMode,
+  type LoadedEmailRecoveryMetadata,
+} from "@/src/features/wallet/services/EmailRecoveryService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
-import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import {
+  DEFAULT_CHAIN_ID,
+  type SupportedChainId,
+} from "@/src/integration/chains";
+import { RootStackParamList } from "@/src/types/navigation";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
@@ -31,24 +39,34 @@ const shortenHex = (value: string | null | undefined, chars = 6) => {
 };
 
 const EmailRecoveryScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const user = useUserStore((state) => state.user);
-  const storedSmartAccountAddress = useUserStore((state) => state.smartAccountAddress);
-  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
+  const storedSmartAccountAddress = useUserStore(
+    (state) => state.smartAccountAddress,
+  );
+  const smartAccountDeployed = useUserStore(
+    (state) => state.smartAccountDeployed,
+  );
   const aaAccount = useWalletStore((state) => state.aaAccount);
   const activeChainId = useWalletStore((state) => state.activeChainId);
 
   const smartAccountAddress = useMemo(() => {
-    const address = aaAccount?.predictedAddress ?? storedSmartAccountAddress ?? undefined;
+    const address =
+      aaAccount?.predictedAddress ?? storedSmartAccountAddress ?? undefined;
     return address ? (address as Address) : undefined;
   }, [aaAccount?.predictedAddress, storedSmartAccountAddress]);
-  const isAccountDeployed = Boolean(aaAccount?.isDeployed ?? smartAccountDeployed ?? false);
+  const isAccountDeployed = Boolean(
+    aaAccount?.isDeployed ?? smartAccountDeployed ?? false,
+  );
   const resolvedChainId = useMemo<SupportedChainId>(
-    () => (aaAccount?.chainId ?? activeChainId ?? DEFAULT_CHAIN_ID) as SupportedChainId,
+    () =>
+      (aaAccount?.chainId ??
+        activeChainId ??
+        DEFAULT_CHAIN_ID) as SupportedChainId,
     [aaAccount?.chainId, activeChainId],
   );
   const smartAccountReady = Boolean(smartAccountAddress && isAccountDeployed);
@@ -56,35 +74,52 @@ const EmailRecoveryScreen: React.FC = () => {
   const defaultGuardianCount = 3;
   const [guardianCountValue, setGuardianCountValue] = useState("3");
   const [thresholdValue, setThresholdValue] = useState("2");
-  const [guardianEmails, setGuardianEmails] = useState<string[]>(
-    () => Array(defaultGuardianCount).fill(""),
+  const [guardianEmails, setGuardianEmails] = useState<string[]>(() =>
+    Array(defaultGuardianCount).fill(""),
   );
-  const [guardianWeights, setGuardianWeights] = useState<string[]>(
-    () => Array(defaultGuardianCount).fill("1"),
+  const [guardianWeights, setGuardianWeights] = useState<string[]>(() =>
+    Array(defaultGuardianCount).fill("1"),
   );
   const [delayDays, setDelayDays] = useState("1");
   const [expiryDays, setExpiryDays] = useState("3");
+  const [securityMode, setSecurityMode] =
+    useState<EmailRecoverySecurityMode>("none");
+  const [vaultKeyInput, setVaultKeyInput] = useState("");
+  const [hasVaultKey, setHasVaultKey] = useState(false);
 
   const [checkingModule, setCheckingModule] = useState(false);
-  const [moduleInstalledState, setModuleInstalledState] = useState<boolean | null>(null);
+  const [moduleInstalledState, setModuleInstalledState] = useState<
+    boolean | null
+  >(null);
   const [moduleError, setModuleError] = useState<string | null>(null);
   const [moduleStatusNonce, setModuleStatusNonce] = useState(0);
   const [installingModule, setInstallingModule] = useState(false);
   const [lastUserOpHash, setLastUserOpHash] = useState<Hex | null>(null);
   const [lastOperationHash, setLastOperationHash] = useState<Hex | null>(null);
-  const [lastInstallPayload, setLastInstallPayload] = useState<UserOperation<"0.7"> | null>(null);
-  const [derivedGuardians, setDerivedGuardians] = useState<{ email: string; guardianAddress: Address }[]>([]);
+  const [lastInstallPayload, setLastInstallPayload] =
+    useState<UserOperation<"0.7"> | null>(null);
+  const [derivedGuardians, setDerivedGuardians] = useState<
+    { email: string; guardianAddress: Address }[]
+  >([]);
+  const [loadingStoredMetadata, setLoadingStoredMetadata] = useState(false);
+  const [storedMetadata, setStoredMetadata] =
+    useState<LoadedEmailRecoveryMetadata | null>(null);
+  const [metadataWarning, setMetadataWarning] = useState<string | null>(null);
 
   const expectedGuardians = useMemo(
     () => Math.max(parseInt(guardianCountValue, 10) || 0, 0),
     [guardianCountValue],
   );
   const trimmedGuardians = useMemo(
-    () => guardianEmails.map((email) => EmailRecoveryService.normalizeGuardianEmail(email)).filter(Boolean),
+    () =>
+      guardianEmails
+        .map((email) => EmailRecoveryService.normalizeGuardianEmail(email))
+        .filter(Boolean),
     [guardianEmails],
   );
   const normalizedGuardianWeights = useMemo(
-    () => guardianWeights.map((weight) => Math.max(parseInt(weight, 10) || 0, 0)),
+    () =>
+      guardianWeights.map((weight) => Math.max(parseInt(weight, 10) || 0, 0)),
     [guardianWeights],
   );
   const totalGuardianWeight = useMemo(
@@ -95,7 +130,8 @@ const EmailRecoveryScreen: React.FC = () => {
     const normalized = trimmedGuardians.map((email) => email.toLowerCase());
     return new Set(normalized).size !== normalized.length;
   }, [trimmedGuardians]);
-  const guardiansReady = expectedGuardians > 0 && trimmedGuardians.length === expectedGuardians;
+  const guardiansReady =
+    expectedGuardians > 0 && trimmedGuardians.length === expectedGuardians;
 
   useEffect(() => {
     if (!smartAccountReady || !smartAccountAddress) {
@@ -115,7 +151,11 @@ const EmailRecoveryScreen: React.FC = () => {
       })
       .catch((error) => {
         if (!cancelled) {
-          setModuleError(error instanceof Error ? error.message : "Failed to read module status");
+          setModuleError(
+            error instanceof Error
+              ? error.message
+              : "Failed to read module status",
+          );
           setModuleInstalledState(false);
         }
       })
@@ -127,34 +167,186 @@ const EmailRecoveryScreen: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [smartAccountReady, smartAccountAddress, resolvedChainId, moduleStatusNonce]);
+  }, [
+    smartAccountReady,
+    smartAccountAddress,
+    resolvedChainId,
+    moduleStatusNonce,
+  ]);
+
+  useEffect(() => {
+    if (!user?.id || !smartAccountAddress) {
+      setStoredMetadata(null);
+      setLoadingStoredMetadata(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingStoredMetadata(true);
+    EmailRecoveryService.loadMetadata({
+      smartAccountAddress,
+    })
+      .then((metadata) => {
+        if (cancelled) return;
+        setStoredMetadata(metadata);
+        if (!metadata) return;
+
+        const guardianCount = Math.max(metadata.guardians.length, 1);
+        setGuardianCountValue(String(guardianCount));
+        setThresholdValue(String(metadata.config.threshold));
+        setDelayDays(
+          String(Math.max(Math.floor(metadata.config.delaySeconds / 86400), 1)),
+        );
+        setExpiryDays(
+          String(
+            Math.max(Math.floor(metadata.config.expirySeconds / 86400), 1),
+          ),
+        );
+        setSecurityMode(metadata.config.securityMode ?? "none");
+        setGuardianEmails(
+          metadata.guardians.map((guardian) => {
+            if (guardian.resolvedEmail) return guardian.resolvedEmail;
+            if (metadata.config.securityMode === "none")
+              return guardian.maskedEmail;
+            return "";
+          }),
+        );
+        setGuardianWeights(
+          metadata.guardians.map((guardian) =>
+            String(Math.max(guardian.weight, 1)),
+          ),
+        );
+
+        EmailRecoveryService.hasVaultKey(smartAccountAddress)
+          .then(setHasVaultKey)
+          .catch(() => setHasVaultKey(false));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setMetadataWarning(
+          error instanceof Error
+            ? error.message
+            : "Failed to load recovery metadata from backend.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingStoredMetadata(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [smartAccountAddress, user?.id]);
+
+  useEffect(() => {
+    if (
+      !storedMetadata ||
+      moduleInstalledState === null ||
+      !smartAccountAddress
+    ) {
+      return;
+    }
+
+    const currentInstall = storedMetadata.installations.find(
+      (i) => i.chainId === Number(resolvedChainId),
+    );
+    const backendStatus = currentInstall?.installStatus ?? "not_installed";
+
+    if (backendStatus === "installed" && !moduleInstalledState) {
+      setMetadataWarning(
+        "Backend says installed, but on-chain check says not installed. Verify again.",
+      );
+      return;
+    }
+    if (backendStatus !== "installed" && moduleInstalledState) {
+      setMetadataWarning(
+        "On-chain module is active but backend status needs sync.",
+      );
+      EmailRecoveryService.syncCurrentChainInstallStatus({
+        configId: storedMetadata.config.id,
+        chainId: resolvedChainId,
+        installStatus: "installed",
+      })
+        .then(() => {
+          setStoredMetadata((current) => {
+            if (!current) return current;
+            const updated: LoadedEmailRecoveryMetadata["installations"] =
+              current.installations.map((i) =>
+                i.chainId === Number(resolvedChainId)
+                  ? { ...i, installStatus: "installed" as const }
+                  : i,
+              );
+            if (!updated.find((i) => i.chainId === Number(resolvedChainId))) {
+              updated.push({
+                chainId: Number(resolvedChainId),
+                installStatus: "installed" as const,
+                installUserOpHash: null,
+                installedAt: new Date().toISOString(),
+                lastCheckedAt: new Date().toISOString(),
+              });
+            }
+            return { ...current, installations: updated };
+          });
+          setMetadataWarning(null);
+        })
+        .catch(() => {
+          // Keep warning visible if backend sync fails.
+        });
+      return;
+    }
+
+    setMetadataWarning(null);
+  }, [
+    moduleInstalledState,
+    resolvedChainId,
+    smartAccountAddress,
+    storedMetadata,
+  ]);
 
   const handleGuardianCountChange = useCallback((value: string) => {
     const parsed = parseInt(value, 10) || 0;
     setGuardianCountValue(value);
     setDerivedGuardians([]);
+
+    // Instead of deleting extra rows, we just hide them in UI, or expand if more are needed
     setGuardianEmails((current) => {
       if (parsed > current.length) {
         return [...current, ...Array(parsed - current.length).fill("")];
       }
-      return current.slice(0, parsed);
+      return current; // Don't wipe previous entries
     });
     setGuardianWeights((current) => {
       if (parsed > current.length) {
         return [...current, ...Array(parsed - current.length).fill("1")];
       }
-      return current.slice(0, parsed);
+      return current; // Don't wipe previous entries
     });
   }, []);
 
-  const handleGuardianEmailChange = useCallback((index: number, value: string) => {
-    setDerivedGuardians([]);
-    setGuardianEmails((prev) => {
-      const updated = [...prev];
-      updated[index] = value;
-      return updated;
+  const handleDeleteGuardian = useCallback((index: number) => {
+    setGuardianEmails((prev) => prev.filter((_, i) => i !== index));
+    setGuardianWeights((prev) => prev.filter((_, i) => i !== index));
+
+    setGuardianCountValue((prev) => {
+      const currentVal = parseInt(prev, 10) || 0;
+      return String(Math.max(0, currentVal - 1));
     });
+    setDerivedGuardians([]);
   }, []);
+
+  const handleGuardianEmailChange = useCallback(
+    (index: number, value: string) => {
+      setDerivedGuardians([]);
+      setGuardianEmails((prev) => {
+        const updated = [...prev];
+        updated[index] = value;
+        return updated;
+      });
+    },
+    [],
+  );
 
   const handleWeightChange = useCallback((index: number, value: string) => {
     setDerivedGuardians([]);
@@ -170,23 +362,34 @@ const EmailRecoveryScreen: React.FC = () => {
     setModuleStatusNonce((nonce) => nonce + 1);
   }, [smartAccountReady]);
 
-  const handleInstallModule = useCallback(async () => {
+  const handleSaveToCloud = useCallback(async () => {
     if (!smartAccountReady || !smartAccountAddress) {
-      Alert.alert("Smart Account Required", "Deploy your smart account before installing email recovery.");
+      Alert.alert(
+        "Smart Account Required",
+        "Deploy your smart account before syncing.",
+      );
       return;
     }
     if (!user?.id) {
-      Alert.alert("Authentication Required", "Please sign in to install the email recovery module.");
+      Alert.alert("Authentication Required", "Please sign in to sync.");
       return;
     }
     if (!guardiansReady) {
-      Alert.alert("Add Guardians", "Fill in all guardian emails before installing.");
+      Alert.alert(
+        "Add Guardians",
+        "Fill in all guardian emails before syncing.",
+      );
       return;
     }
 
-    const invalidGuardian = trimmedGuardians.find((email) => !isValidEmail(email));
+    const invalidGuardian = trimmedGuardians.find(
+      (email) => !isValidEmail(email),
+    );
     if (invalidGuardian) {
-      Alert.alert("Invalid Email", `${invalidGuardian} is not a valid email address.`);
+      Alert.alert(
+        "Invalid Email",
+        `${invalidGuardian} is not a valid email address.`,
+      );
       return;
     }
 
@@ -198,16 +401,35 @@ const EmailRecoveryScreen: React.FC = () => {
       Alert.alert("Invalid Threshold", "Threshold must be greater than zero.");
       return;
     }
+
+    const computedTotalWeight = guardianWeights
+      .slice(0, expectedGuardians)
+      .reduce((sum, weight) => sum + (parseInt(weight, 10) || 0), 0);
+
+    if (parsedThreshold > computedTotalWeight) {
+      Alert.alert(
+        "Threshold Too High",
+        "Threshold cannot exceed the total sum of guardian validation weights.",
+      );
+      return;
+    }
+
     if (hasDuplicateGuardians) {
       Alert.alert("Duplicate Guardians", "Each guardian email must be unique.");
       return;
     }
     if (parsedDelay <= 0 || parsedExpiry <= 0) {
-      Alert.alert("Invalid Timing", "Delay and expiry must be greater than zero.");
+      Alert.alert(
+        "Invalid Timing",
+        "Delay and expiry must be greater than zero.",
+      );
       return;
     }
     if (parsedExpiry < parsedDelay) {
-      Alert.alert("Invalid Timing", "Expiry must be greater than or equal to the delay.");
+      Alert.alert(
+        "Invalid Timing",
+        "Expiry must be greater than or equal to the delay.",
+      );
       return;
     }
 
@@ -216,18 +438,177 @@ const EmailRecoveryScreen: React.FC = () => {
       parsedWeights = guardianWeights.map((weight, index) => {
         const parsed = parseInt(weight, 10) || 0;
         if (parsed <= 0) {
-          throw new Error(`Guardian weight at index ${index + 1} must be greater than zero.`);
+          throw new Error(
+            `Guardian weight at index ${index + 1} must be greater than zero.`,
+          );
         }
         return BigInt(parsed);
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Guardian weights must be greater than zero.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Guardian weights must be greater than zero.";
+      Alert.alert("Invalid Weights", message);
+      return;
+    }
+
+    const totalWeight = parsedWeights.reduce((sum, weight) => sum + weight, 0n);
+    if (BigInt(parsedThreshold) > totalWeight) {
+      Alert.alert(
+        "Invalid Threshold",
+        "Threshold cannot exceed the total guardian weight.",
+      );
+      return;
+    }
+
+    setInstallingModule(true);
+    try {
+      await EmailRecoveryService.persistMetadata({
+        userId: user.id,
+        smartAccountAddress,
+        chainId: resolvedChainId,
+        guardianEmails: trimmedGuardians,
+        guardianWeights: parsedWeights,
+        threshold: BigInt(parsedThreshold),
+        delaySeconds: BigInt(parsedDelay) * 86400n,
+        expirySeconds: BigInt(parsedExpiry) * 86400n,
+        securityMode,
+        installStatus: moduleInstalledState ? "installed" : "pending",
+        installUserOpHash:
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+      });
+
+      const refreshedMetadata = await EmailRecoveryService.loadMetadata({
+        smartAccountAddress,
+      });
+      setStoredMetadata(refreshedMetadata);
+      Alert.alert(
+        "Sync Complete",
+        "Configuration synced to the cloud successfully.",
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to sync metadata.";
+      Alert.alert("Sync Failed", message);
+    } finally {
+      setInstallingModule(false);
+    }
+  }, [
+    smartAccountReady,
+    smartAccountAddress,
+    user?.id,
+    guardiansReady,
+    trimmedGuardians,
+    hasDuplicateGuardians,
+    resolvedChainId,
+    guardianWeights,
+    thresholdValue,
+    delayDays,
+    expiryDays,
+    securityMode,
+    moduleInstalledState,
+  ]);
+
+  const handleInstallModule = useCallback(async () => {
+    if (!smartAccountReady || !smartAccountAddress) {
+      Alert.alert(
+        "Smart Account Required",
+        "Deploy your smart account before installing email recovery.",
+      );
+      return;
+    }
+    if (!user?.id) {
+      Alert.alert(
+        "Authentication Required",
+        "Please sign in to install the email recovery module.",
+      );
+      return;
+    }
+    if (!guardiansReady) {
+      Alert.alert(
+        "Add Guardians",
+        "Fill in all guardian emails before installing.",
+      );
+      return;
+    }
+
+    const invalidGuardian = trimmedGuardians.find(
+      (email) => !isValidEmail(email),
+    );
+    if (invalidGuardian) {
+      Alert.alert(
+        "Invalid Email",
+        `${invalidGuardian} is not a valid email address.`,
+      );
+      return;
+    }
+
+    const parsedThreshold = parseInt(thresholdValue, 10) || 0;
+    const parsedDelay = parseInt(delayDays, 10) || 0;
+    const parsedExpiry = parseInt(expiryDays, 10) || 0;
+
+    if (parsedThreshold <= 0) {
+      Alert.alert("Invalid Threshold", "Threshold must be greater than zero.");
+      return;
+    }
+
+    const computedTotalWeight = guardianWeights
+      .slice(0, expectedGuardians)
+      .reduce((sum, weight) => sum + (parseInt(weight, 10) || 0), 0);
+
+    if (parsedThreshold > computedTotalWeight) {
+      Alert.alert(
+        "Threshold Too High",
+        "Threshold cannot exceed the total sum of guardian validation weights.",
+      );
+      return;
+    }
+
+    if (hasDuplicateGuardians) {
+      Alert.alert("Duplicate Guardians", "Each guardian email must be unique.");
+      return;
+    }
+    if (parsedDelay <= 0 || parsedExpiry <= 0) {
+      Alert.alert(
+        "Invalid Timing",
+        "Delay and expiry must be greater than zero.",
+      );
+      return;
+    }
+    if (parsedExpiry < parsedDelay) {
+      Alert.alert(
+        "Invalid Timing",
+        "Expiry must be greater than or equal to the delay.",
+      );
+      return;
+    }
+
+    let parsedWeights: bigint[];
+    try {
+      parsedWeights = guardianWeights.map((weight, index) => {
+        const parsed = parseInt(weight, 10) || 0;
+        if (parsed <= 0) {
+          throw new Error(
+            `Guardian weight at index ${index + 1} must be greater than zero.`,
+          );
+        }
+        return BigInt(parsed);
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Guardian weights must be greater than zero.";
       Alert.alert("Invalid Weights", message);
       return;
     }
     const totalWeight = parsedWeights.reduce((sum, weight) => sum + weight, 0n);
     if (BigInt(parsedThreshold) > totalWeight) {
-      Alert.alert("Invalid Threshold", "Threshold cannot exceed the total guardian weight.");
+      Alert.alert(
+        "Invalid Threshold",
+        "Threshold cannot exceed the total guardian weight.",
+      );
       return;
     }
 
@@ -239,48 +620,87 @@ const EmailRecoveryScreen: React.FC = () => {
     try {
       const passkey = await PasskeyService.getPasskey(user.id);
       if (!passkey) {
-        throw new Error("No passkey found on this device. Create a passkey first.");
+        throw new Error(
+          "No passkey found on this device. Create a passkey first.",
+        );
       }
 
-      const derivedGuardians = await EmailRecoveryService.deriveGuardianAddresses(
-        smartAccountAddress,
-        trimmedGuardians,
-        resolvedChainId,
-      );
+      const derivedGuardians =
+        await EmailRecoveryService.deriveGuardianAddresses(
+          smartAccountAddress,
+          trimmedGuardians,
+          resolvedChainId,
+        );
       setDerivedGuardians(
-        derivedGuardians.map(({ email, guardianAddress }) => ({ email, guardianAddress })),
+        derivedGuardians.map(({ email, guardianAddress }) => ({
+          email,
+          guardianAddress,
+        })),
       );
 
-      const { userOp, userOpHash } = await EmailRecoveryService.buildInstallModuleUserOp({
-        smartAccountAddress,
-        guardians: derivedGuardians.map(({ guardianAddress }) => guardianAddress),
-        weights: parsedWeights,
-        threshold: BigInt(parsedThreshold),
-        delay: BigInt(parsedDelay) * 86400n,
-        expiry: BigInt(parsedExpiry) * 86400n,
-        passkeyId: passkey.credentialIdRaw as Hex,
-        chainId: resolvedChainId,
-        usePaymaster: true,
-      });
+      const { userOp, userOpHash } =
+        await EmailRecoveryService.buildInstallModuleUserOp({
+          smartAccountAddress,
+          guardians: derivedGuardians.map(
+            ({ guardianAddress }) => guardianAddress,
+          ),
+          weights: parsedWeights,
+          threshold: BigInt(parsedThreshold),
+          delay: BigInt(parsedDelay) * 86400n,
+          expiry: BigInt(parsedExpiry) * 86400n,
+          passkeyId: passkey.credentialIdRaw as Hex,
+          chainId: resolvedChainId,
+          usePaymaster: true,
+        });
 
       setLastUserOpHash(userOpHash);
 
-      const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
-      const encodedSignature = PasskeyService.encodeSignatureForContract(signature) as Hex;
+      const signature = await PasskeyService.signWithPasskey(
+        user.id,
+        userOpHash,
+      );
+      const encodedSignature = PasskeyService.encodeSignatureForContract(
+        signature,
+      ) as Hex;
       const signedUserOp = { ...userOp, signature: encodedSignature };
 
-      const operationHash = await EmailRecoveryService.submitInstallModuleUserOp({
-        signedUserOp,
+      const operationHash =
+        await EmailRecoveryService.submitInstallModuleUserOp({
+          signedUserOp,
+          chainId: resolvedChainId,
+        });
+
+      await EmailRecoveryService.persistMetadata({
+        userId: user.id,
+        smartAccountAddress,
         chainId: resolvedChainId,
+        guardianEmails: trimmedGuardians,
+        guardianWeights: parsedWeights,
+        threshold: BigInt(parsedThreshold),
+        delaySeconds: BigInt(parsedDelay) * 86400n,
+        expirySeconds: BigInt(parsedExpiry) * 86400n,
+        securityMode,
+        installStatus: "pending",
+        installUserOpHash: operationHash,
       });
+
+      const refreshedMetadata = await EmailRecoveryService.loadMetadata({
+        smartAccountAddress,
+      });
+      setStoredMetadata(refreshedMetadata);
 
       setLastOperationHash(operationHash);
       setLastInstallPayload(signedUserOp);
       setModuleInstalledState(true);
-      Alert.alert("Email Recovery Activated", "Email recovery module installation was submitted.");
+      Alert.alert(
+        "Email Recovery Activated",
+        "Email recovery module installation was submitted.",
+      );
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to install the email recovery module.";
+        error instanceof Error
+          ? error.message
+          : "Failed to install the email recovery module.";
       setModuleError(message);
       Alert.alert("Installation Failed", message);
     } finally {
@@ -298,7 +718,78 @@ const EmailRecoveryScreen: React.FC = () => {
     user?.id,
     guardianWeights,
     hasDuplicateGuardians,
+    securityMode,
   ]);
+
+  const handleExportRecoveryKit = useCallback(async () => {
+    if (!smartAccountAddress) {
+      Alert.alert(
+        "Smart Account Required",
+        "Create or load your smart account first.",
+      );
+      return;
+    }
+
+    try {
+      const vaultKey =
+        await EmailRecoveryService.getVaultKeyBase64(smartAccountAddress);
+      if (!vaultKey) {
+        Alert.alert(
+          "No Vault Key Found",
+          "Enable Extra Security and save/install recovery once to generate a vault key.",
+        );
+        return;
+      }
+      navigation.navigate("RecoveryKitExport", {
+        vaultKey,
+        smartAccountAddress,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load vault key.";
+      Alert.alert("Export Failed", message);
+    }
+  }, [navigation, smartAccountAddress]);
+
+  const handleImportVaultKey = useCallback(async () => {
+    if (!smartAccountAddress) {
+      Alert.alert(
+        "Smart Account Required",
+        "Create or load your smart account first.",
+      );
+      return;
+    }
+    if (!vaultKeyInput.trim()) {
+      Alert.alert(
+        "Vault Key Required",
+        "Paste your Base64 vault key to import.",
+      );
+      return;
+    }
+
+    try {
+      await EmailRecoveryService.importVaultKeyBase64(
+        smartAccountAddress,
+        vaultKeyInput.trim(),
+      );
+      setVaultKeyInput("");
+      setHasVaultKey(true);
+
+      const refreshedMetadata = await EmailRecoveryService.loadMetadata({
+        smartAccountAddress,
+      });
+      setStoredMetadata(refreshedMetadata);
+
+      Alert.alert(
+        "Vault Key Imported",
+        "Guardians are now unlocked on this device.",
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to import vault key.";
+      Alert.alert("Import Failed", message);
+    }
+  }, [smartAccountAddress, vaultKeyInput]);
 
   return (
     <View style={styles.container}>
@@ -316,10 +807,156 @@ const EmailRecoveryScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>Saved Recovery Metadata</Text>
+          <Text style={styles.cardDesc}>
+            Offchain metadata is persisted per wallet. Chain behavior remains
+            unchanged.
+          </Text>
+          {loadingStoredMetadata ? (
+            <ActivityIndicator size="small" color={colors.accentAlt} />
+          ) : storedMetadata ? (
+            <>
+              <View style={styles.payloadRow}>
+                <Text style={styles.payloadLabel}>Threshold</Text>
+                <Text style={styles.payloadValue}>
+                  {storedMetadata.config.threshold}
+                </Text>
+              </View>
+              <View style={styles.payloadRow}>
+                <Text style={styles.payloadLabel}>Delay / Expiry (days)</Text>
+                <Text style={styles.payloadValue}>
+                  {Math.floor(storedMetadata.config.delaySeconds / 86400)} /{" "}
+                  {Math.floor(storedMetadata.config.expirySeconds / 86400)}
+                </Text>
+              </View>
+              <View style={styles.payloadRow}>
+                <Text style={styles.payloadLabel}>Security mode</Text>
+                <Text style={styles.payloadValue}>
+                  {storedMetadata.config.securityMode === "extra"
+                    ? "Extra (encrypted)"
+                    : "Standard"}
+                </Text>
+              </View>
+              <Text style={styles.payloadSubLabel}>Masked Guardian Emails</Text>
+              {storedMetadata.guardians.map((guardian) => (
+                <View key={guardian.emailHash} style={styles.payloadRow}>
+                  <Text style={styles.payloadLabel}>
+                    {guardian.resolvedEmail ?? guardian.maskedEmail}
+                    {guardian.isLocked ? " (locked)" : ""}
+                  </Text>
+                  <Text style={styles.payloadValue}>
+                    weight {guardian.weight}
+                  </Text>
+                </View>
+              ))}
+              <Text style={styles.payloadSubLabel}>
+                Current Chain Install Status
+              </Text>
+              <Text style={styles.payloadValue}>
+                {storedMetadata.installations.find(
+                  (i) => i.chainId === Number(resolvedChainId),
+                )?.installStatus ?? "not_installed"}
+              </Text>
+              {storedMetadata.installations.find(
+                (i) => i.chainId === Number(resolvedChainId),
+              )?.installStatus !== "installed" && (
+                <Text style={styles.moduleHint}>
+                  Recovery not active on this chain. Install the module to
+                  activate it.
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text style={styles.moduleHint}>
+              No email recovery metadata found for this wallet yet.
+            </Text>
+          )}
+          {metadataWarning ? (
+            <Text style={styles.moduleError}>{metadataWarning}</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Privacy & Recovery Kit</Text>
+          <Text style={styles.cardDesc}>
+            Standard mode stores masked guardian emails for easier recovery.
+            Extra mode encrypts guardian emails and requires your vault key on
+            each device.
+          </Text>
+
+          <View style={styles.inputRow}>
+            <TouchableOpacity
+              style={[
+                styles.modeButton,
+                securityMode === "none" ? styles.modeButtonActive : undefined,
+              ]}
+              onPress={() => setSecurityMode("none")}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modeButtonText}>Standard</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.modeButton,
+                securityMode === "extra" ? styles.modeButtonActive : undefined,
+              ]}
+              onPress={() => setSecurityMode("extra")}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modeButtonText}>Extra Security</Text>
+            </TouchableOpacity>
+          </View>
+
+          {securityMode === "extra" ? (
+            <>
+              <Text style={styles.moduleHint}>
+                Vault key on this device:{" "}
+                {hasVaultKey ? "Available" : "Not imported"}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleExportRecoveryKit}
+                activeOpacity={0.85}
+                disabled={!smartAccountAddress}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  Export Recovery Kit (QR)
+                </Text>
+              </TouchableOpacity>
+
+              <TextInput
+                style={styles.textInput}
+                value={vaultKeyInput}
+                onChangeText={setVaultKeyInput}
+                placeholder="Paste vault key (Base64)"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleImportVaultKey}
+                activeOpacity={0.85}
+                disabled={!smartAccountAddress}
+              >
+                <Text style={styles.secondaryButtonText}>Import Vault Key</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={styles.moduleHint}>
+              Recovery key export/import is only required in Extra Security
+              mode.
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.cardTitle}>Guardian Configuration</Text>
           <Text style={styles.cardDesc}>
-            Enter guardian email addresses and weights. The app deterministically derives the
-            on-chain EmailAuth guardian contracts from these emails before installing the module.
+            Enter guardian email addresses and weights. The app
+            deterministically derives the on-chain EmailAuth guardian contracts
+            from these emails before installing the module.
           </Text>
 
           <View style={styles.inputRow}>
@@ -346,7 +983,9 @@ const EmailRecoveryScreen: React.FC = () => {
           </View>
 
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryText}>Total weight: {totalGuardianWeight}</Text>
+            <Text style={styles.summaryText}>
+              Total weight: {totalGuardianWeight}
+            </Text>
             {hasDuplicateGuardians && (
               <Text style={[styles.summaryText, styles.summaryWarning]}>
                 Duplicate emails detected
@@ -355,41 +994,67 @@ const EmailRecoveryScreen: React.FC = () => {
           </View>
 
           {guardianEmails.map((email, index) => (
-            <View key={`guardian-${index}`} style={styles.guardianRow}>
-              <View style={styles.guardianColumn}>
-                <Text style={styles.inputLabel}>Guardian {index + 1} Email</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={email}
-                  onChangeText={(value) => handleGuardianEmailChange(index, value)}
-                  placeholder="guardian@example.com"
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  keyboardType="email-address"
-                  textContentType="emailAddress"
-                />
+            <View key={`guardian-${index}`} style={styles.guardianRowContainer}>
+              <View style={styles.guardianRow}>
+                <View style={styles.guardianColumn}>
+                  <Text style={styles.inputLabel}>
+                    Guardian {index + 1} Email
+                  </Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={email}
+                    onChangeText={(value) =>
+                      handleGuardianEmailChange(index, value)
+                    }
+                    placeholder="guardian@example.com"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="email"
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                  />
+                </View>
+                <View style={styles.weightColumn}>
+                  <Text style={styles.inputLabel}>Weight</Text>
+                  <TextInput
+                    style={styles.numberInput}
+                    value={guardianWeights[index] ?? "1"}
+                    onChangeText={(value) => handleWeightChange(index, value)}
+                    keyboardType="number-pad"
+                    placeholderTextColor={colors.textMuted}
+                  />
+                </View>
               </View>
-              <View style={styles.weightColumn}>
-                <Text style={styles.inputLabel}>Weight</Text>
-                <TextInput
-                  style={styles.numberInput}
-                  value={guardianWeights[index] ?? "1"}
-                  onChangeText={(value) => handleWeightChange(index, value)}
-                  keyboardType="number-pad"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
+
+              {/* Optional Delete Button */}
+              {guardianEmails.length > 1 && (
+                <TouchableOpacity
+                  style={styles.deleteGuardianButton}
+                  onPress={() => handleDeleteGuardian(index)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove guardian ${index + 1}`}
+                >
+                  <Feather
+                    name="trash-2"
+                    size={20}
+                    color={theme.colors.danger}
+                  />
+                </TouchableOpacity>
+              )}
             </View>
           ))}
           {derivedGuardians.length > 0 && (
             <View style={styles.payloadBox}>
-              <Text style={styles.payloadTitle}>Derived Guardian Contracts</Text>
+              <Text style={styles.payloadTitle}>
+                Derived Guardian Contracts
+              </Text>
               {derivedGuardians.map(({ email, guardianAddress }) => (
                 <View key={email} style={styles.payloadRow}>
                   <Text style={styles.payloadLabel}>{email}</Text>
-                  <Text style={styles.payloadValue}>{shortenHex(guardianAddress)}</Text>
+                  <Text style={styles.payloadValue}>
+                    {shortenHex(guardianAddress)}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -399,8 +1064,8 @@ const EmailRecoveryScreen: React.FC = () => {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Recovery Timing</Text>
           <Text style={styles.cardDesc}>
-            Delay and expiry are expressed in days. Recovery can be executed after the delay and
-            before the expiry.
+            Delay and expiry are expressed in days. Recovery can be executed
+            after the delay and before the expiry.
           </Text>
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
@@ -440,18 +1105,23 @@ const EmailRecoveryScreen: React.FC = () => {
                 <Feather
                   name="refresh-ccw"
                   size={16}
-                  color={smartAccountReady ? colors.accentAlt : colors.textMuted}
+                  color={
+                    smartAccountReady ? colors.accentAlt : colors.textMuted
+                  }
                 />
               )}
             </TouchableOpacity>
           </View>
           <Text style={styles.cardDesc}>
-            Install the on-chain email recovery module so guardians can approve recovery emails.
+            Install the on-chain email recovery module so guardians can approve
+            recovery emails.
           </Text>
           <View
             style={[
               styles.moduleStatusBadge,
-              moduleInstalledState ? styles.moduleStatusInstalled : styles.moduleStatusIdle,
+              moduleInstalledState
+                ? styles.moduleStatusInstalled
+                : styles.moduleStatusIdle,
               !smartAccountReady && styles.moduleStatusWarning,
             ]}
           >
@@ -460,32 +1130,33 @@ const EmailRecoveryScreen: React.FC = () => {
                 !smartAccountReady
                   ? "alert-circle"
                   : moduleInstalledState
-                  ? "check-circle"
-                  : "shield-off"
+                    ? "check-circle"
+                    : "shield-off"
               }
               size={16}
               color={
                 !smartAccountReady
                   ? colors.warning
                   : moduleInstalledState
-                  ? colors.success
-                  : colors.accentAlt
+                    ? colors.success
+                    : colors.accentAlt
               }
             />
             <Text style={styles.moduleStatusText}>
               {!smartAccountReady
                 ? "Deploy smart account to enable recovery"
                 : checkingModule
-                ? "Checking module status..."
-                : moduleInstalledState
-                ? "Module installed"
-                : "Module not installed"}
+                  ? "Checking module status..."
+                  : moduleInstalledState
+                    ? "Module installed"
+                    : "Module not installed"}
             </Text>
           </View>
           {moduleError && <Text style={styles.moduleError}>{moduleError}</Text>}
           {!smartAccountReady && (
             <Text style={styles.moduleHint}>
-              Deploy your smart account first. Module installation requires an on-chain contract.
+              Deploy your smart account first. Module installation requires an
+              on-chain contract.
             </Text>
           )}
           {smartAccountReady && !guardiansReady && (
@@ -510,31 +1181,49 @@ const EmailRecoveryScreen: React.FC = () => {
               <Text style={styles.payloadTitle}>Latest Module Payload</Text>
               <View style={styles.payloadRow}>
                 <Text style={styles.payloadLabel}>Sender</Text>
-                <Text style={styles.payloadValue}>{shortenHex(lastInstallPayload.sender)}</Text>
+                <Text style={styles.payloadValue}>
+                  {shortenHex(lastInstallPayload.sender)}
+                </Text>
               </View>
               <View style={styles.payloadRow}>
                 <Text style={styles.payloadLabel}>Nonce</Text>
-                <Text style={styles.payloadValue}>{String(lastInstallPayload.nonce)}</Text>
+                <Text style={styles.payloadValue}>
+                  {String(lastInstallPayload.nonce)}
+                </Text>
               </View>
               <View style={styles.payloadRow}>
                 <Text style={styles.payloadLabel}>Paymaster</Text>
                 <Text style={styles.payloadValue}>
-                  {lastInstallPayload.paymaster ? shortenHex(lastInstallPayload.paymaster) : "Not Sponsored"}
+                  {lastInstallPayload.paymaster
+                    ? shortenHex(lastInstallPayload.paymaster)
+                    : "Not Sponsored"}
                 </Text>
               </View>
               <Text style={styles.payloadSubLabel}>Call Data</Text>
-              <Text style={styles.payloadCode}>{shortenHex(lastInstallPayload.callData, 16)}</Text>
+              <Text style={styles.payloadCode}>
+                {shortenHex(lastInstallPayload.callData, 16)}
+              </Text>
               <Text style={styles.payloadSubLabel}>Signature</Text>
-              <Text style={styles.payloadCode}>{shortenHex(lastInstallPayload.signature, 20)}</Text>
+              <Text style={styles.payloadCode}>
+                {shortenHex(lastInstallPayload.signature, 20)}
+              </Text>
             </View>
           )}
           <TouchableOpacity
             style={[
               styles.installButton,
-              (!smartAccountReady || !guardiansReady || moduleInstalledState || installingModule) &&
+              (!smartAccountReady ||
+                !guardiansReady ||
+                moduleInstalledState ||
+                installingModule) &&
                 styles.installButtonDisabled,
             ]}
-            disabled={!smartAccountReady || !guardiansReady || moduleInstalledState || installingModule}
+            disabled={
+              !smartAccountReady ||
+              !guardiansReady ||
+              moduleInstalledState ||
+              installingModule
+            }
             onPress={handleInstallModule}
             activeOpacity={0.85}
           >
@@ -542,7 +1231,29 @@ const EmailRecoveryScreen: React.FC = () => {
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
               <Text style={styles.installButtonText}>
-                {moduleInstalledState ? "Module Installed" : "Install Email Recovery"}
+                {moduleInstalledState
+                  ? "Module Installed"
+                  : "Install Email Recovery"}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.installButton,
+              styles.syncButton,
+              (!smartAccountReady || !guardiansReady || installingModule) &&
+                styles.installButtonDisabled,
+            ]}
+            disabled={!smartAccountReady || !guardiansReady || installingModule}
+            onPress={handleSaveToCloud}
+            activeOpacity={0.85}
+          >
+            {installingModule ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={styles.installButtonText}>
+                Save / Sync Cloud Metadata
               </Text>
             )}
           </TouchableOpacity>
@@ -634,6 +1345,24 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
       fontWeight: "600",
     },
+    modeButton: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: "center",
+      backgroundColor: withAlpha(colors.textPrimary, 0.04),
+    },
+    modeButtonActive: {
+      borderColor: colors.accentAlt,
+      backgroundColor: withAlpha(colors.accentAlt, 0.14),
+    },
+    modeButtonText: {
+      color: colors.textPrimary,
+      fontSize: 13,
+      fontWeight: "700",
+    },
     numberInput: {
       backgroundColor: withAlpha(colors.textPrimary, 0.06),
       borderWidth: 1,
@@ -656,10 +1385,22 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.textPrimary,
       fontSize: 15,
     },
+    guardianRowContainer: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      gap: 12,
+    },
     guardianRow: {
+      flex: 1,
       flexDirection: "row",
       gap: 12,
       alignItems: "flex-end",
+    },
+    deleteGuardianButton: {
+      height: 52,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 8,
     },
     guardianColumn: {
       flex: 1,
@@ -768,6 +1509,19 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 11,
       fontFamily: "monospace",
     },
+    secondaryButton: {
+      borderWidth: 1,
+      borderColor: withAlpha(colors.accentAlt, 0.3),
+      borderRadius: 14,
+      paddingVertical: 12,
+      alignItems: "center",
+      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+    },
+    secondaryButtonText: {
+      color: colors.accentAlt,
+      fontSize: 14,
+      fontWeight: "700",
+    },
     installButton: {
       backgroundColor: colors.accentAlt,
       borderRadius: 16,
@@ -781,6 +1535,9 @@ const createStyles = (colors: ThemeColors) =>
       color: "#ffffff",
       fontSize: 15,
       fontWeight: "700",
+    },
+    syncButton: {
+      marginTop: 12,
     },
   });
 

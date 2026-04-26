@@ -43,7 +43,15 @@ const baseSettingsItems: SettingsItem[] = [
 const settingsItems: SettingsItem[] = [
   ...baseSettingsItems,
   // Dev-only quick link into the AA createAccount tester
-  ...(__DEV__ ? [{ label: "Dev Controls", icon: "cpu", route: "DevCreateAccount" }] : []),
+  ...(__DEV__
+    ? ([
+        {
+          label: "Dev Controls",
+          icon: "cpu",
+          route: "DevCreateAccount",
+        },
+      ] satisfies SettingsItem[])
+    : []),
 ];
 
 const ProfileScreen: React.FC = () => {
@@ -56,7 +64,9 @@ const ProfileScreen: React.FC = () => {
   const user = useUserStore((state) => state.user);
   const profile = useUserStore((state) => state.profile);
   const resetUser = useUserStore((state) => state.reset);
-  const setGuardNavigation = useAuthFlowStore((state) => state.setGuardNavigation);
+  const setGuardNavigation = useAuthFlowStore(
+    (state) => state.setGuardNavigation,
+  );
 
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
@@ -65,6 +75,8 @@ const ProfileScreen: React.FC = () => {
     profile?.username ??
     user?.email?.split("@")[0]?.replace(/[^a-zA-Z0-9]/g, " ") ??
     "Explorer";
+
+  const avatarUri = profile?.avatarUrl ?? null;
 
   const handleToggleTheme = useCallback(() => {
     setMode(resolvedMode === "dark" ? "light" : "dark");
@@ -81,7 +93,10 @@ const ProfileScreen: React.FC = () => {
     } catch (error) {
       didError = true;
       console.error("Failed to sign out", error);
-      Alert.alert("Sign out failed", "Please check your connection and try again.");
+      Alert.alert(
+        "Sign out failed",
+        "Please check your connection and try again.",
+      );
     }
 
     if (!didError) {
@@ -98,33 +113,35 @@ const ProfileScreen: React.FC = () => {
   }, [isSigningOut, navigation, resetUser, setGuardNavigation]);
 
   return (
-  <TabScreenContainer style={styles.screen}>
+    <TabScreenContainer style={styles.screen}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomInset }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: contentBottomInset },
+        ]}
       >
         <View style={styles.heroWrapper}>
-          <LinearGradient colors={gradients.profileHero} style={styles.heroGradient}>
+          <LinearGradient
+            colors={gradients.profileHero}
+            style={styles.heroGradient}
+          >
             <View style={styles.heroHeader}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => navigation.navigate("ProfileEdit")}
                 activeOpacity={0.85}
               >
-                <Avatar
-                  size={72}
-                  uri={
-                    profile?.avatarUrl ??
-                    (user?.user_metadata?.avatar_url as string | undefined) ??
-                    null
-                  }
-                  label={displayName}
-                />
+                <Avatar size={72} uri={avatarUri} label={displayName} />
               </TouchableOpacity>
               <View style={styles.heroInfo}>
-                <TouchableOpacity onPress={() => navigation.navigate("ProfileEdit")}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("ProfileEdit")}
+                >
                   <Text style={styles.name}>{displayName}</Text>
                 </TouchableOpacity>
-                <Text style={styles.email}>{user?.email ?? "wallet@trezo.app"}</Text>
+                <Text style={styles.email}>
+                  {user?.email ?? "wallet@trezo.app"}
+                </Text>
                 <Text style={styles.modeHint}>
                   Theme: {resolvedMode === "dark" ? "Dark" : "Light"} mode
                 </Text>
@@ -152,10 +169,13 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity
               key={item.label}
               activeOpacity={0.85}
-              style={[styles.settingRow, index < settingsItems.length - 1 && styles.rowBorder]}
+              style={[
+                styles.settingRow,
+                index < settingsItems.length - 1 && styles.rowBorder,
+              ]}
               onPress={() => {
                 if (item.route) {
-                  navigation.navigate(item.route);
+                  navigation.navigate(item.route as never);
                 }
               }}
             >
@@ -163,7 +183,11 @@ const ProfileScreen: React.FC = () => {
                 <Feather name={item.icon} size={18} color={colors.accentAlt} />
                 <Text style={styles.settingLabel}>{item.label}</Text>
               </View>
-              <Feather name="chevron-right" size={18} color={colors.textMuted} />
+              <Feather
+                name="chevron-right"
+                size={18}
+                color={colors.textMuted}
+              />
             </TouchableOpacity>
           ))}
         </View>
@@ -196,7 +220,11 @@ const ProfileScreen: React.FC = () => {
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
               <View style={styles.modalIconBadge}>
-                <Feather name="alert-triangle" size={22} color={colors.danger} />
+                <Feather
+                  name="alert-triangle"
+                  size={22}
+                  color={colors.danger}
+                />
               </View>
               <Text style={styles.modalTitle}>Sign out of Trezo Wallet?</Text>
               <Text style={styles.modalBody}>
@@ -212,7 +240,11 @@ const ProfileScreen: React.FC = () => {
                   <Text style={styles.modalCancelLabel}>Stay signed in</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalDanger, isSigningOut && styles.modalButtonDisabled]}
+                  style={[
+                    styles.modalButton,
+                    styles.modalDanger,
+                    isSigningOut && styles.modalButtonDisabled,
+                  ]}
                   onPress={executeSignOut}
                   activeOpacity={0.85}
                   disabled={isSigningOut}

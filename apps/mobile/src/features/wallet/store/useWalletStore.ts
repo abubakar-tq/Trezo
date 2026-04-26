@@ -37,6 +37,9 @@ export type Transaction = {
 export type AAAccount = {
   id: string; // Database ID
   userId: string;
+  walletId: string;
+  walletIndex: number;
+  deploymentMode: "portable" | "chain-specific";
   predictedAddress: string; // Counterfactual address
   ownerAddress: string; // EOA that controls this AA
   isDeployed: boolean;
@@ -75,6 +78,9 @@ type WalletStore = {
   accounts: WalletAccount[];
   activeAccount: WalletAccount | null;
   isWalletInitialized: boolean;
+  
+  // Computed properties
+  primaryAccount: WalletAccount | null; // Alias for activeAccount
   
   // Account Abstraction state
   aaAccount: AAAccount | null;
@@ -147,8 +153,13 @@ const initialState = {
 
 export const useWalletStore = create<WalletStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...initialState,
+      
+      // Computed property
+      get primaryAccount() {
+        return get().activeAccount;
+      },
       
       setAccounts: (accounts) => set({ accounts }),
       

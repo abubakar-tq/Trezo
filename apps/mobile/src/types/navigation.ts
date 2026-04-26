@@ -10,6 +10,7 @@ export type AuthStackParamList = {
   Splash: { redirectTo?: { name: string; params?: Record<string, unknown> } } | undefined;
   Introduction: undefined;
   Welcome: undefined;
+  PasskeyRegistration: undefined;
   Login: { email?: string } | undefined;
   Register: { email?: string } | undefined;
   ForgotPassword: { email?: string } | undefined;
@@ -37,6 +38,10 @@ export type RootStackParamList = {
   BackupRecovery: undefined;
   GuardianRecovery: undefined;
   EmailRecovery: undefined;
+  RecoveryKitExport: {
+    vaultKey: string;
+    smartAccountAddress: string;
+  };
   ProfileEdit: undefined;
   ContactList: undefined;
   AddContact: undefined;

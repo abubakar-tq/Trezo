@@ -1,6 +1,7 @@
-import deployment31337 from "../contracts/deployment.31337.json";
+import deployment31337 from "../../../../../contracts/deployments/31337.json";
 import type { SupportedChainId } from "../chains";
 
+// Local mobile reads the derived compatibility manifest generated under contracts/deployments/<chainId>.json.
 export type DeploymentAddresses = {
   chainId: number;
   entryPoint: `0x${string}`;
@@ -9,6 +10,9 @@ export type DeploymentAddresses = {
   accountFactory: `0x${string}`;
   passkeyValidator: `0x${string}`;
   socialRecovery: `0x${string}`;
+  infraVersion?: string;
+  rootFactory?: `0x${string}`;
+  portable?: boolean;
   emailRecovery?: `0x${string}`;
   emailRecoveryCommandHandler?: `0x${string}`;
   zkEmailVerifier?: `0x${string}`;

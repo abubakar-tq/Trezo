@@ -33,9 +33,12 @@ import { anvil } from 'viem/chains';
 
 import { CHAIN_CONFIG, getRpcUrl, logNetworkConfig } from '@/src/core/network/chain';
 import { getContractAddresses, validateContractAddresses } from '@/src/core/network/contracts';
-import { AccountDeploymentService } from '@/src/features/wallet/services/AccountDeploymentService';
+import {
+  AccountDeploymentService,
+  deriveDefaultWalletId,
+} from '@/src/features/wallet/services/AccountDeploymentService';
 import PasskeyService, { BiometricCapabilities, PasskeyMetadata } from '@/src/features/wallet/services/PasskeyService';
-import type { SupportedChainId } from '@/src/integration/chains';
+import { isPortableChain, type SupportedChainId } from '@/src/integration/chains';
   import { useWalletStore } from '@/src/features/wallet/store/useWalletStore';
 import { useUserStore } from '@store/useUserStore';
 import type { ThemeColors } from '@theme';
@@ -56,6 +59,7 @@ export default function AATestScreen() {
   const { colors } = theme;
   const styles = createStyles(colors);
   const user = useUserStore((state) => state.user);
+  const aaAccount = useWalletStore((state) => state.aaAccount);
   const markAsDeployed = useWalletStore((state) => state.markAsDeployed);
   const setAAAccount = useWalletStore((state) => state.setAAAccount);
   
@@ -280,18 +284,26 @@ export default function AATestScreen() {
     
     try {
       const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
-      const salt = testPasskey.credentialIdRaw as Hex; // deterministic per-passkey
+      const walletIndex = aaAccount?.walletIndex ?? 0;
+      const walletId = (aaAccount?.walletId ?? deriveDefaultWalletId(user?.id || 'test-user')) as Hex;
+      const deploymentMode = aaAccount?.deploymentMode ?? (isPortableChain(chainId) ? "portable" : "chain-specific");
 
-      console.log('🔍 [AATest] Predicting wallet address with passkey salt:', salt);
+      console.log('🔍 [AATest] Predicting wallet address with walletId:', walletId);
 
-      const predictedAddr = await AccountDeploymentService.predictAddress(testPasskey, chainId, salt);
+      const predictedAddr = await AccountDeploymentService.predictAddress(
+        walletId,
+        testPasskey,
+        chainId,
+        walletIndex,
+        deploymentMode,
+      );
 
       setPredictedAddress(predictedAddr as string);
       
       updateTest(6, {
         status: 'success',
         message: `✅ Predicted: ${predictedAddr}`,
-        data: { salt, predictedAddress: predictedAddr },
+        data: { walletId, walletIndex, deploymentMode, predictedAddress: predictedAddr },
       });
     } catch (error) {
       console.error('❌ [AATest] Prediction failed:', error);
@@ -301,7 +313,7 @@ export default function AATestScreen() {
         data: { error: String(error) },
       });
     }
-  }, [testPasskey, updateTest]);
+  }, [aaAccount?.deploymentMode, aaAccount?.walletId, aaAccount?.walletIndex, testPasskey, updateTest, user?.id]);
   
   // Test 7: Fund Test Account
   const testFundAccount = useCallback(async () => {
@@ -372,10 +384,16 @@ export default function AATestScreen() {
     try {
       const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
       console.log('🚀 [AATest] Deploying passkey account through bundler...');
+      const walletIndex = aaAccount?.walletIndex ?? 0;
+      const walletId = (aaAccount?.walletId ?? deriveDefaultWalletId(user?.id || 'test-user')) as Hex;
+      const deploymentMode = aaAccount?.deploymentMode ?? (isPortableChain(chainId) ? "portable" : "chain-specific");
 
       const result = await AccountDeploymentService.deployWithPasskeyAuth(user?.id || 'test-user', {
         chainId,
         passkey: testPasskey,
+        walletId,
+        walletIndex,
+        mode: deploymentMode,
       });
 
       const deployedAddress = result.accountAddress;
@@ -388,6 +406,9 @@ export default function AATestScreen() {
       setAAAccount({
         id: user?.id || 'test-user',
         userId: user?.id || 'test-user',
+        walletId,
+        walletIndex,
+        deploymentMode,
         predictedAddress: deployedAddress,
         ownerAddress: testPasskey.credentialIdRaw,
         isDeployed: true,

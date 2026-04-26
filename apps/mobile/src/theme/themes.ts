@@ -6,13 +6,16 @@ import type { AppTheme, Mode, ThemeColors, ThemeGradients } from "./types";
 
 const darkColors: ThemeColors = {
   background: "#04030a",
+  surface: "rgba(12, 10, 18, 0.92)", // Added missing surface color
   surfaceCard: "rgba(12, 10, 18, 0.92)",
   surfaceElevated: "rgba(15, 23, 42, 0.9)",
   surfaceMuted: "rgba(12, 10, 18, 0.85)",
   border: "rgba(255,255,255,0.08)",
   borderMuted: "rgba(255,255,255,0.05)",
+  text: "#f9fafb", // Added missing text color
   textPrimary: "#f9fafb",
   textSecondary: "#cbd5f5",
+  secondaryText: "#cbd5f5", // Added missing secondaryText color
   textMuted: "#94a3b8",
   textOnAccent: "#0f172a",
   accent: "#38bdf8",
@@ -24,13 +27,16 @@ const darkColors: ThemeColors = {
 
 const lightColors: ThemeColors = {
   background: "#f7f9fc",
+  surface: "#ffffff", // Added missing surface color
   surfaceCard: "#ffffff",
   surfaceElevated: "#edf2ff",
   surfaceMuted: "#f1f5f9",
   border: "rgba(15,23,42,0.12)",
   borderMuted: "rgba(15,23,42,0.06)",
+  text: "#0f172a", // Added missing text color
   textPrimary: "#0f172a",
   textSecondary: "#1e293b",
+  secondaryText: "#1e293b", // Added missing secondaryText color
   textMuted: "#64748b",
   textOnAccent: "#ffffff",
   accent: "#2563eb",

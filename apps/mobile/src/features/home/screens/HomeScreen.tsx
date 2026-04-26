@@ -1,24 +1,42 @@
-import { PortfolioService } from "@/src/features/portfolio/services/PortfolioService";
 import type { TokenBalance } from "@/src/features/portfolio/services/PortfolioService";
-import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
-import type { AAAccount } from "@/src/features/wallet/store/useWalletStore";
-import type { RootStackParamList, TabStackParamList } from "@/src/types/navigation";
-import { Feather } from "@expo/vector-icons";
-import { useNavigation, type CompositeNavigationProp } from "@react-navigation/native";
-import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { AccountDeploymentService } from "@/src/features/wallet/services/AccountDeploymentService";
-import PasskeyService from "@/src/features/wallet/services/PasskeyService";
-import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
-import { type Address } from "viem";
+import { PortfolioService } from "@/src/features/portfolio/services/PortfolioService";
 import {
-  devFundSmartAccount,
-  DEV_FUNDING_AMOUNT_ETH,
+    AccountDeploymentService,
+    deriveDefaultWalletId,
+} from "@/src/features/wallet/services/AccountDeploymentService";
+import {
+    DEV_FUNDING_AMOUNT_ETH,
+    devFundSmartAccount,
 } from "@/src/features/wallet/services/devFunding";
-import { Avatar, TabScreenContainer } from "@shared/components";
+import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import type { AAAccount } from "@/src/features/wallet/store/useWalletStore";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import {
+    DEFAULT_CHAIN_ID,
+    isPortableChain,
+    type SupportedChainId,
+} from "@/src/integration/chains";
+import type {
+    RootStackParamList,
+    TabStackParamList,
+} from "@/src/types/navigation";
+import { Feather } from "@expo/vector-icons";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import {
+    useNavigation,
+    type CompositeNavigationProp,
+} from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { TabScreenContainer } from "@shared/components";
 import { MarketTokenSkeleton } from "@shared/components/ui";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -36,6 +54,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { type Address } from "viem";
 
 import { useTabContentBottomInset } from "@app/hooks";
 import {
@@ -98,23 +117,34 @@ const HomeScreen: React.FC = () => {
   const { colors, gradients } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
   const contentBottomInset = useTabContentBottomInset();
-  
+
   // Smart Account deployment status
-  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
-  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
-  const setSmartAccountAddress = useUserStore((state) => state.setSmartAccountAddress);
-  const setSmartAccountDeployed = useUserStore((state) => state.setSmartAccountDeployed);
+  const smartAccountAddress = useUserStore(
+    (state) => state.smartAccountAddress,
+  );
+  const smartAccountDeployed = useUserStore(
+    (state) => state.smartAccountDeployed,
+  );
+  const setSmartAccountAddress = useUserStore(
+    (state) => state.setSmartAccountAddress,
+  );
+  const setSmartAccountDeployed = useUserStore(
+    (state) => state.setSmartAccountDeployed,
+  );
   const aaAccount = useWalletStore((state) => state.aaAccount);
   const markAsDeployed = useWalletStore((state) => state.markAsDeployed);
   const setAAAccount = useWalletStore((state) => state.setAAAccount);
   const isWalletDeployed = smartAccountDeployed;
   const userId = user?.id ?? null;
-  const resolvedDeployChainId = (aaAccount?.chainId ?? DEFAULT_CHAIN_ID) as SupportedChainId;
-  
+  const resolvedDeployChainId = (aaAccount?.chainId ??
+    DEFAULT_CHAIN_ID) as SupportedChainId;
+
   // Portfolio data
   const [portfolioBalance, setPortfolioBalance] = useState(0);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
-  const [portfolio, setPortfolio] = useState<Awaited<ReturnType<typeof PortfolioService.getPortfolio>> | null>(null);
+  const [portfolio, setPortfolio] = useState<Awaited<
+    ReturnType<typeof PortfolioService.getPortfolio>
+  > | null>(null);
 
   const activeChain = useMarketStore((state) => state.activeChain);
   const setActiveChain = useMarketStore((state) => state.setActiveChain);
@@ -122,7 +152,7 @@ const HomeScreen: React.FC = () => {
   const warmCache = useMarketStore((state) => state.warmCache);
   const loading = useMarketStore((state) => state.loading);
   const error = useMarketStore((state) => state.error);
-  
+
   // Load portfolio balance
   useEffect(() => {
     const loadBalance = async () => {
@@ -131,14 +161,16 @@ const HomeScreen: React.FC = () => {
         setPortfolioBalance(0);
         return;
       }
-      
+
       setPortfolioLoading(true);
-      const portfolioData = await PortfolioService.getPortfolio(aaAccount.predictedAddress);
+      const portfolioData = await PortfolioService.getPortfolio(
+        aaAccount.predictedAddress,
+      );
       setPortfolio(portfolioData);
       setPortfolioBalance(portfolioData.totalValue);
       setPortfolioLoading(false);
     };
-    
+
     loadBalance();
     const interval = setInterval(loadBalance, 30000);
     return () => clearInterval(interval);
@@ -162,7 +194,9 @@ const HomeScreen: React.FC = () => {
   const lastUpdated = chainState?.lastUpdated ?? null;
 
   const [selectedToken, setSelectedToken] = useState<MarketToken | null>(null);
-  const [tokenDetail, setTokenDetail] = useState<TokenMarketDetail | null>(null);
+  const [tokenDetail, setTokenDetail] = useState<TokenMarketDetail | null>(
+    null,
+  );
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailRequestId, setDetailRequestId] = useState(0);
@@ -170,7 +204,9 @@ const HomeScreen: React.FC = () => {
   const [accountModalVisible, setAccountModalVisible] = useState(false);
   const [deployingAccount, setDeployingAccount] = useState(false);
   const [fundingAccount, setFundingAccount] = useState(false);
-  const [accountActionStatus, setAccountActionStatus] = useState<string | null>(null);
+  const [accountActionStatus, setAccountActionStatus] = useState<string | null>(
+    null,
+  );
   const [activeAction, setActiveAction] = useState<QuickAction | null>(null);
   const refreshRotation = useRef(new Animated.Value(0)).current;
 
@@ -178,16 +214,21 @@ const HomeScreen: React.FC = () => {
   const handleCopyAddress = useCallback(() => {
     if (smartAccountAddress) {
       Clipboard.setString(smartAccountAddress);
-      Alert.alert('Copied!', 'Address copied to clipboard', [{ text: 'OK' }]);
+      Alert.alert("Copied!", "Address copied to clipboard", [{ text: "OK" }]);
     }
   }, [smartAccountAddress]);
 
   const fundSmartAccount = useCallback(
     async (targetAddress?: string, options?: { silent?: boolean }) => {
-      const destination = (targetAddress ?? smartAccountAddress) as Address | undefined;
+      const destination = (targetAddress ?? smartAccountAddress) as
+        | Address
+        | undefined;
       if (!destination) {
         if (!options?.silent) {
-          Alert.alert("No Address", "Deploy your smart account before funding it.");
+          Alert.alert(
+            "No Address",
+            "Deploy your smart account before funding it.",
+          );
         }
         return null;
       }
@@ -207,7 +248,10 @@ const HomeScreen: React.FC = () => {
         return transactionHash;
       } catch (error) {
         if (!options?.silent) {
-          Alert.alert("Funding Failed", error instanceof Error ? error.message : "Unable to fund account");
+          Alert.alert(
+            "Funding Failed",
+            error instanceof Error ? error.message : "Unable to fund account",
+          );
         }
         throw error;
       } finally {
@@ -221,7 +265,10 @@ const HomeScreen: React.FC = () => {
   const handleDeploySmartAccount = useCallback(async () => {
     if (deployingAccount) return;
     if (!userId) {
-      Alert.alert("Sign In Required", "Please sign in before deploying your smart account.");
+      Alert.alert(
+        "Sign In Required",
+        "Please sign in before deploying your smart account.",
+      );
       return;
     }
     try {
@@ -237,7 +284,17 @@ const HomeScreen: React.FC = () => {
         throw new Error("Unable to access passkey credentials on this device.");
       }
 
-      const predictedAddress = await AccountDeploymentService.predictAddress(passkey, resolvedDeployChainId);
+      const walletIndex = aaAccount?.walletIndex ?? 0;
+      const walletId = (aaAccount?.walletId ?? deriveDefaultWalletId(userId)) as `0x${string}`;
+      const deploymentMode =
+        aaAccount?.deploymentMode ?? (isPortableChain(resolvedDeployChainId) ? "portable" : "chain-specific");
+      const predictedAddress = await AccountDeploymentService.predictAddress(
+        walletId,
+        passkey,
+        resolvedDeployChainId,
+        walletIndex,
+        deploymentMode,
+      );
       setSmartAccountAddress(predictedAddress);
 
       const baseAccount: AAAccount =
@@ -245,6 +302,9 @@ const HomeScreen: React.FC = () => {
         ({
           id: `local-${userId}`,
           userId,
+          walletId,
+          walletIndex,
+          deploymentMode,
           predictedAddress,
           ownerAddress: passkey.credentialIdRaw,
           isDeployed: false,
@@ -253,24 +313,45 @@ const HomeScreen: React.FC = () => {
           createdAt: new Date().toISOString(),
         } as AAAccount);
 
-      setAAAccount({ ...baseAccount, predictedAddress, chainId: resolvedDeployChainId, isDeployed: false });
-
-      setAccountActionStatus("Authenticating and sending deployment UserOperation…");
-      const result = await AccountDeploymentService.deployWithPasskeyAuth(userId, {
-        chainId: resolvedDeployChainId,
-        passkey,
+      setAAAccount({
+        ...baseAccount,
+        predictedAddress,
+          chainId: resolvedDeployChainId,
+          walletId,
+          walletIndex,
+          deploymentMode,
+          isDeployed: false,
       });
+
+      setAccountActionStatus(
+        "Authenticating and sending deployment UserOperation…",
+      );
+      const result = await AccountDeploymentService.deployWithPasskeyAuth(
+        userId,
+        {
+          chainId: resolvedDeployChainId,
+          passkey,
+          walletId,
+          walletIndex,
+          mode: deploymentMode,
+        },
+      );
 
       const deployedAccount: AAAccount = {
         ...baseAccount,
         predictedAddress: result.accountAddress,
+        walletId,
+        walletIndex,
+        deploymentMode,
         ownerAddress: passkey.credentialIdRaw,
         chainId: resolvedDeployChainId,
         isDeployed: true,
-        deploymentTxHash: result.alreadyDeployed ? baseAccount.deploymentTxHash : result.transactionHash,
+        deploymentTxHash: result.alreadyDeployed
+          ? baseAccount.deploymentTxHash
+          : result.transactionHash,
         deploymentBlockNumber: result.alreadyDeployed
           ? baseAccount.deploymentBlockNumber
-          : result.blockNumber ?? baseAccount.deploymentBlockNumber,
+          : (result.blockNumber ?? baseAccount.deploymentBlockNumber),
         deployedAt: new Date().toISOString(),
       };
       setAAAccount(deployedAccount);
@@ -282,7 +363,9 @@ const HomeScreen: React.FC = () => {
 
       let fundingHash: string | null = null;
       try {
-        fundingHash = await fundSmartAccount(result.accountAddress, { silent: true });
+        fundingHash = await fundSmartAccount(result.accountAddress, {
+          silent: true,
+        });
       } catch (fundError) {
         console.warn("[Home] Funding smart account failed", fundError);
       }
@@ -290,14 +373,18 @@ const HomeScreen: React.FC = () => {
       Alert.alert(
         "Smart Account Ready",
         `${result.alreadyDeployed ? "Already available at" : "Deployed at"}:\n${result.accountAddress}${
-          fundingHash ? `\n\nFunded ${DEV_FUNDING_AMOUNT_ETH} ETH\nTx: ${fundingHash.slice(0, 12)}…` : ""
+          fundingHash
+            ? `\n\nFunded ${DEV_FUNDING_AMOUNT_ETH} ETH\nTx: ${fundingHash.slice(0, 12)}…`
+            : ""
         }`,
       );
     } catch (error) {
       setAccountActionStatus(null);
       Alert.alert(
         "Deployment Failed",
-        error instanceof Error ? error.message : "Unable to deploy smart account",
+        error instanceof Error
+          ? error.message
+          : "Unable to deploy smart account",
       );
     } finally {
       setDeployingAccount(false);
@@ -323,9 +410,14 @@ const HomeScreen: React.FC = () => {
     warmCache().catch(() => undefined);
   }, [warmCache]);
 
-  const skeletonData = useMemo(() => Array.from({ length: 8 }, (_, index) => index), []);
+  const skeletonData = useMemo(
+    () => Array.from({ length: 8 }, (_, index) => index),
+    [],
+  );
   const activeChainLabel = useMemo(
-    () => MARKET_CHAIN_OPTIONS.find((option) => option.key === activeChain)?.label ?? "Selected network",
+    () =>
+      MARKET_CHAIN_OPTIONS.find((option) => option.key === activeChain)
+        ?.label ?? "Selected network",
     [activeChain],
   );
 
@@ -334,8 +426,10 @@ const HomeScreen: React.FC = () => {
     if (!query) {
       return tokens;
     }
-    return tokens.filter((token) =>
-      token.name.toLowerCase().includes(query) || token.symbol.toLowerCase().includes(query),
+    return tokens.filter(
+      (token) =>
+        token.name.toLowerCase().includes(query) ||
+        token.symbol.toLowerCase().includes(query),
     );
   }, [searchQuery, tokens]);
 
@@ -487,7 +581,10 @@ const HomeScreen: React.FC = () => {
         if (controller.signal.aborted) {
           return;
         }
-        const message = error instanceof Error ? error.message : "Unable to load token details.";
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to load token details.";
         setDetailError(message);
       })
       .finally(() => {
@@ -509,10 +606,20 @@ const HomeScreen: React.FC = () => {
       // Generate a deterministic color for the token logo based on symbol
       const getTokenColor = (symbol: string) => {
         const colors_palette = [
-          '#3B82F6', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B',
-          '#10B981', '#06B6D4', '#6366F1', '#F97316', '#14B8A6'
+          "#3B82F6",
+          "#8B5CF6",
+          "#EC4899",
+          "#EF4444",
+          "#F59E0B",
+          "#10B981",
+          "#06B6D4",
+          "#6366F1",
+          "#F97316",
+          "#14B8A6",
         ];
-        const hash = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const hash = symbol
+          .split("")
+          .reduce((acc, char) => acc + char.charCodeAt(0), 0);
         return colors_palette[hash % colors_palette.length];
       };
 
@@ -526,28 +633,47 @@ const HomeScreen: React.FC = () => {
         >
           <View style={styles.marketCardRow}>
             <View style={styles.marketTokenInfo}>
-              <View style={[styles.tokenLogo, { backgroundColor: withAlpha(tokenColor, 0.15), borderColor: withAlpha(tokenColor, 0.3) }]}>
+              <View
+                style={[
+                  styles.tokenLogo,
+                  {
+                    backgroundColor: withAlpha(tokenColor, 0.15),
+                    borderColor: withAlpha(tokenColor, 0.3),
+                  },
+                ]}
+              >
                 <Text style={[styles.tokenLogoText, { color: tokenColor }]}>
                   {item.symbol.slice(0, 3).toUpperCase()}
                 </Text>
               </View>
               <View style={styles.tokenDetails}>
-                <Text style={styles.marketName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.marketName} numberOfLines={1}>
+                  {item.name}
+                </Text>
                 <Text style={styles.marketSymbol} numberOfLines={1}>
                   {item.symbol.toUpperCase()} · {item.network}
                 </Text>
               </View>
             </View>
             <View style={styles.tokenPriceInfo}>
-              <Text style={styles.marketPrice}>{formatPrice(item.priceUsd)}</Text>
-              <View style={[
-                styles.changeChip,
-                { backgroundColor: withAlpha(isPositive ? colors.success : colors.danger, 0.12) }
-              ]}>
-                <Feather 
-                  name={isPositive ? "trending-up" : "trending-down"} 
-                  size={12} 
-                  color={isPositive ? colors.success : colors.danger} 
+              <Text style={styles.marketPrice}>
+                {formatPrice(item.priceUsd)}
+              </Text>
+              <View
+                style={[
+                  styles.changeChip,
+                  {
+                    backgroundColor: withAlpha(
+                      isPositive ? colors.success : colors.danger,
+                      0.12,
+                    ),
+                  },
+                ]}
+              >
+                <Feather
+                  name={isPositive ? "trending-up" : "trending-down"}
+                  size={12}
+                  color={isPositive ? colors.success : colors.danger}
                 />
                 <Text
                   style={[
@@ -572,7 +698,9 @@ const HomeScreen: React.FC = () => {
     if (error) {
       return (
         <View style={styles.marketEmpty}>
-          <Text style={[styles.marketEmptyText, { color: colors.danger }]}>{error}</Text>
+          <Text style={[styles.marketEmptyText, { color: colors.danger }]}>
+            {error}
+          </Text>
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.marketRefresh}
@@ -588,14 +716,18 @@ const HomeScreen: React.FC = () => {
     if (searchQuery.trim().length > 0) {
       return (
         <View style={styles.marketEmpty}>
-          <Text style={styles.marketEmptyText}>No tokens match “{searchQuery.trim()}”.</Text>
+          <Text style={styles.marketEmptyText}>
+            No tokens match “{searchQuery.trim()}”.
+          </Text>
         </View>
       );
     }
 
     return (
       <View style={styles.marketEmpty}>
-        <Text style={styles.marketEmptyText}>No cached prices for {activeChainLabel} yet.</Text>
+        <Text style={styles.marketEmptyText}>
+          No cached prices for {activeChainLabel} yet.
+        </Text>
         <TouchableOpacity
           activeOpacity={0.85}
           style={styles.marketRefresh}
@@ -606,18 +738,22 @@ const HomeScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
     );
-  }, [activeChainLabel, colors, error, handleRefresh, handleRetry, searchQuery, styles]);
+  }, [
+    activeChainLabel,
+    colors,
+    error,
+    handleRefresh,
+    handleRetry,
+    searchQuery,
+    styles,
+  ]);
 
   const greetingName =
     profile?.username ??
-    (user?.email ? user.email.split("@")[0]?.replace(/[^a-zA-Z0-9]/g, " ") : undefined) ??
+    (user?.email
+      ? user.email.split("@")[0]?.replace(/[^a-zA-Z0-9]/g, " ")
+      : undefined) ??
     "Explorer";
-  const avatarUri =
-    profile?.avatarUrl ??
-    (user?.user_metadata?.avatar_url as string | undefined) ??
-    (user?.user_metadata?.avatarUrl as string | undefined) ??
-    null;
-
   return (
     <TabScreenContainer style={styles.screen}>
       <ScrollView
@@ -629,18 +765,25 @@ const HomeScreen: React.FC = () => {
         <View className="flex-row items-center gap-3 mb-5 mt-3">
           {smartAccountAddress ? (
             <>
-              <TouchableOpacity 
+              <TouchableOpacity
                 className="flex-1 flex-row items-center justify-between bg-surface-elevated rounded-2xl p-3 px-4 border border-border/50"
                 onPress={() => setAccountModalVisible(true)}
                 activeOpacity={0.7}
               >
                 <View className="flex-1">
-                  <Text className="text-xs text-text-secondary mb-0.5">Account 1</Text>
+                  <Text className="text-xs text-text-secondary mb-0.5">
+                    Account 1
+                  </Text>
                   <Text className="text-[15px] font-semibold text-text-primary font-mono">
-                    {smartAccountAddress.slice(0, 6)}...{smartAccountAddress.slice(-4)}
+                    {smartAccountAddress.slice(0, 6)}...
+                    {smartAccountAddress.slice(-4)}
                   </Text>
                 </View>
-                <Feather name="chevron-down" size={20} color={colors.textSecondary} />
+                <Feather
+                  name="chevron-down"
+                  size={20}
+                  color={colors.textSecondary}
+                />
               </TouchableOpacity>
               <TouchableOpacity
                 className="w-11 h-11 rounded-full bg-surface-elevated items-center justify-center border border-border/50"
@@ -657,11 +800,13 @@ const HomeScreen: React.FC = () => {
               activeOpacity={0.7}
             >
               <Feather name="alert-triangle" size={16} color={colors.warning} />
-              <Text className="text-sm font-semibold text-warning">Deploy Smart Account</Text>
+              <Text className="text-sm font-semibold text-warning">
+                Deploy Smart Account
+              </Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            onPress={() => navigation.navigate('AATest')}
+            onPress={() => navigation.navigate("AATest")}
             className="w-9 h-9 rounded-full bg-accent/10 items-center justify-center border border-accent/25"
             activeOpacity={0.7}
           >
@@ -674,11 +819,19 @@ const HomeScreen: React.FC = () => {
             <View>
               <Text style={styles.balanceLabel}>Portfolio balance</Text>
               {portfolioLoading ? (
-                <ActivityIndicator size="small" color={colors.accent} style={{ marginTop: 8 }} />
+                <ActivityIndicator
+                  size="small"
+                  color={colors.accent}
+                  style={{ marginTop: 8 }}
+                />
               ) : smartAccountAddress ? (
-                <Text style={styles.balanceValue}>{PortfolioService.formatUSD(portfolioBalance)}</Text>
+                <Text style={styles.balanceValue}>
+                  {PortfolioService.formatUSD(portfolioBalance)}
+                </Text>
               ) : (
-                <Text style={styles.balanceValue}>Connect a wallet to view balance</Text>
+                <Text style={styles.balanceValue}>
+                  Connect a wallet to view balance
+                </Text>
               )}
             </View>
           </View>
@@ -721,20 +874,28 @@ const HomeScreen: React.FC = () => {
               >
                 <View style={styles.assetHeader}>
                   <View style={styles.assetBadge}>
-                    <Text style={styles.assetBadgeText}>{token.symbol.toUpperCase()}</Text>
+                    <Text style={styles.assetBadgeText}>
+                      {token.symbol.toUpperCase()}
+                    </Text>
                   </View>
-                  <Text style={styles.assetAmount}>{token.amount.toFixed(4)}</Text>
+                  <Text style={styles.assetAmount}>
+                    {token.amount.toFixed(4)}
+                  </Text>
                 </View>
                 <Text style={styles.assetName}>{token.name}</Text>
-                <Text style={styles.assetValue}>{formatPrice(token.value)}</Text>
-                <Text style={styles.assetAllocation}>{`@${formatPrice(token.price)}`}</Text>
+                <Text style={styles.assetValue}>
+                  {formatPrice(token.value)}
+                </Text>
+                <Text
+                  style={styles.assetAllocation}
+                >{`@${formatPrice(token.price)}`}</Text>
               </LinearGradient>
             ))}
           </ScrollView>
         ) : (
           <View style={styles.noSpotlight}>
             <Text style={styles.noSpotlightText}>
-              {aaAccount?.predictedAddress 
+              {aaAccount?.predictedAddress
                 ? "Your holdings will appear here once you receive tokens."
                 : "Connect a wallet to see your holdings."}
             </Text>
@@ -775,12 +936,18 @@ const HomeScreen: React.FC = () => {
               return (
                 <TouchableOpacity
                   key={option.key}
-                  style={[styles.marketChainPill, isActive && styles.marketChainPillActive]}
+                  style={[
+                    styles.marketChainPill,
+                    isActive && styles.marketChainPillActive,
+                  ]}
                   activeOpacity={0.85}
                   onPress={() => handleSelectChain(option.key)}
                 >
                   <Text
-                    style={[styles.marketChainLabel, isActive && styles.marketChainLabelActive]}
+                    style={[
+                      styles.marketChainLabel,
+                      isActive && styles.marketChainLabelActive,
+                    ]}
                   >
                     {option.label}
                   </Text>
@@ -808,7 +975,11 @@ const HomeScreen: React.FC = () => {
           </View>
 
           <View style={styles.marketSearch}>
-            <Feather name="search" size={16} color={withAlpha(colors.textMuted, 0.65)} />
+            <Feather
+              name="search"
+              size={16}
+              color={withAlpha(colors.textMuted, 0.65)}
+            />
             <TextInput
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -855,7 +1026,7 @@ const HomeScreen: React.FC = () => {
         action={activeAction}
         onDismiss={handleDismissAction}
       />
-      
+
       {/* Account Modal */}
       <Modal
         transparent
@@ -880,7 +1051,9 @@ const HomeScreen: React.FC = () => {
                     !isWalletDeployed && styles.accountSheetStatusWarning,
                   ]}
                 >
-                  {isWalletDeployed ? "Status: Deployed" : "Status: Not Deployed"}
+                  {isWalletDeployed
+                    ? "Status: Deployed"
+                    : "Status: Not Deployed"}
                 </Text>
               </View>
               <TouchableOpacity
@@ -896,15 +1069,23 @@ const HomeScreen: React.FC = () => {
                 {(deployingAccount || fundingAccount) && (
                   <ActivityIndicator size="small" color={colors.accent} />
                 )}
-                <Text style={styles.accountStatusText}>{accountActionStatus}</Text>
+                <Text style={styles.accountStatusText}>
+                  {accountActionStatus}
+                </Text>
               </View>
             )}
 
             <View style={styles.accountPrimaryActions}>
               {isWalletDeployed ? (
                 <View style={styles.accountDeployedBadge}>
-                  <Feather name="check-circle" size={18} color={colors.success} />
-                  <Text style={styles.accountDeployedText}>Account deployed</Text>
+                  <Feather
+                    name="check-circle"
+                    size={18}
+                    color={colors.success}
+                  />
+                  <Text style={styles.accountDeployedText}>
+                    Account deployed
+                  </Text>
                 </View>
               ) : (
                 <TouchableOpacity
@@ -919,7 +1100,9 @@ const HomeScreen: React.FC = () => {
                   {deployingAccount ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.accountPrimaryButtonLabel}>Deploy Smart Account</Text>
+                    <Text style={styles.accountPrimaryButtonLabel}>
+                      Deploy Smart Account
+                    </Text>
                   )}
                 </TouchableOpacity>
               )}
@@ -1009,15 +1192,23 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
   const changeValue = detail?.token.change24h ?? token.change24h;
   const isPositive = (changeValue ?? 0) >= 0;
 
-  const metrics: ({ label: string; value: number | null } | { label: string; text: string })[] = [
-      { label: "Market cap", value: detail?.marketCapUsd ?? null },
-      { label: "24h volume", value: detail?.volume24hUsd ?? null },
-      { label: "24h high", value: detail?.high24h ?? null },
-      { label: "24h low", value: detail?.low24h ?? null },
-    ];
+  const metrics: (
+    | { label: string; value: number | null }
+    | { label: string; text: string }
+  )[] = [
+    { label: "Market cap", value: detail?.marketCapUsd ?? null },
+    { label: "24h volume", value: detail?.volume24hUsd ?? null },
+    { label: "24h high", value: detail?.high24h ?? null },
+    { label: "24h low", value: detail?.low24h ?? null },
+  ];
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable
           style={styles.sheet}
@@ -1028,20 +1219,30 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
           <View style={styles.sheetHeader}>
             <View style={styles.headerLeft}>
               <View style={styles.tokenBadge}>
-                <Text style={styles.tokenBadgeText}>{token.symbol.toUpperCase()}</Text>
+                <Text style={styles.tokenBadgeText}>
+                  {token.symbol.toUpperCase()}
+                </Text>
               </View>
               <View>
                 <Text style={styles.tokenTitle}>{token.name}</Text>
                 <Text style={styles.tokenSubtitle}>{token.network}</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={12}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeButton}
+              hitSlop={12}
+            >
               <Feather name="x" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           {detail?.image ? (
-            <Image source={{ uri: detail.image }} style={styles.tokenImage} resizeMode="contain" />
+            <Image
+              source={{ uri: detail.image }}
+              style={styles.tokenImage}
+              resizeMode="contain"
+            />
           ) : null}
 
           <View style={styles.priceRow}>
@@ -1049,14 +1250,23 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
             <Text
               style={[
                 styles.priceChange,
-                { color: changeValue == null ? colors.textSecondary : isPositive ? colors.success : colors.danger },
+                {
+                  color:
+                    changeValue == null
+                      ? colors.textSecondary
+                      : isPositive
+                        ? colors.success
+                        : colors.danger,
+                },
               ]}
             >
               {formatChange(changeValue)}
             </Text>
           </View>
 
-          <Text style={styles.priceSource}>Data source: {priceSource === "moralis" ? "Moralis" : "CoinGecko"}</Text>
+          <Text style={styles.priceSource}>
+            Data source: {priceSource === "moralis" ? "Moralis" : "CoinGecko"}
+          </Text>
 
           <View style={styles.metricGrid}>
             {metrics.map((metric) => {
@@ -1066,7 +1276,9 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
                   <View key={metric.label} style={styles.metricCard}>
                     <Text style={styles.metricLabel}>{metric.label}</Text>
                     <Text style={styles.metricValue}>
-                      {value != null && Number.isFinite(value) ? formatPrice(value) : "—"}
+                      {value != null && Number.isFinite(value)
+                        ? formatPrice(value)
+                        : "—"}
                     </Text>
                   </View>
                 );
@@ -1083,17 +1295,27 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
           <View style={styles.descriptionSection}>
             <Text style={styles.descriptionTitle}>Overview</Text>
             {loading ? (
-              <ActivityIndicator color={colors.accent} style={{ marginTop: 12 }} />
+              <ActivityIndicator
+                color={colors.accent}
+                style={{ marginTop: 12 }}
+              />
             ) : error ? (
               <View style={styles.errorContainer}>
                 <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.85}>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={onRetry}
+                  activeOpacity={0.85}
+                >
                   <Feather name="refresh-ccw" size={16} color={colors.accent} />
                   <Text style={styles.retryLabel}>Retry</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <ScrollView style={styles.descriptionScroll} showsVerticalScrollIndicator={false}>
+              <ScrollView
+                style={styles.descriptionScroll}
+                showsVerticalScrollIndicator={false}
+              >
                 <Text style={styles.descriptionText}>
                   {detail?.description ?? "No project summary available yet."}
                 </Text>
@@ -1102,7 +1324,9 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
           </View>
 
           {detail?.lastUpdated ? (
-            <Text style={styles.footerMeta}>Last updated {new Date(detail.lastUpdated).toLocaleString()}</Text>
+            <Text style={styles.footerMeta}>
+              Last updated {new Date(detail.lastUpdated).toLocaleString()}
+            </Text>
           ) : null}
         </Pressable>
       </Pressable>
@@ -1116,7 +1340,11 @@ type QuickActionSheetProps = {
   onDismiss: () => void;
 };
 
-const QuickActionSheet: React.FC<QuickActionSheetProps> = ({ visible, action, onDismiss }) => {
+const QuickActionSheet: React.FC<QuickActionSheetProps> = ({
+  visible,
+  action,
+  onDismiss,
+}) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createQuickActionStyles(colors), [colors]);
@@ -1126,7 +1354,12 @@ const QuickActionSheet: React.FC<QuickActionSheetProps> = ({ visible, action, on
   }
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onDismiss}>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onDismiss}
+    >
       <Pressable style={styles.overlay} onPress={onDismiss}>
         <Pressable
           style={styles.sheet}
@@ -1139,8 +1372,14 @@ const QuickActionSheet: React.FC<QuickActionSheetProps> = ({ visible, action, on
           </View>
           <Text style={styles.title}>{action.label}</Text>
           <Text style={styles.description}>{action.description}</Text>
-          <Text style={styles.helper}>Interactive flows are in progress. Check back soon.</Text>
-          <TouchableOpacity style={styles.dismissButton} onPress={onDismiss} activeOpacity={0.85}>
+          <Text style={styles.helper}>
+            Interactive flows are in progress. Check back soon.
+          </Text>
+          <TouchableOpacity
+            style={styles.dismissButton}
+            onPress={onDismiss}
+            activeOpacity={0.85}
+          >
             <Text style={styles.dismissLabel}>Close</Text>
           </TouchableOpacity>
         </Pressable>
@@ -1451,8 +1690,8 @@ const createStyles = (colors: ThemeColors) =>
       height: 36,
       borderRadius: 18,
       backgroundColor: withAlpha(colors.accent, 0.12),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       borderWidth: 1,
       borderColor: withAlpha(colors.accent, 0.25),
     },

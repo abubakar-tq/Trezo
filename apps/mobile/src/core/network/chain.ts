@@ -11,9 +11,8 @@ import { Platform } from 'react-native';
 export const CHAIN_CONFIG = {
   chainId: 31337, // Anvil default
   name: 'Anvil Local Testnet',
-  // Your laptop's WiFi IP address (MUST UPDATE THIS!)
-  // Use the WiFi adapter IP, not VirtualBox/WSL IPs
-  LAPTOP_IP: '192.168.100.68', // ✅ Update when your WiFi IP changes
+  // Try to get IP from environment, fallback to a default
+  LAPTOP_IP: process.env.EXPO_PUBLIC_LAPTOP_IP || '10.70.81.26', 
 };
 
 // Detect device/simulator

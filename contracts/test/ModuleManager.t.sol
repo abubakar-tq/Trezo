@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {console2} from "forge-std/Test.sol";
+import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {PackedUserOperation} from "lib/account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import {
@@ -21,11 +22,10 @@ import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
 import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
-contract ModuleManagerTest is Test {
+contract ModuleManagerTest is AccountFactoryTestHelper {
     SmartAccount internal account;
 
     MinimalProxyFactory factory;
@@ -47,17 +47,17 @@ contract ModuleManagerTest is Test {
     uint256 internal py;
 
     SendPackedUserOp internal sendUserOp;
-    DeployAccount deployScript;
-
     address entryPoint;
 
     function setUp() public {
-        deployScript = new DeployAccount();
+        (helperConfig, account, factory, accountFactory, validator,) = _deployAccountStack();
 
-        (helperConfig, account, factory, accountFactory, validator,) = deployScript.deployAccount();
-
-        proxy = accountFactory.createAccount(
-            keccak256("module-manager-test"), address(validator), PassKeyDemo.getPasskeyInit(0)
+        proxy = _createAuthorizedAccount(
+            accountFactory,
+            keccak256("module-manager-test"),
+            0,
+            address(validator),
+            PassKeyDemo.getPasskeyInit(0)
         );
 
         HelperConfig.NetworkConfig memory config = helperConfig.getConfig();

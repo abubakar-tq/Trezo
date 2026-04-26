@@ -60,37 +60,41 @@ forge build
 forge test -vv
 ```
 
-## Local Deployment
-This repo has separate deploy steps for the account stack and the email-recovery stack.
+## Local Safe-Root Flow
+Local Anvil development now uses the same Safe-root deployment family as portable release chains.
 
 ```bash
 cd contracts
 make deploy-local
-make deploy-email-local
 ```
 
-What they do:
+What `make deploy-local` does:
 - `deploy-local`
-  - deploys `SmartAccount`, `AccountFactory`, `MinimalProxyFactory`, `PasskeyValidator`, and `SocialRecovery`
-  - writes `deployments/31337.json`
-  - syncs ABIs and deployment JSON into the mobile app
-- `deploy-email-local`
-  - deploys or reuses zk-email infra:
-    - `UserOverrideableDKIMRegistry`
-    - `Verifier`
-    - `Groth16Verifier`
-    - `EmailAuth`
-    - `EmailRecoveryCommandHandler`
-  - deploys Trezo's custom `EmailRecovery`
-  - appends the new addresses into `deployments/31337.json`
-  - syncs updated artifacts into the mobile app
+  - checks that the Safe Singleton Factory exists on the local chain
+  - predicts deterministic infra addresses
+  - deploys `SmartAccount`, `AccountFactory`, `MinimalProxyFactory`, `PasskeyValidator`, and `SocialRecovery` through `DeployInfra.s.sol`
+  - writes local namespaced manifests under:
+    - `deployments/local/releases/*`
+    - `deployments/local/chains/*`
+  - writes the derived compatibility manifest `deployments/31337.json`
+  - deploys or reuses zk-email infra and the custom `EmailRecovery` module
+  - appends email-recovery addresses into `deployments/31337.json`
+  - syncs the final compatibility manifest and ABIs into mobile
 
-## Testnet Deployment
+`make deploy-email-local` remains available when you only need to refresh the email-recovery side of the local stack.
+
+## Canonical Portable/Release Flow
 ```bash
 cd contracts
 make deploy-sepolia
 make deploy-email-sepolia
 ```
+
+- `make deploy-sepolia` is a compatibility alias for the canonical `make deploy-infra-sepolia` flow.
+- Sepolia is portable and must use `DeployInfra`.
+- Canonical release artifacts live in `deployments/releases/*` and `deployments/chains/*`.
+- Local validation artifacts live in `deployments/local/*`.
+- `deployments/<chainId>.json` and the synced mobile JSON are derived outputs, not the source of truth.
 
 For `DeployEmailRecovery.s.sol`, the key environment variables are:
 - `KILL_SWITCH_AUTHORIZER`
@@ -137,5 +141,5 @@ forge test --match-contract SocialRecoveryIntegrationTest -vv
 
 ## Notes
 - Bundler integration targets EntryPoint v0.7.
-- `DeployAccount.s.sol` preserves existing email-recovery fields in the deployment manifest when the account stack is redeployed.
-- `DeployEmailRecovery.s.sol` preserves the core account deployment fields and appends the zk-email deployment metadata.
+- `DeployInfra.s.sol` is the only supported infra deployment entrypoint for both local and release workflows.
+- `DeployEmailRecovery.s.sol` preserves the core deployment metadata and appends the zk-email deployment metadata.

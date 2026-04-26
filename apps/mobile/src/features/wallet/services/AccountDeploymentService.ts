@@ -1,5 +1,5 @@
 import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
-import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, isPortableChain, type SupportedChainId } from "@/src/integration/chains";
 import {
   buildCreateAccountUserOp,
   fundEntryPointDeposit,
@@ -7,18 +7,22 @@ import {
   isContractDeployed,
   predictAccountAddress,
   submitConfiguredUserOp,
+  type DeploymentMode,
   type PasskeyInit,
   waitForUserOperationReceipt,
 } from "@/src/integration/viem";
 import type { PasskeyMetadata } from "@/src/features/wallet/services/PasskeyService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
-import type { Address, Hex } from "viem";
+import { keccak256, toBytes, type Address, type Hex } from "viem";
 import type { UserOperation, UserOperationReceipt } from "viem/account-abstraction";
 
 export type CreateAccountBuildRequest = {
   passkey: PasskeyMetadata;
+  walletId?: Hex;
+  walletIndex?: bigint | number;
+  mode?: DeploymentMode;
+  validator?: Address;
   chainId?: SupportedChainId;
-  salt?: Hex;
   bundlerUrl?: string;
   paymasterUrl?: string;
   usePaymaster?: boolean;
@@ -64,17 +68,40 @@ const toPasskeyInit = (passkey: PasskeyMetadata): PasskeyInit => {
   };
 };
 
+export const deriveDefaultWalletId = (userId: string): Hex =>
+  keccak256(toBytes(`trezo:wallet:${userId}`));
+
+const resolveDeploymentMode = (chainId: SupportedChainId, requested?: DeploymentMode): DeploymentMode => {
+  if (requested) return requested;
+  return isPortableChain(chainId) ? "portable" : "chain-specific";
+};
+
 export class AccountDeploymentService {
   static toPasskeyInit(passkey: PasskeyMetadata): PasskeyInit {
     return toPasskeyInit(passkey);
   }
 
   static async predictAddress(
-    passkey: Pick<PasskeyMetadata, "credentialIdRaw">,
+    walletId: Hex,
+    passkey: PasskeyMetadata,
     chainId: SupportedChainId = DEFAULT_CHAIN_ID,
-    salt?: Hex,
+    walletIndex: bigint | number = 0n,
+    mode: DeploymentMode = resolveDeploymentMode(chainId),
+    validator?: Address,
   ): Promise<Address> {
-    return predictAccountAddress(chainId, (salt ?? passkey.credentialIdRaw) as Hex);
+    const deployment = getDeployment(chainId);
+    if (!deployment?.passkeyValidator) {
+      throw new Error(`No passkey validator configured for chain ${chainId}`);
+    }
+
+    return predictAccountAddress(
+      chainId,
+      walletId,
+      (validator ?? deployment.passkeyValidator) as Address,
+      toPasskeyInit(passkey),
+      walletIndex,
+      mode,
+    );
   }
 
   static async buildCreateAccountUserOp(
@@ -90,10 +117,24 @@ export class AccountDeploymentService {
     if (!deployment?.passkeyValidator) {
       throw new Error(`No passkey validator configured for chain ${chainId}`);
     }
+    if (!deployment.accountFactory || !deployment.entryPoint) {
+      throw new Error(`No account factory or entry point configured for chain ${chainId}`);
+    }
 
-    const salt = (params.salt ?? params.passkey.credentialIdRaw) as Hex;
+    const walletIndex = BigInt(params.walletIndex ?? 0n);
+    const walletId = params.walletId;
+    if (!walletId) {
+      throw new Error("walletId is required for deterministic account deployment.");
+    }
+
+    const mode = resolveDeploymentMode(chainId, params.mode);
+    if (mode === "portable" && !isPortableChain(chainId)) {
+      throw new Error(`Chain ${chainId} is not supported for portable wallet deployment.`);
+    }
+
     const passkeyInit = toPasskeyInit(params.passkey);
-    const sender = await predictAccountAddress(chainId, salt);
+    const validator = (params.validator ?? deployment.passkeyValidator) as Address;
+    const sender = await predictAccountAddress(chainId, walletId, validator, passkeyInit, walletIndex, mode);
 
     if (await isContractDeployed(chainId, sender)) {
       return {
@@ -114,8 +155,10 @@ export class AccountDeploymentService {
 
     const { userOp, userOpHash } = await buildCreateAccountUserOp({
       chainId,
-      salt,
-      validator: deployment.passkeyValidator,
+      walletId,
+      walletIndex,
+      mode,
+      validator,
       passkeyInit,
       bundlerUrl,
       paymasterUrl,

@@ -174,6 +174,74 @@ contract SocialRecoveryTest is Test {
         recovery.scheduleRecovery(address(account), newPassKey, sigs);
     }
 
+    function testScheduleRevertsOnDuplicateApproveHashGuardianIndex() public {
+        PasskeyTypes.PasskeyInit memory newPassKey = _makePasskey("seed-dup-approve");
+        bytes32 digest = _recoveryDigest(address(account), 0, newPassKey);
+
+        vm.prank(guardian1);
+        recovery.approveHash(digest);
+
+        ISocialRecovery.GuardianSig[] memory sigs = new ISocialRecovery.GuardianSig[](2);
+        sigs[0] = ISocialRecovery.GuardianSig({
+            index: 0,
+            kind: ISocialRecovery.SigKind.APPROVE_HASH,
+            sig: bytes("")
+        });
+        sigs[1] = ISocialRecovery.GuardianSig({
+            index: 0,
+            kind: ISocialRecovery.SigKind.APPROVE_HASH,
+            sig: bytes("")
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(SocialRecovery.SocialRecovery_DuplicateGuardianSignature.selector, 0));
+        recovery.scheduleRecovery(address(account), newPassKey, sigs);
+    }
+
+    function testScheduleRevertsOnDuplicateEOAGuardianIndex() public {
+        PasskeyTypes.PasskeyInit memory newPassKey = _makePasskey("seed-dup-eoa");
+        bytes32 digest = _recoveryDigest(address(account), 0, newPassKey);
+        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(guardianKey1, digest);
+
+        ISocialRecovery.GuardianSig[] memory sigs = new ISocialRecovery.GuardianSig[](2);
+        sigs[0] = ISocialRecovery.GuardianSig({
+            index: 0,
+            kind: ISocialRecovery.SigKind.EOA_ECDSA,
+            sig: _packSignature(v1, r1, s1)
+        });
+        sigs[1] = ISocialRecovery.GuardianSig({
+            index: 0,
+            kind: ISocialRecovery.SigKind.EOA_ECDSA,
+            sig: _packSignature(v1, r1, s1)
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(SocialRecovery.SocialRecovery_DuplicateGuardianSignature.selector, 0));
+        recovery.scheduleRecovery(address(account), newPassKey, sigs);
+    }
+
+    function testScheduleRevertsOnDuplicateMixedGuardianIndex() public {
+        PasskeyTypes.PasskeyInit memory newPassKey = _makePasskey("seed-dup-mixed");
+        bytes32 digest = _recoveryDigest(address(account), 0, newPassKey);
+        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(guardianKey1, digest);
+
+        vm.prank(guardian1);
+        recovery.approveHash(digest);
+
+        ISocialRecovery.GuardianSig[] memory sigs = new ISocialRecovery.GuardianSig[](2);
+        sigs[0] = ISocialRecovery.GuardianSig({
+            index: 0,
+            kind: ISocialRecovery.SigKind.EOA_ECDSA,
+            sig: _packSignature(v1, r1, s1)
+        });
+        sigs[1] = ISocialRecovery.GuardianSig({
+            index: 0,
+            kind: ISocialRecovery.SigKind.APPROVE_HASH,
+            sig: bytes("")
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(SocialRecovery.SocialRecovery_DuplicateGuardianSignature.selector, 0));
+        recovery.scheduleRecovery(address(account), newPassKey, sigs);
+    }
+
     function testScheduleAndExecuteWithEOASignatures() public {
         PasskeyTypes.PasskeyInit memory newPassKey = _makePasskey("seed-eoa");
         bytes32 digest = _recoveryDigest(address(account), 0, newPassKey);
@@ -276,6 +344,7 @@ contract SocialRecoveryTest is Test {
 
         vm.expectEmit(true, true, false, true);
         emit SocialRecovery.RecoveryCancelled(address(account), firstId);
+        vm.prank(address(account));
         recovery.cancelRecovery(address(account), firstId);
 
         vm.expectRevert(SocialRecovery.SocialRecovery_NoActiveRecovery.selector);
@@ -293,6 +362,90 @@ contract SocialRecoveryTest is Test {
         assertEq(secondId, keccak256(abi.encode(address(account), _hashPasskey(passkeyTwo))), "second id mismatch");
     }
 
+    function testCancelRecoveryRejectsArbitraryCaller() public {
+        (PasskeyTypes.PasskeyInit memory passkey, bytes32 recoveryId) = _scheduleApprovedRecovery("seed-cancel-auth");
+
+        address attacker = makeAddr("attacker");
+        vm.expectRevert(
+            abi.encodeWithSelector(SocialRecovery.SocialRecovery_OnlyWallet.selector, attacker, address(account))
+        );
+        vm.prank(attacker);
+        recovery.cancelRecovery(address(account), recoveryId);
+
+        vm.warp(block.timestamp + TIME_LOCK + 1);
+        recovery.executeRecovery(address(account), passkey);
+        assertEq(account.passkeyAddCount(), 1, "attacker should not cancel recovery");
+    }
+
+    function testCancelRecoveryAllowsWalletSelfCall() public {
+        (PasskeyTypes.PasskeyInit memory passkey, bytes32 recoveryId) =
+            _scheduleApprovedRecovery("seed-cancel-wallet");
+
+        vm.expectEmit(true, true, false, true);
+        emit SocialRecovery.RecoveryCancelled(address(account), recoveryId);
+        vm.prank(address(account));
+        recovery.cancelRecovery(address(account), recoveryId);
+
+        vm.warp(block.timestamp + TIME_LOCK + 1);
+        vm.expectRevert(SocialRecovery.SocialRecovery_NoActiveRecovery.selector);
+        recovery.executeRecovery(address(account), passkey);
+    }
+
+    function testAddGuardiansRejectsArbitraryCaller() public {
+        address[] memory newGuardians = new address[](1);
+        newGuardians[0] = makeAddr("new-guardian");
+        address attacker = makeAddr("attacker");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(SocialRecovery.SocialRecovery_OnlyWallet.selector, attacker, address(account))
+        );
+        vm.prank(attacker);
+        recovery.addGuardians(address(account), newGuardians, 2);
+    }
+
+    function testAddGuardiansAllowsWalletSelfCall() public {
+        address newGuardian = makeAddr("new-guardian");
+        address[] memory newGuardians = new address[](1);
+        newGuardians[0] = newGuardian;
+
+        vm.expectEmit(true, false, false, true);
+        emit SocialRecovery.GuardiansUpdated(address(account), 3);
+        vm.prank(address(account));
+        recovery.addGuardians(address(account), newGuardians, 3);
+
+        (address[] memory guardians, uint256 threshold) = recovery.getRecoveryDetails(address(account));
+        assertEq(guardians.length, 3, "guardian should be added");
+        assertEq(guardians[2], newGuardian, "new guardian mismatch");
+        assertEq(threshold, 3, "threshold should update");
+    }
+
+    function testRemoveGuardiansRejectsArbitraryCaller() public {
+        address[] memory removedGuardians = new address[](1);
+        removedGuardians[0] = guardian2;
+        address attacker = makeAddr("attacker");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(SocialRecovery.SocialRecovery_OnlyWallet.selector, attacker, address(account))
+        );
+        vm.prank(attacker);
+        recovery.removeGuardians(address(account), removedGuardians, 1);
+    }
+
+    function testRemoveGuardiansAllowsWalletSelfCall() public {
+        address[] memory removedGuardians = new address[](1);
+        removedGuardians[0] = guardian2;
+
+        vm.expectEmit(true, false, false, true);
+        emit SocialRecovery.GuardiansUpdated(address(account), 1);
+        vm.prank(address(account));
+        recovery.removeGuardians(address(account), removedGuardians, 1);
+
+        (address[] memory guardians, uint256 threshold) = recovery.getRecoveryDetails(address(account));
+        assertEq(guardians.length, 1, "guardian should be removed");
+        assertEq(guardians[0], guardian1, "remaining guardian mismatch");
+        assertEq(threshold, 1, "threshold should update");
+    }
+
     function _approvedSignatures() internal pure returns (ISocialRecovery.GuardianSig[] memory sigs) {
         sigs = new ISocialRecovery.GuardianSig[](2);
         sigs[0] = ISocialRecovery.GuardianSig({
@@ -305,6 +458,21 @@ contract SocialRecoveryTest is Test {
             kind: ISocialRecovery.SigKind.APPROVE_HASH,
             sig: bytes("")
         });
+    }
+
+    function _scheduleApprovedRecovery(bytes32 seed)
+        internal
+        returns (PasskeyTypes.PasskeyInit memory passkey, bytes32 recoveryId)
+    {
+        passkey = _makePasskey(seed);
+        bytes32 digest = _recoveryDigest(address(account), recovery.getRecoveryNonce(address(account)), passkey);
+
+        vm.prank(guardian1);
+        recovery.approveHash(digest);
+        vm.prank(guardian2);
+        recovery.approveHash(digest);
+
+        recoveryId = recovery.scheduleRecovery(address(account), passkey, _approvedSignatures());
     }
 
     function _recoveryDigest(address wallet, uint256 nonce, PasskeyTypes.PasskeyInit memory passkey)

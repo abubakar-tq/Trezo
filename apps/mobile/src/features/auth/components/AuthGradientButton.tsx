@@ -2,7 +2,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
 
-type GradientColors = readonly [string, string] | readonly [string, string, string];
+type GradientColors =
+  | readonly [string, string]
+  | readonly [string, string, string];
 
 type AuthGradientButtonProps = {
   label: string;
@@ -30,7 +32,7 @@ const AuthGradientButton: React.FC<AuthGradientButtonProps> = ({
       style={[styles.container, disabled && styles.disabled]}
     >
       <LinearGradient
-        colors={colors as string[]}
+        colors={colors}
         start={{ x: 0, y: 1 }}
         end={{ x: 1, y: 0 }}
         locations={[0, 0.45, 1]}

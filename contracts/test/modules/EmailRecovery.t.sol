@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test} from "forge-std/Test.sol";
+import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {
@@ -12,7 +12,6 @@ import {
 import {CommandUtils} from "@zk-email/ether-email-auth-contracts/src/libraries/CommandUtils.sol";
 import {UserOverrideableDKIMRegistry} from "@zk-email/contracts/UserOverrideableDKIMRegistry.sol";
 
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
@@ -28,7 +27,7 @@ import {
     GuardianStatus
 } from "lib/email-recovery/src/libraries/EnumerableGuardianMap.sol";
 
-contract EmailRecoveryTest is Test {
+contract EmailRecoveryTest is AccountFactoryTestHelper {
     using Strings for uint256;
 
     bytes32 internal constant ACCOUNT_SALT = keccak256("email-recovery-account");
@@ -65,11 +64,14 @@ contract EmailRecoveryTest is Test {
         killSwitchAuthorizer = makeAddr("kill-switch-authorizer");
         proofTimestamp = block.timestamp;
 
-        DeployAccount deployScript = new DeployAccount();
-        (, , , accountFactory, passkeyValidator,) = deployScript.deployAccount();
+        (, , , accountFactory, passkeyValidator,) = _deployAccountStack();
 
-        proxy = accountFactory.createAccount(
-            ACCOUNT_SALT, address(passkeyValidator), PassKeyDemo.getPasskeyInit(0)
+        proxy = _createAuthorizedAccount(
+            accountFactory,
+            ACCOUNT_SALT,
+            0,
+            address(passkeyValidator),
+            PassKeyDemo.getPasskeyInit(0)
         );
 
         _deployZkEmailInfra();

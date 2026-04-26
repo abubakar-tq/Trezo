@@ -1,26 +1,24 @@
-import * as React from "react";
 import Svg, {
-  Circle,
-  Defs,
-  Ellipse,
-  G,
-  LinearGradient,
-  Path,
-  RadialGradient,
-  Stop,
+    Circle,
+    Defs,
+    Ellipse,
+    G,
+    LinearGradient,
+    Path,
+    RadialGradient,
+    Stop,
 } from "react-native-svg";
 /* SVGR has dropped some elements not supported by react-native-svg: animateTransform, animate */
 import type { SvgProps } from "react-native-svg";
 const SvgOnboarding2 = (props: SvgProps) => (
-    <Svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 208 208"       // ✅ makes SVG scalable
-      width="100%"                // ✅ fills parent container width
-      height="100%"               // ✅ fills parent container height
-      preserveAspectRatio="xMidYMid meet"  // ✅ keeps aspect ratio
-      // fill="none"
-      {...props}
-    >
+  <Svg
+    viewBox="0 0 208 208" // ✅ makes SVG scalable
+    width="100%" // ✅ fills parent container width
+    height="100%" // ✅ fills parent container height
+    preserveAspectRatio="xMidYMid meet" // ✅ keeps aspect ratio
+    // fill="none"
+    {...props}
+  >
     <Defs>
       <LinearGradient
         id="onboarding2_svg__b"
@@ -29,18 +27,9 @@ const SvgOnboarding2 = (props: SvgProps) => (
         y1="0%"
         y2="100%"
       >
-        <Stop
-          offset="0%"
-          stopColor="#ff4500" stopOpacity={1}
-        />
-        <Stop
-          offset="50%"
-          stopColor="tomato" stopOpacity={1}
-        />
-        <Stop
-          offset="100%"
-          stopColor="gold" stopOpacity={1}
-        />
+        <Stop offset="0%" stopColor="#ff4500" stopOpacity={1} />
+        <Stop offset="50%" stopColor="tomato" stopOpacity={1} />
+        <Stop offset="100%" stopColor="gold" stopOpacity={1} />
       </LinearGradient>
       <LinearGradient
         id="onboarding2_svg__c"
@@ -49,18 +38,9 @@ const SvgOnboarding2 = (props: SvgProps) => (
         y1="0%"
         y2="100%"
       >
-        <Stop
-          offset="0%"
-          stopColor="#ff1493" stopOpacity={1}
-        />
-        <Stop
-          offset="50%"
-          stopColor="#dc143c" stopOpacity={1}
-        />
-        <Stop
-          offset="100%"
-          stopColor="#b22222" stopOpacity={1}
-        />
+        <Stop offset="0%" stopColor="#ff1493" stopOpacity={1} />
+        <Stop offset="50%" stopColor="#dc143c" stopOpacity={1} />
+        <Stop offset="100%" stopColor="#b22222" stopOpacity={1} />
       </LinearGradient>
       <LinearGradient
         id="onboarding2_svg__d"
@@ -69,32 +49,14 @@ const SvgOnboarding2 = (props: SvgProps) => (
         y1="50%"
         y2="50%"
       >
-        <Stop
-          offset="0%"
-          stopColor="#ff0" stopOpacity={1}
-        />
-        <Stop
-          offset="50%"
-          stopColor="orange" stopOpacity={1}
-        />
-        <Stop
-          offset="100%"
-          stopColor="#ff4500" stopOpacity={1}
-        />
+        <Stop offset="0%" stopColor="#ff0" stopOpacity={1} />
+        <Stop offset="50%" stopColor="orange" stopOpacity={1} />
+        <Stop offset="100%" stopColor="#ff4500" stopOpacity={1} />
       </LinearGradient>
       <RadialGradient id="onboarding2_svg__a" cx="50%" cy="50%" r="50%">
-        <Stop
-          offset="0%"
-          stopColor="gold" stopOpacity={0.9}
-        />
-        <Stop
-          offset="70%"
-          stopColor="#ff4500" stopOpacity={0.6}
-        />
-        <Stop
-          offset="100%"
-          stopColor="#ff1493" stopOpacity={0.3}
-        />
+        <Stop offset="0%" stopColor="gold" stopOpacity={0.9} />
+        <Stop offset="70%" stopColor="#ff4500" stopOpacity={0.6} />
+        <Stop offset="100%" stopColor="#ff1493" stopOpacity={0.3} />
       </RadialGradient>
     </Defs>
     <Circle

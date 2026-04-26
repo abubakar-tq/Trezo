@@ -3,7 +3,7 @@
  * Manages CRUD operations for contacts in Supabase
  */
 
-import { getSupabaseClient } from '@/lib/supabase';
+import { getSupabaseClient } from '@lib/supabase';
 import type { Contact, CreateContactInput, UpdateContactInput } from '../types';
 
 export class ContactService {

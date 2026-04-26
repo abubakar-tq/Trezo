@@ -3,7 +3,7 @@
  * Test Supabase Storage connectivity and permissions
  */
 
-import { getSupabaseClient } from '@/lib/supabase';
+import { getSupabaseClient } from '@lib/supabase';
 
 export class StorageTest {
   private static supabase = getSupabaseClient();

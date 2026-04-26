@@ -2,8 +2,9 @@ import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Clipboard } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useUserStore } from '@store/useUserStore';
-import { PasskeyService } from '../services/PasskeyService';
-import { predictAccountAddress, isContractDeployed } from '../../../integration/viem';
+import { isContractDeployed } from '../../../integration/viem';
+import PasskeyService from '../services/PasskeyService';
+import { AccountDeploymentService, deriveDefaultWalletId } from '../services/AccountDeploymentService';
 import type { Hex } from 'viem';
 
 export const SmartAccountCard = () => {
@@ -20,15 +21,20 @@ export const SmartAccountCard = () => {
       if (!userId) return;
       
       try {
+        const chainId = 31337;
+        const walletId = deriveDefaultWalletId(userId);
         const passkey = await PasskeyService.getPasskey(userId);
         if (!passkey) return;
-
-        const chainId = 31337;
-        const salt = passkey.credentialIdRaw as Hex;
         
         // If we don't have an address yet, predict it
         if (!smartAccountAddress) {
-          const predicted = await predictAccountAddress(chainId, salt);
+          const predicted = await AccountDeploymentService.predictAddress(
+            walletId,
+            passkey,
+            chainId,
+            0n,
+            "chain-specific",
+          );
           setSmartAccountAddress(predicted);
           
           // Check if it's deployed

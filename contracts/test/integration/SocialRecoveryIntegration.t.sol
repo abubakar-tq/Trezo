@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import "forge-std/Test.sol";
+import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 
@@ -19,7 +18,7 @@ import {PackedUserOperation} from "lib/account-abstraction/contracts/interfaces/
 import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
 
-contract SocialRecoveryIntegrationTest is Test {
+contract SocialRecoveryIntegrationTest is AccountFactoryTestHelper {
     AccountFactory internal accountFactory;
     PasskeyValidator internal passkeyValidator;
     HelperConfig internal helperConfig;
@@ -41,14 +40,13 @@ contract SocialRecoveryIntegrationTest is Test {
     address internal spender = makeAddr("spender");
 
     function setUp() public {
-        DeployAccount deployScript = new DeployAccount();
         (
             HelperConfig _helperConfig,
             ,
             ,
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator,
-        ) = deployScript.deployAccount();
+        ) = _deployAccountStack();
         helperConfig = _helperConfig;
         accountFactory = _accountFactory;
         passkeyValidator = _passkeyValidator;
@@ -58,8 +56,12 @@ contract SocialRecoveryIntegrationTest is Test {
         sendUserOp = new SendPackedUserOp();
         recoveryModule = new SocialRecovery();
 
-        proxy = accountFactory.createAccount(
-            keccak256("integration-social-recovery"), address(passkeyValidator), PassKeyDemo.getPasskeyInit(0)
+        proxy = _createAuthorizedAccount(
+            accountFactory,
+            keccak256("integration-social-recovery"),
+            0,
+            address(passkeyValidator),
+            PassKeyDemo.getPasskeyInit(0)
         );
 
         bundler = makeAddr("bundler");

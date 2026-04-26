@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test, console2} from "forge-std/Test.sol";
-import {DeployAccount} from "script/DeployAccount.s.sol";
+import {console2} from "forge-std/Test.sol";
+import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
@@ -14,7 +14,7 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
 
-contract UserOperationTest is Test {
+contract UserOperationTest is AccountFactoryTestHelper {
     AccountFactory accountFactory;
     HelperConfig helperConfig;
     address usdc;
@@ -25,15 +25,13 @@ contract UserOperationTest is Test {
     address immutable RANDOM_USER = makeAddr("RandomUser");
 
     function setUp() public {
-        // Use DeployAccount script to get all required contracts
-        DeployAccount deployScript = new DeployAccount();
         (
             HelperConfig _helperConfig,
             , // smartAccount
             , // proxyFactory
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator,
-        ) = deployScript.deployAccount();
+        ) = _deployAccountStack();
         accountFactory = _accountFactory;
         helperConfig = _helperConfig;
         usdc = helperConfig.getConfig().usdc;
@@ -42,8 +40,12 @@ contract UserOperationTest is Test {
         sendScript = new SendPackedUserOp();
         config = helperConfig.getConfig();
 
-        proxy = accountFactory.createAccount(
-            keccak256("userop-setup"), address(_passkeyValidator), PassKeyDemo.getPasskeyInit(0)
+        proxy = _createAuthorizedAccount(
+            accountFactory,
+            keccak256("userop-setup"),
+            0,
+            address(_passkeyValidator),
+            PassKeyDemo.getPasskeyInit(0)
         );
     }
 

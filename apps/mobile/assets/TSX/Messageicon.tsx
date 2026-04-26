@@ -1,14 +1,7 @@
-import * as React from "react";
-import Svg, { Rect, Path, Defs, LinearGradient, Stop } from "react-native-svg";
 import type { SvgProps } from "react-native-svg";
+import Svg, { Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 const SvgMessageicon = (props: SvgProps) => (
-  <Svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={48}
-    height={48}
-    fill="none"
-    {...props}
-  >
+  <Svg width={48} height={48} fill="none" {...props}>
     <Rect width={48} height={48} fill="url(#messageicon_svg__a)" rx={24} />
     <Path
       fill="#fff"
