@@ -21,3 +21,6 @@ graphify-out/
 
 # Local agent instructions
 AGENTS.md
+plan.md
+Context_Capsule.md
+agent-plans/
