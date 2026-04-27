@@ -6,9 +6,10 @@ import {
   getDeployment,
   isExecutorModuleInstalled,
   submitConfiguredUserOp,
+  waitForUserOperationReceipt,
 } from "@/src/integration/viem";
 import type { Address, Hex } from "viem";
-import type { UserOperation } from "viem/account-abstraction";
+import type { UserOperation, UserOperationReceipt } from "viem/account-abstraction";
 
 export type SocialRecoveryInstallRequest = {
   smartAccountAddress: Address;
@@ -86,6 +87,20 @@ export class SocialRecoveryService {
       throw new Error("Signed UserOperation must include a signature before submission");
     }
     return submitConfiguredUserOp(params.signedUserOp, chainId, bundlerUrl);
+  }
+
+  static async waitForInstallModuleReceipt(
+    userOpHash: Hex,
+    chainId: SupportedChainId = DEFAULT_CHAIN_ID,
+    bundlerUrl?: string,
+    timeoutMs?: number,
+  ): Promise<UserOperationReceipt<"0.7">> {
+    return waitForUserOperationReceipt(
+      userOpHash,
+      chainId,
+      bundlerUrl ?? getBundlerUrl(),
+      timeoutMs,
+    );
   }
 
   static async isModuleInstalled(
