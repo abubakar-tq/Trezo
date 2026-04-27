@@ -1,0 +1,6 @@
+# Exclude vendor libraries and submodules
+contracts/lib/
+node_modules/
+dist/
+build/
+out/
