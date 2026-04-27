@@ -184,7 +184,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         validator.addPasskey(existing.init.idRaw, existing.init.px, existing.init.py);
     }
 
-    function test_remove_passkey_emits_event_and_decrements_count() public {
+    function test_schedule_remove_passkey_emits_event_and_keeps_count() public {
         // Arrange
         PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
         vm.prank(instance.account);
@@ -192,20 +192,102 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
 
         // Act
         vm.expectEmit(true, true, false, false);
-        emit PasskeyValidator.PasskeyRemoved(instance.account, additional.init.idRaw);
+        emit PasskeyValidator.PasskeyRemovalScheduled(
+            instance.account,
+            additional.init.idRaw,
+            uint48(block.timestamp + validator.PASSKEY_REMOVAL_DELAY())
+        );
         vm.prank(instance.account);
-        validator.removePasskey(additional.init.idRaw);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
 
         uint256 count = validator.passkeyCount(instance.account);
 
         // Assert
-        assertEq(count, 1, "removing extra passkey should restore count");
+        assertEq(count, 2, "scheduling removal should not change active passkey count");
+    }
+
+    function test_cancel_remove_passkey_clears_pending_state() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+
+        vm.expectEmit(true, true, false, false);
+        emit PasskeyValidator.PasskeyRemovalCancelled(instance.account, additional.init.idRaw);
+        vm.prank(instance.account);
+        validator.cancelRemovePasskey(additional.init.idRaw);
+
+            (uint48 executeAfter,, bool cancelled) = validator.pendingRemovals(instance.account, additional.init.idRaw);
+            assertTrue(executeAfter > 0, "cancelled removal should preserve the original execution time for auditability");
+        assertTrue(cancelled, "pending removal should be marked cancelled");
+    }
+
+    function test_execute_remove_passkey_reverts_before_delay() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_RemovalNotReady.selector);
+        vm.prank(instance.account);
+        validator.executeRemovePasskey(additional.init.idRaw);
+    }
+
+    function test_execute_remove_passkey_reverts_when_cancelled() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+        vm.prank(instance.account);
+        validator.cancelRemovePasskey(additional.init.idRaw);
+
+        vm.warp(block.timestamp + validator.PASSKEY_REMOVAL_DELAY() + 1);
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_RemovalNotScheduled.selector);
+        vm.prank(instance.account);
+        validator.executeRemovePasskey(additional.init.idRaw);
+    }
+
+    function test_execute_remove_passkey_succeeds_after_delay() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+
+        vm.warp(block.timestamp + validator.PASSKEY_REMOVAL_DELAY() + 1);
+        vm.expectEmit(true, true, false, false);
+        emit PasskeyValidator.PasskeyRemoved(instance.account, additional.init.idRaw);
+        vm.prank(instance.account);
+        validator.executeRemovePasskey(additional.init.idRaw);
+
+        uint256 count = validator.passkeyCount(instance.account);
+        assertEq(count, 1, "removal should decrement active passkey count");
+    }
+
+    function test_remove_passkey_alias_respects_delay() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_RemovalNotReady.selector);
+        vm.prank(instance.account);
+        validator.removePasskey(additional.init.idRaw);
     }
 
     function test_remove_passkey_reverts_when_removing_only_passkey() public {
         vm.expectRevert(PasskeyValidator.PasskeyValidator_CannotRemoveLastPasskey.selector);
         vm.prank(instance.account);
-        validator.removePasskey(dummyId);
+        validator.scheduleRemovePasskey(dummyId);
     }
 
     function test_remove_passkey_reverts_when_missing() public {
@@ -213,9 +295,22 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         bytes32 missingId = keccak256("missing-passkey");
 
         // Act
-        vm.expectRevert("no such key");
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_PasskeyDoesNotExist.selector);
         vm.prank(instance.account);
-        validator.removePasskey(missingId);
+        validator.executeRemovePasskey(missingId);
+    }
+
+    function test_schedule_remove_passkey_reverts_on_duplicate_pending_removal() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_RemovalAlreadyScheduled.selector);
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
     }
 
     function test_validate_user_op_succeeds_and_blocks_replay() public {

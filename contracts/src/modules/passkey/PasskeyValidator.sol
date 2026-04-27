@@ -17,12 +17,18 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
     event PasskeyAdded(address indexed account, bytes32 indexed passkeyId);
     event PasskeyRemoved(address indexed account, bytes32 indexed passkeyId);
+    event PasskeyRemovalScheduled(address indexed account, bytes32 indexed passkeyId, uint48 executeAfter);
+    event PasskeyRemovalCancelled(address indexed account, bytes32 indexed passkeyId);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
     error InvalidInstallDataLength();
     error PasskeyValidator_CannotRemoveLastPasskey();
+    error PasskeyValidator_PasskeyDoesNotExist();
+    error PasskeyValidator_RemovalAlreadyScheduled();
+    error PasskeyValidator_RemovalNotScheduled();
+    error PasskeyValidator_RemovalNotReady();
 
     /*//////////////////////////////////////////////////////////////
                                 STRUCTS
@@ -63,6 +69,15 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     // account => (passkeyId => record)
     mapping(address => mapping(PasskeyId => PasskeyRecord)) internal passkeys;
     mapping(address => EnumerableSet.Bytes32Set) internal passkeyIds; // stores PasskeyId.unwrap(id)
+
+    struct PendingPasskeyRemoval {
+        uint48 executeAfter;
+        uint48 requestedAt;
+        bool cancelled;
+    }
+
+    uint48 public constant PASSKEY_REMOVAL_DELAY = 1 days;
+    mapping(address => mapping(bytes32 => PendingPasskeyRemoval)) public pendingRemovals;
 
     /*//////////////////////////////////////////////////////////////////////////
                                      CONFIG
@@ -152,14 +167,59 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     }
 
     function removePasskey(bytes32 passkeyId) external {
+        executeRemovePasskey(passkeyId);
+    }
+
+    function scheduleRemovePasskey(bytes32 passkeyId) external {
         address account = msg.sender;
-        PasskeyId id = PasskeyId.wrap(passkeyId);
         require(passkeyIds[account].contains(passkeyId), "no such key");
         if (passkeyIds[account].length() == 1) {
             revert PasskeyValidator_CannotRemoveLastPasskey();
         }
+
+        PendingPasskeyRemoval storage pending = pendingRemovals[account][passkeyId];
+        if (pending.executeAfter != 0 && !pending.cancelled) {
+            revert PasskeyValidator_RemovalAlreadyScheduled();
+        }
+
+        pending.executeAfter = uint48(block.timestamp) + PASSKEY_REMOVAL_DELAY;
+        pending.requestedAt = uint48(block.timestamp);
+        pending.cancelled = false;
+        emit PasskeyRemovalScheduled(account, passkeyId, pending.executeAfter);
+    }
+
+    function cancelRemovePasskey(bytes32 passkeyId) external {
+        address account = msg.sender;
+        PendingPasskeyRemoval storage pending = pendingRemovals[account][passkeyId];
+        if (pending.executeAfter == 0 || pending.cancelled) {
+            revert PasskeyValidator_RemovalNotScheduled();
+        }
+
+        pending.cancelled = true;
+        emit PasskeyRemovalCancelled(account, passkeyId);
+    }
+
+    function executeRemovePasskey(bytes32 passkeyId) public {
+        address account = msg.sender;
+        if (!passkeyIds[account].contains(passkeyId)) {
+            revert PasskeyValidator_PasskeyDoesNotExist();
+        }
+        if (passkeyIds[account].length() == 1) {
+            revert PasskeyValidator_CannotRemoveLastPasskey();
+        }
+
+        PendingPasskeyRemoval storage pending = pendingRemovals[account][passkeyId];
+        if (pending.executeAfter == 0 || pending.cancelled) {
+            revert PasskeyValidator_RemovalNotScheduled();
+        }
+        if (block.timestamp < pending.executeAfter) {
+            revert PasskeyValidator_RemovalNotReady();
+        }
+
+        PasskeyId id = PasskeyId.wrap(passkeyId);
         delete passkeys[account][id];
         passkeyIds[account].remove(passkeyId); // O(1), internally swap-and-pop
+        delete pendingRemovals[account][passkeyId];
         emit PasskeyRemoved(account, passkeyId);
     }
 
