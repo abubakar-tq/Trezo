@@ -11,7 +11,7 @@ export type AuthStackParamList = {
   Introduction: undefined;
   Welcome: undefined;
   PasskeyRegistration: undefined;
-  Login: { email?: string } | undefined;
+  Login: { email?: string; pairingMode?: "resume" } | undefined;
   Register: { email?: string } | undefined;
   ForgotPassword: { email?: string } | undefined;
   VerifyEmail: { email: string; flow: AuthVerificationFlow };
@@ -36,6 +36,9 @@ export type RootStackParamList = {
   TabNavigation: undefined;
   BrowserSettings: undefined;
   BackupRecovery: undefined;
+  DevicesPasskeys: undefined;
+  PairDevice: { requestId?: string; secret?: string } | undefined;
+  CompromisedWallet: undefined;
   GuardianRecovery: undefined;
   EmailRecovery: undefined;
   RecoveryKitExport: {
