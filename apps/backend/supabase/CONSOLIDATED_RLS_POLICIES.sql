@@ -188,6 +188,50 @@ CREATE POLICY "Users can create transactions for their wallets"
   );
 
 -- =====================================================
+-- DEVICE PAIRING REQUESTS TABLE POLICIES
+-- =====================================================
+ALTER TABLE public.device_pairing_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own device pairing requests"
+  ON public.device_pairing_requests FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create their own device pairing requests"
+  ON public.device_pairing_requests FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own device pairing requests"
+  ON public.device_pairing_requests FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own device pairing requests"
+  ON public.device_pairing_requests FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- =====================================================
+-- WALLET DEVICES TABLE POLICIES
+-- =====================================================
+ALTER TABLE public.wallet_devices ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own wallet devices"
+  ON public.wallet_devices FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create their own wallet devices"
+  ON public.wallet_devices FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own wallet devices"
+  ON public.wallet_devices FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own wallet devices"
+  ON public.wallet_devices FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- =====================================================
 -- STORAGE BUCKET POLICIES
 -- =====================================================
 -- Storage bucket: profiles
