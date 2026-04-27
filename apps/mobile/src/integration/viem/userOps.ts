@@ -256,6 +256,24 @@ export type AddPasskeyUserOpParams = {
   preVerificationGas?: bigint;
 };
 
+export type RemovePasskeyUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  targetPasskeyId: Hex;
+  signingPasskeyId: Hex;
+  validatorAddress?: Address;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+};
+
 type RpcRequestClient = {
   request(args: { method: string; params?: readonly unknown[] }): Promise<any>;
 };
@@ -1107,6 +1125,79 @@ export async function buildAddPasskeyUserOp(params: AddPasskeyUserOpParams) {
     preVerificationGas: params.preVerificationGas ?? 100_000n,
     operationLabel: "buildAddPasskeyUserOp",
   });
+}
+
+const resolvePasskeyValidatorAddress = (
+  chainId: SupportedChainId,
+  validatorAddress?: Address,
+): Address => {
+  const deployment = getDeployment(chainId);
+  if (!deployment) throw new Error(`No deployment found for chain ${chainId}`);
+  const resolved = (validatorAddress ?? deployment.passkeyValidator) as Address;
+  if (!resolved || resolved === ZERO_ADDRESS) {
+    throw new Error("Passkey validator address is required");
+  }
+  return resolved;
+};
+
+const buildPasskeyValidatorExecuteUserOp = async (
+  params: RemovePasskeyUserOpParams,
+  functionName: "scheduleRemovePasskey" | "cancelRemovePasskey" | "executeRemovePasskey",
+  operationLabel: string,
+) => {
+  const validatorAddress = resolvePasskeyValidatorAddress(params.chainId, params.validatorAddress);
+  const actionData = encodeFunctionData({
+    abi: ABIS.passkeyValidator,
+    functionName,
+    args: [params.targetPasskeyId],
+  });
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [validatorAddress, 0n, actionData],
+  });
+
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.signingPasskeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 650_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 900_000n,
+    preVerificationGas: params.preVerificationGas ?? 100_000n,
+    operationLabel,
+  });
+};
+
+export async function buildScheduleRemovePasskeyUserOp(params: RemovePasskeyUserOpParams) {
+  return buildPasskeyValidatorExecuteUserOp(
+    params,
+    "scheduleRemovePasskey",
+    "buildScheduleRemovePasskeyUserOp",
+  );
+}
+
+export async function buildCancelRemovePasskeyUserOp(params: RemovePasskeyUserOpParams) {
+  return buildPasskeyValidatorExecuteUserOp(
+    params,
+    "cancelRemovePasskey",
+    "buildCancelRemovePasskeyUserOp",
+  );
+}
+
+export async function buildExecuteRemovePasskeyUserOp(params: RemovePasskeyUserOpParams) {
+  return buildPasskeyValidatorExecuteUserOp(
+    params,
+    "executeRemovePasskey",
+    "buildExecuteRemovePasskeyUserOp",
+  );
 }
 
 export async function submitConfiguredUserOp(
