@@ -9,6 +9,7 @@ import {
     devFundSmartAccount,
 } from "@/src/features/wallet/services/devFunding";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import WalletSyncService from "@/src/features/wallet/services/WalletSyncService";
 import type { AAAccount } from "@/src/features/wallet/store/useWalletStore";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import {
@@ -296,31 +297,47 @@ const HomeScreen: React.FC = () => {
         deploymentMode,
       );
       setSmartAccountAddress(predictedAddress);
+      const walletName = `${profile?.username ?? "Primary"} Smart Account`;
+      const persistedBaseWallet = await WalletSyncService.persistWalletMetadata({
+        userId,
+        predictedAddress,
+        ownerAddress: passkey.credentialIdRaw,
+        walletName,
+        chainId: resolvedDeployChainId,
+        walletId,
+        walletIndex,
+        deploymentMode,
+      }).catch((error) => {
+        console.warn("[Home] Failed to persist predicted wallet metadata", error);
+        return null;
+      });
 
       const baseAccount: AAAccount =
-        aaAccount ??
-        ({
-          id: `local-${userId}`,
-          userId,
-          walletId,
-          walletIndex,
-          deploymentMode,
-          predictedAddress,
-          ownerAddress: passkey.credentialIdRaw,
-          isDeployed: false,
-          walletName: `${profile?.username ?? "Primary"} Smart Account`,
-          chainId: resolvedDeployChainId,
-          createdAt: new Date().toISOString(),
-        } as AAAccount);
+        persistedBaseWallet
+          ? WalletSyncService.applyWalletToStores(persistedBaseWallet, Boolean(persistedBaseWallet.is_deployed))
+          : aaAccount ??
+            ({
+              id: `local-${userId}`,
+              userId,
+              walletId,
+              walletIndex,
+              deploymentMode,
+              predictedAddress,
+              ownerAddress: passkey.credentialIdRaw,
+              isDeployed: false,
+              walletName,
+              chainId: resolvedDeployChainId,
+              createdAt: new Date().toISOString(),
+            } as AAAccount);
 
       setAAAccount({
         ...baseAccount,
         predictedAddress,
-          chainId: resolvedDeployChainId,
-          walletId,
-          walletIndex,
-          deploymentMode,
-          isDeployed: false,
+        chainId: resolvedDeployChainId,
+        walletId,
+        walletIndex,
+        deploymentMode,
+        isDeployed: Boolean(baseAccount.isDeployed),
       });
 
       setAccountActionStatus(
@@ -354,9 +371,34 @@ const HomeScreen: React.FC = () => {
           : (result.blockNumber ?? baseAccount.deploymentBlockNumber),
         deployedAt: new Date().toISOString(),
       };
+
+      const persistedDeployedWallet = await WalletSyncService.persistWalletMetadata({
+        userId,
+        predictedAddress: result.accountAddress,
+        ownerAddress: passkey.credentialIdRaw,
+        walletName,
+        chainId: resolvedDeployChainId,
+        walletId,
+        walletIndex,
+        deploymentMode,
+        isDeployed: true,
+        deploymentTxHash: result.alreadyDeployed ? undefined : result.transactionHash,
+        deploymentBlockNumber:
+          result.alreadyDeployed
+            ? undefined
+            : (result.blockNumber ?? undefined),
+        deployedAt: new Date().toISOString(),
+      }).catch((error) => {
+        console.warn("[Home] Failed to persist deployed wallet metadata", error);
+        return null;
+      });
+
       setAAAccount(deployedAccount);
       setSmartAccountAddress(result.accountAddress);
       setSmartAccountDeployed(true);
+      if (persistedDeployedWallet) {
+        WalletSyncService.applyWalletToStores(persistedDeployedWallet, true);
+      }
       if (!result.alreadyDeployed) {
         markAsDeployed(result.transactionHash!, result.blockNumber!);
       }
