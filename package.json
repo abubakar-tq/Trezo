@@ -2,7 +2,18 @@
   "name": "trezo-workspace",
   "private": true,
   "scripts": {
-    "android": "npm --workspace apps/mobile run android"
+    "android": "npm --workspace apps/mobile run android",
+    "supabase:local:start": "npx supabase start --workdir apps/backend/supabase",
+    "supabase:local:stop": "npx supabase stop --workdir apps/backend/supabase",
+    "supabase:local:status": "npx supabase status --workdir apps/backend/supabase",
+    "supabase:local:env": "npx supabase status -o env --workdir apps/backend/supabase",
+    "supabase:local:db:reset": "npx supabase db reset --workdir apps/backend/supabase",
+    "supabase:local:functions": "npx supabase functions serve --workdir apps/backend/supabase --env-file apps/backend/supabase/functions/.env.local --no-verify-jwt",
+    "supabase:local:mobile-env": "bash scripts/supabase-local-mobile-env.sh",
+    "infra:up": "bash scripts/infra-up.sh",
+    "infra:down": "bash scripts/infra-down.sh",
+    "infra:mobile-env": "bash scripts/infra-export-mobile-env.sh",
+    "supabase:sync-user": "node scripts/supabase-sync-user.js"
   },
   "workspaces": [
     "apps/*"
