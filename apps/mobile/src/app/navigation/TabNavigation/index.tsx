@@ -8,7 +8,7 @@ import { BrowserScreen } from "@features/browser";
 import { DexScreen } from "@features/dex";
 import { HomeScreen } from "@features/home";
 import ProfileScreen from "@features/profile/screens/ProfileScreen";
-import { PortfolioScreen } from "@features/wallet/screens/PortfolioScreen";
+import PortfolioScreen from "@features/portfolio/screens/PortfolioScreen";
 import { useAppTheme } from "@theme";
 import TabBar from "./TabBar";
 

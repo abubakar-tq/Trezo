@@ -1,134 +1,151 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
-import { PortfolioService } from '@features/portfolio/services/PortfolioService';
+import { withAlpha } from '@utils/color';
+import Svg, { Path } from 'react-native-svg';
 
 interface BalanceCardProps {
   balance: number;
-  loading: boolean;
-  address: string | null;
-  onDeployPress?: () => void;
+  loading?: boolean;
+  address?: string;
 }
 
 export const BalanceCard: React.FC<BalanceCardProps> = ({
   balance,
   loading,
   address,
-  onDeployPress,
 }) => {
   const { theme } = useAppTheme();
-  const { colors, gradients } = theme;
-
-  // For visual polish, we'll simulate a 24h change if balance > 0
-  const hasBalance = balance > 0;
-  const simulatedChange = hasBalance ? "+2.4%" : "0.0%";
-  const isPositive = true;
+  const { colors } = theme;
 
   return (
-    <LinearGradient colors={gradients.hero} style={styles.balanceCard}>
-      <View style={styles.headerRow}>
-        <Text style={[styles.balanceLabel, { color: colors.textOnHero }]}>Portfolio Balance</Text>
-        {hasBalance && (
-          <View style={styles.changeBadge}>
-            <Feather name="arrow-up-right" size={12} color="#4ade80" />
-            <Text style={styles.changeText}>{simulatedChange}</Text>
+    <View style={[styles.container, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
+        <View style={styles.header}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Balance</Text>
+          <View style={[styles.badge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+            <Feather name="trending-up" size={10} color={colors.accent} />
+            <Text style={[styles.badgeText, { color: colors.accent }]}>+4.2%</Text>
           </View>
-        )}
-      </View>
+        </View>
 
-      <View style={styles.mainContent}>
-        {loading ? (
-          <ActivityIndicator size="small" color={colors.textOnHero} style={{ marginVertical: 8 }} />
-        ) : address ? (
-          <View style={styles.balanceContainer}>
-            <Text style={[styles.balanceValue, { color: colors.textOnHero }]}>
-              {PortfolioService.formatUSD(balance)}
-            </Text>
-            <Text style={[styles.currencyLabel, { color: colors.textOnHero }]}>USD</Text>
-          </View>
-        ) : (
-          <Text style={[styles.balanceValue, { color: colors.textOnHero, fontSize: 18 }]}>
-            Account not deployed
+        <View style={styles.balanceRow}>
+          <Text style={[styles.currency, { color: colors.textSecondary }]}>$</Text>
+          <Text style={[styles.balance, { color: colors.textPrimary }]} numberOfLines={1} adjustsFontSizeToFit>
+            {loading ? "---" : (balance >= 1000000000 
+              ? `${(balance / 1000000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}B`
+              : balance >= 1000000 
+                ? `${(balance / 1000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`
+                : balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
           </Text>
-        )}
-      </View>
+        </View>
 
-      <View style={styles.footer}>
-        <Text style={[styles.balanceHelper, { color: colors.textOnHero }]}>
-          {address 
-            ? `Active on ${balance > 0 ? simulatedChange + ' last 24h' : 'Mainnet'}`
-            : 'Deploy your smart account to start trading'}
-        </Text>
-      </View>
-    </LinearGradient>
+        <View style={styles.pulseContainer}>
+          <Svg height="40" width="100%">
+            <Path
+              d="M0 25 Q 40 10, 80 30 T 160 20 T 240 35 T 320 15"
+              fill="none"
+              stroke={colors.accent}
+              strokeWidth="1.5"
+              strokeOpacity="0.6"
+            />
+          </Svg>
+        </View>
+
+        <View style={[styles.footer, { borderTopColor: colors.glassBorder }]}>
+          <View style={[styles.addressBox, { backgroundColor: colors.surfaceMuted }]}>
+            <Feather name="shield" size={12} color={colors.textSecondary} />
+            <Text style={[styles.addressText, { color: colors.textSecondary }]}>
+              {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Not Deployed"}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.copyButton}>
+            <Feather name="copy" size={14} color={colors.accent} />
+          </TouchableOpacity>
+        </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  balanceCard: {
-    borderRadius: 28,
+  container: {
+    borderRadius: 24,
     padding: 24,
-    marginBottom: 20,
-    minHeight: 160,
-    justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 8,
+    borderWidth: 1,
+    // Ultimate Borderless Fix: Zero depth
+    shadowOpacity: 0,
+    elevation: 0,
+    overflow: 'visible',
   },
-  headerRow: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 10,
   },
-  balanceLabel: {
+  label: {
     fontSize: 14,
-    opacity: 0.9,
-    fontWeight: '700',
+    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  changeBadge: {
+  badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    gap: 4,
   },
-  changeText: {
-    color: '#4ade80',
-    fontSize: 12,
-    fontWeight: '800',
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginLeft: 4,
   },
-  mainContent: {
-    marginVertical: 12,
-  },
-  balanceContainer: {
+  balanceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 8,
   },
-  balanceValue: {
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: -1,
+  currency: {
+    fontSize: 14,
+    fontWeight: '500',
   },
-  currencyLabel: {
-    fontSize: 18,
-    fontWeight: '600',
-    opacity: 0.8,
+  balance: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  pulseContainer: {
+    marginTop: 16,
+    marginBottom: 8,
+    height: 40,
   },
   footer: {
-    marginTop: 8,
+    marginTop: 12,
+    paddingTop: 16,
+    borderTopWidth: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  balanceHelper: {
-    fontSize: 13,
-    opacity: 0.8,
-    fontWeight: '500',
+  addressBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
+  },
+  addressText: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  copyButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

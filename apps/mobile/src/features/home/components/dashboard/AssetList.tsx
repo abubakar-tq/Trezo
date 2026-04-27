@@ -1,139 +1,208 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAppTheme } from '@theme';
 import { withAlpha } from '@utils/color';
+import { TokenIcon } from '@shared/components';
 import type { TokenBalance } from '@features/portfolio/services/PortfolioService';
 
 interface AssetListProps {
   assets: TokenBalance[];
   predictedAddress: string | null;
   formatPrice: (value: number) => string;
+  onAssetPress?: (asset: TokenBalance) => void;
 }
+
+/**
+ * Formats large numbers into a human-readable compact format (e.g., 1.2B, 3.4M)
+ */
+const formatCompactNumber = (value: number) => {
+  if (value >= 1e12) return (value / 1e12).toFixed(2) + 'T';
+  if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B';
+  if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M';
+  if (value >= 1e3) return (value / 1e3).toFixed(2) + 'K';
+  return value.toLocaleString('en-US', { maximumFractionDigits: 4 });
+};
+
+/**
+ * Formats USD value with compact notation for very large numbers
+ */
+const formatCompactPrice = (value: number) => {
+  if (value >= 1e9) {
+    return '$' + (value / 1e9).toFixed(2) + 'B';
+  }
+  if (value >= 1e6) {
+    return '$' + (value / 1e6).toFixed(2) + 'M';
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(value);
+};
 
 export const AssetList: React.FC<AssetListProps> = ({
   assets,
-  predictedAddress,
   formatPrice,
+  onAssetPress,
 }) => {
   const { theme } = useAppTheme();
-  const { colors, gradients } = theme;
+  const { colors } = theme;
 
   if (assets.length === 0) {
     return (
-      <View style={styles.container}>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Spotlight holdings</Text>
-        <View style={[styles.noAssets, { backgroundColor: withAlpha(colors.surfaceElevated, 0.4), borderColor: colors.borderMuted }]}>
-          <Text style={[styles.noAssetsText, { color: colors.textSecondary }]}>
-            {predictedAddress
-              ? "Your holdings will appear here once you receive tokens."
-              : "Connect a wallet to see your holdings."}
-          </Text>
-        </View>
+      <View style={styles.emptyState}>
+        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No active positions detected.</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Spotlight holdings</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {assets.map((token) => (
-          <LinearGradient
-            key={token.address}
-            colors={gradients.card}
-            style={[styles.assetCard, { borderColor: colors.border }]}
+      <View style={styles.list}>
+        {assets.map((token, index) => (
+          <TouchableOpacity 
+            key={`${token.address}-${index}`} 
+            style={[
+              styles.item, 
+              index !== assets.length - 1 && { borderBottomWidth: 1, borderBottomColor: withAlpha(colors.accent, 0.08) }
+            ]}
+            onPress={() => onAssetPress?.(token)}
+            activeOpacity={0.7}
           >
-            <View style={styles.assetHeader}>
-              <View style={[styles.assetBadge, { backgroundColor: withAlpha(colors.accent, 0.16) }]}>
-                <Text style={[styles.assetBadgeText, { color: colors.accent }]}>
-                  {token.symbol.toUpperCase()}
+            {/* Left Section: Icon and Token Name */}
+            <View style={styles.itemLeft}>
+              <TokenIcon 
+                symbol={token.symbol} 
+                address={token.address} 
+                size={44}
+                style={{ borderRadius: 14 }}
+              />
+              <View style={styles.nameWrapper}>
+                <Text 
+                  style={[styles.symbol, { color: colors.textPrimary }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {token.symbol}
+                </Text>
+                <Text 
+                  style={[styles.name, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {token.name}
                 </Text>
               </View>
-              <Text style={[styles.assetAmount, { color: colors.textSecondary }]}>
-                {token.amount.toFixed(4)}
+            </View>
+
+            {/* Right Section: USD Value and Token Amount */}
+            <View style={styles.itemRight}>
+              <Text 
+                style={[styles.value, { color: colors.textPrimary }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {formatCompactPrice(token.value)}
+              </Text>
+              <Text 
+                style={[styles.amount, { color: colors.textSecondary }]}
+                numberOfLines={1}
+                ellipsizeMode="middle"
+              >
+                {formatCompactNumber(token.amount)} <Text style={styles.amountSymbol}>{token.symbol}</Text>
               </Text>
             </View>
-            <Text style={[styles.assetName, { color: colors.textPrimary }]}>{token.name}</Text>
-            <Text style={[styles.assetValue, { color: colors.textPrimary }]}>
-              {formatPrice(token.value)}
-            </Text>
-            <Text style={[styles.assetAllocation, { color: colors.textSecondary }]}>
-              {`@${formatPrice(token.price)}`}
-            </Text>
-          </LinearGradient>
+          </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 32,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 14,
-  },
-  scrollContent: {
+    fontSize: 15,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginBottom: 20,
     paddingHorizontal: 4,
-    columnGap: 14,
   },
-  assetCard: {
-    padding: 20,
-    borderRadius: 22,
-    minWidth: 210,
-    borderWidth: 1,
+  list: {
+    gap: 0,
   },
-  assetHeader: {
+  item: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    minHeight: 80,
+  },
+  itemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    flex: 0.6, // Give more space to the name section if needed, but allow right side to grow
+    gap: 16,
   },
-  assetBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+  nameWrapper: {
+    flex: 1,
+    justifyContent: 'center',
   },
-  assetBadgeText: {
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  assetAmount: {
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  assetName: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 14,
-  },
-  assetValue: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  assetAllocation: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  noAssets: {
-    paddingVertical: 32,
-    paddingHorizontal: 20,
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 18,
     borderWidth: 1,
   },
-  noAssetsText: {
+  iconText: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  symbol: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  name: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  itemRight: {
+    flex: 0.4,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  value: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textAlign: 'right',
+  },
+  amount: {
     fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 19,
+    fontWeight: '500',
+    marginTop: 4,
+    fontFamily: 'monospace',
+    textAlign: 'right',
+  },
+  amountSymbol: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  emptyState: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
 });

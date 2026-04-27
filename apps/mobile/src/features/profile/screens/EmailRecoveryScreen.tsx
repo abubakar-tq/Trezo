@@ -813,7 +813,7 @@ const EmailRecoveryScreen: React.FC = () => {
             unchanged.
           </Text>
           {loadingStoredMetadata ? (
-            <ActivityIndicator size="small" color={colors.accentAlt} />
+            <ActivityIndicator size="small" color={colors.accent} />
           ) : storedMetadata ? (
             <>
               <View style={styles.payloadRow}>
@@ -1100,13 +1100,13 @@ const EmailRecoveryScreen: React.FC = () => {
               disabled={!smartAccountReady || checkingModule}
             >
               {checkingModule ? (
-                <ActivityIndicator size="small" color={colors.accentAlt} />
+                <ActivityIndicator size="small" color={colors.accent} />
               ) : (
                 <Feather
                   name="refresh-ccw"
                   size={16}
                   color={
-                    smartAccountReady ? colors.accentAlt : colors.textMuted
+                    smartAccountReady ? colors.accent : colors.textMuted
                   }
                 />
               )}
@@ -1139,7 +1139,7 @@ const EmailRecoveryScreen: React.FC = () => {
                   ? colors.warning
                   : moduleInstalledState
                     ? colors.success
-                    : colors.accentAlt
+                    : colors.accent
               }
             />
             <Text style={styles.moduleStatusText}>
@@ -1355,8 +1355,8 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: withAlpha(colors.textPrimary, 0.04),
     },
     modeButtonActive: {
-      borderColor: colors.accentAlt,
-      backgroundColor: withAlpha(colors.accentAlt, 0.14),
+      borderColor: colors.accent,
+      backgroundColor: withAlpha(colors.accent, 0.14),
     },
     modeButtonText: {
       color: colors.textPrimary,
@@ -1421,7 +1421,7 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: withAlpha(colors.accent, 0.1),
     },
     moduleStatusBadge: {
       flexDirection: "row",
@@ -1432,7 +1432,7 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 12,
     },
     moduleStatusIdle: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: withAlpha(colors.accent, 0.1),
       borderWidth: 1,
       borderColor: withAlpha(colors.accentAlt, 0.2),
     },
@@ -1515,7 +1515,7 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 14,
       paddingVertical: 12,
       alignItems: "center",
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: withAlpha(colors.accent, 0.1),
     },
     secondaryButtonText: {
       color: colors.accentAlt,
@@ -1523,7 +1523,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     installButton: {
-      backgroundColor: colors.accentAlt,
+      backgroundColor: colors.accent,
       borderRadius: 16,
       paddingVertical: 14,
       alignItems: "center",

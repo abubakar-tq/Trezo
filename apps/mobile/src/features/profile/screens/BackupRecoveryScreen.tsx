@@ -38,14 +38,14 @@ const BackupRecoveryScreen: React.FC = () => {
               activeOpacity={0.85}
             >
               <View style={styles.optionInfo}>
-                <View
-                  style={[
-                    styles.iconBadge,
-                    { backgroundColor: withAlpha(colors.accentAlt, 0.15) },
-                  ]}
-                >
-                  <Feather name="shield" size={20} color={colors.accentAlt} />
-                </View>
+                  <View
+                    style={[
+                      styles.iconBadge,
+                      { backgroundColor: withAlpha(colors.accent, 0.15) },
+                    ]}
+                  >
+                    <Feather name="shield" size={20} color={colors.accent} />
+                  </View>
                 <View style={styles.optionText}>
                   <Text style={styles.optionLabel}>Guardian Recovery</Text>
                   <Text style={styles.optionDesc}>Configure trusted guardians</Text>
@@ -65,14 +65,14 @@ const BackupRecoveryScreen: React.FC = () => {
               activeOpacity={0.85}
             >
               <View style={styles.optionInfo}>
-                <View
-                  style={[
-                    styles.iconBadge,
-                    { backgroundColor: withAlpha(colors.accentAlt, 0.15) },
-                  ]}
-                >
-                  <Feather name="mail" size={20} color={colors.accentAlt} />
-                </View>
+                  <View
+                    style={[
+                      styles.iconBadge,
+                      { backgroundColor: withAlpha(colors.accent, 0.15) },
+                    ]}
+                  >
+                    <Feather name="mail" size={20} color={colors.accent} />
+                  </View>
                 <View style={styles.optionText}>
                   <Text style={styles.optionLabel}>Email Recovery</Text>
                   <Text style={styles.optionDesc}>Set up email-based guardians</Text>

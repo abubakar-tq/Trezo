@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { Avatar, TabScreenContainer } from "@shared/components";
+import { MeshBackground } from "@shared/components/MeshBackground";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -58,7 +59,7 @@ const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { theme, resolvedMode, setMode } = useAppTheme();
   const { colors, gradients } = theme;
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const styles = useMemo(() => createStyles(colors, resolvedMode), [colors, resolvedMode]);
   const contentBottomInset = useTabContentBottomInset();
 
   const user = useUserStore((state) => state.user);
@@ -113,7 +114,8 @@ const ProfileScreen: React.FC = () => {
   }, [isSigningOut, navigation, resetUser, setGuardNavigation]);
 
   return (
-    <TabScreenContainer style={styles.screen}>
+    <TabScreenContainer includeBottomInset>
+      <MeshBackground intensity={resolvedMode === "dark" ? 0.25 : 0.8} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
@@ -122,10 +124,7 @@ const ProfileScreen: React.FC = () => {
         ]}
       >
         <View style={styles.heroWrapper}>
-          <LinearGradient
-            colors={gradients.profileHero}
-            style={styles.heroGradient}
-          >
+          <View style={styles.heroCard}>
             <View style={styles.heroHeader}>
               <TouchableOpacity
                 onPress={() => navigation.navigate("ProfileEdit")}
@@ -160,11 +159,12 @@ const ProfileScreen: React.FC = () => {
                 />
               </TouchableOpacity>
             </View>
-          </LinearGradient>
+          </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Settings</Text>
+          <View style={styles.settingsCard}>
+            <Text style={styles.sectionTitle}>TECHNICAL PROFILE</Text>
           {settingsItems.map((item, index) => (
             <TouchableOpacity
               key={item.label}
@@ -180,7 +180,7 @@ const ProfileScreen: React.FC = () => {
               }}
             >
               <View style={styles.settingInfo}>
-                <Feather name={item.icon} size={18} color={colors.accentAlt} />
+                <Feather name={item.icon as any} size={18} color={colors.accent} />
                 <Text style={styles.settingLabel}>{item.label}</Text>
               </View>
               <Feather
@@ -191,6 +191,7 @@ const ProfileScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
         </View>
+      </View>
 
         <TouchableOpacity
           activeOpacity={0.85}
@@ -264,7 +265,7 @@ const ProfileScreen: React.FC = () => {
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
+const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
   StyleSheet.create({
     screen: {
       flex: 1,
@@ -275,14 +276,17 @@ const createStyles = (colors: ThemeColors) =>
       paddingTop: 12,
     },
     heroWrapper: {
-      borderRadius: 28,
-      borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.6),
-      overflow: "hidden",
       marginBottom: 20,
     },
-    heroGradient: {
+    heroCard: {
+      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF',
       padding: 24,
+      borderRadius: 28,
+      borderWidth: 1,
+      borderColor: colors.border,
+      // Zero Depth
+      shadowOpacity: 0,
+      elevation: 0,
     },
     heroHeader: {
       flexDirection: "row",
@@ -318,17 +322,24 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: withAlpha(colors.textPrimary, 0.08),
     },
     card: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 24,
-      padding: 20,
-      borderWidth: 1,
-      borderColor: colors.borderMuted,
       marginBottom: 20,
+    },
+    settingsCard: {
+      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF',
+      borderRadius: 24,
+      padding: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+      // Zero Depth
+      shadowOpacity: 0,
+      elevation: 0,
     },
     sectionTitle: {
       color: colors.textPrimary,
       fontSize: 18,
-      fontWeight: "700",
+      fontWeight: "800",
+      textTransform: 'uppercase',
+      letterSpacing: 2,
       marginBottom: 16,
     },
     settingRow: {
@@ -359,8 +370,8 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 16,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.24),
-      backgroundColor: withAlpha(colors.danger, 0.12),
+      borderColor: withAlpha(colors.danger, 0.3),
+      backgroundColor: mode === 'dark' ? 'rgba(220, 38, 38, 0.08)' : 'rgba(220, 38, 38, 0.04)',
       marginTop: 8,
     },
     signOutIconWrap: {
@@ -389,12 +400,15 @@ const createStyles = (colors: ThemeColors) =>
       width: "100%",
       borderRadius: 28,
       borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.35),
-      backgroundColor: colors.surfaceCard,
+      borderColor: withAlpha(colors.danger, 0.2),
+      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.95)' : '#FFFFFF',
       paddingVertical: 28,
       paddingHorizontal: 24,
       alignItems: "center",
       gap: 16,
+      // Zero Depth
+      shadowOpacity: 0,
+      elevation: 0,
     },
     modalIconBadge: {
       width: 64,

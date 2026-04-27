@@ -4,39 +4,34 @@ import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
 import { withAlpha } from '@utils/color';
 
-export type QuickActionKey = 'send' | 'receive' | 'buy' | 'swap';
+export type QuickActionKey = 'buy' | 'swap' | 'send' | 'receive';
 
 export type QuickAction = {
   key: QuickActionKey;
   label: string;
   icon: React.ComponentProps<typeof Feather>['name'];
-  description: string;
 };
 
 export const quickActions: QuickAction[] = [
   {
-    key: 'send',
-    label: 'Send',
-    icon: 'arrow-up-right',
-    description: 'Move assets from your wallet to another address.',
-  },
-  {
-    key: 'receive',
-    label: 'Receive',
-    icon: 'arrow-down-left',
-    description: 'Generate deposit details to receive funds securely.',
-  },
-  {
     key: 'buy',
     label: 'Buy',
-    icon: 'credit-card',
-    description: 'Purchase crypto with fiat using curated providers.',
+    icon: 'plus-circle',
   },
   {
     key: 'swap',
     label: 'Swap',
     icon: 'repeat',
-    description: 'Exchange one token for another without leaving Trezo.',
+  },
+  {
+    key: 'send',
+    label: 'Send',
+    icon: 'arrow-up-right',
+  },
+  {
+    key: 'receive',
+    label: 'Receive',
+    icon: 'arrow-down-left',
   },
 ];
 
@@ -53,14 +48,14 @@ export const ActionGrid: React.FC<ActionGridProps> = ({ onActionPress }) => {
       {quickActions.map((action) => (
         <TouchableOpacity
           key={action.key}
-          activeOpacity={0.85}
-          style={[styles.button, { backgroundColor: colors.surfaceCard }]}
+          activeOpacity={0.7}
+          style={styles.actionItem}
           onPress={() => onActionPress(action)}
         >
-          <View style={[styles.iconWrapper, { backgroundColor: withAlpha(colors.accent, 0.12) }]}>
-            <Feather name={action.icon} size={20} color={colors.accent} />
+          <View style={[styles.iconBox, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
+            <Feather name={action.icon} size={16} color={colors.textPrimary} strokeWidth={1} />
           </View>
-          <Text style={[styles.label, { color: colors.textPrimary }]}>{action.label}</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>{action.label}</Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -71,34 +66,30 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 24,
-    gap: 12,
+    paddingVertical: 8, // 35% reduction from 12
   },
-  button: {
-    flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    borderRadius: 20,
+  actionItem: {
+    alignItems: 'center',
+    gap: 10,
+  },
+  iconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
+    // Add very subtle shadow for light mode visibility
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-  },
-  iconWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 0.5,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
   },
 });

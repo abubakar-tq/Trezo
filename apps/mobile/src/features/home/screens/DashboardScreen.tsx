@@ -22,7 +22,7 @@ import { Colors } from "../../../shared/components/TokenRegistry";
 import { ContactsScreen } from "../../contacts/screens/ContactsScreen";
 import { SecurityCenterScreen } from "../../recovery/screens/SecurityCenterScreen";
 import { SettingsScreen } from "../../settings/screens/SettingsScreen";
-import { PortfolioScreen } from "../../wallet/screens/PortfolioScreen";
+import PortfolioScreen from "../../portfolio/screens/PortfolioScreen";
 import HomeScreen from "./HomeScreen";
 
 type TabType = "home" | "wallet" | "recovery" | "contacts" | "settings";
@@ -53,10 +53,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           />
         )}
         {activeTab === "wallet" && (
-          <PortfolioScreen
-            onSend={() => console.log("Send from portfolio")}
-            onReceive={() => console.log("Receive from portfolio")}
-          />
+          <PortfolioScreen />
         )}
         {activeTab === "recovery" && (
           <SecurityCenterScreen

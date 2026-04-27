@@ -45,9 +45,15 @@ const mockTransactions: Transaction[] = [
   },
 ];
 
-export const ActivityFeed: React.FC = () => {
+interface ActivityFeedProps {
+  limit?: number;
+}
+
+export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
+
+  const displayTransactions = limit ? mockTransactions.slice(0, limit) : mockTransactions;
 
   const getIcon = (type: TransactionType) => {
     switch (type) {
@@ -59,55 +65,53 @@ export const ActivityFeed: React.FC = () => {
     }
   };
 
-  const getStatusColor = (status: Transaction['status']) => {
-    switch (status) {
-      case 'completed': return colors.success;
-      case 'pending': return colors.warning;
-      case 'failed': return colors.danger;
-      default: return colors.textSecondary;
-    }
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Recent Activity</Text>
+        <Text style={[styles.title, { color: colors.textSecondary }]}>Activity</Text>
         <TouchableOpacity>
-          <Text style={[styles.seeAll, { color: colors.accent }]}>See All</Text>
+          <Text style={[styles.seeAll, { color: colors.accent }]}>Full History</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.list, { backgroundColor: colors.surfaceCard, borderColor: colors.borderMuted }]}>
-        {mockTransactions.map((tx, index) => (
+      <View style={styles.list}>
+        {displayTransactions.map((tx, index) => (
           <TouchableOpacity 
             key={tx.id} 
             style={[
-              styles.item, 
-              index < mockTransactions.length - 1 && { borderBottomWidth: 1, borderBottomColor: withAlpha(colors.border, 0.5) }
+              styles.item,
+              index !== displayTransactions.length - 1 && { borderBottomWidth: 1, borderBottomColor: withAlpha(colors.accent, 0.08) }
             ]}
             activeOpacity={0.7}
           >
-            <View style={[styles.iconWrapper, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
-              <Feather name={getIcon(tx.type)} size={18} color={colors.accent} />
+            <View style={styles.itemLeft}>
+              <View style={[styles.iconBox, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
+                <Feather name={getIcon(tx.type)} size={16} color={colors.accent} strokeWidth={1.5} />
+              </View>
+              <View style={styles.textContainer}>
+                <Text 
+                  style={[styles.typeText, { color: colors.textPrimary }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {tx.type.charAt(0).toUpperCase() + tx.type.slice(1)} {tx.symbol}
+                </Text>
+                <Text style={[styles.timeText, { color: colors.textSecondary }]}>{tx.timestamp}</Text>
+              </View>
             </View>
             
-            <View style={styles.details}>
-              <Text style={[styles.txType, { color: colors.textPrimary }]}>
-                {tx.type.charAt(0).toUpperCase() + tx.type.slice(1)} {tx.symbol}
-              </Text>
-              <Text style={[styles.txMeta, { color: colors.textSecondary }]}>
-                {tx.status === 'completed' ? tx.timestamp : tx.status} · {tx.address || 'Smart Contract'}
-              </Text>
-            </View>
-
-            {tx.amount && (
-              <View style={styles.amountWrapper}>
-                <Text style={[styles.amount, { color: colors.textPrimary }]}>
+            <View style={styles.itemRight}>
+              {tx.amount && (
+                <Text 
+                  style={[styles.amountText, { color: colors.textPrimary }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
                   {tx.type === 'send' ? '-' : '+'}{tx.amount}
                 </Text>
-                <View style={[styles.statusDot, { backgroundColor: getStatusColor(tx.status) }]} />
-              </View>
-            )}
+              )}
+              <View style={[styles.statusIndicator, { backgroundColor: tx.status === 'completed' ? colors.accent : colors.warning }]} />
+            </View>
           </TouchableOpacity>
         ))}
       </View>
@@ -117,64 +121,80 @@ export const ActivityFeed: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 40,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+    paddingHorizontal: 4,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
   },
   seeAll: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   list: {
-    borderRadius: 24,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    overflow: 'hidden',
+    gap: 0,
   },
   item: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 16,
+    minHeight: 80,
   },
-  iconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  itemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 0.65,
+    gap: 16,
+  },
+  textContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    borderWidth: 1,
   },
-  details: {
-    flex: 1,
-  },
-  txType: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  txMeta: {
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  amountWrapper: {
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  amount: {
-    fontSize: 15,
+  typeText: {
+    fontSize: 16,
     fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  statusDot: {
+  timeText: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  itemRight: {
+    flex: 0.35,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  amountText: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    fontFamily: 'monospace',
+    textAlign: 'right',
+  },
+  statusIndicator: {
     width: 6,
-    height: 6,
+    height: 14,
     borderRadius: 3,
   },
 });

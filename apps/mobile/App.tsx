@@ -13,13 +13,18 @@ import { useAppLock, useCachedResources } from "@app/hooks";
 import RootNavigation from "@app/navigation/RootNavigation";
 import { isSupabaseConfigured, supabaseConfigIssue } from "@lib/supabase";
 import { AppThemeProvider, useAppTheme } from "@theme";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./global.css";
+
+const queryClient = new QueryClient();
 
 const App = () => (
   <SafeAreaProvider>
-    <AppThemeProvider>
-      <AppBootstrap />
-    </AppThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <AppThemeProvider>
+        <AppBootstrap />
+      </AppThemeProvider>
+    </QueryClientProvider>
   </SafeAreaProvider>
 );
 

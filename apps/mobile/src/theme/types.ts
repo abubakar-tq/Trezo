@@ -23,6 +23,8 @@ export type ThemeColors = {
   success: string;
   warning: string;
   danger: string;
+  glass: string;
+  glassBorder: string;
 };
 
 export type ThemeGradients = {

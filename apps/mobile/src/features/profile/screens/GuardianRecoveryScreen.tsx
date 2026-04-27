@@ -538,7 +538,7 @@ const GuardianRecoveryScreen: React.FC = () => {
                   size={16} 
                   color={
                     !syncStatus.hasAAWallet ? colors.warning :
-                    !syncStatus.isSynced ? colors.accentAlt :
+                    !syncStatus.isSynced ? colors.accent :
                     colors.success
                   } 
                 />
@@ -556,7 +556,7 @@ const GuardianRecoveryScreen: React.FC = () => {
                     style={styles.syncButton}
                   >
                     {isSyncing ? (
-                      <ActivityIndicator size="small" color={colors.accentAlt} />
+                      <ActivityIndicator size="small" color={colors.accent} />
                     ) : (
                       <Text style={styles.syncButtonText}>Sync Now</Text>
                     )}
@@ -588,7 +588,7 @@ const GuardianRecoveryScreen: React.FC = () => {
             ))}
 
             <View style={styles.guardianSummary}>
-              <Feather name="info" size={16} color={colors.accentAlt} />
+              <Feather name="info" size={16} color={colors.accent} />
               <Text style={styles.guardianSummaryText}>
                 {requiredSignatures} of {storedGuardians.length} guardians required for recovery
               </Text>
@@ -609,7 +609,7 @@ const GuardianRecoveryScreen: React.FC = () => {
                 <Feather
                   name="refresh-ccw"
                   size={16}
-                  color={smartAccountReady ? colors.accentAlt : colors.textMuted}
+                  color={smartAccountReady ? colors.accent : colors.textMuted}
                 />
               )}
             </TouchableOpacity>
@@ -740,7 +740,7 @@ const GuardianRecoveryScreen: React.FC = () => {
       </ScrollView>
       {isSubmitting && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={colors.accentAlt} />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Saving guardians…</Text>
         </View>
       )}
@@ -868,7 +868,7 @@ const createStyles = (colors: ThemeColors) =>
       fontFamily: "monospace",
     },
     submitButton: {
-      backgroundColor: colors.accentAlt,
+      backgroundColor: colors.accent,
       borderRadius: 16,
       paddingVertical: 16,
       alignItems: "center",
@@ -902,7 +902,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     editButton: {
-      color: colors.accentAlt,
+      color: colors.accent,
       fontSize: 15,
       fontWeight: "600",
     },
@@ -926,14 +926,14 @@ const createStyles = (colors: ThemeColors) =>
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: withAlpha(colors.accentAlt, 0.15),
+      backgroundColor: withAlpha(colors.accent, 0.15),
       borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.3),
+      borderColor: withAlpha(colors.accent, 0.3),
       alignItems: "center",
       justifyContent: "center",
     },
     guardianBadgeText: {
-      color: colors.accentAlt,
+      color: colors.accent,
       fontSize: 14,
       fontWeight: "700",
     },
@@ -947,7 +947,7 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: withAlpha(colors.accent, 0.1),
       borderRadius: 12,
       padding: 14,
       marginTop: 16,
@@ -971,7 +971,7 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: withAlpha(colors.warning, 0.2),
     },
     syncStatusNeedSync: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: withAlpha(colors.accent, 0.1),
       borderWidth: 1,
       borderColor: withAlpha(colors.accentAlt, 0.2),
     },
@@ -987,7 +987,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 16,
     },
     syncButton: {
-      backgroundColor: colors.accentAlt,
+      backgroundColor: colors.accent,
       borderRadius: 8,
       paddingHorizontal: 12,
       paddingVertical: 6,
@@ -1061,7 +1061,7 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: withAlpha(colors.accentAlt, 0.15),
     },
     actionChipText: {
-      color: colors.accentAlt,
+      color: colors.accent,
       fontSize: 12,
       fontWeight: "600",
       textTransform: "uppercase",
@@ -1110,7 +1110,7 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: withAlpha(colors.success, 0.15),
     },
     moduleStatusIdle: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.12),
+      backgroundColor: withAlpha(colors.accent, 0.12),
     },
     moduleStatusWarning: {
       backgroundColor: withAlpha(colors.warning, 0.15),
@@ -1146,7 +1146,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     installButton: {
       marginTop: 8,
-      backgroundColor: colors.accentAlt,
+      backgroundColor: colors.accent,
       borderRadius: 16,
       paddingVertical: 14,
       alignItems: "center",
