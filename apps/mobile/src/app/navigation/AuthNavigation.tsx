@@ -1,6 +1,8 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 
+import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
 import { AuthStackParamList } from "@/src/types/navigation";
 import {
     AuthResultScreen,
@@ -17,11 +19,39 @@ import {
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 const AuthNavigation = () => {
+  const [initialRouteName, setInitialRouteName] = useState<keyof AuthStackParamList | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    DevicePairingService.getPendingDeepLink()
+      .then((pending) => {
+        if (cancelled) return;
+        setInitialRouteName(pending ? "Login" : "Introduction");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setInitialRouteName("Introduction");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   console.log('🔐 [AuthNavigation] Rendering');
-  
+
+  if (!initialRouteName) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#000000" }}>
+        <ActivityIndicator size="large" color="#ffffff" />
+      </View>
+    );
+  }
+
   return (
 		<Stack.Navigator
-			initialRouteName="Introduction"
+			initialRouteName={initialRouteName}
 			screenOptions={{
 				headerShown: false,
 				animation: "slide_from_right",

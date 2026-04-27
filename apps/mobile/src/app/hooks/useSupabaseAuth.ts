@@ -6,6 +6,8 @@ import * as Linking from "expo-linking";
 
 import { GuardianSyncService } from "@/src/features/profile/services/GuardianSyncService";
 import { ProfileSyncService } from "@/src/features/profile/services/ProfileSyncService";
+import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
+import WalletSyncService from "@/src/features/wallet/services/WalletSyncService";
 import { AuthVerificationFlow } from "@/src/types/navigation";
 import { navigate } from "@app/navigation/navigationRef";
 import { authRedirectUri } from "@lib/oauth";
@@ -84,6 +86,7 @@ type UseSupabaseAuthResult = {
 export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<AuthError | SupabaseConfigurationError | null>(null);
+	const session = useUserStore((state) => state.session);
 	const { setSession, setUser, setIsLoggedIn, setProfile, setIsOnboarded } =
 		useUserStore();
 	const lastAuthStateRef = useRef<boolean>(Boolean(useUserStore.getState().session));
@@ -156,50 +159,60 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 				}
 			}
 
-			// Sync profile and guardians from database on login FIRST
 			if (session?.user && isAuthenticated) {
 				try {
-					// Fetch profile from database first (this updates the store)
 					const dbProfile = await ProfileSyncService.fetchAndSyncProfile(session.user.id);
-					
-					// Only use session metadata as fallback if database has no profile
+
 					if (!dbProfile || !dbProfile.username) {
-						// Profile from db might exist with no username but explicit null avatar_url
-						const isAvatarExplicitlyNull = dbProfile ? (dbProfile.avatar_url === null) : false;
+						const isAvatarExplicitlyNull = dbProfile
+							? dbProfile.avatar_url === null
+							: false;
 						const isAvatarRemoved = dbProfile?.avatar_removed ?? false;
-						const profile = normalizeProfile(session?.user, isAvatarExplicitlyNull, isAvatarRemoved);
+						const profile = normalizeProfile(
+							session.user,
+							isAvatarExplicitlyNull,
+							isAvatarRemoved,
+						);
 						setProfile(profile);
 						setIsOnboarded(Boolean(profile?.username));
-						
+
 						if (profile?.username) {
 							void syncProfileDefaults(session.user, profile);
 						}
 					} else {
-						// Database profile exists, use it
 						setIsOnboarded(true);
 					}
 
-					// Check if AA wallet exists and fetch guardians
+					const hydratedWallet = await WalletSyncService.hydrateWalletForUser({
+						userId: session.user.id,
+					});
+					if (hydratedWallet) {
+						await DevicePairingService.ensureLocalDeviceSynced({
+							userId: session.user.id,
+							walletAddress: hydratedWallet.predictedAddress,
+							chainId: hydratedWallet.chainId,
+						});
+					}
+
 					const aaWalletId = await GuardianSyncService.getAAWalletId(session.user.id);
 					if (aaWalletId) {
 						await GuardianSyncService.fetchAndSyncGuardians(aaWalletId);
 						console.log("✅ Guardians synced from database");
 					} else {
-						console.log("📝 No AA wallet found, guardians stored locally only");
+						console.log("📝 No deployed AA wallet found for guardian sync");
 					}
 				} catch (syncError) {
 					console.warn("⚠️  Failed to sync user data from database:", syncError);
-					// Fallback to session metadata on error
+					const profile = normalizeProfile(session.user, false, false);
+					setProfile(profile);
+					setIsOnboarded(Boolean(profile?.username));
+				}
+			} else {
 				const profile = normalizeProfile(session?.user, false, false);
 				setProfile(profile);
 				setIsOnboarded(Boolean(profile?.username));
-			}
-		} else if (!session?.user) {
-			// User logged out
-			const profile = normalizeProfile(session?.user, false, false);
-				setProfile(profile);
-				setIsOnboarded(Boolean(profile?.username));
 				syncedProfileRef.current = null;
+				WalletSyncService.clearWalletState();
 			}
 		},
 		[setIsLoggedIn, setIsOnboarded, setProfile, setSession, setUser, syncProfileDefaults],
@@ -239,6 +252,26 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 		},
 		[setError],
 	);
+
+	const handlePairingRedirect = useCallback(async (incomingUrl: string | null | undefined) => {
+		if (!incomingUrl) return;
+		let parsed: { requestId: string; secret: string } | null = null;
+		try {
+			parsed = DevicePairingService.parsePairingDeepLink(incomingUrl);
+		} catch {
+			parsed = null;
+		}
+		if (!parsed) return;
+
+		const isLoggedIn = Boolean(useUserStore.getState().session);
+		if (!isLoggedIn) {
+			await DevicePairingService.stashPendingDeepLink(parsed);
+			navigate("Login", { pairingMode: "resume" });
+			return;
+		}
+
+		navigate("PairDevice", parsed);
+	}, []);
 
 	useEffect(() => {
 		let isMounted = true;
@@ -303,18 +336,30 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 		if (!isSupabaseConfigured) return;
 
 		Linking.getInitialURL().then((url) => {
+			void handlePairingRedirect(url);
 			handleAuthRedirect(url);
 		});
 		const subscription = Linking.addEventListener("url", (event) => {
+			void handlePairingRedirect(event.url);
 			handleAuthRedirect(event.url);
 		});
 
 		return () => {
 			subscription.remove();
 		};
-	}, [handleAuthRedirect]);
+	}, [handleAuthRedirect, handlePairingRedirect]);
 
-	const session = useUserStore.getState().session;
+	useEffect(() => {
+		if (!isSupabaseConfigured) return;
+		if (!useUserStore.getState().session) return;
+
+		DevicePairingService.consumePendingDeepLink()
+			.then((pending) => {
+				if (!pending) return;
+				navigate("PairDevice", pending);
+			})
+			.catch(() => {});
+	}, [session]);
 
 	return { session, loading, error };
 };
