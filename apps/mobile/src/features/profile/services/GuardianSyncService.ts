@@ -357,4 +357,68 @@ export class GuardianSyncService {
       };
     }
   }
+
+  static async getDatabaseGuardianStatus(userId: string): Promise<{
+    hasWalletMetadata: boolean;
+    walletMarkedDeployed: boolean;
+    dbGuardians: number;
+    localGuardians: number;
+    isSynced: boolean;
+  }> {
+    try {
+      const localConfig = useRecoveryStatusStore.getState();
+      const localGuardians = localConfig.guardians?.length || 0;
+
+      const { data: wallet, error: walletError } = await this.supabase
+        .from('aa_wallets')
+        .select('id, is_deployed')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (walletError) {
+        throw walletError;
+      }
+
+      if (!wallet) {
+        return {
+          hasWalletMetadata: false,
+          walletMarkedDeployed: false,
+          dbGuardians: 0,
+          localGuardians,
+          isSynced: false,
+        };
+      }
+
+      const { count, error: guardianError } = await this.supabase
+        .from('guardians')
+        .select('id', { count: 'exact', head: true })
+        .eq('aa_wallet_id', wallet.id)
+        .eq('is_active', true);
+
+      if (guardianError) {
+        throw guardianError;
+      }
+
+      const dbGuardians = count ?? 0;
+
+      return {
+        hasWalletMetadata: true,
+        walletMarkedDeployed: Boolean(wallet.is_deployed),
+        dbGuardians,
+        localGuardians,
+        isSynced: localGuardians === dbGuardians && dbGuardians > 0,
+      };
+    } catch (error) {
+      console.error(`❌ [GuardianSync] Failed to get guardian database status:`, error);
+      return {
+        hasWalletMetadata: false,
+        walletMarkedDeployed: false,
+        dbGuardians: 0,
+        localGuardians: 0,
+        isSynced: false,
+      };
+    }
+  }
 }

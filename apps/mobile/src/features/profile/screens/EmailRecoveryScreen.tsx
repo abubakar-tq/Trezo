@@ -110,21 +110,41 @@ const EmailRecoveryScreen: React.FC = () => {
     () => Math.max(parseInt(guardianCountValue, 10) || 0, 0),
     [guardianCountValue],
   );
+  const visibleGuardianEmails = useMemo(
+    () => guardianEmails.slice(0, expectedGuardians),
+    [expectedGuardians, guardianEmails],
+  );
+  const visibleGuardianWeights = useMemo(
+    () => guardianWeights.slice(0, expectedGuardians),
+    [expectedGuardians, guardianWeights],
+  );
   const trimmedGuardians = useMemo(
     () =>
-      guardianEmails
+      visibleGuardianEmails
         .map((email) => EmailRecoveryService.normalizeGuardianEmail(email))
         .filter(Boolean),
-    [guardianEmails],
+    [visibleGuardianEmails],
   );
   const normalizedGuardianWeights = useMemo(
     () =>
-      guardianWeights.map((weight) => Math.max(parseInt(weight, 10) || 0, 0)),
-    [guardianWeights],
+      visibleGuardianWeights.map((weight) => Math.max(parseInt(weight, 10) || 0, 0)),
+    [visibleGuardianWeights],
   );
   const totalGuardianWeight = useMemo(
     () => normalizedGuardianWeights.reduce((sum, weight) => sum + weight, 0),
     [normalizedGuardianWeights],
+  );
+  const parsedThreshold = useMemo(
+    () => Math.max(parseInt(thresholdValue, 10) || 0, 0),
+    [thresholdValue],
+  );
+  const parsedDelayDays = useMemo(
+    () => Math.max(parseInt(delayDays, 10) || 0, 0),
+    [delayDays],
+  );
+  const parsedExpiryDays = useMemo(
+    () => Math.max(parseInt(expiryDays, 10) || 0, 0),
+    [expiryDays],
   );
   const hasDuplicateGuardians = useMemo(() => {
     const normalized = trimmedGuardians.map((email) => email.toLowerCase());
@@ -132,6 +152,66 @@ const EmailRecoveryScreen: React.FC = () => {
   }, [trimmedGuardians]);
   const guardiansReady =
     expectedGuardians > 0 && trimmedGuardians.length === expectedGuardians;
+  const invalidGuardian = useMemo(
+    () => trimmedGuardians.find((email) => !isValidEmail(email)) ?? null,
+    [trimmedGuardians],
+  );
+  const invalidWeightIndex = useMemo(
+    () => normalizedGuardianWeights.findIndex((weight) => weight <= 0),
+    [normalizedGuardianWeights],
+  );
+  const guardianValidationError = useMemo(() => {
+    if (expectedGuardians < 1) {
+      return "Add at least one guardian.";
+    }
+    if (visibleGuardianEmails.length !== expectedGuardians) {
+      return "Guardian slots are still syncing. Try again.";
+    }
+    if (trimmedGuardians.length !== expectedGuardians) {
+      return "Fill in every guardian email before continuing.";
+    }
+    if (invalidGuardian) {
+      return `${invalidGuardian} is not a valid email address.`;
+    }
+    if (hasDuplicateGuardians) {
+      return "Duplicate guardian emails are not allowed.";
+    }
+    if (parsedThreshold < 1) {
+      return "Threshold must be at least 1.";
+    }
+    if (parsedThreshold > expectedGuardians) {
+      return "Threshold cannot exceed the guardian count.";
+    }
+    if (parsedThreshold > totalGuardianWeight) {
+      return "Threshold cannot exceed the total guardian weight.";
+    }
+    if (invalidWeightIndex >= 0) {
+      return `Guardian weight at slot ${invalidWeightIndex + 1} must be greater than zero.`;
+    }
+    if (parsedDelayDays < 1 || parsedExpiryDays < 1) {
+      return "Delay and expiry must both be at least 1 day.";
+    }
+    if (parsedExpiryDays < parsedDelayDays) {
+      return "Expiry must be greater than or equal to the delay.";
+    }
+    return null;
+  }, [
+    expectedGuardians,
+    hasDuplicateGuardians,
+    invalidGuardian,
+    invalidWeightIndex,
+    parsedDelayDays,
+    parsedExpiryDays,
+    parsedThreshold,
+    totalGuardianWeight,
+    trimmedGuardians.length,
+    visibleGuardianEmails.length,
+  ]);
+  const canSubmitGuardianConfig =
+    smartAccountReady &&
+    guardiansReady &&
+    !guardianValidationError &&
+    !installingModule;
 
   useEffect(() => {
     if (!smartAccountReady || !smartAccountAddress) {
@@ -309,19 +389,17 @@ const EmailRecoveryScreen: React.FC = () => {
     const parsed = parseInt(value, 10) || 0;
     setGuardianCountValue(value);
     setDerivedGuardians([]);
-
-    // Instead of deleting extra rows, we just hide them in UI, or expand if more are needed
     setGuardianEmails((current) => {
       if (parsed > current.length) {
         return [...current, ...Array(parsed - current.length).fill("")];
       }
-      return current; // Don't wipe previous entries
+      return current.slice(0, parsed);
     });
     setGuardianWeights((current) => {
       if (parsed > current.length) {
         return [...current, ...Array(parsed - current.length).fill("1")];
       }
-      return current; // Don't wipe previous entries
+      return current.slice(0, parsed);
     });
   }, []);
 
@@ -362,6 +440,18 @@ const EmailRecoveryScreen: React.FC = () => {
     setModuleStatusNonce((nonce) => nonce + 1);
   }, [smartAccountReady]);
 
+  const parseGuardianWeights = useCallback((): bigint[] => {
+    return visibleGuardianWeights.map((weight, index) => {
+      const parsed = parseInt(weight, 10) || 0;
+      if (parsed <= 0) {
+        throw new Error(
+          `Guardian weight at index ${index + 1} must be greater than zero.`,
+        );
+      }
+      return BigInt(parsed);
+    });
+  }, [visibleGuardianWeights]);
+
   const handleSaveToCloud = useCallback(async () => {
     if (!smartAccountReady || !smartAccountAddress) {
       Alert.alert(
@@ -374,91 +464,20 @@ const EmailRecoveryScreen: React.FC = () => {
       Alert.alert("Authentication Required", "Please sign in to sync.");
       return;
     }
-    if (!guardiansReady) {
-      Alert.alert(
-        "Add Guardians",
-        "Fill in all guardian emails before syncing.",
-      );
-      return;
-    }
-
-    const invalidGuardian = trimmedGuardians.find(
-      (email) => !isValidEmail(email),
-    );
-    if (invalidGuardian) {
-      Alert.alert(
-        "Invalid Email",
-        `${invalidGuardian} is not a valid email address.`,
-      );
-      return;
-    }
-
-    const parsedThreshold = parseInt(thresholdValue, 10) || 0;
-    const parsedDelay = parseInt(delayDays, 10) || 0;
-    const parsedExpiry = parseInt(expiryDays, 10) || 0;
-
-    if (parsedThreshold <= 0) {
-      Alert.alert("Invalid Threshold", "Threshold must be greater than zero.");
-      return;
-    }
-
-    const computedTotalWeight = guardianWeights
-      .slice(0, expectedGuardians)
-      .reduce((sum, weight) => sum + (parseInt(weight, 10) || 0), 0);
-
-    if (parsedThreshold > computedTotalWeight) {
-      Alert.alert(
-        "Threshold Too High",
-        "Threshold cannot exceed the total sum of guardian validation weights.",
-      );
-      return;
-    }
-
-    if (hasDuplicateGuardians) {
-      Alert.alert("Duplicate Guardians", "Each guardian email must be unique.");
-      return;
-    }
-    if (parsedDelay <= 0 || parsedExpiry <= 0) {
-      Alert.alert(
-        "Invalid Timing",
-        "Delay and expiry must be greater than zero.",
-      );
-      return;
-    }
-    if (parsedExpiry < parsedDelay) {
-      Alert.alert(
-        "Invalid Timing",
-        "Expiry must be greater than or equal to the delay.",
-      );
+    if (guardianValidationError) {
+      Alert.alert("Check Guardian Setup", guardianValidationError);
       return;
     }
 
     let parsedWeights: bigint[];
     try {
-      parsedWeights = guardianWeights.map((weight, index) => {
-        const parsed = parseInt(weight, 10) || 0;
-        if (parsed <= 0) {
-          throw new Error(
-            `Guardian weight at index ${index + 1} must be greater than zero.`,
-          );
-        }
-        return BigInt(parsed);
-      });
+      parsedWeights = parseGuardianWeights();
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Guardian weights must be greater than zero.";
       Alert.alert("Invalid Weights", message);
-      return;
-    }
-
-    const totalWeight = parsedWeights.reduce((sum, weight) => sum + weight, 0n);
-    if (BigInt(parsedThreshold) > totalWeight) {
-      Alert.alert(
-        "Invalid Threshold",
-        "Threshold cannot exceed the total guardian weight.",
-      );
       return;
     }
 
@@ -471,8 +490,8 @@ const EmailRecoveryScreen: React.FC = () => {
         guardianEmails: trimmedGuardians,
         guardianWeights: parsedWeights,
         threshold: BigInt(parsedThreshold),
-        delaySeconds: BigInt(parsedDelay) * 86400n,
-        expirySeconds: BigInt(parsedExpiry) * 86400n,
+        delaySeconds: BigInt(parsedDelayDays) * 86400n,
+        expirySeconds: BigInt(parsedExpiryDays) * 86400n,
         securityMode,
         installStatus: moduleInstalledState ? "installed" : "pending",
         installUserOpHash:
@@ -498,14 +517,13 @@ const EmailRecoveryScreen: React.FC = () => {
     smartAccountReady,
     smartAccountAddress,
     user?.id,
-    guardiansReady,
     trimmedGuardians,
-    hasDuplicateGuardians,
     resolvedChainId,
-    guardianWeights,
-    thresholdValue,
-    delayDays,
-    expiryDays,
+    guardianValidationError,
+    parseGuardianWeights,
+    parsedDelayDays,
+    parsedExpiryDays,
+    parsedThreshold,
     securityMode,
     moduleInstalledState,
   ]);
@@ -525,90 +543,20 @@ const EmailRecoveryScreen: React.FC = () => {
       );
       return;
     }
-    if (!guardiansReady) {
-      Alert.alert(
-        "Add Guardians",
-        "Fill in all guardian emails before installing.",
-      );
-      return;
-    }
-
-    const invalidGuardian = trimmedGuardians.find(
-      (email) => !isValidEmail(email),
-    );
-    if (invalidGuardian) {
-      Alert.alert(
-        "Invalid Email",
-        `${invalidGuardian} is not a valid email address.`,
-      );
-      return;
-    }
-
-    const parsedThreshold = parseInt(thresholdValue, 10) || 0;
-    const parsedDelay = parseInt(delayDays, 10) || 0;
-    const parsedExpiry = parseInt(expiryDays, 10) || 0;
-
-    if (parsedThreshold <= 0) {
-      Alert.alert("Invalid Threshold", "Threshold must be greater than zero.");
-      return;
-    }
-
-    const computedTotalWeight = guardianWeights
-      .slice(0, expectedGuardians)
-      .reduce((sum, weight) => sum + (parseInt(weight, 10) || 0), 0);
-
-    if (parsedThreshold > computedTotalWeight) {
-      Alert.alert(
-        "Threshold Too High",
-        "Threshold cannot exceed the total sum of guardian validation weights.",
-      );
-      return;
-    }
-
-    if (hasDuplicateGuardians) {
-      Alert.alert("Duplicate Guardians", "Each guardian email must be unique.");
-      return;
-    }
-    if (parsedDelay <= 0 || parsedExpiry <= 0) {
-      Alert.alert(
-        "Invalid Timing",
-        "Delay and expiry must be greater than zero.",
-      );
-      return;
-    }
-    if (parsedExpiry < parsedDelay) {
-      Alert.alert(
-        "Invalid Timing",
-        "Expiry must be greater than or equal to the delay.",
-      );
+    if (guardianValidationError) {
+      Alert.alert("Check Guardian Setup", guardianValidationError);
       return;
     }
 
     let parsedWeights: bigint[];
     try {
-      parsedWeights = guardianWeights.map((weight, index) => {
-        const parsed = parseInt(weight, 10) || 0;
-        if (parsed <= 0) {
-          throw new Error(
-            `Guardian weight at index ${index + 1} must be greater than zero.`,
-          );
-        }
-        return BigInt(parsed);
-      });
+      parsedWeights = parseGuardianWeights();
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Guardian weights must be greater than zero.";
       Alert.alert("Invalid Weights", message);
-      return;
-    }
-    const totalWeight = parsedWeights.reduce((sum, weight) => sum + weight, 0n);
-    if (BigInt(parsedThreshold) > totalWeight) {
-      Alert.alert(
-        "Invalid Threshold",
-        "Threshold cannot exceed the total guardian weight.",
-      );
       return;
     }
 
@@ -646,8 +594,8 @@ const EmailRecoveryScreen: React.FC = () => {
           ),
           weights: parsedWeights,
           threshold: BigInt(parsedThreshold),
-          delay: BigInt(parsedDelay) * 86400n,
-          expiry: BigInt(parsedExpiry) * 86400n,
+          delay: BigInt(parsedDelayDays) * 86400n,
+          expiry: BigInt(parsedExpiryDays) * 86400n,
           passkeyId: passkey.credentialIdRaw as Hex,
           chainId: resolvedChainId,
           usePaymaster: true,
@@ -677,8 +625,8 @@ const EmailRecoveryScreen: React.FC = () => {
         guardianEmails: trimmedGuardians,
         guardianWeights: parsedWeights,
         threshold: BigInt(parsedThreshold),
-        delaySeconds: BigInt(parsedDelay) * 86400n,
-        expirySeconds: BigInt(parsedExpiry) * 86400n,
+        delaySeconds: BigInt(parsedDelayDays) * 86400n,
+        expirySeconds: BigInt(parsedExpiryDays) * 86400n,
         securityMode,
         installStatus: "pending",
         installUserOpHash: operationHash,
@@ -707,17 +655,16 @@ const EmailRecoveryScreen: React.FC = () => {
       setInstallingModule(false);
     }
   }, [
-    delayDays,
-    expiryDays,
-    guardiansReady,
+    guardianValidationError,
+    parseGuardianWeights,
+    parsedDelayDays,
+    parsedExpiryDays,
+    parsedThreshold,
     resolvedChainId,
     smartAccountAddress,
     smartAccountReady,
-    thresholdValue,
     trimmedGuardians,
     user?.id,
-    guardianWeights,
-    hasDuplicateGuardians,
     securityMode,
   ]);
 
@@ -992,8 +939,13 @@ const EmailRecoveryScreen: React.FC = () => {
               </Text>
             )}
           </View>
+          {guardianValidationError ? (
+            <View style={styles.validationBox}>
+              <Text style={styles.validationText}>{guardianValidationError}</Text>
+            </View>
+          ) : null}
 
-          {guardianEmails.map((email, index) => (
+          {visibleGuardianEmails.map((email, index) => (
             <View key={`guardian-${index}`} style={styles.guardianRowContainer}>
               <View style={styles.guardianRow}>
                 <View style={styles.guardianColumn}>
@@ -1019,7 +971,7 @@ const EmailRecoveryScreen: React.FC = () => {
                   <Text style={styles.inputLabel}>Weight</Text>
                   <TextInput
                     style={styles.numberInput}
-                    value={guardianWeights[index] ?? "1"}
+                    value={visibleGuardianWeights[index] ?? "1"}
                     onChangeText={(value) => handleWeightChange(index, value)}
                     keyboardType="number-pad"
                     placeholderTextColor={colors.textMuted}
@@ -1028,7 +980,7 @@ const EmailRecoveryScreen: React.FC = () => {
               </View>
 
               {/* Optional Delete Button */}
-              {guardianEmails.length > 1 && (
+              {visibleGuardianEmails.length > 1 && (
                 <TouchableOpacity
                   style={styles.deleteGuardianButton}
                   onPress={() => handleDeleteGuardian(index)}
@@ -1164,6 +1116,9 @@ const EmailRecoveryScreen: React.FC = () => {
               Add guardians and weights before installing.
             </Text>
           )}
+          {guardianValidationError ? (
+            <Text style={styles.moduleError}>{guardianValidationError}</Text>
+          ) : null}
           {lastUserOpHash && (
             <View style={styles.hashRow}>
               <Text style={styles.hashLabel}>UserOp Hash</Text>
@@ -1213,14 +1168,14 @@ const EmailRecoveryScreen: React.FC = () => {
             style={[
               styles.installButton,
               (!smartAccountReady ||
-                !guardiansReady ||
+                !canSubmitGuardianConfig ||
                 moduleInstalledState ||
                 installingModule) &&
                 styles.installButtonDisabled,
             ]}
             disabled={
               !smartAccountReady ||
-              !guardiansReady ||
+              !canSubmitGuardianConfig ||
               moduleInstalledState ||
               installingModule
             }
@@ -1242,10 +1197,10 @@ const EmailRecoveryScreen: React.FC = () => {
             style={[
               styles.installButton,
               styles.syncButton,
-              (!smartAccountReady || !guardiansReady || installingModule) &&
+              (!smartAccountReady || !canSubmitGuardianConfig || installingModule) &&
                 styles.installButtonDisabled,
             ]}
-            disabled={!smartAccountReady || !guardiansReady || installingModule}
+            disabled={!smartAccountReady || !canSubmitGuardianConfig || installingModule}
             onPress={handleSaveToCloud}
             activeOpacity={0.85}
           >
@@ -1305,6 +1260,20 @@ const createStyles = (colors: ThemeColors) =>
     },
     summaryWarning: {
       color: colors.warning,
+    },
+    validationBox: {
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.warning, 0.28),
+      backgroundColor: withAlpha(colors.warning, 0.12),
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    validationText: {
+      color: colors.warning,
+      fontSize: 12,
+      lineHeight: 18,
+      fontWeight: "600",
     },
     card: {
       backgroundColor: colors.surfaceCard,

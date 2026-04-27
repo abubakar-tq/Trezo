@@ -26,21 +26,6 @@ import { useUserStore } from "@store/useUserStore";
 import { isAddress, sha256, toBytes, type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
 
-const randomHex = (bytes: number): Hex => {
-  const arr = new Uint8Array(bytes);
-  if (typeof globalThis.crypto?.getRandomValues === "function") {
-    globalThis.crypto.getRandomValues(arr);
-  } else {
-    for (let i = 0; i < bytes; i++) {
-      arr[i] = Math.floor(Math.random() * 256);
-    }
-  }
-  const hex = Array.from(arr)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return (`0x${hex}`) as Hex;
-};
-
 const shortenHex = (value: string | null | undefined, chars = 6) => {
   if (!value) return "—";
   if (value.length <= chars * 2 + 2) return value;
@@ -64,8 +49,6 @@ const GuardianRecoveryScreen: React.FC = () => {
     totalGuardians,
     setGuardians,
     clearGuardians,
-    moduleInstalled: moduleInstalledPersisted,
-    setModuleInstalled: setPersistentModuleInstalled,
   } = useRecoveryStatusStore();
   const smartAccountAddress = useMemo(() => {
     const address = aaAccount?.predictedAddress ?? storedSmartAccountAddress ?? undefined;
@@ -95,7 +78,8 @@ const GuardianRecoveryScreen: React.FC = () => {
     storedGuardians.length > 0 ? "list" : "form"
   );
   const [syncStatus, setSyncStatus] = useState<{
-    hasAAWallet: boolean;
+    hasWalletMetadata: boolean;
+    walletMarkedDeployed: boolean;
     isSynced: boolean;
     localGuardians: number;
     dbGuardians: number;
@@ -115,7 +99,7 @@ const GuardianRecoveryScreen: React.FC = () => {
     signature: Hex;
     generatedAt: string;
   } | null>(null);
-  const moduleStatusLocked = moduleInstalledPersisted;
+  const [moduleStatusWarning, setModuleStatusWarning] = useState<string | null>(null);
   const savedGuardianAddresses = useMemo(
     () => storedGuardians.map((g) => g.address.trim()).filter(Boolean),
     [storedGuardians],
@@ -126,21 +110,17 @@ const GuardianRecoveryScreen: React.FC = () => {
   useEffect(() => {
     const checkSync = async () => {
       if (!user?.id) return;
-      const status = await GuardianSyncService.getSyncStatus(user.id);
+      const status = await GuardianSyncService.getDatabaseGuardianStatus(user.id);
       setSyncStatus(status);
     };
-    checkSync();
-  }, [user?.id]);
+    void checkSync();
+  }, [moduleStatusNonce, user?.id]);
 
   useEffect(() => {
-    if (moduleStatusLocked) {
-      setModuleInstalledState(true);
-      setCheckingModule(false);
-      return;
-    }
     if (!smartAccountReady || !smartAccountAddress) {
       setModuleInstalledState(null);
       setModuleError(null);
+      setModuleStatusWarning(null);
       setCheckingModule(false);
       return;
     }
@@ -167,7 +147,26 @@ const GuardianRecoveryScreen: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [smartAccountReady, smartAccountAddress, resolvedChainId, moduleStatusNonce, moduleStatusLocked]);
+  }, [smartAccountReady, smartAccountAddress, resolvedChainId, moduleStatusNonce]);
+
+  useEffect(() => {
+    if (!syncStatus) {
+      setModuleStatusWarning(null);
+      return;
+    }
+
+    if (syncStatus.dbGuardians > 0 && moduleInstalledState === false) {
+      setModuleStatusWarning("Saved in database, but not installed on current chain.");
+      return;
+    }
+
+    if (syncStatus.dbGuardians === 0 && moduleInstalledState) {
+      setModuleStatusWarning("Module is active on-chain, but no guardian metadata is saved in the database.");
+      return;
+    }
+
+    setModuleStatusWarning(null);
+  }, [moduleInstalledState, syncStatus]);
 
   const simulateGuardianAction = useCallback(
     async (actionType: string, payload: Record<string, unknown>) => {
@@ -270,7 +269,7 @@ const GuardianRecoveryScreen: React.FC = () => {
     if (syncResult.success || syncResult.error === 'AA_WALLET_NOT_DEPLOYED') {
       Alert.alert("Recovery Updated", "Guardian changes were authenticated and synced.");
       // Refresh sync status
-      const status = await GuardianSyncService.getSyncStatus(user.id);
+      const status = await GuardianSyncService.getDatabaseGuardianStatus(user.id);
       setSyncStatus(status);
     } else {
       Alert.alert(
@@ -293,7 +292,7 @@ const GuardianRecoveryScreen: React.FC = () => {
     if (result.success || result.error === 'AA_WALLET_NOT_DEPLOYED') {
       Alert.alert("Success", "Guardians synced to database!");
       // Refresh sync status
-      const status = await GuardianSyncService.getSyncStatus(user.id);
+      const status = await GuardianSyncService.getDatabaseGuardianStatus(user.id);
       setSyncStatus(status);
     } else {
       Alert.alert("Sync Failed", "Failed to sync guardians to database. Please try again later.");
@@ -351,14 +350,25 @@ const GuardianRecoveryScreen: React.FC = () => {
       const encodedSignature = PasskeyService.encodeSignatureForContract(signature) as Hex;
       const signedUserOp = { ...userOp, signature: encodedSignature };
 
-      const mockOpHash = randomHex(32);
-      setLastOperationHash(mockOpHash);
+      const operationHash = await SocialRecoveryService.submitInstallModuleUserOp({
+        signedUserOp,
+        chainId: resolvedChainId,
+      });
+      const receipt = await SocialRecoveryService.waitForInstallModuleReceipt(
+        operationHash,
+        resolvedChainId,
+      );
+      if (!receipt.success) {
+        throw new Error("Social recovery module installation reverted.");
+      }
+
+      setLastOperationHash(operationHash);
       setLastInstallPayload(signedUserOp);
       setModuleInstalledState(true);
-      setPersistentModuleInstalled(true);
+      setModuleStatusNonce((nonce) => nonce + 1);
       Alert.alert(
         "Social Recovery Activated",
-        "Guardian recovery module installation was submitted successfully.",
+        "Guardian recovery module installation confirmed on-chain.",
       );
     } catch (error) {
       const message =
@@ -376,7 +386,6 @@ const GuardianRecoveryScreen: React.FC = () => {
     smartAccountAddress,
     smartAccountReady,
     user?.id,
-    setPersistentModuleInstalled,
   ]);
 
   const handleRemoveGuardian = useCallback((id: string) => {
@@ -525,31 +534,33 @@ const GuardianRecoveryScreen: React.FC = () => {
             {syncStatus && (
               <View style={[
                 styles.syncStatusContainer,
-                !syncStatus.hasAAWallet ? styles.syncStatusWarning :
+                !syncStatus.hasWalletMetadata ? styles.syncStatusWarning :
                 !syncStatus.isSynced ? styles.syncStatusNeedSync :
                 styles.syncStatusSynced
               ]}>
                 <Feather 
                   name={
-                    !syncStatus.hasAAWallet ? "alert-circle" :
+                    !syncStatus.hasWalletMetadata ? "database" :
                     !syncStatus.isSynced ? "upload-cloud" :
                     "check-circle"
                   } 
                   size={16} 
                   color={
-                    !syncStatus.hasAAWallet ? colors.warning :
+                    !syncStatus.hasWalletMetadata ? colors.warning :
                     !syncStatus.isSynced ? colors.accentAlt :
                     colors.success
                   } 
                 />
                 <Text style={styles.syncStatusText}>
-                  {!syncStatus.hasAAWallet 
-                    ? "Minimum 1 guardian required"
+                  {!syncStatus.hasWalletMetadata 
+                    ? "No wallet metadata saved in the database yet."
+                    : syncStatus.dbGuardians === 0
+                    ? "Wallet metadata exists, but guardian configuration is not saved in the database."
                     : !syncStatus.isSynced
-                    ? "Not synced to database"
-                    : "Synced ✓"}
+                    ? `Database has ${syncStatus.dbGuardians} guardian(s); this device has ${syncStatus.localGuardians}.`
+                    : `Database synced with ${syncStatus.dbGuardians} guardian(s).`}
                 </Text>
-                {syncStatus.hasAAWallet && !syncStatus.isSynced && (
+                {syncStatus.hasWalletMetadata && !syncStatus.isSynced && (
                   <TouchableOpacity 
                     onPress={handleSyncNow}
                     disabled={isSyncing}
@@ -618,6 +629,27 @@ const GuardianRecoveryScreen: React.FC = () => {
             Install the on-chain guardian recovery module so your saved M-of-N guardian list can recover
             the wallet if you lose access.
           </Text>
+          {syncStatus && (
+            <View
+              style={[
+                styles.syncStatusContainer,
+                syncStatus.dbGuardians > 0 ? styles.syncStatusSynced : styles.syncStatusWarning,
+              ]}
+            >
+              <Feather
+                name="database"
+                size={16}
+                color={syncStatus.dbGuardians > 0 ? colors.success : colors.warning}
+              />
+              <Text style={styles.syncStatusText}>
+                {syncStatus.dbGuardians > 0
+                  ? `Database status: ${syncStatus.dbGuardians} guardian(s) saved${syncStatus.walletMarkedDeployed ? "" : ", but wallet metadata is not marked deployed on this chain."}`
+                  : syncStatus.hasWalletMetadata
+                    ? "Database status: wallet metadata exists, but no guardian configuration is saved."
+                    : "Database status: no wallet metadata saved yet."}
+              </Text>
+            </View>
+          )}
           <View
             style={[
               styles.moduleStatusBadge,
@@ -648,11 +680,12 @@ const GuardianRecoveryScreen: React.FC = () => {
                 : checkingModule
                 ? "Checking module status..."
                 : moduleInstalledState
-                ? "Module installed"
-                : "Module not installed"}
+                ? "On-chain status: module installed"
+                : "On-chain status: module not installed"}
             </Text>
           </View>
           {moduleError && <Text style={styles.moduleError}>{moduleError}</Text>}
+          {moduleStatusWarning && <Text style={styles.moduleError}>{moduleStatusWarning}</Text>}
           {!smartAccountReady && (
             <Text style={styles.moduleHint}>
               Deploy your smart account first. Module installation requires an on-chain contract.
