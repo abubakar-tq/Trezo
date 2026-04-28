@@ -17,6 +17,7 @@ import {
   type EmailRecoverySecurityMode,
   type LoadedEmailRecoveryMetadata,
 } from "@/src/features/wallet/services/EmailRecoveryService";
+import LocalSignerService from "@/src/features/wallet/services/LocalSignerService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import {
@@ -105,6 +106,8 @@ const EmailRecoveryScreen: React.FC = () => {
   const [storedMetadata, setStoredMetadata] =
     useState<LoadedEmailRecoveryMetadata | null>(null);
   const [metadataWarning, setMetadataWarning] = useState<string | null>(null);
+  const [checkingLocalSigner, setCheckingLocalSigner] = useState(true);
+  const [canSignForWallet, setCanSignForWallet] = useState(false);
 
   const expectedGuardians = useMemo(
     () => Math.max(parseInt(guardianCountValue, 10) || 0, 0),
@@ -212,6 +215,39 @@ const EmailRecoveryScreen: React.FC = () => {
     guardiansReady &&
     !guardianValidationError &&
     !installingModule;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSignerStatus = async () => {
+      if (!user?.id) {
+        if (!cancelled) {
+          setCanSignForWallet(false);
+          setCheckingLocalSigner(false);
+        }
+        return;
+      }
+
+      const signerStatus = await LocalSignerService.getWalletSignerStatus({
+        userId: user.id,
+        smartAccountAddress: smartAccountAddress ?? null,
+        chainId: resolvedChainId,
+        expectedPasskeyId: aaAccount?.ownerAddress ?? null,
+      });
+
+      if (!cancelled) {
+        setCanSignForWallet(signerStatus.canSignForWallet);
+        setCheckingLocalSigner(false);
+      }
+    };
+
+    setCheckingLocalSigner(true);
+    void loadSignerStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aaAccount?.ownerAddress, resolvedChainId, smartAccountAddress, user?.id]);
 
   useEffect(() => {
     if (!smartAccountReady || !smartAccountAddress) {
@@ -737,6 +773,58 @@ const EmailRecoveryScreen: React.FC = () => {
       Alert.alert("Import Failed", message);
     }
   }, [smartAccountAddress, vaultKeyInput]);
+
+  if (checkingLocalSigner || !canSignForWallet) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={24} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Email Recovery</Text>
+          <View style={{ width: 24 }} />
+        </View>
+
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.card}>
+            {checkingLocalSigner ? (
+              <>
+                <Text style={styles.cardTitle}>Checking local signer access...</Text>
+                <ActivityIndicator size="small" color={colors.accentAlt} />
+                <Text style={styles.cardDesc}>
+                  Trezo is verifying whether this device has a wallet passkey that is active for
+                  this account.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardTitle}>This device cannot manage email recovery yet</Text>
+                <Text style={styles.cardDesc}>
+                  Email recovery setup is wallet-authorized. This device may know the wallet and its
+                  saved metadata, but it cannot change or install recovery until a passkey on this
+                  device is active for the wallet.
+                </Text>
+                <TouchableOpacity
+                  style={styles.installButton}
+                  onPress={() => navigation.navigate("RecoveryEntry")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.installButtonText}>Open recovery options</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => navigation.navigate("BackupRecovery")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.secondaryButtonText}>Back to backup & recovery</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

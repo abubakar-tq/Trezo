@@ -154,6 +154,14 @@ export const DeviceVerificationScreen = () => {
       textAlign: "center",
       lineHeight: 24,
     },
+    note: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      textAlign: "center",
+      lineHeight: 20,
+      marginTop: 12,
+      maxWidth: 340,
+    },
     optionsContainer: {
       width: "100%",
       gap: 16,
@@ -284,6 +292,10 @@ export const DeviceVerificationScreen = () => {
         <Text style={styles.title}>Welcome Back!</Text>
         <Text style={styles.subtitle}>
           Choose how you&apos;d like to continue with your secure wallet
+        </Text>
+        <Text style={styles.note}>
+          This step unlocks the app on this device. It does not install a wallet passkey for
+          signing transactions or changing guardian configuration.
         </Text>
       </View>
 

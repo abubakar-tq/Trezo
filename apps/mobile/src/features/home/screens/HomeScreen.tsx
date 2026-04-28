@@ -8,6 +8,7 @@ import {
     DEV_FUNDING_AMOUNT_ETH,
     devFundSmartAccount,
 } from "@/src/features/wallet/services/devFunding";
+import LocalSignerService from "@/src/features/wallet/services/LocalSignerService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import WalletSyncService from "@/src/features/wallet/services/WalletSyncService";
 import type { AAAccount } from "@/src/features/wallet/store/useWalletStore";
@@ -24,6 +25,7 @@ import type {
 import { Feather } from "@expo/vector-icons";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
+    useFocusEffect,
     useNavigation,
     type CompositeNavigationProp,
 } from "@react-navigation/native";
@@ -139,6 +141,7 @@ const HomeScreen: React.FC = () => {
   const userId = user?.id ?? null;
   const resolvedDeployChainId = (aaAccount?.chainId ??
     DEFAULT_CHAIN_ID) as SupportedChainId;
+  const [canSignForWallet, setCanSignForWallet] = useState<boolean | null>(null);
 
   // Portfolio data
   const [portfolioBalance, setPortfolioBalance] = useState(0);
@@ -210,6 +213,37 @@ const HomeScreen: React.FC = () => {
   );
   const [activeAction, setActiveAction] = useState<QuickAction | null>(null);
   const refreshRotation = useRef(new Animated.Value(0)).current;
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const loadLocalPasskeyState = async () => {
+        if (!userId) {
+          if (active) {
+            setCanSignForWallet(false);
+          }
+          return;
+        }
+
+        const signerStatus = await LocalSignerService.getWalletSignerStatus({
+          userId,
+          smartAccountAddress: (smartAccountAddress as Address | null) ?? null,
+          chainId: resolvedDeployChainId,
+          expectedPasskeyId: aaAccount?.ownerAddress ?? null,
+        });
+        if (active) {
+          setCanSignForWallet(signerStatus.canSignForWallet);
+        }
+      };
+
+      void loadLocalPasskeyState();
+
+      return () => {
+        active = false;
+      };
+    }, [aaAccount?.ownerAddress, resolvedDeployChainId, smartAccountAddress, userId]),
+  );
 
   // Copy address to clipboard
   const handleCopyAddress = useCallback(() => {
@@ -856,6 +890,34 @@ const HomeScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        {smartAccountAddress && canSignForWallet === false && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate("BackupRecovery")}
+            style={{
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: withAlpha(colors.warning, 0.28),
+              backgroundColor: withAlpha(colors.warning, 0.1),
+              paddingHorizontal: 16,
+              paddingVertical: 14,
+              marginBottom: 18,
+              gap: 8,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Feather name="shield-off" size={18} color={colors.warning} />
+              <Text style={{ color: colors.warning, fontSize: 14, fontWeight: "700" }}>
+                This device can view the wallet, but it cannot sign yet
+              </Text>
+            </View>
+            <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>
+              Add a local passkey from another trusted device, or use recovery before sending
+        transactions or changing recovery settings.
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <LinearGradient colors={gradients.hero} style={styles.balanceCard}>
           <View style={styles.balanceRow}>
             <View>
@@ -1162,6 +1224,27 @@ const HomeScreen: React.FC = () => {
                 </Text>
               )}
             </View>
+
+            {smartAccountAddress && canSignForWallet === false && (
+              <View
+                style={{
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: withAlpha(colors.warning, 0.28),
+                  backgroundColor: withAlpha(colors.warning, 0.1),
+                  padding: 14,
+                  gap: 6,
+                }}
+              >
+                <Text style={{ color: colors.warning, fontSize: 13, fontWeight: "700" }}>
+                  This device does not have a usable wallet signer
+                </Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>
+                  You can inspect the account address and balances here, but transaction signing and
+                  recovery management require a local passkey that is active for this wallet.
+                </Text>
+              </View>
+            )}
 
             <View style={styles.accountSheetButtons}>
               <TouchableOpacity

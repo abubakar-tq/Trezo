@@ -13,6 +13,7 @@ import {
 } from "react-native";
 
 import { SocialRecoveryService } from "@/src/features/wallet/services/SocialRecoveryService";
+import LocalSignerService from "@/src/features/wallet/services/LocalSignerService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
@@ -23,7 +24,7 @@ import { useRecoveryStatusStore } from "@store/useRecoveryStatusStore";
 import type { Guardian } from "@store/useRecoveryStatusStore";
 import { GuardianSyncService } from "../services/GuardianSyncService";
 import { useUserStore } from "@store/useUserStore";
-import { isAddress, sha256, toBytes, type Address, type Hex } from "viem";
+import { isAddress, type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
 
 const shortenHex = (value: string | null | undefined, chars = 6) => {
@@ -92,19 +93,46 @@ const GuardianRecoveryScreen: React.FC = () => {
   const [lastUserOpHash, setLastUserOpHash] = useState<Hex | null>(null);
   const [lastOperationHash, setLastOperationHash] = useState<Hex | null>(null);
   const [lastInstallPayload, setLastInstallPayload] = useState<UserOperation<"0.7"> | null>(null);
-  const [lastGuardianAction, setLastGuardianAction] = useState<{
-    actionType: string;
-    payload: Record<string, unknown>;
-    userOpHash: Hex;
-    signature: Hex;
-    generatedAt: string;
-  } | null>(null);
   const [moduleStatusWarning, setModuleStatusWarning] = useState<string | null>(null);
+  const [checkingLocalSigner, setCheckingLocalSigner] = useState(true);
+  const [canSignForWallet, setCanSignForWallet] = useState(false);
   const savedGuardianAddresses = useMemo(
     () => storedGuardians.map((g) => g.address.trim()).filter(Boolean),
     [storedGuardians],
   );
   const guardiansReady = savedGuardianAddresses.length > 0 && requiredSignatures <= savedGuardianAddresses.length;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLocalSigner = async () => {
+      if (!user?.id) {
+        if (!cancelled) {
+          setCanSignForWallet(false);
+          setCheckingLocalSigner(false);
+        }
+        return;
+      }
+
+      const signerStatus = await LocalSignerService.getWalletSignerStatus({
+        userId: user.id,
+        smartAccountAddress: smartAccountAddress ?? null,
+        chainId: resolvedChainId,
+        expectedPasskeyId: aaAccount?.ownerAddress ?? null,
+      });
+      if (!cancelled) {
+        setCanSignForWallet(signerStatus.canSignForWallet);
+        setCheckingLocalSigner(false);
+      }
+    };
+
+    setCheckingLocalSigner(true);
+    void loadLocalSigner();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aaAccount?.ownerAddress, resolvedChainId, smartAccountAddress, user?.id]);
 
   // Check sync status on mount
   useEffect(() => {
@@ -168,31 +196,6 @@ const GuardianRecoveryScreen: React.FC = () => {
     setModuleStatusWarning(null);
   }, [moduleInstalledState, syncStatus]);
 
-  const simulateGuardianAction = useCallback(
-    async (actionType: string, payload: Record<string, unknown>) => {
-      if (!user?.id) {
-        throw new Error("User not authenticated");
-      }
-      const passkey = await PasskeyService.getPasskey(user.id);
-      if (!passkey) {
-        throw new Error("No passkey found on this device. Create a passkey first.");
-      }
-      const message = JSON.stringify({ actionType, payload, timestamp: Date.now() });
-      const fakeHash = sha256(toBytes(message)) as Hex;
-      const signature = await PasskeyService.signWithPasskey(user.id, fakeHash);
-      const encodedSignature = PasskeyService.encodeSignatureForContract(signature) as Hex;
-      setLastGuardianAction({
-        actionType,
-        payload,
-        userOpHash: fakeHash,
-        signature: encodedSignature,
-        generatedAt: new Date().toISOString(),
-      });
-      return { fakeHash, encodedSignature };
-    },
-    [user?.id],
-  );
-
   const handleMNChange = useCallback(
     (field: "m" | "n", value: string) => {
       const numValue = parseInt(value) || 0;
@@ -233,30 +236,35 @@ const GuardianRecoveryScreen: React.FC = () => {
       Alert.alert("Incomplete", `Please enter all ${n} guardian addresses`);
       return;
     }
+    const normalizedAddresses = filledAddresses.map((addr) => addr.trim().toLowerCase());
+    const invalidGuardian = normalizedAddresses.find((address) => !isAddress(address));
+    if (invalidGuardian) {
+      Alert.alert("Invalid Address", `${invalidGuardian} is not a valid Ethereum address.`);
+      return;
+    }
+    if (new Set(normalizedAddresses).size !== normalizedAddresses.length) {
+      Alert.alert("Duplicate Guardians", "Each guardian address must be unique.");
+      return;
+    }
 
     if (!user?.id) {
       Alert.alert("Error", "User not authenticated");
       return;
     }
-
-    setIsSubmitting(true);
-
-    try {
-      await simulateGuardianAction("configure_guardians", {
-        guardians: filledAddresses,
-        threshold: m,
-        totalGuardians: n,
-      });
-    } catch (error) {
-      setIsSubmitting(false);
-      Alert.alert("Passkey Required", error instanceof Error ? error.message : "Failed to authenticate with passkey.");
+    if (moduleInstalledState && storedGuardians.length > 0) {
+      Alert.alert(
+        "On-Chain Guardians Active",
+        "This screen manages pre-install guardian metadata. Once the module is installed, changing guardians here would drift from the on-chain guardian set. Use the active guardian configuration for recovery, or add an explicit wallet-authorized update flow before changing it.",
+      );
       return;
     }
+
+    setIsSubmitting(true);
 
     // Save guardians locally
     const newGuardians: Guardian[] = guardianAddresses.map((addr, idx) => ({
       id: `guardian-${Date.now()}-${idx}`,
-      address: addr,
+      address: addr.trim().toLowerCase(),
     }));
 
     setGuardians(newGuardians, m, n);
@@ -274,13 +282,13 @@ const GuardianRecoveryScreen: React.FC = () => {
     } else {
       Alert.alert(
         "Partially Saved",
-        "Guardians saved locally but failed to sync to database. You can sync manually later.",
+        `Guardians saved locally but failed to sync to database. ${syncResult.error ?? "Please try syncing again."}`,
         [{ text: "OK" }]
       );
     }
 
     setViewMode("list");
-  }, [mValue, nValue, guardianAddresses, setGuardians, user?.id, simulateGuardianAction]);
+  }, [guardianAddresses, mValue, moduleInstalledState, nValue, setGuardians, storedGuardians.length, user?.id]);
 
   const handleSyncNow = useCallback(async () => {
     if (!user?.id) return;
@@ -295,7 +303,7 @@ const GuardianRecoveryScreen: React.FC = () => {
       const status = await GuardianSyncService.getDatabaseGuardianStatus(user.id);
       setSyncStatus(status);
     } else {
-      Alert.alert("Sync Failed", "Failed to sync guardians to database. Please try again later.");
+      Alert.alert("Sync Failed", result.error ?? "Failed to sync guardians to database. Please try again later.");
     }
   }, [user?.id]);
 
@@ -391,6 +399,13 @@ const GuardianRecoveryScreen: React.FC = () => {
   const handleRemoveGuardian = useCallback((id: string) => {
     const targetGuardian = storedGuardians.find((g) => g.id === id);
     if (!targetGuardian) return;
+    if (moduleInstalledState) {
+      Alert.alert(
+        "On-Chain Guardians Active",
+        "Guardian removal is locked here once the recovery module is installed. Changing the live guardian set needs a wallet-authorized on-chain update, not a local metadata edit.",
+      );
+      return;
+    }
     if (storedGuardians.length <= 1) {
       Alert.alert("Minimum Required", "You need at least one guardian configured at all times.");
       return;
@@ -401,18 +416,6 @@ const GuardianRecoveryScreen: React.FC = () => {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
-          try {
-            await simulateGuardianAction("remove_guardian", {
-              guardianId: targetGuardian.id,
-              guardianAddress: targetGuardian.address,
-            });
-          } catch (error) {
-            Alert.alert(
-              "Passkey Required",
-              error instanceof Error ? error.message : "Failed to authenticate with passkey.",
-            );
-            return;
-          }
           const updated = storedGuardians.filter((g) => g.id !== id);
           if (updated.length === 0) {
             clearGuardians();
@@ -426,13 +429,77 @@ const GuardianRecoveryScreen: React.FC = () => {
         },
       },
     ]);
-  }, [storedGuardians, mValue, setGuardians, clearGuardians, simulateGuardianAction]);
+  }, [clearGuardians, mValue, moduleInstalledState, setGuardians, storedGuardians]);
 
   const handleEditGuardians = useCallback(() => {
+    if (moduleInstalledState) {
+      Alert.alert(
+        "On-Chain Guardians Active",
+        "Editing is locked after module installation so this screen cannot silently diverge from the guardian set enforced on-chain.",
+      );
+      return;
+    }
     setNValue(storedGuardians.length.toString());
     setGuardianAddresses(storedGuardians.map((g) => g.address));
     setViewMode("form");
-  }, [storedGuardians]);
+  }, [moduleInstalledState, storedGuardians]);
+
+  if (checkingLocalSigner || !canSignForWallet) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Guardian Recovery</Text>
+          <View style={{ width: 24 }} />
+        </View>
+
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.blockedCard}>
+            {checkingLocalSigner ? (
+              <>
+                <ActivityIndicator size="small" color={colors.accentAlt} />
+                <Text style={styles.blockedTitle}>Checking local signer access...</Text>
+                <Text style={styles.blockedText}>
+                  Trezo is verifying whether this device has a wallet passkey for guardian setup.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.blockedTitle}>This device cannot manage guardians yet</Text>
+                <Text style={styles.blockedText}>
+                  Guardian setup is a wallet-authorized action. This device can read saved guardian
+                  metadata from your account, but without an active wallet passkey it cannot
+                  install or edit the live guardian set.
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.blockedPrimaryButton}
+                  onPress={() => navigation.navigate("RecoveryEntry" as never)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.blockedPrimaryButtonText}>Open recovery options</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.blockedSecondaryButton}
+                  onPress={() => navigation.navigate("BackupRecovery" as never)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.blockedSecondaryButtonText}>Back to backup & recovery</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -629,6 +696,11 @@ const GuardianRecoveryScreen: React.FC = () => {
             Install the on-chain guardian recovery module so your saved M-of-N guardian list can recover
             the wallet if you lose access.
           </Text>
+          {moduleInstalledState && (
+            <Text style={styles.moduleHint}>
+              Guardian edits are locked here after installation so the app cannot drift away from the on-chain policy enforced by the module.
+            </Text>
+          )}
           {syncStatus && (
             <View
               style={[
@@ -750,26 +822,6 @@ const GuardianRecoveryScreen: React.FC = () => {
             )}
           </TouchableOpacity>
         </View>
-        {lastGuardianAction && (
-          <View style={styles.payloadCard}>
-            <View style={styles.payloadHeader}>
-              <Text style={styles.payloadTitle}>Latest Guardian Action</Text>
-              <View style={styles.actionChip}>
-                <Text style={styles.actionChipText}>{lastGuardianAction.actionType}</Text>
-              </View>
-            </View>
-            <Text style={styles.payloadSubLabel}>Generated</Text>
-            <Text style={styles.payloadValue}>{new Date(lastGuardianAction.generatedAt).toLocaleString()}</Text>
-            <Text style={styles.payloadSubLabel}>UserOp Hash</Text>
-            <Text style={styles.payloadCode}>{shortenHex(lastGuardianAction.userOpHash, 18)}</Text>
-            <Text style={styles.payloadSubLabel}>Signature</Text>
-            <Text style={styles.payloadCode}>{shortenHex(lastGuardianAction.signature, 18)}</Text>
-            <Text style={styles.payloadSubLabel}>Payload</Text>
-            <Text style={styles.payloadCode}>
-              {JSON.stringify(lastGuardianAction.payload, null, 2)}
-            </Text>
-          </View>
-        )}
       </ScrollView>
       {isSubmitting && (
         <View style={styles.loadingOverlay}>
@@ -801,6 +853,51 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.textPrimary,
       fontSize: 20,
       fontWeight: "700",
+    },
+    blockedCard: {
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.warning, 0.28),
+      backgroundColor: withAlpha(colors.warning, 0.1),
+      padding: 20,
+      gap: 12,
+      marginTop: 16,
+    },
+    blockedTitle: {
+      color: colors.textPrimary,
+      fontSize: 20,
+      fontWeight: "700",
+      lineHeight: 28,
+    },
+    blockedText: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      lineHeight: 22,
+    },
+    blockedPrimaryButton: {
+      backgroundColor: colors.accentAlt,
+      borderRadius: 16,
+      paddingVertical: 14,
+      alignItems: "center",
+      marginTop: 4,
+    },
+    blockedPrimaryButtonText: {
+      color: "#ffffff",
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    blockedSecondaryButton: {
+      borderRadius: 16,
+      paddingVertical: 14,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.borderMuted,
+      backgroundColor: colors.surfaceCard,
+    },
+    blockedSecondaryButtonText: {
+      color: colors.textPrimary,
+      fontSize: 15,
+      fontWeight: "600",
     },
     scrollView: {
       flex: 1,
@@ -1071,33 +1168,6 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 12,
       fontFamily: "monospace",
       marginTop: 2,
-    },
-    payloadCard: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: 18,
-      marginTop: 20,
-      gap: 6,
-    },
-    payloadHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 4,
-    },
-    actionChip: {
-      paddingHorizontal: 12,
-      paddingVertical: 4,
-      borderRadius: 999,
-      backgroundColor: withAlpha(colors.accentAlt, 0.15),
-    },
-    actionChipText: {
-      color: colors.accentAlt,
-      fontSize: 12,
-      fontWeight: "600",
-      textTransform: "uppercase",
     },
     moduleCard: {
       backgroundColor: colors.surfaceCard,

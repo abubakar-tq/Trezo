@@ -1,16 +1,34 @@
 import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { RootStackParamList } from "@/src/types/navigation";
+import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
 
 const CompromisedWalletScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const user = useUserStore((state) => state.user);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+
+  const handleGuardianStart = useCallback(async () => {
+    if (!user?.id) {
+      navigation.navigate("RecoveryEntry");
+      return;
+    }
+
+    const localPasskey = await PasskeyService.getPasskey(user.id);
+    if (localPasskey?.credentialIdRaw) {
+      navigation.navigate("GuardianRecovery");
+      return;
+    }
+
+    navigation.navigate("RecoveryEntry");
+  }, [navigation, user?.id]);
 
   return (
     <View style={styles.container}>
@@ -23,17 +41,25 @@ const CompromisedWalletScreen: React.FC = () => {
       </View>
 
       <View style={styles.body}>
-        <Text style={styles.title}>Normal passkey removal is not enough for compromise</Text>
+        <Text style={styles.title}>Use recovery to replace access without changing your wallet address</Text>
         <Text style={styles.text}>
-          If one of your devices or passkeys is compromised, use guardian/email recovery to reset access.
+          If a device or passkey may be compromised, start a recovery flow that installs a new passkey after guardian approvals and the configured timelock.
         </Text>
 
         <TouchableOpacity
           style={styles.primaryButton}
+          onPress={() => void handleGuardianStart()}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.primaryButtonLabel}>Start guardian recovery</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.secondaryButton}
           onPress={() => navigation.navigate("GuardianRecovery")}
           activeOpacity={0.9}
         >
-          <Text style={styles.primaryButtonLabel}>Set up guardians</Text>
+          <Text style={styles.secondaryButtonLabel}>Review guardian setup</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -41,19 +67,15 @@ const CompromisedWalletScreen: React.FC = () => {
           onPress={() => navigation.navigate("EmailRecovery")}
           activeOpacity={0.9}
         >
-          <Text style={styles.secondaryButtonLabel}>Set up email recovery</Text>
+          <Text style={styles.secondaryButtonLabel}>Review email recovery</Text>
         </TouchableOpacity>
 
-        <View style={styles.placeholderAction}>
-          <Text style={styles.placeholderLabel}>Emergency reset coming in Level 2 + Level 3</Text>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>What Level 2 does</Text>
+          <Text style={styles.infoText}>
+            Guardians approve one portable recovery intent, any caller can submit it on-chain, and execution stays delayed by the wallet's timelock before the new passkey becomes active.
+          </Text>
         </View>
-
-        <Text style={styles.todo}>
-          TODO Level 2 guardian flow: submit permissionless guardian approvals and timelocked execution.
-        </Text>
-        <Text style={styles.todo}>
-          TODO Level 3 zk-email flow: integrate zk-email guardian proof execution path.
-        </Text>
       </View>
     </View>
   );
@@ -121,20 +143,21 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "600",
       fontSize: 14,
     },
-    placeholderAction: {
+    infoCard: {
+      marginTop: 8,
+      borderRadius: 14,
       borderWidth: 1,
       borderColor: colors.borderMuted,
-      borderRadius: 12,
-      paddingVertical: 14,
-      alignItems: "center",
-      opacity: 0.7,
+      backgroundColor: colors.surfaceCard,
+      padding: 14,
+      gap: 8,
     },
-    placeholderLabel: {
-      color: colors.textMuted,
-      fontSize: 13,
-      fontWeight: "600",
+    infoTitle: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: "700",
     },
-    todo: {
+    infoText: {
       color: colors.textMuted,
       fontSize: 12,
       lineHeight: 18,

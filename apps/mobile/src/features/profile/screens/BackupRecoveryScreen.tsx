@@ -1,18 +1,51 @@
 import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import { getRecoveryRequestService } from "@/src/features/wallet/services/RecoveryRequestService";
 import { RootStackParamList } from "@/src/types/navigation";
+import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
 
 const BackupRecoveryScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const user = useUserStore((state) => state.user);
+  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const handleGuardianRecoveryPress = useCallback(async () => {
+    try {
+      if (!user?.id) {
+        navigation.navigate("RecoveryEntry");
+        return;
+      }
+
+      const activeRequest = await getRecoveryRequestService().getLatestActiveRecoveryRequestForUser(
+        user.id,
+        smartAccountAddress,
+      );
+      if (activeRequest) {
+        navigation.navigate("RecoveryProgress", { requestId: activeRequest.id });
+        return;
+      }
+
+      const localPasskey = await PasskeyService.getPasskey(user.id);
+      if (localPasskey?.credentialIdRaw) {
+        navigation.navigate("GuardianRecovery");
+        return;
+      }
+
+      navigation.navigate("RecoveryEntry");
+    } catch {
+      navigation.navigate("RecoveryEntry");
+    }
+  }, [navigation, smartAccountAddress, user?.id]);
 
   return (
     <View style={styles.container}>
@@ -61,7 +94,7 @@ const BackupRecoveryScreen: React.FC = () => {
           <View style={styles.card}>
             <TouchableOpacity
               style={styles.optionRow}
-              onPress={() => navigation.navigate("GuardianRecovery")}
+              onPress={() => void handleGuardianRecoveryPress()}
               activeOpacity={0.85}
             >
               <View style={styles.optionInfo}>
@@ -75,7 +108,7 @@ const BackupRecoveryScreen: React.FC = () => {
                 </View>
                 <View style={styles.optionText}>
                   <Text style={styles.optionLabel}>Guardian Recovery</Text>
-                  <Text style={styles.optionDesc}>Configure trusted guardians</Text>
+                  <Text style={styles.optionDesc}>Start the on-chain guardian recovery flow</Text>
                 </View>
               </View>
               <Feather name="chevron-right" size={20} color={colors.textMuted} />

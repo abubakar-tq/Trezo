@@ -17,6 +17,7 @@ import DevicePairingService, {
   type DevicePairingRequest,
   type WalletDevice,
 } from "@/src/features/wallet/services/DevicePairingService";
+import LocalSignerService from "@/src/features/wallet/services/LocalSignerService";
 import { PasskeyAccountService } from "@/src/features/wallet/services/PasskeyAccountService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { SupabaseWalletService } from "@/src/features/wallet/services/SupabaseWalletService";
@@ -59,10 +60,46 @@ const DevicesPasskeysScreen: React.FC = () => {
   const [activeLink, setActiveLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checkingLocalSigner, setCheckingLocalSigner] = useState(true);
+  const [canSignForWallet, setCanSignForWallet] = useState(false);
 
   useEffect(() => {
     setWalletAddress(walletFromStore);
   }, [walletFromStore]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const loadSignerStatus = async () => {
+        if (!user?.id) {
+          if (active) {
+            setCanSignForWallet(false);
+            setCheckingLocalSigner(false);
+          }
+          return;
+        }
+
+        const signerStatus = await LocalSignerService.getWalletSignerStatus({
+          userId: user.id,
+          smartAccountAddress: (walletAddress ?? walletFromStore ?? null) as `0x${string}` | null,
+          chainId: DEFAULT_CHAIN_ID,
+        });
+
+        if (active) {
+          setCanSignForWallet(signerStatus.canSignForWallet);
+          setCheckingLocalSigner(false);
+        }
+      };
+
+      setCheckingLocalSigner(true);
+      void loadSignerStatus();
+
+      return () => {
+        active = false;
+      };
+    }, [user?.id, walletAddress, walletFromStore]),
+  );
 
   const loadData = useCallback(async () => {
     if (!user?.id) return;
@@ -356,6 +393,42 @@ const DevicesPasskeysScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        {(checkingLocalSigner || !canSignForWallet) ? (
+          <View style={styles.card}>
+            {checkingLocalSigner ? (
+              <>
+                <Text style={styles.cardTitle}>Checking local signer access...</Text>
+                <ActivityIndicator size="small" color={theme.colors.accentAlt} />
+                <Text style={styles.muted}>
+                  Trezo is verifying whether this device has an active wallet passkey.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardTitle}>This device cannot manage passkeys yet</Text>
+                <Text style={styles.muted}>
+                  Devices and passkey changes are wallet-authorized actions. Use a trusted device to
+                  approve pairing, or open recovery if this device still needs access.
+                </Text>
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={() => navigation.navigate("RecoveryEntry")}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.primaryButtonLabel}>Open recovery options</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => navigation.navigate("PairDevice")}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.actionLabel}>Resume device pairing</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        ) : (
+          <>
         <TouchableOpacity
           style={[styles.primaryButton, busy && styles.disabledButton]}
           onPress={handleCreatePairing}
@@ -467,6 +540,8 @@ const DevicesPasskeysScreen: React.FC = () => {
         <Text style={styles.footnote}>
           TODO Level 2/3: Compromised-wallet reset stays guardian/email-based and should not be passkey-only.
         </Text>
+          </>
+        )}
       </ScrollView>
     </View>
   );
