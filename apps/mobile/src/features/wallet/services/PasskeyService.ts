@@ -587,6 +587,12 @@ export class PasskeyService {
       rpId,
       timeout: 60000,
       userVerification: 'required' as const,
+      allowCredentials: [
+        {
+          id: passkey.credentialId,
+          type: 'public-key' as const,
+        },
+      ],
     };
 
     let authResult;
@@ -661,6 +667,12 @@ export class PasskeyService {
     
     if (!authResult) {
       throw new Error('Authentication returned null result');
+    }
+
+    if (authResult.id && authResult.id !== passkey.credentialId) {
+      throw new Error(
+        'The platform returned a different passkey than the one stored for this wallet on this device.',
+      );
     }
     
     // 5. Extract signature components from WebAuthn response

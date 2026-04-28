@@ -262,14 +262,76 @@ export class DevicePairingService {
     }
 
     const currentDeviceLabel = PasskeyService.getCurrentDeviceLabel();
-
+    const normalizedWalletAddress = normalizeWalletAddress(params.walletAddress);
+    const normalizedPasskeyId = normalizeHex(localPasskey.credentialIdRaw);
     const supabase = getSupabaseClient();
+
+    try {
+      const chainId = params.chainId as SupportedChainId;
+      const walletAddress = normalizedWalletAddress as Address;
+      const walletDeployed = await isContractDeployed(chainId, walletAddress);
+
+      if (walletDeployed) {
+        const onchainState = await getPasskeyOnchainState({
+          chainId,
+          smartAccountAddress: walletAddress,
+          passkeyId: normalizedPasskeyId as `0x${string}`,
+        });
+
+        if (!onchainState.exists) {
+          await supabase
+            .from("wallet_devices")
+            .delete()
+            .eq("user_id", params.userId)
+            .eq("wallet_address", normalizedWalletAddress)
+            .eq("chain_id", params.chainId)
+            .eq("passkey_id", normalizedPasskeyId);
+          return;
+        }
+
+        const pendingRemoval =
+          onchainState.executeAfter > 0n && !onchainState.cancelled;
+        const status: DeviceStatus = pendingRemoval ? "pending_removal" : "active";
+        const removalExecuteAfter = pendingRemoval
+          ? toIsoFromUnixSeconds(onchainState.executeAfter)
+          : null;
+
+        const { error } = await supabase.from("wallet_devices").upsert(
+          {
+            user_id: params.userId,
+            wallet_address: normalizedWalletAddress,
+            chain_id: params.chainId,
+            passkey_id: normalizedPasskeyId,
+            credential_id: localPasskey.credentialId,
+            device_name: currentDeviceLabel,
+            platform: localPasskey.deviceType,
+            status,
+            added_at: localPasskey.createdAt ?? nowIso(),
+            last_used_at: nowIso(),
+            removed_at: null,
+            removal_execute_after: removalExecuteAfter,
+          },
+          {
+            onConflict: "wallet_address,chain_id,passkey_id",
+          },
+        );
+
+        if (error) {
+          throw new Error(`Failed to sync current device: ${error.message}`);
+        }
+
+        return;
+      }
+    } catch (error) {
+      console.warn("[DevicePairing] Failed to verify local passkey on-chain before syncing device", error);
+    }
+
     const { error } = await supabase.from("wallet_devices").upsert(
       {
         user_id: params.userId,
-        wallet_address: normalizeWalletAddress(params.walletAddress),
+        wallet_address: normalizedWalletAddress,
         chain_id: params.chainId,
-        passkey_id: normalizeHex(localPasskey.credentialIdRaw),
+        passkey_id: normalizedPasskeyId,
         credential_id: localPasskey.credentialId,
         device_name: currentDeviceLabel,
         platform: localPasskey.deviceType,
