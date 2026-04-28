@@ -10,14 +10,16 @@ interface SparklineProps {
   height?: number;
   color?: string;
   strokeWidth?: number;
+  fillOpacity?: number;
 }
 
-export const Sparkline: React.FC<SparklineProps> = ({
+export const Sparkline = React.memo<SparklineProps>(({
   data,
   width = 100,
   height = 40,
   color,
   strokeWidth = 2,
+  fillOpacity = 0.3,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
@@ -52,7 +54,7 @@ export const Sparkline: React.FC<SparklineProps> = ({
       <Svg width={width} height={height}>
         <Defs>
           <LinearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor={lineColor} stopOpacity="0.3" />
+            <Stop offset="0%" stopColor={lineColor} stopOpacity={fillOpacity.toString()} />
             <Stop offset="100%" stopColor={lineColor} stopOpacity="0" />
           </LinearGradient>
         </Defs>
@@ -71,4 +73,4 @@ export const Sparkline: React.FC<SparklineProps> = ({
       </Svg>
     </View>
   );
-};
+});

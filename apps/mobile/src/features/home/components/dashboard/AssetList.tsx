@@ -40,7 +40,7 @@ const formatCompactPrice = (value: number) => {
   }).format(value);
 };
 
-export const AssetList: React.FC<AssetListProps> = ({
+export const AssetList = React.memo<AssetListProps>(({
   assets,
   formatPrice,
   onAssetPress,
@@ -49,9 +49,40 @@ export const AssetList: React.FC<AssetListProps> = ({
   const { colors } = theme;
 
   if (assets.length === 0) {
+    // Show professional placeholders if empty to avoid blank screen
+    const placeholders = [
+      { symbol: 'ETH', name: 'Ethereum', amount: 0, price: 0, value: 0 },
+      { symbol: 'USDC', name: 'USD Coin', amount: 0, price: 0, value: 0 },
+      { symbol: 'USDT', name: 'Tether', amount: 0, price: 0, value: 0 },
+      { symbol: 'WBTC', name: 'Wrapped Bitcoin', amount: 0, price: 0, value: 0 },
+    ];
+    
     return (
-      <View style={styles.emptyState}>
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No active positions detected.</Text>
+      <View style={styles.container}>
+        <View style={styles.list}>
+          {placeholders.map((token, index) => (
+            <View 
+              key={`placeholder-${index}`} 
+              style={[
+                styles.item, 
+                { opacity: 0.3 },
+                index !== placeholders.length - 1 && { borderBottomWidth: 1, borderBottomColor: withAlpha(colors.accent, 0.08) }
+              ]}
+            >
+              <View style={styles.itemLeft}>
+                <TokenIcon symbol={token.symbol} size={44} style={{ borderRadius: 14 }} />
+                <View style={styles.nameWrapper}>
+                  <Text style={[styles.symbol, { color: colors.textSecondary }]}>{token.symbol}</Text>
+                  <Text style={[styles.name, { color: colors.textMuted }]}>{token.name}</Text>
+                </View>
+              </View>
+              <View style={styles.itemRight}>
+                <Text style={[styles.value, { color: colors.textMuted }]}>$0.00</Text>
+                <Text style={[styles.amount, { color: colors.textMuted }]}>0.00 {token.symbol}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
       </View>
     );
   }
@@ -118,7 +149,7 @@ export const AssetList: React.FC<AssetListProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -195,6 +226,11 @@ const styles = StyleSheet.create({
   amountSymbol: {
     fontSize: 10,
     fontWeight: '600',
+  },
+  placeholderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
   },
   emptyState: {
     paddingVertical: 32,

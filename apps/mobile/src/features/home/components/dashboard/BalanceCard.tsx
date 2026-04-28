@@ -31,7 +31,12 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
 
         <View style={styles.balanceRow}>
           <Text style={[styles.currency, { color: colors.textSecondary }]}>$</Text>
-          <Text style={[styles.balance, { color: colors.textPrimary }]} numberOfLines={1} adjustsFontSizeToFit>
+          <Text 
+            style={[styles.balance, { color: colors.textPrimary }]} 
+            numberOfLines={1} 
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+          >
             {loading ? "---" : (balance >= 1000000000 
               ? `${(balance / 1000000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}B`
               : balance >= 1000000 
@@ -110,7 +115,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   balance: {
-    fontSize: 28,
+    fontSize: 25,
     fontWeight: '800',
     letterSpacing: -0.5,
   },

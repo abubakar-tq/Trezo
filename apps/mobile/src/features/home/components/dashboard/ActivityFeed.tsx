@@ -67,13 +67,6 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.textSecondary }]}>Activity</Text>
-        <TouchableOpacity>
-          <Text style={[styles.seeAll, { color: colors.accent }]}>Full History</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={styles.list}>
         {displayTransactions.map((tx, index) => (
           <TouchableOpacity 
