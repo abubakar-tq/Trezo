@@ -4,12 +4,14 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
+    Share,
 } from "react-native";
 
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
@@ -17,6 +19,7 @@ import { SocialRecoveryService } from "@/src/features/wallet/services/SocialReco
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import {
     DEFAULT_CHAIN_ID,
+    getDeployment,
     type SupportedChainId,
 } from "@/src/integration/chains";
 import type { Guardian } from "@store/useRecoveryStatusStore";
@@ -133,6 +136,8 @@ const GuardianRecoveryScreen: React.FC = () => {
     signature: Hex;
     generatedAt: string;
   } | null>(null);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [activeRecoveryHash, setActiveRecoveryHash] = useState<Hex | null>(null);
   const moduleStatusLocked = moduleInstalledPersisted;
   const savedGuardianAddresses = useMemo(
     () => storedGuardians.map((g) => g.address.trim()).filter(Boolean),
@@ -541,6 +546,42 @@ const GuardianRecoveryScreen: React.FC = () => {
     }
   };
 
+  const handleShareRecoveryLink = useCallback(async () => {
+    if (!smartAccountAddress) return;
+    
+    setIsGeneratingLink(true);
+    try {
+      const deployment = getDeployment(resolvedChainId);
+      const moduleAddress = deployment?.socialRecovery as Address;
+      
+      // For simulation: generate a random new owner hash and a random recovery ID
+      const mockNewOwnerHash = randomHex(32);
+      const mockRecoveryId = randomHex(20);
+      
+      const hash = SocialRecoveryService.getRecoveryHash(
+        smartAccountAddress,
+        mockRecoveryId,
+        mockNewOwnerHash
+      );
+      
+      setActiveRecoveryHash(hash);
+
+      const baseUrl = process.env.EXPO_PUBLIC_GUARDIAN_PORTAL_URL || 'https://guardian-approval.trezo.app';
+      const portalUrl = `${baseUrl}/?hash=${hash}&module=${moduleAddress}`;
+      
+      await Share.share({
+        message: `Trezo Recovery Request: Please help me recover my account by approving this hash on-chain: ${portalUrl}`,
+        title: "Trezo Account Recovery",
+      });
+      
+    } catch (error) {
+      console.error("Failed to share recovery link:", error);
+      Alert.alert("Error", "Failed to generate recovery link");
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  }, [smartAccountAddress, resolvedChainId]);
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -830,6 +871,42 @@ const GuardianRecoveryScreen: React.FC = () => {
               </Text>
             )}
           </View>
+
+            {moduleInstalledState && (
+              <View style={styles.recoverySimCard}>
+                <View style={styles.cardSectionHeader}>
+                  <Text style={styles.cardSectionLabel}>RECOVERY SIMULATION</Text>
+                </View>
+                <Text style={styles.moduleDescription}>
+                  Test your recovery setup by generating an approval link to share with your guardians.
+                </Text>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.shareLinkButton,
+                    isGeneratingLink && styles.submitButtonDisabled,
+                  ]}
+                  onPress={handleShareRecoveryLink}
+                  disabled={isGeneratingLink}
+                >
+                  {isGeneratingLink ? (
+                    <ActivityIndicator size="small" color={colors.accent} />
+                  ) : (
+                    <>
+                      <Feather name="share-2" size={18} color={colors.accent} />
+                      <Text style={styles.shareLinkButtonText}>Share Approval Link</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {activeRecoveryHash && (
+                  <View style={styles.activeHashContainer}>
+                    <Text style={styles.hashLabel}>ACTIVE TEST HASH</Text>
+                    <Text style={styles.hashValue} numberOfLines={1}>{activeRecoveryHash}</Text>
+                  </View>
+                )}
+              </View>
+            )}
 
           {/* DEV INFO SECTION (CLEANER) */}
           {__DEV__ && (lastUserOpHash || lastOperationHash) && (
@@ -1326,6 +1403,39 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
       color: colors.textSecondary,
       lineHeight: 20,
+      paddingBottom: 40,
+    },
+    recoverySimCard: {
+      backgroundColor: withAlpha(colors.accent, 0.05),
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.accent, 0.2),
+      padding: 20,
+      marginBottom: 20,
+      gap: 14,
+    },
+    shareLinkButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      backgroundColor: withAlpha(colors.accent, 0.1),
+      borderRadius: 16,
+      paddingVertical: 14,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.accent, 0.3),
+    },
+    shareLinkButtonText: {
+      color: colors.accent,
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    activeHashContainer: {
+      backgroundColor: withAlpha(colors.textPrimary, 0.04),
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.borderMuted,
     },
   });
 
