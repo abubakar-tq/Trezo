@@ -15,8 +15,8 @@ echo "[infra-up] Starting local Supabase stack..."
 npx supabase start --workdir "$SUPABASE_DIR"
 
 status_env="$(npx supabase status -o env --workdir "$SUPABASE_DIR")"
-local_api_url="$(printf '%s\n' "$status_env" | awk -F= '/^API_URL=/{print substr($0,9)}')"
-local_service_key="$(printf '%s\n' "$status_env" | awk -F= '/^SERVICE_ROLE_KEY=/{print substr($0,18)}')"
+local_api_url="$(printf '%s\n' "$status_env" | awk -F= '/^API_URL=/{print substr($0,9)}' | tr -d '\"')"
+local_service_key="$(printf '%s\n' "$status_env" | awk -F= '/^SERVICE_ROLE_KEY=/{print substr($0,18)}' | tr -d '\"')"
 
 if [[ -f "$SYNC_ENV_FILE" ]]; then
   echo "[infra-up] Found sync config: $SYNC_ENV_FILE"
