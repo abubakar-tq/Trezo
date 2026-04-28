@@ -5,11 +5,10 @@
  */
 
 import React from "react";
-import { ActivityIndicator, View, TouchableOpacity } from "react-native";
+import { ActivityIndicator, View, TouchableOpacity, Text } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { Surface } from "../Tier1/Surface";
-import { BodyText, CaptionText, OverlineText } from "../Tier1/Text";
-import { Colors } from "../TokenRegistry";
+import { useAppTheme } from "@theme";
+import { withAlpha } from "@utils/color";
 
 export type GuardianState =
   | "invited"
@@ -25,143 +24,167 @@ interface GuardianListItemProps {
   contact: string; // email or phone
   state: GuardianState;
   removedDate?: string; // "Removed on [Date]"
-  isDark?: boolean;
   editable?: boolean;
   onEdit?: () => void;
   onRemove?: () => void;
 }
-
-const getStateStyles = (state: GuardianState) => {
-  const styles: Record<
-    GuardianState,
-    { color: string; icon: string; label: string; borderStyle?: any }
-  > = {
-    invited: {
-      color: Colors.warning,
-      icon: "⏳",
-      label: "Awaiting confirmation",
-      borderStyle: { borderStyle: "dashed" as const },
-    },
-    pending: {
-      color: Colors.primary,
-      icon: "⟳",
-      label: "Securing your setup...",
-    },
-    active: {
-      color: Colors.success,
-      icon: "✓",
-      label: "Actively protecting",
-    },
-    recovering: {
-      color: "#4f46e5",
-      icon: "↔",
-      label: "Helping you recover",
-    },
-    inactive: {
-      color: "#9ca3af",
-      icon: "⚠",
-      label: "Connection lost",
-    },
-    removed: {
-      color: "#9ca3af",
-      icon: "✗",
-      label: "Removed",
-    },
-    expired: {
-      color: Colors.danger,
-      icon: "🔄",
-      label: "Invitation expired",
-    },
-  };
-
-  return styles[state];
-};
 
 export const GuardianListItem: React.FC<GuardianListItemProps> = ({
   name,
   contact,
   state,
   removedDate,
-  isDark = true,
   editable,
   onEdit,
   onRemove,
 }) => {
-  const { color, icon, label, borderStyle } = getStateStyles(state);
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+
+  const getStateStyles = (state: GuardianState) => {
+    const styles: Record<
+      GuardianState,
+      { color: string; icon: string; label: string; borderStyle?: any }
+    > = {
+      invited: {
+        color: colors.warning,
+        icon: "⏳",
+        label: "Awaiting confirmation",
+        borderStyle: { borderStyle: "dashed" as const },
+      },
+      pending: {
+        color: colors.accent,
+        icon: "⟳",
+        label: "Securing your setup...",
+      },
+      active: {
+        color: colors.success,
+        icon: "✓",
+        label: "Actively protecting",
+      },
+      recovering: {
+        color: colors.accentAlt,
+        icon: "↔",
+        label: "Helping you recover",
+      },
+      inactive: {
+        color: colors.textMuted,
+        icon: "⚠",
+        label: "Connection lost",
+      },
+      removed: {
+        color: colors.textMuted,
+        icon: "✗",
+        label: "Removed",
+      },
+      expired: {
+        color: colors.danger,
+        icon: "🔄",
+        label: "Invitation expired",
+      },
+    };
+
+    return styles[state];
+  };
+
+  const { color, icon, label } = getStateStyles(state);
+  const isInvited = state === "invited";
 
   return (
-    <Surface isDark={isDark} elevation={1}>
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          borderWidth: state === "invited" ? 1 : 0,
-          borderColor: state === "invited" ? Colors.warning : "transparent",
-          borderStyle: state === "invited" ? "dashed" : "solid",
-          borderRadius: 8,
-          padding: state === "invited" ? 8 : 0,
-          gap: 12,
-        }}
-      >
-        {/* Avatar + Info */}
-        <View style={{ flex: 1, gap: 4 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <View
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                backgroundColor: color,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <BodyText color="#ffffff">{icon}</BodyText>
-            </View>
-            <View style={{ flex: 1 }}>
-              <BodyText isDark={isDark} style={{ fontWeight: "600" }}>{name}</BodyText>
-              <CaptionText
-                isDark={isDark}
-                color={isDark ? Colors.textTertiary : Colors.lightTextSecondary}
-              >
-                {contact}
-              </CaptionText>
-            </View>
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: colors.surfaceCard,
+        borderRadius: 20,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: isInvited ? colors.warning : colors.borderMuted,
+        borderStyle: isInvited ? "dashed" : "solid",
+        gap: 12,
+      }}
+    >
+      {/* Avatar + Info */}
+      <View style={{ flex: 1, gap: 12 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: withAlpha(color, 0.1),
+              justifyContent: "center",
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: withAlpha(color, 0.2),
+            }}
+          >
+            <Text style={{ fontSize: 18, color: color }}>{icon}</Text>
           </View>
-
-          {/* Status Label */}
-          <View style={{ paddingLeft: 48, gap: 4 }}>
-            <OverlineText color={color} style={{ fontSize: 10 }}>{label.toUpperCase()}</OverlineText>
-            {removedDate && (
-              <CaptionText
-                isDark={isDark}
-                color={isDark ? Colors.textTertiary : Colors.lightTextSecondary}
-              >
-                {removedDate}
-              </CaptionText>
-            )}
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: colors.textPrimary }}>
+              {name}
+            </Text>
+            <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 1 }}>
+              {contact}
+            </Text>
           </View>
         </View>
 
-        {/* Actions or Indicator */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {editable && (
-            <>
-              <TouchableOpacity onPress={onEdit} style={{ padding: 4 }}>
-                <Feather name="edit-2" size={16} color={isDark ? Colors.textTertiary : Colors.lightTextSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={onRemove} style={{ padding: 4 }}>
-                <Feather name="trash-2" size={16} color={Colors.danger} />
-              </TouchableOpacity>
-            </>
-          )}
-          {(state === "pending" || state === "recovering") && (
-            <ActivityIndicator color={color} size="small" />
+        {/* Status Label */}
+        <View style={{ paddingLeft: 56, gap: 4 }}>
+          <Text 
+            style={{ 
+              fontSize: 10, 
+              fontWeight: '800', 
+              letterSpacing: 0.5,
+              color: color 
+            }}
+          >
+            {label.toUpperCase()}
+          </Text>
+          {removedDate && (
+            <Text style={{ fontSize: 11, color: colors.textMuted }}>
+              {removedDate}
+            </Text>
           )}
         </View>
       </View>
-    </Surface>
+
+      {/* Actions or Indicator */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        {editable && (
+          <>
+            <TouchableOpacity 
+              onPress={onEdit} 
+              activeOpacity={0.7}
+              style={{ 
+                padding: 8,
+                borderRadius: 12,
+                backgroundColor: withAlpha(colors.textPrimary, 0.03)
+              }}
+            >
+              <Feather name="edit-2" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={onRemove} 
+              activeOpacity={0.7}
+              style={{ 
+                padding: 8,
+                borderRadius: 12,
+                backgroundColor: withAlpha(colors.danger, 0.05)
+              }}
+            >
+              <Feather name="trash-2" size={16} color={colors.danger} />
+            </TouchableOpacity>
+          </>
+        )}
+        {(state === "pending" || state === "recovering") && (
+          <ActivityIndicator color={color} size="small" />
+        )}
+      </View>
+    </View>
   );
 };
 
@@ -169,61 +192,50 @@ export const GuardianListItem: React.FC<GuardianListItemProps> = ({
  * Guardian List Showcase
  * Renders all 7 states for visual QA
  */
-interface GuardianListShowcaseProps {
-  isDark?: boolean;
-}
-
-export const GuardianListShowcase: React.FC<GuardianListShowcaseProps> = ({
-  isDark = true,
-}) => {
-  const mockGuardians: Array<GuardianListItemProps> = [
+export const GuardianListShowcase: React.FC = () => {
+  const { theme } = useAppTheme();
+  
+  const mockGuardians: Array<any> = [
     {
       name: "Alice Smith",
       contact: "alice@example.com",
       state: "active",
-      isDark,
     },
     {
       name: "Bob Johnson",
       contact: "+1 234 567 8900",
       state: "invited",
-      isDark,
     },
     {
       name: "Carol Williams",
       contact: "carol@example.com",
       state: "pending",
-      isDark,
     },
     {
       name: "David Brown",
       contact: "david@example.com",
       state: "recovering",
-      isDark,
     },
     {
       name: "Eve Davis",
       contact: "eve@example.com",
       state: "inactive",
-      isDark,
     },
     {
       name: "Frank Miller",
       contact: "frank@example.com",
       state: "removed",
       removedDate: "Removed on April 20, 2026",
-      isDark,
     },
     {
       name: "Grace Lee",
       contact: "grace@example.com",
       state: "expired",
-      isDark,
     },
   ];
 
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: 12 }}>
       {mockGuardians.map((guardian, idx) => (
         <GuardianListItem
           key={idx}
@@ -231,9 +243,9 @@ export const GuardianListShowcase: React.FC<GuardianListShowcaseProps> = ({
           contact={guardian.contact}
           state={guardian.state}
           removedDate={guardian.removedDate}
-          isDark={isDark}
         />
       ))}
     </View>
   );
 };
+
