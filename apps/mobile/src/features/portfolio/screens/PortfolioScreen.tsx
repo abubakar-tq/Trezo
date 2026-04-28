@@ -13,12 +13,13 @@ import { TabScreenContainer, MeshBackground, Sparkline } from "@shared/component
 import { BalanceCard, AssetList } from "../../home/components/dashboard";
 import { useWalletData } from "@hooks/useWalletData";
 import { useMarketData } from "@hooks/useMarketData";
-import { useTabContentBottomInset } from "@app/hooks";
+import { useTabContentBottomInset } from "@hooks";
 import { withAlpha } from "@utils/color";
 import { TokenDetailModal } from "../components/TokenDetailModal";
 import type { TokenBalance } from "../services/PortfolioService";
 import { TokenIcon } from "@shared/components/visuals/TokenIcon";
 import { ActivityIndicator } from "react-native";
+import { formatUnits } from "viem";
 
 const { width } = Dimensions.get("window");
 
@@ -53,15 +54,19 @@ const PortfolioScreen: React.FC = () => {
 
   // Format tokens for AssetList
   const displayTokens = useMemo(() => {
-    return tokens.map((t: any) => ({
-      symbol: t.symbol,
-      name: t.name,
-      amount: parseFloat(t.balance_formatted || "0"),
-      price: t.usd_price || 0,
-      value: t.usd_value || 0,
-      change24h: 0,
-      address: t.token_address
-    }));
+    return tokens.map((t: any) => {
+      // Ensure we have a valid balance and symbol
+      const balance = t.balance_formatted || (t.balance ? formatUnits(t.balance, t.decimals || 18) : "0");
+      return {
+        symbol: t.symbol || "UNKNOWN",
+        name: t.name || "Unknown Token",
+        amount: parseFloat(balance),
+        price: t.usd_price || 0,
+        value: t.usd_value || 0,
+        change24h: 0,
+        address: t.token_address || "0x"
+      };
+    });
   }, [tokens]);
 
   return (
@@ -76,8 +81,8 @@ const PortfolioScreen: React.FC = () => {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={[styles.headerKicker, { color: colors.accent }]}>NET WORTH</Text>
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>OVERVIEW</Text>
+            <Text style={[styles.headerKicker, { color: colors.accent }]}>MY VAULT</Text>
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>PERFORMANCE</Text>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity style={[styles.iconButton, { backgroundColor: withAlpha(colors.textPrimary, 0.05), borderColor: colors.border }]}>
@@ -86,7 +91,7 @@ const PortfolioScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Unified Portfolio Mastery Card */}
+        {/* Unified Institutional Performance Card */}
         <View style={styles.sectionWrapper}>
           <View style={[styles.omniCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : colors.surface, borderColor: colors.border }]}>
             {/* Top Row: Balance & Growth */}
@@ -162,7 +167,19 @@ const PortfolioScreen: React.FC = () => {
                 const change = parseFloat(asset.changePercent24Hr);
                 
                 return (
-                  <View key={asset.id} style={[styles.marketCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : colors.surface, borderColor: colors.border }]}>
+                  <TouchableOpacity 
+                    key={asset.id} 
+                    style={[styles.marketCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : colors.surface, borderColor: colors.border }]}
+                    onPress={() => handleAssetPress({
+                      symbol: asset.symbol,
+                      name: asset.name,
+                      amount: 0,
+                      price: price,
+                      value: 0,
+                      change24h: change,
+                      address: asset.id
+                    })}
+                  >
                     <View style={styles.marketHeader}>
                       <TokenIcon symbol={asset.symbol} size={32} />
                       <View style={[styles.miniChange, { backgroundColor: withAlpha(change >= 0 ? colors.accent : colors.danger, 0.1) }]}>
@@ -184,7 +201,7 @@ const PortfolioScreen: React.FC = () => {
                          strokeWidth={2} 
                        />
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             )}
@@ -193,15 +210,11 @@ const PortfolioScreen: React.FC = () => {
 
         {/* Holdings Section */}
         <View style={styles.sectionWrapper}>
-          <View style={styles.sectionHeadingRow}>
-            <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>HOLDINGS</Text>
-            <Text style={[styles.assetCount, { color: colors.textMuted }]}>{tokens.length} tokens</Text>
-          </View>
-          
-          <View style={[styles.assetsContainer, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : colors.surface, borderColor: colors.border }]}>
-            <AssetList
-              assets={displayTokens}
-              formatPrice={(p) => `$${p.toLocaleString()}`}
+          <View style={[styles.glassSection, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Asset Holdings</Text>
+            <AssetList 
+              assets={displayTokens} 
+              formatPrice={(p) => `$${p.toLocaleString()}`} 
               predictedAddress={smartAccountAddress}
               onAssetPress={handleAssetPress}
             />
@@ -210,11 +223,13 @@ const PortfolioScreen: React.FC = () => {
 
        </ScrollView>
 
-      <TokenDetailModal 
-        visible={modalVisible} 
-        onClose={() => setModalVisible(false)} 
-        token={selectedToken} 
-      />
+      {selectedToken && (
+        <TokenDetailModal 
+          visible={modalVisible} 
+          onClose={() => setModalVisible(false)} 
+          token={selectedToken} 
+        />
+      )}
     </TabScreenContainer>
   );
 };
@@ -403,6 +418,22 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     padding: 12,
     borderWidth: 1,
+  },
+  glassSection: {
+    borderRadius: 20,
+    paddingVertical: 22,
+    paddingHorizontal: 25,
+    borderWidth: 1,
+    shadowOpacity: 0,
+    elevation: 0, 
+    overflow: 'visible',
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginBottom: 16,
   },
 });
 

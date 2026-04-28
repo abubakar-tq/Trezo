@@ -21,8 +21,6 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
   const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
 
-  if (!token) return null;
-
   const isDark = resolvedMode === 'dark';
   const glassBackground = isDark ? 'rgba(25, 25, 25, 0.95)' : '#FFFFFF';
 
@@ -37,15 +35,20 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
       'BTC': 'bitcoin',
       'ETH': 'ethereum',
       'SOL': 'solana',
-      'BNB': 'binancecoin',
+      'BNB': 'binance-coin',
       'XRP': 'ripple',
       'ADA': 'cardano',
-      'AVAX': 'avalanche-2',
+      'AVAX': 'avalanche',
       'DOT': 'polkadot',
       'LINK': 'chainlink',
       'MATIC': 'polygon',
+      'POL': 'polygon',
       'OP': 'optimism',
       'ARB': 'arbitrum',
+      'USDC': 'usd-coin',
+      'USDT': 'tether',
+      'DAI': 'multi-collateral-dai',
+      'TAO': 'bittensor',
     };
     return map[token.symbol] || token.name.toLowerCase().replace(/\s+/g, '-');
   }, [token]);
@@ -54,132 +57,95 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
 
   React.useEffect(() => {
     if (visible && coinId) {
-      marketService.getAssetDetails(coinId).then(details => {
+      marketService.getAssetDetails(coinId).then((details: any) => {
         if (details) setMarketDetails(details);
       });
     }
   }, [visible, coinId]);
 
+  if (!token) return null;
+
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent={true}
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
+        <TouchableOpacity style={styles.dismissOverlay} onPress={onClose} activeOpacity={1} />
         <View style={[styles.content, { backgroundColor: glassBackground, borderColor: colors.border }]}>
-          {/* Header */}
+          {/* Header Compact */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
             <View style={styles.headerTitleRow}>
-              <TokenIcon symbol={token.symbol} address={token.address} size={32} />
-              <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{token.name}</Text>
+              <TokenIcon symbol={token.symbol} address={token.address} size={28} />
+              <View>
+                <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{token.name}</Text>
+                <Text style={[styles.headerSymbol, { color: colors.textSecondary }]}>{token.symbol}</Text>
+              </View>
             </View>
-            <TouchableOpacity style={styles.actionIcon}>
-              <Feather name="star" size={20} color={colors.textSecondary} />
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
  
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
-            {/* Price Hero */}
+            {/* Price Hero Compact */}
             <View style={styles.priceHero}>
               <Text style={[styles.currentPrice, { color: colors.textPrimary }]}>
                 ${(token.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </Text>
               <View style={[styles.priceChange, { backgroundColor: withAlpha(parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? colors.success : colors.danger, 0.1) }]}>
-                <Feather name={parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? "trending-up" : "trending-down"} size={14} color={parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? colors.success : colors.danger} />
                 <Text style={[styles.priceChangeText, { color: parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? colors.success : colors.danger }]}>
-                  {parseFloat(marketDetails?.changePercent24Hr || '0').toFixed(2)}% (24h)
+                  {parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? '+' : ''}{parseFloat(marketDetails?.changePercent24Hr || '0').toFixed(2)}%
                 </Text>
               </View>
             </View>
  
-            {/* Main Chart */}
+            {/* Minimal Chart */}
             <View style={styles.chartContainer}>
               {chartLoading ? (
-                <View style={{ height: 180, justifyContent: 'center' }}>
-                  <ActivityIndicator color={colors.accent} />
+                <View style={{ height: 100, justifyContent: 'center' }}>
+                  <ActivityIndicator color={colors.accent} size="small" />
                 </View>
               ) : (
                 <Sparkline 
                   data={chartData.length > 0 ? chartData : [0,0]} 
-                  width={width - 48} 
-                  height={180} 
-                  color={parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? colors.accentAlt : colors.danger} 
-                  strokeWidth={3} 
+                  width={width - 80} 
+                  height={100} 
+                  color={parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? colors.accent : colors.danger} 
+                  strokeWidth={2.5} 
                 />
               )}
               <View style={styles.chartFilters}>
-                {['1D', '1W', '1M', '1Y', 'ALL'].map(p => (
+                {['1D', '1W', '1M', '1Y'].map(p => (
                   <TouchableOpacity 
                     key={p} 
                     onPress={() => setSelectedPeriod(p)}
-                    style={[styles.filterPill, selectedPeriod === p && { backgroundColor: colors.accent }]}
+                    style={[styles.filterPill, selectedPeriod === p && { backgroundColor: withAlpha(colors.accent, 0.1) }]}
                   >
-                    <Text style={[styles.filterText, { color: selectedPeriod === p ? colors.textOnAccent : colors.textSecondary }]}>{p}</Text>
+                    <Text style={[styles.filterText, { color: selectedPeriod === p ? colors.accent : colors.textSecondary }]}>{p}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
 
-            {/* Holdings Card */}
-            <View style={[styles.infoCard, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
-              <Text style={[styles.cardTitle, { color: colors.textSecondary }]}>YOUR BALANCE</Text>
-              <View style={styles.holdingRow}>
-                <View>
-                  <Text style={[styles.holdingValue, { color: colors.textPrimary }]}>
-                    {token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} {token.symbol}
-                  </Text>
-                  <Text style={[styles.holdingFiat, { color: colors.textSecondary }]}>
-                    ${token.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </Text>
-                </View>
-                <TouchableOpacity style={[styles.tradeButton, { backgroundColor: colors.accent }]}>
-                  <Text style={[styles.tradeButtonText, { color: colors.textOnAccent }]}>Swap</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Token Stats */}
+            {/* Pinpoint Stats Grid */}
             <View style={styles.statsGrid}>
               <View style={styles.statItem}>
-                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Market Cap</Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>MARKET CAP</Text>
                 <Text style={[styles.statValue, { color: colors.textPrimary }]}>
                   ${marketDetails ? (parseFloat(marketDetails.marketCapUsd) / 1000000000).toFixed(2) + 'B' : '---'}
                 </Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={[styles.statLabel, { color: colors.textMuted }]}>24h Volume</Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>24H VOLUME</Text>
                 <Text style={[styles.statValue, { color: colors.textPrimary }]}>
                    ${marketDetails ? (parseFloat(marketDetails.volumeUsd24Hr) / 1000000).toFixed(2) + 'M' : '---'}
                 </Text>
               </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Supply</Text>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  {marketDetails ? (parseFloat(marketDetails.supply) / 1000000).toFixed(1) + 'M' : '---'}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Rank</Text>
-                <Text style={[styles.statValue, { color: colors.accentAlt }]}>
-                  #{marketDetails?.rank || '---'}
-                </Text>
-              </View>
             </View>
 
-            {/* About Section */}
-            <View style={styles.aboutSection}>
-              <Text style={[styles.cardTitle, { color: colors.textSecondary }]}>MARKET INSIGHT</Text>
-              <Text style={[styles.aboutText, { color: colors.textSecondary }]}>
-                {token.name} ({token.symbol}) is currently ranked #{marketDetails?.rank} in the global crypto market. 
-                Its price has shifted {parseFloat(marketDetails?.changePercent24Hr || '0').toFixed(2)}% in the last 24 hours 
-                with a trading volume of ${marketDetails ? (parseFloat(marketDetails.volumeUsd24Hr) / 1000000).toFixed(2) + 'M' : '---'}.
-              </Text>
-            </View>
 
           </ScrollView>
         </View>
@@ -191,152 +157,124 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dismissOverlay: {
+    ...StyleSheet.absoluteFillObject,
   },
   content: {
-    height: height * 0.85,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+    width: width * 0.88,
+    borderRadius: 28,
     borderWidth: 1,
-    paddingTop: 12,
+    paddingTop: 8,
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 16,
   },
   closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 0.5,
   },
-  actionIcon: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+  headerSymbol: {
+    fontSize: 11,
+    fontWeight: '700',
+    opacity: 0.6,
   },
   scrollBody: {
-    paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
   },
   priceHero: {
-    alignItems: 'center',
-    marginVertical: 20,
-    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 16,
+    gap: 10,
   },
   currentPrice: {
-    fontSize: 42,
+    fontSize: 32,
     fontWeight: '900',
-    letterSpacing: -1,
+    letterSpacing: -0.5,
   },
   priceChange: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   priceChangeText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
   },
   chartContainer: {
-    marginVertical: 20,
+    marginVertical: 10,
     alignItems: 'center',
   },
   chartFilters: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     width: '100%',
-    marginTop: 20,
+    marginTop: 16,
+    gap: 8,
   },
   filterPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
   filterText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  infoCard: {
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    marginVertical: 10,
-    gap: 12,
-  },
-  cardTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-  },
-  holdingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  holdingValue: {
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  holdingFiat: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  tradeButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 14,
-  },
-  tradeButtonText: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '800',
   },
   statsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginVertical: 20,
-    gap: 16,
+    marginTop: 20,
+    marginBottom: 24,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.05)',
   },
   statItem: {
-    width: (width - 64) / 2,
+    flex: 1,
     gap: 4,
   },
   statLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
   },
-  aboutSection: {
-    gap: 12,
-    marginTop: 10,
+  tradeButton: {
+    height: 54,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  aboutText: {
-    fontSize: 14,
-    lineHeight: 22,
-    fontWeight: '500',
+  tradeButtonText: {
+    fontSize: 15,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
 });

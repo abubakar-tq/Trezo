@@ -23,7 +23,7 @@ import { SecurityStatus } from "../components/dashboard/SecurityStatus";
 import { TokenDetailModal } from "../../portfolio/components/TokenDetailModal";
 import type { TokenBalance } from "../../portfolio/services/PortfolioService";
 import { useWalletData } from "@hooks/useWalletData";
-import { formatUnits } from "ethers";
+import { formatUnits } from "viem";
 
 const { width } = Dimensions.get("window");
 
@@ -48,6 +48,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
 
   const [selectedToken, setSelectedToken] = React.useState<TokenBalance | null>(null);
   const [modalVisible, setModalVisible] = React.useState(false);
+  const marketRef = React.useRef<any>(null);
 
   // Use live data
   const portfolioBalance = totalBalanceUSD;
@@ -92,7 +93,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
           <Text style={[styles.brandName, { color: colors.textPrimary }]}>TREZO</Text>
           <View style={styles.headerRight}>
             <TouchableOpacity 
-              onPress={() => {/* Open Search */}}
+              onPress={() => marketRef.current?.focusSearch()} 
               style={[styles.headerAction, { backgroundColor: colors.glass, marginRight: 8 }]}
             >
               <Feather name="search" size={18} color={colors.textPrimary} strokeWidth={1.5} />
@@ -107,13 +108,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
           </View>
         </View>
 
-        {/* Search Bar - Premium Restoration */}
-        <View style={styles.searchWrapper}>
-          <TouchableOpacity style={[styles.searchBar, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
-            <Feather name="search" size={16} color={colors.textMuted} />
-            <Text style={[styles.searchText, { color: colors.textMuted }]}>Search assets, addresses...</Text>
-          </TouchableOpacity>
-        </View>
 
         {/* Integrated Sections with Zero Depth to fix Android Gray Line */}
         <View style={styles.sectionWrapper}>
@@ -131,25 +125,19 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
           </View>
         </View>
 
-        {/* Market Trends - Using MarketExplorer's internal header */}
-        <View style={styles.sectionWrapper}>
-          <MarketExplorer />
-        </View>
 
+        {/* Market Trends - Unified Header */}
         <View style={styles.sectionWrapper}>
           <View style={[styles.glassSection, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Vault Holdings</Text>
-            <AssetList 
-              assets={displayTokens} 
-              formatPrice={formatPrice} 
-              predictedAddress={smartAccountAddress}
-              onAssetPress={handleAssetPress}
-            />
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginBottom: 12 }]}>Market Trends</Text>
+            <MarketExplorer ref={marketRef} />
           </View>
         </View>
 
+
         <View style={styles.sectionWrapper}>
           <View style={[styles.glassSection, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Recent Activity</Text>
             <ActivityFeed limit={3} />
           </View>
         </View>
@@ -160,11 +148,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
         </View>
       </ScrollView>
 
-      <TokenDetailModal 
-        visible={modalVisible} 
-        onClose={() => setModalVisible(false)} 
-        token={selectedToken} 
-      />
+      {selectedToken && (
+        <TokenDetailModal 
+          visible={modalVisible} 
+          onClose={() => setModalVisible(false)} 
+          token={selectedToken} 
+        />
+      )}
     </TabScreenContainer>
   );
 };
