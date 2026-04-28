@@ -48,4 +48,6 @@ interface ISocialRecovery {
     function getRecoveryDetails(address wallet) external view returns (address[] memory guardians, uint256 threshold);
 
     function getRecoveryNonce(address wallet) external view returns (uint256 nonce);
+    
+    function isApproved(bytes32 hash, address guardian) external view returns (bool);
 }

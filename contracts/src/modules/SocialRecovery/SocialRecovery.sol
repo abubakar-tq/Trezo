@@ -362,6 +362,13 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         emit HashedApproval(msg.sender, hash);
     }
 
+    /**
+     * @dev Helper to check if a guardian has approved a hash
+     */
+    function isApproved(bytes32 hash, address guardian) external view returns (bool) {
+        return approvedHashes[_hashKey(guardian, hash)] != 0;
+    }
+
     function rejectHash(bytes32 hash) external {
         bytes32 key = _hashKey(msg.sender, hash);
         if (approvedHashes[key] == 0) {
