@@ -10,13 +10,21 @@ import ContactDetailScreen from "@features/contacts/screens/ContactDetailScreen"
 import ContactListScreen from "@features/contacts/screens/ContactListScreen";
 import BackupRecoveryScreen from "@features/profile/screens/BackupRecoveryScreen";
 import BrowserSettingsScreen from "@features/profile/screens/BrowserSettingsScreen";
+import CompromisedWalletScreen from "@features/profile/screens/CompromisedWalletScreen";
 import ConnectedDevicesScreen from "@features/profile/screens/ConnectedDevicesScreen";
+import DevicesPasskeysScreen from "@features/profile/screens/DevicesPasskeysScreen";
 import EmailRecoveryScreen from "@features/profile/screens/EmailRecoveryScreen";
 import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
 import NotificationsScreen from "@features/profile/screens/NotificationsScreen";
+import PairDeviceScreen from "@features/profile/screens/PairDeviceScreen";
 import ProfileEditScreen from "@features/profile/screens/ProfileEditScreen";
 import RecoveryKitExportScreen from "@features/profile/screens/RecoveryKitExportScreen";
 import SecurityPrivacyScreen from "@features/profile/screens/SecurityPrivacyScreen";
+import CreateRecoveryRequestScreen from "@features/recovery/screens/CreateRecoveryRequestScreen";
+import RecoveryCompleteScreen from "@features/recovery/screens/RecoveryCompleteScreen";
+import RecoveryEntryScreen from "@features/recovery/screens/RecoveryEntryScreen";
+import RecoveryProgressScreen from "@features/recovery/screens/RecoveryProgressScreen";
+import ShareRecoveryScreen from "@features/recovery/screens/ShareRecoveryScreen";
 import AATestScreen from "@features/wallet/screens/AATestScreen";
 import AAWalletDebugScreen from "@features/wallet/screens/AAWalletDebugScreen";
 import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
@@ -174,6 +182,30 @@ const RootNavigation = () => {
               }}
             />
             <Stack.Screen
+              name="DevicesPasskeys"
+              component={DevicesPasskeysScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="PairDevice"
+              component={PairDeviceScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="CompromisedWallet"
+              component={CompromisedWalletScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="GuardianRecovery"
               component={GuardianRecoveryScreen}
               options={{
@@ -184,6 +216,46 @@ const RootNavigation = () => {
             <Stack.Screen
               name="EmailRecovery"
               component={EmailRecoveryScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="RecoveryEntry"
+              component={RecoveryEntryScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="CreateRecoveryRequest"
+              component={CreateRecoveryRequestScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="ShareRecoveryRequest"
+              component={ShareRecoveryScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="RecoveryProgress"
+              component={RecoveryProgressScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="RecoveryComplete"
+              component={RecoveryCompleteScreen}
               options={{
                 headerShown: false,
                 animation: "slide_from_right",

@@ -6,7 +6,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     ScrollView,
     StyleSheet,
@@ -36,7 +35,8 @@ const baseSettingsItems: SettingsItem[] = [
   { label: "Contacts", icon: "book", route: "ContactList" },
   { label: "Browser settings", icon: "globe", route: "BrowserSettings" },
   { label: "Security & privacy", icon: "shield", route: "SecurityPrivacy" },
-  { label: "Connected devices", icon: "smartphone", route: "ConnectedDevices" },
+  { label: "Devices & passkeys", icon: "smartphone", route: "DevicesPasskeys" },
+  { label: "Connected devices", icon: "wifi", route: "ConnectedDevices" },
   { label: "Notifications", icon: "bell", route: "Notifications" },
   { label: "Backup & recovery", icon: "cloud", route: "BackupRecovery" },
 ];
@@ -87,28 +87,22 @@ const ProfileScreen: React.FC = () => {
     if (isSigningOut) return;
     setIsSigningOut(true);
 
-    let didError = false;
     try {
       const client = getSupabaseClient();
       await client.auth.signOut();
     } catch (error) {
-      didError = true;
-      console.error("Failed to sign out", error);
-      Alert.alert(
-        "Sign out failed",
-        "Please check your connection and try again.",
-      );
+      // Log but don't block — if Supabase is unreachable (local dev), still clear local state
+      console.warn("Supabase signOut failed (continuing locally):", error);
     }
 
-    if (!didError) {
-      resetUser();
-      setGuardNavigation(false);
-      setConfirmVisible(false);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "AuthNavigation" }],
-      });
-    }
+    // Always clear local state and navigate away
+    resetUser();
+    setGuardNavigation(false);
+    setConfirmVisible(false);
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "AuthNavigation" }],
+    });
 
     setIsSigningOut(false);
   }, [isSigningOut, navigation, resetUser, setGuardNavigation]);

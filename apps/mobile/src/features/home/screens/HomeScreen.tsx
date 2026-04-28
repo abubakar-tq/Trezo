@@ -16,14 +16,14 @@ import {
   BalanceCard, 
   ActionGrid, 
   ActivityFeed,
-  AssetList
 } from "../components/dashboard";
 import { MarketExplorer } from "../components/dashboard/MarketExplorer";
 import { SecurityStatus } from "../components/dashboard/SecurityStatus";
 import { TokenDetailModal } from "../../portfolio/components/TokenDetailModal";
 import type { TokenBalance } from "../../portfolio/services/PortfolioService";
 import { useWalletData } from "@hooks/useWalletData";
-import { formatUnits } from "viem";
+import { useUserStore } from "@store/useUserStore";
+import { withAlpha } from "@utils/color";
 
 const { width } = Dimensions.get("window");
 
@@ -42,9 +42,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   const { theme } = useAppTheme();
   const { colors } = theme;
   
-  const smartAccountAddress = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
+  // Live wallet state from store (replaces hardcoded placeholder)
+  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   
-  const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress);
+  const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress ?? undefined);
 
   const [selectedToken, setSelectedToken] = React.useState<TokenBalance | null>(null);
   const [modalVisible, setModalVisible] = React.useState(false);
@@ -114,7 +116,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
           <BalanceCard
             balance={portfolioBalance}
             loading={portfolioLoading}
-            address={smartAccountAddress}
+            address={smartAccountAddress ?? undefined}
+            isDeployed={smartAccountDeployed}
+            onDeploy={() => navigation.navigate("DeployAccount")}
           />
         </View>
 

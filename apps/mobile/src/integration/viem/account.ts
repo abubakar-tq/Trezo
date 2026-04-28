@@ -72,6 +72,46 @@ export async function isExecutorModuleInstalled({
   }) as Promise<boolean>;
 }
 
+export type PasskeyOnchainState = {
+  exists: boolean;
+  executeAfter: bigint;
+  requestedAt: bigint;
+  cancelled: boolean;
+};
+
+export async function getPasskeyOnchainState({
+  chainId,
+  smartAccountAddress,
+  passkeyId,
+  validatorAddress,
+}: {
+  chainId: SupportedChainId;
+  smartAccountAddress: Address;
+  passkeyId: `0x${string}`;
+  validatorAddress?: Address;
+}): Promise<PasskeyOnchainState> {
+  const deployment = getDeployment(chainId);
+  const validator = validatorAddress ?? (deployment?.passkeyValidator as Address | undefined);
+  if (!validator) {
+    throw new Error(`No passkey validator configured for chain ${chainId}`);
+  }
+
+  const publicClient = getPublicClient(chainId);
+  const exists = await publicClient.readContract({
+    address: validator,
+    abi: ABIS.passkeyValidator,
+    functionName: 'hasPasskey',
+    args: [smartAccountAddress, passkeyId],
+  }) as boolean;
+
+  return {
+    exists,
+    executeAfter: 0n,
+    requestedAt: 0n,
+    cancelled: false,
+  };
+}
+
 /**
  * Dev helper: prefund a predicted account using Anvil's default rich account.
  * Only for local testing; do not ship to production builds.

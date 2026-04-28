@@ -36,8 +36,16 @@ export type RootStackParamList = {
   TabNavigation: undefined;
   BrowserSettings: undefined;
   BackupRecovery: undefined;
+  DevicesPasskeys: undefined;
+  PairDevice: { requestId?: string; secret?: string } | undefined;
+  CompromisedWallet: undefined;
   GuardianRecovery: undefined;
   EmailRecovery: undefined;
+  RecoveryEntry: undefined;
+  CreateRecoveryRequest: { walletAddress?: string } | undefined;
+  ShareRecoveryRequest: { requestId: string };
+  RecoveryProgress: { requestId: string };
+  RecoveryComplete: { requestId: string };
   RecoveryKitExport: {
     vaultKey: string;
     smartAccountAddress: string;

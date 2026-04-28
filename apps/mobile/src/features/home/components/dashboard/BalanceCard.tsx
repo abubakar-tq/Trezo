@@ -9,12 +9,16 @@ interface BalanceCardProps {
   balance: number;
   loading?: boolean;
   address?: string;
+  isDeployed?: boolean;
+  onDeploy?: () => void;
 }
 
 export const BalanceCard: React.FC<BalanceCardProps> = ({
   balance,
   loading,
   address,
+  isDeployed = true,
+  onDeploy,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
@@ -23,10 +27,21 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
     <View style={[styles.container, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
         <View style={styles.header}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>Balance</Text>
-          <View style={[styles.badge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
-            <Feather name="trending-up" size={10} color={colors.accent} />
-            <Text style={[styles.badgeText, { color: colors.accent }]}>+4.2%</Text>
-          </View>
+          {isDeployed ? (
+            <View style={[styles.badge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+              <Feather name="trending-up" size={10} color={colors.accent} />
+              <Text style={[styles.badgeText, { color: colors.accent }]}>+4.2%</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={onDeploy}
+              style={[styles.deployBadge, { backgroundColor: withAlpha('#F59E0B', 0.15), borderColor: withAlpha('#F59E0B', 0.35) }]}
+              activeOpacity={0.8}
+            >
+              <Feather name="zap" size={10} color="#F59E0B" />
+              <Text style={[styles.badgeText, { color: '#F59E0B', marginLeft: 4 }]}>Activate Wallet</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.balanceRow}>
@@ -45,23 +60,26 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
           </Text>
         </View>
 
+        {/* SVG chart — viewBox + extra vertical room prevents line clipping */}
         <View style={styles.pulseContainer}>
-          <Svg height="40" width="100%">
+          <Svg height="48" width="100%" viewBox="0 0 320 48">
             <Path
-              d="M0 25 Q 40 10, 80 30 T 160 20 T 240 35 T 320 15"
+              d="M4 36 Q 44 16, 84 32 T 164 24 T 244 38 T 316 18"
               fill="none"
-              stroke={colors.accent}
+              stroke={isDeployed ? colors.accent : '#F59E0B'}
               strokeWidth="1.5"
-              strokeOpacity="0.6"
+              strokeOpacity={isDeployed ? "0.6" : "0.35"}
             />
           </Svg>
         </View>
 
         <View style={[styles.footer, { borderTopColor: colors.glassBorder }]}>
           <View style={[styles.addressBox, { backgroundColor: colors.surfaceMuted }]}>
-            <Feather name="shield" size={12} color={colors.textSecondary} />
-            <Text style={[styles.addressText, { color: colors.textSecondary }]}>
-              {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Not Deployed"}
+            <Feather name={isDeployed ? "shield" : "alert-circle"} size={12} color={isDeployed ? colors.textSecondary : '#F59E0B'} />
+            <Text style={[styles.addressText, { color: isDeployed ? colors.textSecondary : '#F59E0B' }]}>
+              {address 
+                ? (isDeployed ? `${address.slice(0, 6)}...${address.slice(-4)}` : `${address.slice(0, 6)}...${address.slice(-4)} · Not Deployed`)
+                : "No wallet"}
             </Text>
           </View>
           <TouchableOpacity style={styles.copyButton}>
@@ -71,6 +89,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
@@ -101,6 +120,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
+  deployBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
   badgeText: {
     fontSize: 10,
     fontWeight: '700',
@@ -122,7 +149,7 @@ const styles = StyleSheet.create({
   pulseContainer: {
     marginTop: 16,
     marginBottom: 8,
-    height: 40,
+    height: 48,
   },
   footer: {
     marginTop: 12,

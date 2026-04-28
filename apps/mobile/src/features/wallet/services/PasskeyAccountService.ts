@@ -7,6 +7,7 @@ import {
   buildRemovePasskeyUserOp,
   getDeployment,
   sendUserOp,
+  waitForUserOperationReceipt,
   type PasskeyInit,
 } from "@/src/integration/viem";
 import type {
@@ -15,7 +16,7 @@ import type {
 } from "@/src/integration/viem/userOps";
 import type { PasskeyMetadata } from "./PasskeyService";
 import type { Address, Hex } from "viem";
-import type { UserOperation } from "viem/account-abstraction";
+import type { UserOperation, UserOperationReceipt } from "viem/account-abstraction";
 
 const STORAGE_PREFIX = "trezo_pending_passkeys_v1_";
 
@@ -192,5 +193,14 @@ export class PasskeyAccountService {
       entryPoint = deployment.entryPoint;
     }
     return sendUserOp(signedUserOp, chainId, bundlerUrl, entryPoint);
+  }
+
+  static async waitForReceipt(
+    userOpHash: Hex,
+    chainId: SupportedChainId = DEFAULT_CHAIN_ID,
+    bundlerUrl: string = getBundlerUrl(),
+    timeoutMs = 120_000,
+  ): Promise<UserOperationReceipt<"0.7">> {
+    return waitForUserOperationReceipt(userOpHash, chainId, bundlerUrl, timeoutMs);
   }
 }
