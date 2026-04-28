@@ -13,7 +13,8 @@
     "infra:up": "bash scripts/infra-up.sh",
     "infra:down": "bash scripts/infra-down.sh",
     "infra:mobile-env": "bash scripts/infra-export-mobile-env.sh",
-    "supabase:sync-user": "node scripts/supabase-sync-user.js"
+    "supabase:sync-user": "node scripts/supabase-sync-user.js",
+    "anvil:warp-time": "cast rpc evm_increaseTime 86400 && cast rpc evm_mine"
   },
   "workspaces": [
     "apps/*"
