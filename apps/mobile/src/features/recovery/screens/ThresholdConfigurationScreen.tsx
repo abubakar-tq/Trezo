@@ -1,323 +1,268 @@
 /**
  * ThresholdConfigurationScreen.tsx
  *
- * Configure approval requirement for recovery ("X of Y" model).
+ * Configure how many trusted contacts are required to approve a recovery request.
+ *
+ * Displays:
+ * - Dynamic threshold selector (1 of N)
+ * - Security risk/recommendation indicator
+ * - Confirmation CTA
  *
  * Constraints Applied:
- * - Recovery UX: "Approval Requirement" terminology (never "Threshold", "Guardian Threshold")
- * - Visual Fractionation: Show blocks for each required approval
- * - Dynamic Feedback: "You need X more contacts to require Y approvals"
- * - Rule of One: "Save Configuration" primary button
- * - Stepper UI to increase/decrease requirement
- * - No raw numbers in vacuum (always contextualize)
+ * - Direct selection of threshold
+ * - Professional warning for "1 of N" configurations
+ * - Recovery UX: "Security Threshold" terminology
  */
 
 import React, { useState } from "react";
-import { SafeAreaView, ScrollView, View } from "react-native";
-import { Badge } from "../../../shared/components/Tier1/Badge";
 import {
-    PrimaryButton,
-    SecondaryButton,
-} from "../../../shared/components/Tier1/Button";
-import { CardLevel1, Surface } from "../../../shared/components/Tier1/Surface";
-import {
-    BodyText,
-    CaptionText,
-    HeadlineText,
-    TitleText
-} from "../../../shared/components/Tier1/Text";
-import { Colors, Spacing } from "../../../shared/components/TokenRegistry";
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useAppTheme } from "@theme";
+import { withAlpha } from "@utils/color";
 
 interface ThresholdConfigurationScreenProps {
-  isDark?: boolean;
   onSaveConfiguration?: (threshold: number) => void;
   onCancel?: () => void;
 }
 
 export const ThresholdConfigurationScreen: React.FC<
   ThresholdConfigurationScreenProps
-> = ({ isDark = true, onSaveConfiguration, onCancel }) => {
-  const [requiredApprovals, setRequiredApprovals] = useState(2);
+> = ({ onSaveConfiguration, onCancel }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  
+  // These would typically come from a store or props
   const [totalContacts] = useState(3);
+  const [selectedThreshold, setSelectedThreshold] = useState(2);
   const isSaving = false;
 
-  const canIncrease = requiredApprovals < totalContacts;
-  const canDecrease = requiredApprovals > 1;
-  const needsMoreContacts = requiredApprovals > totalContacts;
-
-  const handleIncrement = () => {
-    if (canIncrease) {
-      setRequiredApprovals(requiredApprovals + 1);
-    }
+  const getSecurityLevel = (threshold: number, total: number) => {
+    if (total <= 1) return { label: "Limited", color: colors.warning, icon: "⚠️" };
+    if (threshold === 1) return { label: "Low Security", color: colors.error, icon: "🛡️" };
+    if (threshold === total) return { label: "Strict", color: colors.success, icon: "🔒" };
+    return { label: "Balanced", color: colors.accent, icon: "✅" };
   };
 
-  const handleDecrement = () => {
-    if (canDecrease) {
-      setRequiredApprovals(requiredApprovals - 1);
-    }
-  };
-
-  const handleSave = () => {
-    if (!needsMoreContacts) {
-      onSaveConfiguration?.(requiredApprovals);
-    }
-  };
+  const security = getSecurityLevel(selectedThreshold, totalContacts);
 
   return (
     <SafeAreaView
       style={{
         flex: 1,
-        backgroundColor: isDark ? Colors.background : "#ffffff",
+        backgroundColor: colors.background,
       }}
     >
       <ScrollView
         contentContainerStyle={{
-          paddingHorizontal: Spacing.sp4,
-          paddingVertical: Spacing.sp6,
-          gap: Spacing.sp6,
-          paddingBottom: Spacing.sp8,
+          paddingHorizontal: 16,
+          paddingVertical: 24,
+          gap: 32,
+          paddingBottom: 40,
         }}
       >
-        {/* HEADER */}
-        <View style={{ gap: Spacing.sp2 }}>
-          <HeadlineText isDark={isDark}>Approval Requirement</HeadlineText>
-          <BodyText
-            isDark={isDark}
-            color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
+        {/* HEADER SECTION */}
+        <View style={{ gap: 8 }}>
+          <TouchableOpacity 
+            onPress={onCancel}
+            style={{ 
+              marginBottom: 8,
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: withAlpha(colors.textPrimary, 0.05),
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
           >
-            Choose how many trusted contacts must approve recovery requests.
-          </BodyText>
+            <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700' }}>←</Text>
+          </TouchableOpacity>
+          <Text
+            style={{
+              fontSize: 28,
+              fontWeight: "800",
+              color: colors.textPrimary,
+            }}
+          >
+            Security Threshold
+          </Text>
+          <Text
+            style={{
+              fontSize: 15,
+              color: colors.textSecondary,
+              lineHeight: 22
+            }}
+          >
+            Choose how many of your {totalContacts} trusted contacts must approve a recovery attempt.
+          </Text>
         </View>
 
-        {/* VISUAL FRACTIONATION */}
-        <Surface isDark={isDark} elevation={1}>
-          <View style={{ gap: Spacing.sp4 }}>
-            <CaptionText color={Colors.primary}>REQUIRED APPROVALS</CaptionText>
+        {/* THRESHOLD SELECTOR */}
+        <View style={{ gap: 20 }}>
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: "700",
+              letterSpacing: 1,
+              color: colors.accent,
+              paddingHorizontal: 4
+            }}
+          >
+            SELECT APPROVALS REQUIRED
+          </Text>
 
-            {/* LARGE VISUAL INDICATOR */}
-            <View style={{ alignItems: "center", gap: Spacing.sp3 }}>
-              <View
-                style={{
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <BodyText isDark={isDark} style={{ fontSize: 48, fontWeight: "800", lineHeight: 60 }}>
-                  {requiredApprovals} <BodyText isDark={isDark} style={{ fontSize: 24, fontWeight: "400" }}>out of {totalContacts}</BodyText>
-                </BodyText>
-              </View>
-
-              {/* FRACTIONATION BLOCKS */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: Spacing.sp2,
-                  flexWrap: "wrap",
-                  justifyContent: "center",
-                }}
-              >
-                {Array.from({ length: totalContacts }).map((_, idx) => (
-                  <View
-                    key={idx}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+            {Array.from({ length: totalContacts }, (_, i) => i + 1).map((num) => {
+              const isSelected = selectedThreshold === num;
+              return (
+                <TouchableOpacity
+                  key={num}
+                  activeOpacity={0.8}
+                  onPress={() => setSelectedThreshold(num)}
+                  style={{
+                    width: '30%',
+                    aspectRatio: 1,
+                    backgroundColor: isSelected ? colors.accent : withAlpha(colors.textPrimary, 0.03),
+                    borderRadius: 20,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderWidth: 2,
+                    borderColor: isSelected ? colors.accent : colors.borderMuted,
+                  }}
+                >
+                  <Text
                     style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 8,
-                      backgroundColor:
-                        idx < requiredApprovals
-                          ? Colors.primary
-                          : isDark
-                            ? Colors.surfaceMid
-                            : "#e2e8f0",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderWidth: 2,
-                      borderColor:
-                        idx < requiredApprovals
-                          ? Colors.primary
-                          : "transparent",
+                      fontSize: 24,
+                      fontWeight: "800",
+                      color: isSelected ? colors.textOnAccent : colors.textPrimary,
                     }}
                   >
-                    <BodyText
-                      isDark={isDark}
-                      color={
-                        idx < requiredApprovals
-                          ? "#ffffff"
-                          : isDark
-                            ? Colors.textSecondary
-                            : Colors.lightTextSecondary
-                      }
-                      style={{ fontWeight: "bold", fontSize: 16 }}
-                    >
-                      {idx + 1}
-                    </BodyText>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* EXPLANATION */}
-            <BodyText
-              isDark={isDark}
-              color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
-              style={{ textAlign: "center", fontSize: 13 }}
-            >
-              {requiredApprovals === 1
-                ? `Any 1 of your ${totalContacts} trusted contacts can approve recovery.`
-                : `All ${requiredApprovals} of your ${totalContacts} trusted contacts must approve recovery together.`}
-            </BodyText>
+                    {num}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontWeight: "600",
+                      color: isSelected ? colors.textOnAccent : colors.textSecondary,
+                      marginTop: 4
+                    }}
+                  >
+                    CONTACT{num > 1 ? 'S' : ''}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-        </Surface>
+        </View>
 
-        {/* STEPPER CONTROLS */}
-        <CardLevel1 isDark={isDark}>
-          <View style={{ gap: Spacing.sp3, alignItems: "center" }}>
-            <CaptionText color={Colors.primary}>ADJUST REQUIREMENT</CaptionText>
-
-            <View
-              style={{
-                flexDirection: "row",
-                gap: Spacing.sp3,
-                alignItems: "center",
+        {/* SECURITY ANALYSIS CARD */}
+        <View
+          style={{
+            backgroundColor: withAlpha(security.color, 0.08),
+            borderRadius: 24,
+            padding: 24,
+            borderWidth: 1,
+            borderColor: withAlpha(security.color, 0.2),
+            gap: 16
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View 
+              style={{ 
+                width: 44, 
+                height: 44, 
+                borderRadius: 22, 
+                backgroundColor: withAlpha(security.color, 0.15),
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
-              <SecondaryButton
-                label="−"
-                isDark={isDark}
-                onPress={handleDecrement}
-                disabled={!canDecrease}
-              />
-
-              <BodyText
-                isDark={isDark}
-                style={{
-                  fontSize: 32,
-                  fontWeight: "bold",
-                  minWidth: 60,
-                  textAlign: "center",
-                }}
-              >
-                {requiredApprovals}
-              </BodyText>
-
-              <SecondaryButton
-                label="+"
-                isDark={isDark}
-                onPress={handleIncrement}
-                disabled={!canIncrease}
-              />
+              <Text style={{ fontSize: 20 }}>{security.icon}</Text>
             </View>
-
-            <BodyText
-              isDark={isDark}
-              color={isDark ? Colors.textTertiary : Colors.lightTextSecondary}
-              style={{ fontSize: 12, textAlign: "center" }}
-            >
-              {canDecrease
-                ? "Tap − to require fewer approvals"
-                : "Minimum: 1 approval required"}{" "}
-              {"\n"}
-              {canIncrease
-                ? "Tap + to require more approvals"
-                : "Maximum reached for your contacts"}
-            </BodyText>
-          </View>
-        </CardLevel1>
-
-        {/* INSUFFICIENT CONTACTS WARNING */}
-        {needsMoreContacts && (
-          <Surface isDark={isDark} elevation={1}>
-            <View
-              style={{
-                flexDirection: "row",
-                gap: Spacing.sp2,
-                paddingHorizontal: Spacing.sp3,
-                paddingVertical: Spacing.sp3,
-                backgroundColor: isDark ? Colors.surface : "#fef3c7",
-                borderRadius: 8,
-                borderLeftWidth: 4,
-                borderLeftColor: Colors.warning,
-              }}
-            >
-              <BodyText isDark={isDark} style={{ fontSize: 18 }}>
-                ⚠️
-              </BodyText>
-              <BodyText
-                isDark={isDark}
-                color={Colors.warning}
-                style={{ flex: 1, fontSize: 13, fontWeight: "600" }}
-              >
-                You need {requiredApprovals - totalContacts} more trusted
-                contact{requiredApprovals - totalContacts === 1 ? "" : "s"} to
-                require {requiredApprovals} approval
-                {requiredApprovals === 1 ? "" : "s"}.
-              </BodyText>
-            </View>
-          </Surface>
-        )}
-
-        {/* SECURITY IMPLICATIONS */}
-        <CardLevel1 isDark={isDark}>
-          <View style={{ gap: Spacing.sp2 }}>
-            <TitleText isDark={isDark}>Why this matters</TitleText>
-            <BodyText
-              isDark={isDark}
-              color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
-              style={{ fontSize: 13, lineHeight: 20 }}
-            >
-              •{" "}
-              <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
-                Higher threshold = More secure
-              </BodyText>
-              {"\n"}Requires more people to approve, harder for attackers.
-              {"\n\n"}•{" "}
-              <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
-                Lower threshold = Easier recovery
-              </BodyText>
-              {"\n"}Faster recovery if you lose access.{"\n\n"}• All approvals
-              must happen together (not spread over time).
-            </BodyText>
-          </View>
-        </CardLevel1>
-
-        {/* CURRENT SETTING */}
-        <Surface isDark={isDark} elevation={1}>
-          <View style={{ gap: Spacing.sp2 }}>
-            <CaptionText color={Colors.primary}>CURRENT SETTING</CaptionText>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: Spacing.sp2,
-              }}
-            >
-              <Badge
-                isDark={isDark}
-                status="active"
-                label={`${requiredApprovals}/${totalContacts}`}
-              />
-              <BodyText isDark={isDark}>
-                {requiredApprovals} out of {totalContacts} contacts required
-              </BodyText>
+            <View>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: security.color, letterSpacing: 0.5 }}>
+                SECURITY ANALYSIS
+              </Text>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>
+                {security.label}
+              </Text>
             </View>
           </View>
-        </Surface>
+
+          <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 22 }}>
+            {selectedThreshold === 1 
+              ? "High Risk: Only one contact is needed to access your account. This is vulnerable if a contact's email is compromised."
+              : selectedThreshold === totalContacts
+              ? "Strict Security: Every single contact must approve. If even one contact loses access, recovery becomes impossible."
+              : `Recommended: Requiring ${selectedThreshold} of ${totalContacts} contacts provides optimal protection against both compromise and loss of access.`}
+          </Text>
+
+          {selectedThreshold === 1 && (
+            <View style={{ 
+              backgroundColor: withAlpha(colors.error, 0.1), 
+              padding: 12, 
+              borderRadius: 12,
+              borderLeftWidth: 3,
+              borderLeftColor: colors.error
+            }}>
+              <Text style={{ fontSize: 12, color: colors.error, fontWeight: '600' }}>
+                We strongly recommend adding more contacts or increasing the threshold.
+              </Text>
+            </View>
+          )}
+        </View>
 
         {/* ACTIONS */}
-        <View style={{ gap: Spacing.sp2 }}>
-          <PrimaryButton
-            label={isSaving ? "Saving..." : "Save Configuration"}
-            isDark={isDark}
-            onPress={handleSave}
-            disabled={isSaving || needsMoreContacts}
-          />
-
-          <SecondaryButton
-            label="Cancel"
-            isDark={isDark}
-            onPress={onCancel}
+        <View style={{ gap: 12, marginTop: 'auto' }}>
+          <TouchableOpacity
+            onPress={() => onSaveConfiguration?.(selectedThreshold)}
+            activeOpacity={0.85}
             disabled={isSaving}
-          />
+            style={{
+              backgroundColor: colors.accent,
+              borderRadius: 16,
+              paddingVertical: 18,
+              alignItems: "center",
+              shadowColor: colors.accent,
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.3,
+              shadowRadius: 12,
+              elevation: 6
+            }}
+          >
+            <Text
+              style={{
+                color: colors.textOnAccent,
+                fontSize: 16,
+                fontWeight: "700",
+              }}
+            >
+              {isSaving ? "Saving Configuration..." : "Save Configuration"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={onCancel}
+            activeOpacity={0.7}
+            style={{
+              paddingVertical: 12,
+              alignItems: "center",
+            }}
+          >
+            <Text
+              style={{
+                color: colors.textSecondary,
+                fontSize: 14,
+                fontWeight: "600",
+              }}
+            >
+              Cancel
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -325,3 +270,4 @@ export const ThresholdConfigurationScreen: React.FC<
 };
 
 export default ThresholdConfigurationScreen;
+
