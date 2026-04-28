@@ -236,6 +236,9 @@ contract DeployEmailRecovery is Script {
             _trySerializeExistingAddress(root, "entryPoint", existingJson, ".entryPoint");
             _trySerializeExistingAddress(root, "usdc", existingJson, ".usdc");
             _trySerializeExistingAddress(root, "deployer", existingJson, ".deployer");
+            _trySerializeExistingString(root, "infraVersion", existingJson, ".infraVersion");
+            _trySerializeExistingAddress(root, "rootFactory", existingJson, ".rootFactory");
+            _trySerializeExistingBool(root, "portable", existingJson, ".portable");
             _trySerializeExistingAddress(root, "smartAccountImpl", existingJson, ".smartAccountImpl");
             _trySerializeExistingAddress(root, "proxyFactory", existingJson, ".proxyFactory");
             _trySerializeExistingAddress(root, "accountFactory", existingJson, ".accountFactory");
@@ -333,6 +336,19 @@ contract DeployEmailRecovery is Script {
     {
         try vm.parseJsonBool(existingJson, jsonPath) returns (bool value) {
             vm.serializeBool(root, key, value);
+        } catch { }
+    }
+
+    function _trySerializeExistingString(
+        string memory root,
+        string memory key,
+        string memory existingJson,
+        string memory jsonPath
+    )
+        internal
+    {
+        try vm.parseJsonString(existingJson, jsonPath) returns (string memory value) {
+            vm.serializeString(root, key, value);
         } catch { }
     }
 }

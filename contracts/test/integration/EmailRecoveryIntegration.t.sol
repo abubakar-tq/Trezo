@@ -13,7 +13,6 @@ import {
 import {CommandUtils} from "@zk-email/ether-email-auth-contracts/src/libraries/CommandUtils.sol";
 import {UserOverrideableDKIMRegistry} from "@zk-email/contracts/UserOverrideableDKIMRegistry.sol";
 
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 
@@ -72,14 +71,13 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
         killSwitchAuthorizer = makeAddr("kill-switch-authorizer");
         proofTimestamp = block.timestamp;
 
-        DeployAccount deployScript = new DeployAccount();
         (
             HelperConfig _helperConfig,
             ,
             ,
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator,
-        ) = deployScript.deployAccount();
+        ) = _deployAccountStack();
         helperConfig = _helperConfig;
         accountFactory = _accountFactory;
         passkeyValidator = _passkeyValidator;

@@ -1,6 +1,9 @@
 {
   "name": "trezo-workspace",
   "private": true,
+  "scripts": {
+    "android": "npm --workspace apps/mobile run android"
+  },
   "workspaces": [
     "apps/*"
   ]

@@ -3,7 +3,6 @@ pragma solidity ^0.8.30;
 
 import {console2} from "forge-std/Test.sol";
 import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
@@ -26,15 +25,13 @@ contract UserOperationTest is AccountFactoryTestHelper {
     address immutable RANDOM_USER = makeAddr("RandomUser");
 
     function setUp() public {
-        // Use DeployAccount script to get all required contracts
-        DeployAccount deployScript = new DeployAccount();
         (
             HelperConfig _helperConfig,
             , // smartAccount
             , // proxyFactory
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator,
-        ) = deployScript.deployAccount();
+        ) = _deployAccountStack();
         accountFactory = _accountFactory;
         helperConfig = _helperConfig;
         usdc = helperConfig.getConfig().usdc;

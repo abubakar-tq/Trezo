@@ -76,9 +76,10 @@ contract DeployInfra is Script {
         _log(deployed);
     }
 
-    function _writeArtifacts(PredictInfra.InfraAddresses memory deployed, address entryPoint) internal {
-        vm.createDir("deployments/releases", true);
-        vm.createDir("deployments/chains", true);
+    function _writeArtifacts(PredictInfra.InfraAddresses memory deployed, address entryPoint) internal virtual {
+        vm.createDir("deployments", true);
+        vm.createDir(string.concat(_artifactRootPath(), "/releases"), true);
+        vm.createDir(string.concat(_artifactRootPath(), "/chains"), true);
 
         string memory releaseRoot = "release";
         vm.serializeString(releaseRoot, "release", DeployConstants.TREZO_INFRA_VERSION);
@@ -90,7 +91,7 @@ contract DeployInfra is Script {
         vm.serializeBytes32(releaseRoot, "passkeyValidatorSalt", DeployConstants.PASSKEY_VALIDATOR_SALT);
         string memory releaseJson =
             vm.serializeBytes32(releaseRoot, "socialRecoverySalt", DeployConstants.SOCIAL_RECOVERY_SALT);
-        vm.writeJson(releaseJson, "deployments/releases/trezo-infra-v2.json");
+        vm.writeJson(releaseJson, _releaseManifestPath());
 
         string memory chainRoot = "chain";
         vm.serializeUint(chainRoot, "chainId", block.chainid);
@@ -103,9 +104,9 @@ contract DeployInfra is Script {
         vm.serializeAddress(chainRoot, "accountFactory", deployed.accountFactory);
         vm.serializeAddress(chainRoot, "passkeyValidator", deployed.passkeyValidator);
         string memory chainJson = vm.serializeAddress(chainRoot, "socialRecovery", deployed.socialRecovery);
-        vm.writeJson(chainJson, string.concat("deployments/chains/", vm.toString(block.chainid), ".json"));
+        vm.writeJson(chainJson, _chainManifestPath());
 
-        vm.writeJson(chainJson, string.concat("deployments/", vm.toString(block.chainid), ".json"));
+        vm.writeJson(chainJson, _flatManifestPath());
     }
 
     function _log(PredictInfra.InfraAddresses memory deployed) internal view {
@@ -116,5 +117,33 @@ contract DeployInfra is Script {
         console2.log("MinimalProxyFactory:", deployed.proxyFactory);
         console2.log("PasskeyValidator:", deployed.passkeyValidator);
         console2.log("SocialRecovery:", deployed.socialRecovery);
+    }
+
+    function _artifactRootPath() internal view virtual returns (string memory) {
+        string memory namespace = _deploymentNamespace();
+        if (bytes(namespace).length == 0) {
+            return "deployments";
+        }
+        return string.concat("deployments/", namespace);
+    }
+
+    function _deploymentNamespace() internal view virtual returns (string memory) {
+        try vm.envString("DEPLOYMENT_NAMESPACE") returns (string memory namespace) {
+            return namespace;
+        } catch {
+            return "";
+        }
+    }
+
+    function _releaseManifestPath() internal view virtual returns (string memory) {
+        return string.concat(_artifactRootPath(), "/releases/trezo-infra-v2.json");
+    }
+
+    function _chainManifestPath() internal view virtual returns (string memory) {
+        return string.concat(_artifactRootPath(), "/chains/", vm.toString(block.chainid), ".json");
+    }
+
+    function _flatManifestPath() internal view virtual returns (string memory) {
+        return string.concat("deployments/", vm.toString(block.chainid), ".json");
     }
 }

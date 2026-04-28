@@ -6,7 +6,6 @@ import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.so
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
@@ -24,8 +23,7 @@ contract MinimalTest is AccountFactoryTestHelper {
     SendPackedUserOp sendUserOp;
 
     function setUp() public {
-        DeployAccount deployer = new DeployAccount();
-        (helperConfig, implementation,  factory, accountFactory,passkeyValidator, ) = deployer.deployAccount();
+        (helperConfig, implementation, factory, accountFactory, passkeyValidator,) = _deployAccountStack();
 
 
         proxy = _createAuthorizedAccount(

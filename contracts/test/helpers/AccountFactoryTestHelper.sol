@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
+import {SafeRootDeployFixture} from "./SafeRootDeployFixture.sol";
 
-abstract contract AccountFactoryTestHelper is Test {
+abstract contract AccountFactoryTestHelper is SafeRootDeployFixture {
     function _createAuthorizedAccount(
         AccountFactory accountFactory,
         bytes32 walletId,

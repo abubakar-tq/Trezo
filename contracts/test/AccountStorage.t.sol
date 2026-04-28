@@ -6,7 +6,6 @@ import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.so
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
@@ -23,8 +22,6 @@ contract AccountStorageTest is AccountFactoryTestHelper {
     PasskeyValidator passkeyValidator;
 
     function setUp() public {
-        // Use DeployAccount script to get all required contracts
-        DeployAccount deployScript = new DeployAccount();
         (
             HelperConfig _helperConfig,
             , // Smart Account
@@ -32,7 +29,7 @@ contract AccountStorageTest is AccountFactoryTestHelper {
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator
             ,
-        ) = deployScript.deployAccount();
+        ) = _deployAccountStack();
 
         accountFactory = _accountFactory;
         passkeyValidator = _passkeyValidator;

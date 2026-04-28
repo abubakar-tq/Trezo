@@ -6,6 +6,7 @@ DEFAULT_ANVIL_KEY := 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6
 DEFAULT_ANVIL_ACCOUNT := 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
 
 ANVIL_RPC_URL = http://192.168.100.68:8545
+LOCAL_PRIVATE_KEY ?= $(DEFAULT_ANVIL_KEY)
 
 # Where the Expo app lives (relative to contracts/)
 MOBILE_DIR ?= ../apps/mobile/src/integration
@@ -19,11 +20,14 @@ RPC_URL ?= $(ANVIL_RPC_URL)
 CHAIN_ID ?= $(CHAIN_ID_LOCAL)
 SCRIPT_VERBOSITY ?= -vvvv
 
-ANVIL_NETWORK_ARGS := --rpc-url $(ANVIL_RPC_URL) --private-key $(DEFAULT_ANVIL_KEY) --broadcast $(SCRIPT_VERBOSITY)
+ANVIL_NETWORK_ARGS := --rpc-url $(ANVIL_RPC_URL) --private-key $(LOCAL_PRIVATE_KEY) --broadcast $(SCRIPT_VERBOSITY)
 
 DEPLOY_SCRIPT_ENV := \
 	$(if $(PRIVATE_KEY),PRIVATE_KEY=$(PRIVATE_KEY)) \
-	$(if $(ENTRYPOINT),ENTRYPOINT=$(ENTRYPOINT))
+	$(if $(ENTRYPOINT),ENTRYPOINT=$(ENTRYPOINT)) \
+	$(if $(DEPLOYMENT_NAMESPACE),DEPLOYMENT_NAMESPACE=$(DEPLOYMENT_NAMESPACE))
+
+OPTIONAL_ENTRYPOINT_MAKE := $(if $(ENTRYPOINT),ENTRYPOINT=$(ENTRYPOINT))
 
 PREDICT_WALLET_ENV := \
 	$(if $(ACCOUNT_FACTORY),ACCOUNT_FACTORY=$(ACCOUNT_FACTORY)) \
@@ -39,6 +43,8 @@ help:
 	@echo "Common targets:"
 	@echo "  make build"
 	@echo "  make deploy-local"
+	@echo "  make predict-local"
+	@echo "  make verify-local"
 	@echo "  make deploy-email-local"
 	@echo ""
 	@echo "Deterministic infra flow:"
@@ -46,12 +52,13 @@ help:
 	@echo "  make check-chain-support RPC_URL=<rpc>"
 	@echo "  make predict-infra RPC_URL=<rpc> [ENTRYPOINT=...]"
 	@echo "  make deploy-infra RPC_URL=<rpc> PRIVATE_KEY=<pk> [ENTRYPOINT=...]"
+	@echo "  make deploy-sepolia   # compatibility alias for make deploy-infra-sepolia"
 	@echo "  make verify-infra RPC_URL=<rpc> [ENTRYPOINT=...]"
 	@echo "  make predict-wallet RPC_URL=<rpc> ACCOUNT_FACTORY=<addr> WALLET_ID=<bytes32> VALIDATOR=<addr> PASSKEY_ID_RAW=<bytes32> PASSKEY_PX=<uint256> PASSKEY_PY=<uint256> [WALLET_INDEX=0]"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make check-root-factory RPC_URL=\$$SEPOLIA_RPC_URL"
-	@echo "  make deploy-infra RPC_URL=\$$SEPOLIA_RPC_URL PRIVATE_KEY=\$$PRIVATE_KEY"
+	@echo "  make deploy-sepolia PRIVATE_KEY=\$$PRIVATE_KEY"
 	@echo "  make predict-wallet RPC_URL=\$$BASE_RPC_URL ACCOUNT_FACTORY=0x... WALLET_ID=0x... VALIDATOR=0x... PASSKEY_ID_RAW=0x... PASSKEY_PX=... PASSKEY_PY=... WALLET_INDEX=0"
 
 .PHONY: build
@@ -61,13 +68,14 @@ build:
 # ---------- Deploy targets ----------
 
 .PHONY: deploy-local
-deploy-local: build
-	forge script script/DeployAccount.s.sol:DeployAccount \
-	$(ANVIL_NETWORK_ARGS)
-	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
-	$(ANVIL_NETWORK_ARGS)
-	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL) 
-	$(MAKE) sync-abi	
+deploy-local:
+	@echo "Deploying the local stack through the canonical Safe-root flow."
+	@echo "Note: 31337 is not allowlisted as a portable release chain, so deploy-local skips check-chain-support."
+	$(MAKE) check-root-factory RPC_URL=$(ANVIL_RPC_URL)
+	$(MAKE) predict-local $(OPTIONAL_ENTRYPOINT_MAKE)
+	$(MAKE) deploy-infra RPC_URL=$(ANVIL_RPC_URL) PRIVATE_KEY=$(LOCAL_PRIVATE_KEY) DEPLOYMENT_NAMESPACE=local $(OPTIONAL_ENTRYPOINT_MAKE)
+	$(MAKE) verify-local $(OPTIONAL_ENTRYPOINT_MAKE)
+	$(MAKE) deploy-email-local
 
 .PHONY: deploy-email-local
 deploy-email-local: build
@@ -77,14 +85,14 @@ deploy-email-local: build
 	$(MAKE) sync-abi
 
 .PHONY: deploy-sepolia
-deploy-sepolia: build
-	forge script script/DeployAccount.s.sol:DeployAccount \
-		--rpc-url $(SEPOLIA_RPC_URL) \
-		--account sepKey \
-		--broadcast -vvv
+deploy-sepolia:
+	@echo "deploy-sepolia is a compatibility alias for the canonical portable infra flow."
+	@echo "For the full Sepolia stack, run make deploy-sepolia then make deploy-email-sepolia."
+	$(MAKE) deploy-infra-sepolia PRIVATE_KEY=$(PRIVATE_KEY) $(OPTIONAL_ENTRYPOINT_MAKE)
 
 .PHONY: deploy-email-sepolia
 deploy-email-sepolia: build
+	@echo "Deploying email recovery after canonical infra deployment on Sepolia."
 	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
 		--rpc-url $(SEPOLIA_RPC_URL) \
 		--account sepKey \
@@ -138,6 +146,15 @@ predict-wallet:
 deploy-infra-sepolia:
 	$(MAKE) deploy-infra RPC_URL=$(SEPOLIA_RPC_URL)
 
+.PHONY: predict-local
+predict-local:
+	$(MAKE) predict-infra RPC_URL=$(ANVIL_RPC_URL) $(OPTIONAL_ENTRYPOINT_MAKE)
+
+.PHONY: verify-local
+verify-local:
+	$(MAKE) check-root-factory RPC_URL=$(ANVIL_RPC_URL)
+	$(MAKE) verify-infra RPC_URL=$(ANVIL_RPC_URL) $(OPTIONAL_ENTRYPOINT_MAKE)
+
 .PHONY: predict-infra-sepolia
 predict-infra-sepolia:
 	$(MAKE) predict-infra RPC_URL=$(SEPOLIA_RPC_URL)
@@ -161,7 +178,8 @@ sync-mobile:
 	@echo "Syncing artifacts for chain $(CHAIN_ID) to $(MOBILE_DIR)"
 	mkdir -p $(MOBILE_DIR)/contracts
 
-	# copy deployment JSON (written by DeployAccount.s.sol as deployments/<chainId>.json)
+	# copy the derived compatibility manifest used by local/mobile flows
+	# canonical release truth lives in deployments/releases/* and deployments/chains/*
 	cp deployments/$(CHAIN_ID).json \
 		$(MOBILE_DIR)/contracts/deployment.$(CHAIN_ID).json
 

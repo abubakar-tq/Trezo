@@ -12,7 +12,6 @@ import {
 import {CommandUtils} from "@zk-email/ether-email-auth-contracts/src/libraries/CommandUtils.sol";
 import {UserOverrideableDKIMRegistry} from "@zk-email/contracts/UserOverrideableDKIMRegistry.sol";
 
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
@@ -65,8 +64,7 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         killSwitchAuthorizer = makeAddr("kill-switch-authorizer");
         proofTimestamp = block.timestamp;
 
-        DeployAccount deployScript = new DeployAccount();
-        (, , , accountFactory, passkeyValidator,) = deployScript.deployAccount();
+        (, , , accountFactory, passkeyValidator,) = _deployAccountStack();
 
         proxy = _createAuthorizedAccount(
             accountFactory,
