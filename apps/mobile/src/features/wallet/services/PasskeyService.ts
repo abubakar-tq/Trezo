@@ -13,6 +13,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSupabaseWalletService } from './SupabaseWalletService';
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
@@ -643,6 +644,49 @@ export class PasskeyService {
     
     debugLog('📦 [PasskeyService] Encoded passkey data for deployment');
     return encoded;
+  }
+
+  /**
+   * Push passkey metadata to Supabase for cross-device visibility
+   */
+  static async syncPasskeyToCloud(userId: string, aaWalletId: string, metadata: PasskeyMetadata): Promise<void> {
+    debugLog('☁️ [PasskeyService] Syncing passkey to Supabase...');
+    const walletService = getSupabaseWalletService();
+    
+    await walletService.savePasskey({
+      userId,
+      aaWalletId,
+      credentialId: metadata.credentialId,
+      publicKey: JSON.stringify({ x: metadata.publicKeyX, y: metadata.publicKeyY }),
+      deviceName: metadata.deviceName,
+      deviceType: metadata.deviceType,
+    });
+    
+    debugLog('✅ [PasskeyService] Passkey synced to cloud');
+  }
+
+  /**
+   * Fetch all passkeys for a user from Supabase
+   */
+  static async fetchCloudPasskeys(userId: string): Promise<PasskeyMetadata[]> {
+    debugLog('☁️ [PasskeyService] Fetching passkeys from Supabase...');
+    const walletService = getSupabaseWalletService();
+    
+    const cloudPasskeys = await walletService.getPasskeys(userId);
+    
+    return cloudPasskeys.map(cp => {
+      const pubKey = JSON.parse(cp.public_key);
+      return {
+        credentialId: cp.credential_id,
+        credentialIdRaw: this.credentialIdToBytes32(cp.credential_id),
+        publicKeyX: pubKey.x,
+        publicKeyY: pubKey.y,
+        rpId: getRpId(),
+        deviceName: cp.device_name,
+        deviceType: cp.device_type as 'ios' | 'android',
+        createdAt: cp.created_at,
+      };
+    });
   }
   
   // ==================== PRIVATE HELPER METHODS ====================

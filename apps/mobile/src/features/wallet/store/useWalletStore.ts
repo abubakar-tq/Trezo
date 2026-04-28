@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import type { Hex } from "viem";
 
 export type WalletAccount = {
   address: string;
@@ -55,9 +56,12 @@ export type DeploymentStatus = 'idle' | 'predicting' | 'deploying' | 'deployed' 
 
 export type PasskeyInfo = {
   id: string;
-  credentialId: string;
+  idRaw: Hex;
   deviceName: string;
   deviceType: string;
+  isOnChain: boolean;
+  px: string;
+  py: string;
   lastUsedAt?: string;
   createdAt: string;
 };

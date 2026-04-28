@@ -4,11 +4,15 @@ import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import {
   buildAddPasskeyUserOp,
+  buildRemovePasskeyUserOp,
   getDeployment,
   sendUserOp,
   type PasskeyInit,
 } from "@/src/integration/viem";
-import type { AddPasskeyUserOpParams } from "@/src/integration/viem/userOps";
+import type {
+  AddPasskeyUserOpParams,
+  RemovePasskeyUserOpParams,
+} from "@/src/integration/viem/userOps";
 import type { PasskeyMetadata } from "./PasskeyService";
 import type { Address, Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
@@ -28,6 +32,24 @@ export type PendingPasskeyRecord = {
 export type AddPasskeyBuildRequest = {
   smartAccountAddress: Address;
   pendingPasskey: PendingPasskeyRecord;
+  signingPasskeyId: Hex;
+  validatorAddress?: Address;
+  chainId?: SupportedChainId;
+  bundlerUrl?: string;
+  paymasterUrl?: string;
+  usePaymaster?: boolean;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+};
+
+export type RemovePasskeyBuildRequest = {
+  smartAccountAddress: Address;
+  passkeyIdToRemove: Hex;
   signingPasskeyId: Hex;
   validatorAddress?: Address;
   chainId?: SupportedChainId;
@@ -119,6 +141,36 @@ export class PasskeyAccountService {
       verificationGasLimit: params.verificationGasLimit,
       preVerificationGas: params.preVerificationGas,
     } satisfies AddPasskeyUserOpParams);
+
+    return { userOp, userOpHash };
+  }
+
+  static async buildRemovePasskeyUserOp(
+    params: RemovePasskeyBuildRequest,
+  ): Promise<PasskeyUserOpResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const paymasterUrl = params.usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl()
+      : params.paymasterUrl;
+
+    const { userOp, userOpHash } = await buildRemovePasskeyUserOp({
+      chainId,
+      bundlerUrl,
+      smartAccountAddress: params.smartAccountAddress,
+      passkeyIdToRemove: params.passkeyIdToRemove,
+      signingPasskeyId: params.signingPasskeyId,
+      validatorAddress: params.validatorAddress,
+      nonce: params.nonce,
+      nonceKey: params.nonceKey,
+      usePaymaster: params.usePaymaster,
+      paymasterUrl,
+      maxFeePerGas: params.maxFeePerGas,
+      maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+      callGasLimit: params.callGasLimit,
+      verificationGasLimit: params.verificationGasLimit,
+      preVerificationGas: params.preVerificationGas,
+    } satisfies RemovePasskeyUserOpParams);
 
     return { userOp, userOpHash };
   }
