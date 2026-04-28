@@ -2,29 +2,32 @@ import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
-import { SocialRecoveryService } from "@/src/features/wallet/services/SocialRecoveryService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import { SocialRecoveryService } from "@/src/features/wallet/services/SocialRecoveryService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
-import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import {
+    DEFAULT_CHAIN_ID,
+    type SupportedChainId,
+} from "@/src/integration/chains";
+import type { Guardian } from "@store/useRecoveryStatusStore";
+import { useRecoveryStatusStore } from "@store/useRecoveryStatusStore";
+import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
-import { useRecoveryStatusStore } from "@store/useRecoveryStatusStore";
-import type { Guardian } from "@store/useRecoveryStatusStore";
-import { GuardianSyncService } from "../services/GuardianSyncService";
-import { useUserStore } from "@store/useUserStore";
 import { isAddress, sha256, toBytes, type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
+import { GuardianSyncService } from "../services/GuardianSyncService";
 
 const randomHex = (bytes: number): Hex => {
   const arr = new Uint8Array(bytes);
@@ -38,7 +41,7 @@ const randomHex = (bytes: number): Hex => {
   const hex = Array.from(arr)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-  return (`0x${hex}`) as Hex;
+  return `0x${hex}` as Hex;
 };
 
 const shortenHex = (value: string | null | undefined, chars = 6) => {
@@ -52,10 +55,14 @@ const GuardianRecoveryScreen: React.FC = () => {
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
-  
+
   const user = useUserStore((state) => state.user);
-  const storedSmartAccountAddress = useUserStore((state) => state.smartAccountAddress);
-  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
+  const storedSmartAccountAddress = useUserStore(
+    (state) => state.smartAccountAddress,
+  );
+  const smartAccountDeployed = useUserStore(
+    (state) => state.smartAccountDeployed,
+  );
   const aaAccount = useWalletStore((state) => state.aaAccount);
   const activeChainId = useWalletStore((state) => state.activeChainId);
   const {
@@ -68,21 +75,29 @@ const GuardianRecoveryScreen: React.FC = () => {
     setModuleInstalled: setPersistentModuleInstalled,
   } = useRecoveryStatusStore();
   const smartAccountAddress = useMemo(() => {
-    const address = aaAccount?.predictedAddress ?? storedSmartAccountAddress ?? undefined;
+    const address =
+      aaAccount?.predictedAddress ?? storedSmartAccountAddress ?? undefined;
     return address ? (address as Address) : undefined;
   }, [aaAccount?.predictedAddress, storedSmartAccountAddress]);
   const isAccountDeployed = Boolean(
     aaAccount?.isDeployed ?? smartAccountDeployed ?? false,
   );
   const resolvedChainId = useMemo<SupportedChainId>(
-    () => (aaAccount?.chainId ?? activeChainId ?? DEFAULT_CHAIN_ID) as SupportedChainId,
+    () =>
+      (aaAccount?.chainId ??
+        activeChainId ??
+        DEFAULT_CHAIN_ID) as SupportedChainId,
     [aaAccount?.chainId, activeChainId],
   );
   const smartAccountReady = Boolean(smartAccountAddress && isAccountDeployed);
 
   const defaultN = 3;
-  const [mValue, setMValue] = useState(storedGuardians.length > 0 ? requiredSignatures.toString() : "2");
-  const [nValue, setNValue] = useState(storedGuardians.length > 0 ? totalGuardians.toString() : "3");
+  const [mValue, setMValue] = useState(
+    storedGuardians.length > 0 ? requiredSignatures.toString() : "2",
+  );
+  const [nValue, setNValue] = useState(
+    storedGuardians.length > 0 ? totalGuardians.toString() : "3",
+  );
   const [guardianAddresses, setGuardianAddresses] = useState<string[]>(() => {
     if (storedGuardians.length > 0) {
       return storedGuardians.map((g) => g.address);
@@ -92,7 +107,7 @@ const GuardianRecoveryScreen: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [viewMode, setViewMode] = useState<"form" | "list">(
-    storedGuardians.length > 0 ? "list" : "form"
+    storedGuardians.length > 0 ? "list" : "form",
   );
   const [syncStatus, setSyncStatus] = useState<{
     hasAAWallet: boolean;
@@ -102,12 +117,15 @@ const GuardianRecoveryScreen: React.FC = () => {
   } | null>(null);
   const [moduleStatusNonce, setModuleStatusNonce] = useState(0);
   const [checkingModule, setCheckingModule] = useState(false);
-  const [moduleInstalledState, setModuleInstalledState] = useState<boolean | null>(null);
+  const [moduleInstalledState, setModuleInstalledState] = useState<
+    boolean | null
+  >(null);
   const [installingModule, setInstallingModule] = useState(false);
   const [moduleError, setModuleError] = useState<string | null>(null);
   const [lastUserOpHash, setLastUserOpHash] = useState<Hex | null>(null);
   const [lastOperationHash, setLastOperationHash] = useState<Hex | null>(null);
-  const [lastInstallPayload, setLastInstallPayload] = useState<UserOperation<"0.7"> | null>(null);
+  const [lastInstallPayload, setLastInstallPayload] =
+    useState<UserOperation<"0.7"> | null>(null);
   const [lastGuardianAction, setLastGuardianAction] = useState<{
     actionType: string;
     payload: Record<string, unknown>;
@@ -120,7 +138,9 @@ const GuardianRecoveryScreen: React.FC = () => {
     () => storedGuardians.map((g) => g.address.trim()).filter(Boolean),
     [storedGuardians],
   );
-  const guardiansReady = savedGuardianAddresses.length > 0 && requiredSignatures <= savedGuardianAddresses.length;
+  const guardiansReady =
+    savedGuardianAddresses.length > 0 &&
+    requiredSignatures <= savedGuardianAddresses.length;
 
   // Check sync status on mount
   useEffect(() => {
@@ -146,7 +166,10 @@ const GuardianRecoveryScreen: React.FC = () => {
     }
     let cancelled = false;
     setCheckingModule(true);
-    SocialRecoveryService.isModuleInstalled(smartAccountAddress, resolvedChainId)
+    SocialRecoveryService.isModuleInstalled(
+      smartAccountAddress,
+      resolvedChainId,
+    )
       .then((installed) => {
         if (!cancelled) {
           setModuleInstalledState(installed);
@@ -155,7 +178,11 @@ const GuardianRecoveryScreen: React.FC = () => {
       })
       .catch((error) => {
         if (!cancelled) {
-          setModuleError(error instanceof Error ? error.message : "Failed to read module status");
+          setModuleError(
+            error instanceof Error
+              ? error.message
+              : "Failed to read recovery status",
+          );
           setModuleInstalledState(false);
         }
       })
@@ -167,7 +194,13 @@ const GuardianRecoveryScreen: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [smartAccountReady, smartAccountAddress, resolvedChainId, moduleStatusNonce, moduleStatusLocked]);
+  }, [
+    smartAccountReady,
+    smartAccountAddress,
+    resolvedChainId,
+    moduleStatusNonce,
+    moduleStatusLocked,
+  ]);
 
   const simulateGuardianAction = useCallback(
     async (actionType: string, payload: Record<string, unknown>) => {
@@ -176,12 +209,20 @@ const GuardianRecoveryScreen: React.FC = () => {
       }
       const passkey = await PasskeyService.getPasskey(user.id);
       if (!passkey) {
-        throw new Error("No passkey found on this device. Create a passkey first.");
+        throw new Error(
+          "No passkey found on this device. Create a passkey first.",
+        );
       }
-      const message = JSON.stringify({ actionType, payload, timestamp: Date.now() });
+      const message = JSON.stringify({
+        actionType,
+        payload,
+        timestamp: Date.now(),
+      });
       const fakeHash = sha256(toBytes(message)) as Hex;
       const signature = await PasskeyService.signWithPasskey(user.id, fakeHash);
-      const encodedSignature = PasskeyService.encodeSignatureForContract(signature) as Hex;
+      const encodedSignature = PasskeyService.encodeSignatureForContract(
+        signature,
+      ) as Hex;
       setLastGuardianAction({
         actionType,
         payload,
@@ -194,23 +235,20 @@ const GuardianRecoveryScreen: React.FC = () => {
     [user?.id],
   );
 
-  const handleMNChange = useCallback(
-    (field: "m" | "n", value: string) => {
-      const numValue = parseInt(value) || 0;
-      if (field === "m") {
-        setMValue(value);
-      } else {
-        setNValue(value);
-        setGuardianAddresses((current) => {
-          if (numValue > current.length) {
-            return [...current, ...Array(numValue - current.length).fill("")];
-          }
-          return current.slice(0, numValue || 0);
-        });
-      }
-    },
-    []
-  );
+  const handleMNChange = useCallback((field: "m" | "n", value: string) => {
+    const numValue = parseInt(value) || 0;
+    if (field === "m") {
+      setMValue(value);
+    } else {
+      setNValue(value);
+      setGuardianAddresses((current) => {
+        if (numValue > current.length) {
+          return [...current, ...Array(numValue - current.length).fill("")];
+        }
+        return current.slice(0, numValue || 0);
+      });
+    }
+  }, []);
 
   const handleAddressChange = useCallback((index: number, value: string) => {
     setGuardianAddresses((prev) => {
@@ -225,18 +263,24 @@ const GuardianRecoveryScreen: React.FC = () => {
     const n = parseInt(nValue);
 
     if (!m || !n || m > n) {
-      Alert.alert("Invalid Configuration", "M must be less than or equal to N");
+      Alert.alert(
+        "Invalid setup",
+        "Approvals needed must be less than or equal to total contacts.",
+      );
       return;
     }
 
     const filledAddresses = guardianAddresses.filter((addr) => addr.trim());
     if (filledAddresses.length !== n) {
-      Alert.alert("Incomplete", `Please enter all ${n} guardian addresses`);
+      Alert.alert(
+        "Incomplete",
+        `Please enter all ${n} trusted contact addresses.`,
+      );
       return;
     }
 
     if (!user?.id) {
-      Alert.alert("Error", "User not authenticated");
+      Alert.alert("Sign in required", "Please sign in to continue.");
       return;
     }
 
@@ -250,7 +294,12 @@ const GuardianRecoveryScreen: React.FC = () => {
       });
     } catch (error) {
       setIsSubmitting(false);
-      Alert.alert("Passkey Required", error instanceof Error ? error.message : "Failed to authenticate with passkey.");
+      Alert.alert(
+        "Passkey required",
+        error instanceof Error
+          ? error.message
+          : "Failed to confirm with your passkey.",
+      );
       return;
     }
 
@@ -263,40 +312,55 @@ const GuardianRecoveryScreen: React.FC = () => {
     setGuardians(newGuardians, m, n);
 
     // Try to sync to database
-    const syncResult = await GuardianSyncService.syncGuardiansToDatabase(user.id);
-    
+    const syncResult = await GuardianSyncService.syncGuardiansToDatabase(
+      user.id,
+    );
+
     setIsSubmitting(false);
 
-    if (syncResult.success || syncResult.error === 'AA_WALLET_NOT_DEPLOYED') {
-      Alert.alert("Recovery Updated", "Guardian changes were authenticated and synced.");
+    if (syncResult.success || syncResult.error === "AA_WALLET_NOT_DEPLOYED") {
+      Alert.alert(
+        "Recovery updated",
+        "Trusted contact changes were confirmed and synced.",
+      );
       // Refresh sync status
       const status = await GuardianSyncService.getSyncStatus(user.id);
       setSyncStatus(status);
     } else {
       Alert.alert(
-        "Partially Saved",
-        "Guardians saved locally but failed to sync to database. You can sync manually later.",
-        [{ text: "OK" }]
+        "Saved locally",
+        "Trusted contacts were saved locally but not synced yet. You can sync manually later.",
+        [{ text: "OK" }],
       );
     }
 
     setViewMode("list");
-  }, [mValue, nValue, guardianAddresses, setGuardians, user?.id, simulateGuardianAction]);
+  }, [
+    mValue,
+    nValue,
+    guardianAddresses,
+    setGuardians,
+    user?.id,
+    simulateGuardianAction,
+  ]);
 
   const handleSyncNow = useCallback(async () => {
     if (!user?.id) return;
-    
+
     setIsSyncing(true);
     const result = await GuardianSyncService.syncGuardiansToDatabase(user.id);
     setIsSyncing(false);
 
-    if (result.success || result.error === 'AA_WALLET_NOT_DEPLOYED') {
-      Alert.alert("Success", "Guardians synced to database!");
+    if (result.success || result.error === "AA_WALLET_NOT_DEPLOYED") {
+      Alert.alert("Synced", "Trusted contacts synced successfully.");
       // Refresh sync status
       const status = await GuardianSyncService.getSyncStatus(user.id);
       setSyncStatus(status);
     } else {
-      Alert.alert("Sync Failed", "Failed to sync guardians to database. Please try again later.");
+      Alert.alert(
+        "Sync failed",
+        "Unable to sync trusted contacts right now. Try again later.",
+      );
     }
   }, [user?.id]);
 
@@ -307,20 +371,31 @@ const GuardianRecoveryScreen: React.FC = () => {
 
   const handleInstallModule = useCallback(async () => {
     if (!smartAccountReady || !smartAccountAddress) {
-      Alert.alert("Smart Account Required", "Deploy your smart account before installing guardian recovery.");
+      Alert.alert(
+        "Trezo account required",
+        "Create your Trezo account before activating recovery.",
+      );
       return;
     }
     if (!user?.id) {
-      Alert.alert("Authentication Required", "Please sign in to install the social recovery module.");
+      Alert.alert("Sign in required", "Please sign in to activate recovery.");
       return;
     }
     if (!guardiansReady) {
-      Alert.alert("Add Guardians", "Save at least one guardian configuration before installing.");
+      Alert.alert(
+        "Add trusted contacts",
+        "Save at least one trusted contact before activating recovery.",
+      );
       return;
     }
-    const invalidGuardian = savedGuardianAddresses.find((address) => !isAddress(address));
+    const invalidGuardian = savedGuardianAddresses.find(
+      (address) => !isAddress(address),
+    );
     if (invalidGuardian) {
-      Alert.alert("Invalid Address", `${invalidGuardian} is not a valid Ethereum address.`);
+      Alert.alert(
+        "Invalid address",
+        `${invalidGuardian} is not a valid address.`,
+      );
       return;
     }
 
@@ -332,23 +407,33 @@ const GuardianRecoveryScreen: React.FC = () => {
     try {
       const passkey = await PasskeyService.getPasskey(user.id);
       if (!passkey) {
-        throw new Error("No passkey found on this device. Create a passkey in the AA deployment flow first.");
+        throw new Error(
+          "No passkey found on this device. Create a passkey first.",
+        );
       }
 
-      const guardians = savedGuardianAddresses.map((address) => address as Address);
-      const { userOp, userOpHash } = await SocialRecoveryService.buildInstallModuleUserOp({
-        smartAccountAddress,
-        guardians,
-        threshold: requiredSignatures,
-        passkeyId: passkey.credentialIdRaw as Hex,
-        chainId: resolvedChainId,
-        usePaymaster: true,
-      });
+      const guardians = savedGuardianAddresses.map(
+        (address) => address as Address,
+      );
+      const { userOp, userOpHash } =
+        await SocialRecoveryService.buildInstallModuleUserOp({
+          smartAccountAddress,
+          guardians,
+          threshold: requiredSignatures,
+          passkeyId: passkey.credentialIdRaw as Hex,
+          chainId: resolvedChainId,
+          usePaymaster: true,
+        });
 
       setLastUserOpHash(userOpHash);
 
-      const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
-      const encodedSignature = PasskeyService.encodeSignatureForContract(signature) as Hex;
+      const signature = await PasskeyService.signWithPasskey(
+        user.id,
+        userOpHash,
+      );
+      const encodedSignature = PasskeyService.encodeSignatureForContract(
+        signature,
+      ) as Hex;
       const signedUserOp = { ...userOp, signature: encodedSignature };
 
       const mockOpHash = randomHex(32);
@@ -357,14 +442,16 @@ const GuardianRecoveryScreen: React.FC = () => {
       setModuleInstalledState(true);
       setPersistentModuleInstalled(true);
       Alert.alert(
-        "Social Recovery Activated",
-        "Guardian recovery module installation was submitted successfully.",
+        "Recovery activated",
+        "Trusted contacts are now enabled for recovery.",
       );
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to install the social recovery module. Please try again.";
+        error instanceof Error
+          ? error.message
+          : "Failed to activate recovery. Please try again.";
       setModuleError(message);
-      Alert.alert("Installation Failed", message);
+      Alert.alert("Activation failed", message);
     } finally {
       setInstallingModule(false);
     }
@@ -379,45 +466,63 @@ const GuardianRecoveryScreen: React.FC = () => {
     setPersistentModuleInstalled,
   ]);
 
-  const handleRemoveGuardian = useCallback((id: string) => {
-    const targetGuardian = storedGuardians.find((g) => g.id === id);
-    if (!targetGuardian) return;
-    if (storedGuardians.length <= 1) {
-      Alert.alert("Minimum Required", "You need at least one guardian configured at all times.");
-      return;
-    }
-    Alert.alert("Remove Guardian", "Are you sure you want to remove this guardian?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await simulateGuardianAction("remove_guardian", {
-              guardianId: targetGuardian.id,
-              guardianAddress: targetGuardian.address,
-            });
-          } catch (error) {
-            Alert.alert(
-              "Passkey Required",
-              error instanceof Error ? error.message : "Failed to authenticate with passkey.",
-            );
-            return;
-          }
-          const updated = storedGuardians.filter((g) => g.id !== id);
-          if (updated.length === 0) {
-            clearGuardians();
-            setViewMode("form");
-            setGuardianAddresses(Array(defaultN).fill(""));
-            setMValue("2");
-            setNValue("3");
-          } else {
-            setGuardians(updated, parseInt(mValue), updated.length);
-          }
-        },
-      },
-    ]);
-  }, [storedGuardians, mValue, setGuardians, clearGuardians, simulateGuardianAction]);
+  const handleRemoveGuardian = useCallback(
+    (id: string) => {
+      const targetGuardian = storedGuardians.find((g) => g.id === id);
+      if (!targetGuardian) return;
+      if (storedGuardians.length <= 1) {
+        Alert.alert(
+          "Minimum required",
+          "You need at least one trusted contact configured at all times.",
+        );
+        return;
+      }
+      Alert.alert(
+        "Remove trusted contact",
+        "Are you sure you want to remove this trusted contact?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await simulateGuardianAction("remove_guardian", {
+                  guardianId: targetGuardian.id,
+                  guardianAddress: targetGuardian.address,
+                });
+              } catch (error) {
+                Alert.alert(
+                  "Passkey required",
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to confirm with your passkey.",
+                );
+                return;
+              }
+              const updated = storedGuardians.filter((g) => g.id !== id);
+              if (updated.length === 0) {
+                clearGuardians();
+                setViewMode("form");
+                setGuardianAddresses(Array(defaultN).fill(""));
+                setMValue("2");
+                setNValue("3");
+              } else {
+                setGuardians(updated, parseInt(mValue), updated.length);
+              }
+            },
+          },
+        ],
+      );
+    },
+    [
+      storedGuardians,
+      mValue,
+      setGuardians,
+      clearGuardians,
+      simulateGuardianAction,
+    ],
+  );
 
   const handleEditGuardians = useCallback(() => {
     setNValue(storedGuardians.length.toString());
@@ -425,35 +530,53 @@ const GuardianRecoveryScreen: React.FC = () => {
     setViewMode("form");
   }, [storedGuardians]);
 
+  const formatActionType = (value: string) => {
+    switch (value) {
+      case "configure_guardians":
+        return "Configure contacts";
+      case "remove_guardian":
+        return "Remove contact";
+      default:
+        return "Recovery action";
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Guardian Recovery</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {viewMode === "form" && (
-          <View style={styles.configCard}>
-            <View style={styles.configHeader}>
-              <Text style={styles.configTitle}>Configure Guardians</Text>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* HEADER */}
+          <View style={styles.header}>
+            <TouchableOpacity 
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            >
+              <Feather name="arrow-left" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={{ gap: 4 }}>
+              <Text style={styles.screenTitle}>Trusted Contacts</Text>
+              <Text style={styles.screenDesc}>
+                Guardians who can help you recover your account.
+              </Text>
             </View>
+          </View>
+          {viewMode === "form" && (
+            <View style={styles.configCard}>
+              <View style={styles.cardSectionHeader}>
+                <Text style={styles.cardSectionLabel}>SETUP TRUSTED CONTACTS</Text>
+              </View>
 
-            <Text style={styles.configDesc}>
-              Set up M-of-N guardian recovery. M guardians out of N total must approve to recover
-              your wallet.
-            </Text>
+              <Text style={styles.configDesc}>
+                Define how many trusted contacts you want to add and how many are required to approve a recovery.
+              </Text>
 
             <View style={styles.mnContainer}>
               <View style={styles.mnInputGroup}>
-                <Text style={styles.mnLabel}>Required (M)</Text>
+                <Text style={styles.mnLabel}>Approvals Needed</Text>
                 <TextInput
                   style={styles.mnInput}
                   value={mValue}
@@ -467,7 +590,7 @@ const GuardianRecoveryScreen: React.FC = () => {
               <Text style={styles.mnDivider}>of</Text>
 
               <View style={styles.mnInputGroup}>
-                <Text style={styles.mnLabel}>Total (N)</Text>
+                <Text style={styles.mnLabel}>Total Contacts</Text>
                 <TextInput
                   style={styles.mnInput}
                   value={nValue}
@@ -480,7 +603,9 @@ const GuardianRecoveryScreen: React.FC = () => {
             </View>
 
             <View style={styles.addressesContainer}>
-              <Text style={styles.addressesLabel}>Guardian Addresses</Text>
+              <Text style={styles.addressesLabel}>
+                Trusted Contact Addresses
+              </Text>
               {guardianAddresses.map((address, index) => (
                 <View key={index} style={styles.addressInputWrapper}>
                   <Text style={styles.addressIndex}>{index + 1}</Text>
@@ -488,7 +613,7 @@ const GuardianRecoveryScreen: React.FC = () => {
                     style={styles.addressInput}
                     value={address}
                     onChangeText={(val) => handleAddressChange(index, val)}
-                    placeholder={`0x... (Guardian ${index + 1})`}
+                    placeholder={`0x... (Contact ${index + 1})`}
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -497,60 +622,71 @@ const GuardianRecoveryScreen: React.FC = () => {
               ))}
             </View>
 
-            <TouchableOpacity
-              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-              onPress={handleSubmit}
-              activeOpacity={0.85}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <Text style={styles.submitButtonText}>Save Guardians</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {viewMode === "list" && (
-          <View style={styles.existingCard}>
-            <View style={styles.existingHeader}>
-              <Text style={styles.existingTitle}>Current Guardians</Text>
-              <TouchableOpacity onPress={handleEditGuardians}>
-                <Text style={styles.editButton}>Edit</Text>
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  isSubmitting && styles.submitButtonDisabled,
+                ]}
+                onPress={handleSubmit}
+                activeOpacity={0.85}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color={colors.textOnAccent} />
+                ) : (
+                  <Text style={styles.submitButtonText}>Confirm & Save</Text>
+                )}
               </TouchableOpacity>
             </View>
+          )}
+
+          {viewMode === "list" && (
+            <View style={styles.existingCard}>
+              <View style={styles.existingHeader}>
+                <Text style={styles.cardSectionLabel}>ACTIVE TRUSTED CONTACTS</Text>
+                <TouchableOpacity onPress={handleEditGuardians}>
+                  <Text style={styles.editButton}>Manage</Text>
+                </TouchableOpacity>
+              </View>
 
             {/* Sync Status Indicator */}
             {syncStatus && (
-              <View style={[
-                styles.syncStatusContainer,
-                !syncStatus.hasAAWallet ? styles.syncStatusWarning :
-                !syncStatus.isSynced ? styles.syncStatusNeedSync :
-                styles.syncStatusSynced
-              ]}>
-                <Feather 
+              <View
+                style={[
+                  styles.syncStatusContainer,
+                  !syncStatus.hasAAWallet
+                    ? styles.syncStatusWarning
+                    : !syncStatus.isSynced
+                      ? styles.syncStatusNeedSync
+                      : styles.syncStatusSynced,
+                ]}
+              >
+                <Feather
                   name={
-                    !syncStatus.hasAAWallet ? "alert-circle" :
-                    !syncStatus.isSynced ? "upload-cloud" :
-                    "check-circle"
-                  } 
-                  size={16} 
+                    !syncStatus.hasAAWallet
+                      ? "alert-circle"
+                      : !syncStatus.isSynced
+                        ? "upload-cloud"
+                        : "check-circle"
+                  }
+                  size={16}
                   color={
-                    !syncStatus.hasAAWallet ? colors.warning :
-                    !syncStatus.isSynced ? colors.accent :
-                    colors.success
-                  } 
+                    !syncStatus.hasAAWallet
+                      ? colors.warning
+                      : !syncStatus.isSynced
+                        ? colors.accent
+                        : colors.success
+                  }
                 />
                 <Text style={styles.syncStatusText}>
-                  {!syncStatus.hasAAWallet 
-                    ? "Minimum 1 guardian required"
+                  {!syncStatus.hasAAWallet
+                    ? "Add at least 1 trusted contact"
                     : !syncStatus.isSynced
-                    ? "Not synced to database"
-                    : "Synced ✓"}
+                      ? "Not synced yet"
+                      : "Synced ✓"}
                 </Text>
                 {syncStatus.hasAAWallet && !syncStatus.isSynced && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={handleSyncNow}
                     disabled={isSyncing}
                     style={styles.syncButton}
@@ -570,7 +706,8 @@ const GuardianRecoveryScreen: React.FC = () => {
                 key={guardian.id}
                 style={[
                   styles.guardianRow,
-                  index < storedGuardians.length - 1 && styles.guardianRowBorder,
+                  index < storedGuardians.length - 1 &&
+                    styles.guardianRowBorder,
                 ]}
               >
                 <View style={styles.guardianInfo}>
@@ -581,7 +718,9 @@ const GuardianRecoveryScreen: React.FC = () => {
                     {guardian.address}
                   </Text>
                 </View>
-                <TouchableOpacity onPress={() => handleRemoveGuardian(guardian.id)}>
+                <TouchableOpacity
+                  onPress={() => handleRemoveGuardian(guardian.id)}
+                >
                   <Feather name="trash-2" size={18} color={colors.danger} />
                 </TouchableOpacity>
               </View>
@@ -590,158 +729,142 @@ const GuardianRecoveryScreen: React.FC = () => {
             <View style={styles.guardianSummary}>
               <Feather name="info" size={16} color={colors.accent} />
               <Text style={styles.guardianSummaryText}>
-                {requiredSignatures} of {storedGuardians.length} guardians required for recovery
+                Approval requirement: {requiredSignatures} of{" "}
+                {storedGuardians.length}
               </Text>
             </View>
           </View>
         )}
-        <View style={styles.moduleCard}>
-          <View style={styles.moduleHeader}>
-            <Text style={styles.moduleTitle}>Social Recovery Module</Text>
-            <TouchableOpacity
-              onPress={handleRefreshModuleStatus}
-              style={styles.refreshButton}
-              disabled={!smartAccountReady || checkingModule}
+          <View style={styles.moduleCard}>
+            <View style={styles.moduleHeader}>
+              <Text style={styles.cardSectionLabel}>RECOVERY ENGINE</Text>
+              <TouchableOpacity
+                onPress={handleRefreshModuleStatus}
+                style={styles.refreshButton}
+                disabled={!smartAccountReady || checkingModule}
+              >
+                {checkingModule ? (
+                  <ActivityIndicator size="small" color={colors.accentAlt} />
+                ) : (
+                  <Feather
+                    name="refresh-ccw"
+                    size={16}
+                    color={smartAccountReady ? colors.accent : colors.textMuted}
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.moduleDescription}>
+              Activate recovery so your trusted contacts can help you regain
+              access if needed.
+            </Text>
+            <View
+              style={[
+                styles.moduleStatusBadge,
+                moduleInstalledState
+                  ? styles.moduleStatusInstalled
+                  : styles.moduleStatusIdle,
+                !smartAccountReady && styles.moduleStatusWarning,
+              ]}
             >
-              {checkingModule ? (
-                <ActivityIndicator size="small" color={colors.accentAlt} />
-              ) : (
-                <Feather
-                  name="refresh-ccw"
-                  size={16}
-                  color={smartAccountReady ? colors.accent : colors.textMuted}
-                />
-              )}
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.moduleDescription}>
-            Install the on-chain guardian recovery module so your saved M-of-N guardian list can recover
-            the wallet if you lose access.
-          </Text>
-          <View
-            style={[
-              styles.moduleStatusBadge,
-              moduleInstalledState ? styles.moduleStatusInstalled : styles.moduleStatusIdle,
-              !smartAccountReady && styles.moduleStatusWarning,
-            ]}
-          >
-            <Feather
-              name={
-                !smartAccountReady
-                  ? "alert-circle"
-                  : moduleInstalledState
-                  ? "check-circle"
-                  : "shield-off"
-              }
-              size={16}
-              color={
-                !smartAccountReady
-                  ? colors.warning
-                  : moduleInstalledState
-                  ? colors.success
-                  : colors.accentAlt
-              }
-            />
-            <Text style={styles.moduleStatusText}>
-              {!smartAccountReady
-                ? "Deploy smart account to enable recovery"
-                : checkingModule
-                ? "Checking module status..."
-                : moduleInstalledState
-                ? "Module installed"
-                : "Module not installed"}
-            </Text>
-          </View>
-          {moduleError && <Text style={styles.moduleError}>{moduleError}</Text>}
-          {!smartAccountReady && (
-            <Text style={styles.moduleHint}>
-              Deploy your smart account first. Module installation requires an on-chain contract.
-            </Text>
-          )}
-          {smartAccountReady && !guardiansReady && (
-            <Text style={styles.moduleHint}>
-              Add and save guardians (at least {requiredSignatures}) before installing.
-            </Text>
-          )}
-          {lastUserOpHash && (
-            <View style={styles.hashRow}>
-              <Text style={styles.hashLabel}>UserOp Hash</Text>
-              <Text style={styles.hashValue}>{lastUserOpHash}</Text>
+              <Feather
+                name={
+                  !smartAccountReady
+                    ? "alert-circle"
+                    : moduleInstalledState
+                      ? "check-circle"
+                      : "shield-off"
+                }
+                size={16}
+                color={
+                  !smartAccountReady
+                    ? colors.warning
+                    : moduleInstalledState
+                      ? colors.success
+                      : colors.accentAlt
+                }
+              />
+              <Text style={styles.moduleStatusText}>
+                {!smartAccountReady
+                  ? "Trezo account required"
+                  : checkingModule
+                    ? "Checking status..."
+                    : moduleInstalledState
+                      ? "Recovery is Active"
+                      : "Recovery not active"}
+              </Text>
             </View>
-          )}
-          {lastOperationHash && (
-            <View style={styles.hashRow}>
-              <Text style={styles.hashLabel}>Bundler Operation Hash</Text>
-              <Text style={styles.hashValue}>{lastOperationHash}</Text>
-            </View>
-          )}
-          {lastInstallPayload && (
-            <View style={styles.payloadBox}>
-              <Text style={styles.payloadTitle}>Latest Module Payload</Text>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Sender</Text>
-                <Text style={styles.payloadValue}>{shortenHex(lastInstallPayload.sender)}</Text>
-              </View>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Nonce</Text>
-                <Text style={styles.payloadValue}>{String(lastInstallPayload.nonce)}</Text>
-              </View>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Paymaster</Text>
-                <Text style={styles.payloadValue}>
-                  {lastInstallPayload.paymaster ? shortenHex(lastInstallPayload.paymaster) : "Not Sponsored"}
-                </Text>
-              </View>
-              <Text style={styles.payloadSubLabel}>Call Data</Text>
-              <Text style={styles.payloadCode}>{shortenHex(lastInstallPayload.callData, 16)}</Text>
-              <Text style={styles.payloadSubLabel}>Signature</Text>
-              <Text style={styles.payloadCode}>{shortenHex(lastInstallPayload.signature, 20)}</Text>
-            </View>
-          )}
-          <TouchableOpacity
-            style={[
-              styles.installButton,
-              (!smartAccountReady || !guardiansReady || moduleInstalledState || installingModule) &&
-                styles.installButtonDisabled,
-            ]}
-            disabled={!smartAccountReady || !guardiansReady || moduleInstalledState || installingModule}
-            onPress={handleInstallModule}
-            activeOpacity={0.85}
-          >
-            {installingModule ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Text style={styles.installButtonText}>
-                {moduleInstalledState ? "Module Installed" : "Install Social Recovery"}
+            {moduleError && (
+              <Text style={styles.moduleError}>{moduleError}</Text>
+            )}
+
+            {smartAccountReady && guardiansReady && !moduleInstalledState && (
+              <TouchableOpacity
+                style={[
+                  styles.installButton,
+                  installingModule && styles.installButtonDisabled,
+                ]}
+                onPress={handleInstallModule}
+                activeOpacity={0.85}
+                disabled={installingModule}
+              >
+                {installingModule ? (
+                  <ActivityIndicator size="small" color={colors.textOnAccent} />
+                ) : (
+                  <Text style={styles.installButtonText}>
+                    Activate Recovery Now
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {!smartAccountReady && (
+              <Text style={styles.moduleHint}>
+                Please create your Trezo account to enable this feature.
               </Text>
             )}
-          </TouchableOpacity>
-        </View>
-        {lastGuardianAction && (
-          <View style={styles.payloadCard}>
-            <View style={styles.payloadHeader}>
-              <Text style={styles.payloadTitle}>Latest Guardian Action</Text>
-              <View style={styles.actionChip}>
-                <Text style={styles.actionChipText}>{lastGuardianAction.actionType}</Text>
-              </View>
+            {smartAccountReady && !guardiansReady && !moduleInstalledState && (
+              <Text style={styles.moduleHint}>
+                Add and save at least {requiredSignatures} trusted contacts
+                first.
+              </Text>
+            )}
+          </View>
+
+          {/* DEV INFO SECTION (CLEANER) */}
+          {__DEV__ && (lastUserOpHash || lastOperationHash) && (
+            <View style={styles.existingCard}>
+              <Text style={styles.cardSectionLabel}>TRANSACTION STATUS</Text>
+              {lastUserOpHash && (
+                <View style={styles.hashRow}>
+                  <Text style={styles.hashLabel}>Request ID</Text>
+                  <Text style={styles.hashValue}>{lastUserOpHash}</Text>
+                </View>
+              )}
+              {lastOperationHash && (
+                <View style={styles.hashRow}>
+                  <Text style={styles.hashLabel}>Processing ID</Text>
+                  <Text style={styles.hashValue}>{lastOperationHash}</Text>
+                </View>
+              )}
             </View>
-            <Text style={styles.payloadSubLabel}>Generated</Text>
-            <Text style={styles.payloadValue}>{new Date(lastGuardianAction.generatedAt).toLocaleString()}</Text>
-            <Text style={styles.payloadSubLabel}>UserOp Hash</Text>
-            <Text style={styles.payloadCode}>{shortenHex(lastGuardianAction.userOpHash, 18)}</Text>
-            <Text style={styles.payloadSubLabel}>Signature</Text>
-            <Text style={styles.payloadCode}>{shortenHex(lastGuardianAction.signature, 18)}</Text>
-            <Text style={styles.payloadSubLabel}>Payload</Text>
-            <Text style={styles.payloadCode}>
-              {JSON.stringify(lastGuardianAction.payload, null, 2)}
+          )}
+
+          {/* HELP SECTION (Visual Parity with SecurityCenter) */}
+          <View style={styles.helpCard}>
+            <Text style={styles.helpTitle}>How does this protect me?</Text>
+            <Text style={styles.helpText}>
+              If you lose your phone or forget your passkey, your trusted
+              contacts can collectively approve a recovery request to restore
+              your access. This ensures you never lose your funds.
             </Text>
           </View>
-        )}
-      </ScrollView>
+        </ScrollView>
+      </SafeAreaView>
       {isSubmitting && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={styles.loadingText}>Saving guardians…</Text>
+          <Text style={styles.loadingText}>Saving trusted contacts…</Text>
         </View>
       )}
     </View>
@@ -755,45 +878,55 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.background,
     },
     header: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingTop: 60,
-      paddingBottom: 20,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderMuted,
+      marginBottom: 24,
+      paddingTop: 12,
     },
-    headerTitle: {
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 16,
+    },
+    screenTitle: {
       color: colors.textPrimary,
-      fontSize: 20,
-      fontWeight: "700",
+      fontSize: 28,
+      fontWeight: "800",
+    },
+    screenDesc: {
+      color: colors.textSecondary,
+      fontSize: 15,
+      lineHeight: 22,
     },
     scrollView: {
       flex: 1,
     },
     scrollContent: {
-      padding: 20,
+      padding: 16,
       paddingBottom: 40,
     },
     configCard: {
       backgroundColor: colors.surfaceCard,
       borderRadius: 24,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.borderMuted,
       padding: 20,
-      marginTop: 8,
+      marginBottom: 20,
     },
-    configHeader: {
+    cardSectionHeader: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 12,
+      marginBottom: 16,
     },
-    configTitle: {
-      color: colors.textPrimary,
-      fontSize: 18,
+    cardSectionLabel: {
+      fontSize: 11,
       fontWeight: "700",
+      letterSpacing: 1,
+      color: colors.accent,
+      textTransform: "uppercase",
     },
     configDesc: {
       color: colors.textSecondary,
@@ -857,10 +990,10 @@ const createStyles = (colors: ThemeColors) =>
     },
     addressInput: {
       flex: 1,
-      backgroundColor: withAlpha(colors.textPrimary, 0.06),
+      backgroundColor: withAlpha(colors.textPrimary, 0.04),
       borderWidth: 1,
       borderColor: colors.borderMuted,
-      borderRadius: 14,
+      borderRadius: 16,
       paddingHorizontal: 16,
       paddingVertical: 14,
       color: colors.textPrimary,
@@ -870,7 +1003,7 @@ const createStyles = (colors: ThemeColors) =>
     submitButton: {
       backgroundColor: colors.accent,
       borderRadius: 16,
-      paddingVertical: 16,
+      paddingVertical: 14,
       alignItems: "center",
       marginTop: 24,
     },
@@ -878,17 +1011,17 @@ const createStyles = (colors: ThemeColors) =>
       opacity: 0.6,
     },
     submitButtonText: {
-      color: "#ffffff",
-      fontSize: 16,
+      color: colors.textOnAccent,
+      fontSize: 15,
       fontWeight: "700",
     },
     existingCard: {
       backgroundColor: colors.surfaceCard,
       borderRadius: 24,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.borderMuted,
       padding: 20,
-      marginTop: 8,
+      marginBottom: 20,
     },
     existingHeader: {
       flexDirection: "row",
@@ -1070,9 +1203,9 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.surfaceCard,
       borderRadius: 24,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.borderMuted,
       padding: 20,
-      marginTop: 20,
+      marginBottom: 20,
       gap: 14,
     },
     moduleHeader: {
@@ -1174,6 +1307,25 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.textPrimary,
       fontSize: 15,
       fontWeight: "600",
+    },
+    helpCard: {
+      backgroundColor: colors.surfaceCard,
+      borderRadius: 24,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: colors.borderMuted,
+      marginTop: 8,
+      gap: 8,
+    },
+    helpTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    helpText: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      lineHeight: 20,
     },
   });
 
