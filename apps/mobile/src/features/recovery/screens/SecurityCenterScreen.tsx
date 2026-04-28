@@ -16,6 +16,7 @@ import { useRecoveryStatusStore } from "@store/useRecoveryStatusStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
+import { Address } from "viem";
 import React, { useEffect, useMemo, useState } from "react";
 import {
     SafeAreaView,
@@ -57,7 +58,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
   const [emailRecoveryLoading, setEmailRecoveryLoading] = useState(false);
 
   const smartAccountAddress = useMemo(
-    () => aaAccount?.predictedAddress ?? storedSmartAccountAddress ?? undefined,
+    () => (aaAccount?.predictedAddress ?? storedSmartAccountAddress ?? undefined) as Address | undefined,
     [aaAccount?.predictedAddress, storedSmartAccountAddress],
   );
 

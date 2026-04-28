@@ -256,6 +256,24 @@ export type AddPasskeyUserOpParams = {
   preVerificationGas?: bigint;
 };
 
+export type RemovePasskeyUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  passkeyIdToRemove: Hex;
+  signingPasskeyId: Hex;
+  validatorAddress?: Address;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+};
+
 type RpcRequestClient = {
   request(args: { method: string; params?: readonly unknown[] }): Promise<any>;
 };
@@ -1106,6 +1124,45 @@ export async function buildAddPasskeyUserOp(params: AddPasskeyUserOpParams) {
     verificationGasLimit: params.verificationGasLimit ?? 900_000n,
     preVerificationGas: params.preVerificationGas ?? 100_000n,
     operationLabel: "buildAddPasskeyUserOp",
+  });
+}
+
+export async function buildRemovePasskeyUserOp(params: RemovePasskeyUserOpParams) {
+  const deployment = getDeployment(params.chainId);
+  if (!deployment) throw new Error(`No deployment found for chain ${params.chainId}`);
+  if (!deployment.entryPoint) {
+    throw new Error("Deployment is missing entry point");
+  }
+  const validatorAddress = (params.validatorAddress ?? deployment.passkeyValidator) as Address;
+  if (!validatorAddress || validatorAddress === ZERO_ADDRESS) {
+    throw new Error("Passkey validator address is required to remove a passkey");
+  }
+  const removePasskeyData = encodeFunctionData({
+    abi: ABIS.passkeyValidator,
+    functionName: "removePasskey",
+    args: [params.passkeyIdToRemove],
+  });
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [validatorAddress, 0n, removePasskeyData],
+  });
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.signingPasskeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 800_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 900_000n,
+    preVerificationGas: params.preVerificationGas ?? 100_000n,
+    operationLabel: "buildRemovePasskeyUserOp",
   });
 }
 

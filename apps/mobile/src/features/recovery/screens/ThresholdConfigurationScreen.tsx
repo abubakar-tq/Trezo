@@ -43,7 +43,7 @@ export const ThresholdConfigurationScreen: React.FC<
 
   const getSecurityLevel = (threshold: number, total: number) => {
     if (total <= 1) return { label: "Limited", color: colors.warning, icon: "⚠️" };
-    if (threshold === 1) return { label: "Low Security", color: colors.error, icon: "🛡️" };
+    if (threshold === 1) return { label: "Low Security", color: colors.danger, icon: "🛡️" };
     if (threshold === total) return { label: "Strict", color: colors.success, icon: "🔒" };
     return { label: "Balanced", color: colors.accent, icon: "✅" };
   };
@@ -203,13 +203,13 @@ export const ThresholdConfigurationScreen: React.FC<
 
           {selectedThreshold === 1 && (
             <View style={{ 
-              backgroundColor: withAlpha(colors.error, 0.1), 
+              backgroundColor: withAlpha(colors.danger, 0.1), 
               padding: 12, 
               borderRadius: 12,
               borderLeftWidth: 3,
-              borderLeftColor: colors.error
+              borderLeftColor: colors.danger
             }}>
-              <Text style={{ fontSize: 12, color: colors.error, fontWeight: '600' }}>
+              <Text style={{ fontSize: 12, color: colors.danger, fontWeight: '600' }}>
                 We strongly recommend adding more contacts or increasing the threshold.
               </Text>
             </View>

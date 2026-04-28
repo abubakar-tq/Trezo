@@ -1,10 +1,14 @@
 {
   "name": "trezo-workspace",
+  "main": "index.js",
   "private": true,
   "scripts": {
-    "android": "npm --workspace apps/mobile run android"
+    "android": "npm --workspace apps/mobile run android",
+    "start": "npm --workspace apps/mobile run start"
   },
   "workspaces": [
-    "apps/*"
+    "apps/mobile",
+    "apps/guardian-approval",
+    "contracts"
   ]
 }
