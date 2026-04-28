@@ -774,7 +774,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
-  transferArrowBox: {
+  transferArrowBoxCircle: {
     width: 32,
     height: 32,
     borderRadius: 16,

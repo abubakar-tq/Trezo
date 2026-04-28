@@ -1616,6 +1616,12 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 12,
       fontFamily: "monospace",
     },
+    cardDesc: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      lineHeight: 20,
+      marginBottom: 16,
+    },
   });
 
 export default EmailRecoveryScreen;

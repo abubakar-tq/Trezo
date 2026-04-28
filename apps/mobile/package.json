@@ -1,6 +1,9 @@
 {
   "name": "trezo_wallet",
   "main": "index.js",
+  "expo": {
+    "entryPoint": "./index.js"
+  },
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",

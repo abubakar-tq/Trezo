@@ -1,4 +1,4 @@
-import anvilDeployment from "../../../../../contracts/deployments/31337.json";
+import anvilDeployment from "../../integration/contracts/deployment.31337.json";
 
 /**
  * Minimal set of contract addresses the app actually uses.
