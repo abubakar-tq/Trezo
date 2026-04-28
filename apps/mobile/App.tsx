@@ -6,13 +6,13 @@ import { ActivityIndicator, StyleSheet, View,Text } from "react-native";
 import "./src/integration/viem/polyfills";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { AppErrorBoundary } from "@app/components/system/AppErrorBoundary";
-import LockScreen from "@app/components/system/LockScreen";
-import { MissingConfigurationScreen } from "@app/components/system/MissingConfigurationScreen";
-import { useAppLock, useCachedResources } from "@hooks";
-import RootNavigation from "@app/navigation/RootNavigation";
-import { isSupabaseConfigured, supabaseConfigIssue } from "@lib/supabase";
-import { AppThemeProvider, useAppTheme } from "@theme";
+import { AppErrorBoundary } from "./src/app/components/system/AppErrorBoundary";
+import LockScreen from "./src/app/components/system/LockScreen";
+import { MissingConfigurationScreen } from "./src/app/components/system/MissingConfigurationScreen";
+import { useAppLock, useCachedResources } from "./src/shared/hooks";
+import RootNavigation from "./src/app/navigation/RootNavigation";
+import { isSupabaseConfigured, supabaseConfigIssue } from "./src/lib/supabase";
+import { AppThemeProvider, useAppTheme } from "./src/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./global.css";
 
