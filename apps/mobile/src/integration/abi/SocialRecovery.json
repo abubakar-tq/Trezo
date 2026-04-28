@@ -153,6 +153,132 @@
     },
     {
       "type": "function",
+      "name": "executeRecovery",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "getActiveRecovery",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "recoveryId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "executeAfter",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getChainScopeHash",
+      "inputs": [
+        {
+          "name": "scopes",
+          "type": "tuple[]",
+          "internalType": "struct RecoveryTypes.ChainRecoveryScope[]",
+          "components": [
+            {
+              "name": "chainId",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "wallet",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "socialRecovery",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "nonce",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "guardianSetHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "policyHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "pure"
+    },
+    {
+      "type": "function",
+      "name": "getGuardianSetHash",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getPolicyHash",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
       "name": "getRecoveryDetails",
       "inputs": [
         {
@@ -223,6 +349,57 @@
     },
     {
       "type": "function",
+      "name": "getRecoveryDigest",
+      "inputs": [
+        {
+          "name": "intent",
+          "type": "tuple",
+          "internalType": "struct RecoveryTypes.RecoveryIntent",
+          "components": [
+            {
+              "name": "requestId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "newPasskeyHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "chainScopeHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "validAfter",
+              "type": "uint48",
+              "internalType": "uint48"
+            },
+            {
+              "name": "deadline",
+              "type": "uint48",
+              "internalType": "uint48"
+            },
+            {
+              "name": "metadataHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
       "name": "getRecoveryNonce",
       "inputs": [
         {
@@ -234,6 +411,25 @@
       "outputs": [
         {
           "name": "nonce",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getRecoveryTimelock",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "timelockSeconds",
           "type": "uint256",
           "internalType": "uint256"
         }
@@ -368,6 +564,143 @@
               "name": "py",
               "type": "uint256",
               "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "name": "sigs",
+          "type": "tuple[]",
+          "internalType": "struct ISocialRecovery.GuardianSig[]",
+          "components": [
+            {
+              "name": "index",
+              "type": "uint16",
+              "internalType": "uint16"
+            },
+            {
+              "name": "kind",
+              "type": "uint8",
+              "internalType": "enum ISocialRecovery.SigKind"
+            },
+            {
+              "name": "sig",
+              "type": "bytes",
+              "internalType": "bytes"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "recoveryId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "scheduleRecovery",
+      "inputs": [
+        {
+          "name": "wallet",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "newPassKey",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        },
+        {
+          "name": "intent",
+          "type": "tuple",
+          "internalType": "struct RecoveryTypes.RecoveryIntent",
+          "components": [
+            {
+              "name": "requestId",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "newPasskeyHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "chainScopeHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "validAfter",
+              "type": "uint48",
+              "internalType": "uint48"
+            },
+            {
+              "name": "deadline",
+              "type": "uint48",
+              "internalType": "uint48"
+            },
+            {
+              "name": "metadataHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            }
+          ]
+        },
+        {
+          "name": "scopes",
+          "type": "tuple[]",
+          "internalType": "struct RecoveryTypes.ChainRecoveryScope[]",
+          "components": [
+            {
+              "name": "chainId",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "wallet",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "socialRecovery",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "nonce",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "guardianSetHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "policyHash",
+              "type": "bytes32",
+              "internalType": "bytes32"
             }
           ]
         },
@@ -568,6 +901,28 @@
     },
     {
       "type": "error",
+      "name": "SocialRecovery_ChainNotInScope",
+      "inputs": [
+        {
+          "name": "chainId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_DeadlineExpired",
+      "inputs": [
+        {
+          "name": "deadline",
+          "type": "uint48",
+          "internalType": "uint48"
+        }
+      ]
+    },
+    {
+      "type": "error",
       "name": "SocialRecovery_DuplicateGuardian",
       "inputs": [
         {
@@ -608,6 +963,11 @@
           "internalType": "address"
         }
       ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_GuardianSetChanged",
+      "inputs": []
     },
     {
       "type": "error",
@@ -680,6 +1040,17 @@
     },
     {
       "type": "error",
+      "name": "SocialRecovery_NotYetValid",
+      "inputs": [
+        {
+          "name": "validAfter",
+          "type": "uint48",
+          "internalType": "uint48"
+        }
+      ]
+    },
+    {
+      "type": "error",
       "name": "SocialRecovery_OnlyWallet",
       "inputs": [
         {
@@ -702,6 +1073,69 @@
           "name": "recoveryId",
           "type": "bytes32",
           "internalType": "bytes32"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_PasskeyHashMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_PolicyChanged",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_ScopeHashMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_ScopeModuleMismatch",
+      "inputs": [
+        {
+          "name": "expected",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "provided",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_ScopeNonceMismatch",
+      "inputs": [
+        {
+          "name": "expected",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "provided",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SocialRecovery_ScopeWalletMismatch",
+      "inputs": [
+        {
+          "name": "expected",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "provided",
+          "type": "address",
+          "internalType": "address"
         }
       ]
     },

@@ -659,11 +659,16 @@ const buildSmartAccountExecuteUserOp = async ({
   return { userOp: refreshedUserOp, userOpHash };
 };
 
-export const encodeSocialRecoveryInitData = (guardians: readonly Address[], threshold: bigint | number): Hex => {
+export const encodeSocialRecoveryInitData = (
+  guardians: readonly Address[],
+  threshold: bigint | number,
+  timelockSeconds: bigint | number = 86400,
+): Hex => {
   if (!guardians.length) {
     throw new Error("At least one guardian is required to initialize Social Recovery");
   }
   const normalizedThreshold = typeof threshold === "bigint" ? threshold : BigInt(threshold);
+  const normalizedTimelock = typeof timelockSeconds === "bigint" ? timelockSeconds : BigInt(timelockSeconds);
   if (normalizedThreshold === 0n) {
     throw new Error("Threshold must be greater than zero");
   }
@@ -681,7 +686,10 @@ export const encodeSocialRecoveryInitData = (guardians: readonly Address[], thre
     }
     seen.add(key);
   });
-  return encodeAbiParameters(parseAbiParameters("address[], uint256"), [guardians, normalizedThreshold]);
+  return encodeAbiParameters(
+    parseAbiParameters("address[], uint256, uint256"),
+    [guardians, normalizedThreshold, normalizedTimelock],
+  );
 };
 
 export const encodeEmailRecoveryInitData = (

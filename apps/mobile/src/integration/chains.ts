@@ -48,6 +48,7 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
 };
 
 export const DEFAULT_CHAIN_ID: SupportedChainId = 31337;
+export const SUPPORTED_CHAIN_IDS = Object.keys(CHAINS).map(Number) as SupportedChainId[];
 
 export const PORTABLE_CHAIN_IDS = [1, 11155111, 10, 8453, 42161, 137] as const;
 
