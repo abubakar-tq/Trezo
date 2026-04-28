@@ -9,7 +9,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppErrorBoundary } from "@app/components/system/AppErrorBoundary";
 import LockScreen from "@app/components/system/LockScreen";
 import { MissingConfigurationScreen } from "@app/components/system/MissingConfigurationScreen";
-import { useAppLock, useCachedResources } from "@app/hooks";
+import { useAppLock, useCachedResources } from "@hooks";
 import RootNavigation from "@app/navigation/RootNavigation";
 import { isSupabaseConfigured, supabaseConfigIssue } from "@lib/supabase";
 import { AppThemeProvider, useAppTheme } from "@theme";

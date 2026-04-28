@@ -14,7 +14,9 @@
       "@lib/*": ["src/lib/*"],
       "@store/*": ["src/store/*"],
       "@utils/*": ["src/utils/*"],
-      "@hooks/*": ["src/hooks/*"]
+      "@hooks/*": ["src/shared/hooks/*"],
+      "@hooks": ["src/shared/hooks/index"],
+      "@services/*": ["src/services/*"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx", "nativewind-env.d.ts"]

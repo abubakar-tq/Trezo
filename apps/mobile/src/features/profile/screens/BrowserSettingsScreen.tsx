@@ -352,6 +352,7 @@ export default function BrowserSettingsScreen() {
                 selected={settings.searchEngine === "web3compass-duckduckgo"}
                 onPress={() => handleSelectSearchEngine("web3compass-duckduckgo")}
                 colors={colors}
+                styles={styles}
               />
               <SearchOption 
                 title="DuckDuckGo Only"
@@ -359,6 +360,7 @@ export default function BrowserSettingsScreen() {
                 selected={settings.searchEngine === "duckduckgo"}
                 onPress={() => handleSelectSearchEngine("duckduckgo")}
                 colors={colors}
+                styles={styles}
               />
               <SearchOption 
                 title="Google"
@@ -366,6 +368,7 @@ export default function BrowserSettingsScreen() {
                 selected={settings.searchEngine === "google"}
                 onPress={() => handleSelectSearchEngine("google")}
                 colors={colors}
+                styles={styles}
               />
             </View>
           </Pressable>
@@ -395,7 +398,7 @@ export default function BrowserSettingsScreen() {
   );
 }
 
-function SearchOption({ title, description, selected, onPress, colors }: any) {
+function SearchOption({ title, description, selected, onPress, colors, styles }: any) {
   return (
     <TouchableOpacity 
       onPress={onPress}

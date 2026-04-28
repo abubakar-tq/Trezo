@@ -1,4 +1,4 @@
-import { useTabContentBottomInset } from "@app/hooks";
+import { useTabContentBottomInset } from "@hooks";
 import { Feather } from "@expo/vector-icons";
 import { TabScreenContainer } from "@shared/components";
 import {
@@ -891,7 +891,6 @@ const homeStyles = StyleSheet.create({
     height: 150,
     borderRadius: 75,
     backgroundColor: '#00FFFF20',
-    blurRadius: 50,
   },
   heroContent: {
     flexDirection: 'row',

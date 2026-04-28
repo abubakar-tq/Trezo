@@ -12,7 +12,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
 import { withAlpha } from '@utils/color';
 import { TabScreenContainer, MeshBackground, TokenIcon } from '@shared/components';
-import { useTabContentBottomInset } from '@app/hooks';
+import { useTabContentBottomInset } from '@hooks';
 
 const { width } = Dimensions.get('window');
 
@@ -66,36 +66,8 @@ export const DexScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Network Selection Row (Bridge specific) */}
-        {activeTab === 'bridge' ? (
-          <View style={styles.bridgeNetworkRow}>
-            <TouchableOpacity style={[styles.networkPill, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
-              <Text style={[styles.pillLabel, { color: colors.textSecondary }]}>From</Text>
-              <View style={styles.pillContent}>
-                <View style={[styles.miniIcon, { backgroundColor: '#627EEA' }]}>
-                  <Text style={styles.miniIconText}>Ξ</Text>
-                </View>
-                <Text style={[styles.pillName, { color: colors.textPrimary }]}>{fromNetwork}</Text>
-                <Feather name="chevron-down" size={14} color={colors.textSecondary} />
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.bridgeSwapButton, { backgroundColor: colors.glass }]}>
-              <Ionicons name="arrow-forward" size={16} color={colors.textPrimary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.networkPill, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
-              <Text style={[styles.pillLabel, { color: colors.textSecondary }]}>To</Text>
-              <View style={styles.pillContent}>
-                <View style={[styles.miniIcon, { backgroundColor: '#96BED9' }]}>
-                  <Text style={styles.miniIconText}>A</Text>
-                </View>
-                <Text style={[styles.pillName, { color: colors.textPrimary }]}>{toNetwork}</Text>
-                <Feather name="chevron-down" size={14} color={colors.textSecondary} />
-              </View>
-            </TouchableOpacity>
-          </View>
-        ) : (
+        {/* Network Selection Row (Swap specific) */}
+        {activeTab === 'swap' && (
           <TouchableOpacity style={[styles.networkSelector, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
             <View style={styles.networkInfo}>
                <View style={[styles.networkIcon, { backgroundColor: '#627EEA' }]}>
@@ -170,6 +142,29 @@ export const DexScreen: React.FC = () => {
           /* "One Page" Compact Bridge Redesign */
           <View style={styles.bridgeContainer}>
             <View style={[styles.unifiedBridgeCard, { backgroundColor: glassBackground, borderColor: colors.border }]}>
+               {/* Integrated Network & Token Row */}
+               <View style={styles.bridgeTopRow}>
+                 <TouchableOpacity style={[styles.bridgeNetworkPill, { backgroundColor: withAlpha(colors.accent, 0.05), borderColor: colors.border }]}>
+                    <View style={[styles.miniIcon, { backgroundColor: '#627EEA' }]}>
+                      <Text style={styles.miniIconText}>Ξ</Text>
+                    </View>
+                    <Text style={[styles.bridgeNetworkName, { color: colors.textPrimary }]}>{fromNetwork}</Text>
+                    <Feather name="chevron-down" size={12} color={colors.textMuted} />
+                 </TouchableOpacity>
+                 
+                  <View style={styles.transferArrowBox}>
+                    <Ionicons name="arrow-forward" size={16} color={colors.accent} />
+                  </View>
+
+                 <TouchableOpacity style={[styles.bridgeNetworkPill, { backgroundColor: withAlpha(colors.accentAlt, 0.05), borderColor: colors.border }]}>
+                    <View style={[styles.miniIcon, { backgroundColor: '#96BED9' }]}>
+                      <Text style={styles.miniIconText}>A</Text>
+                    </View>
+                    <Text style={[styles.bridgeNetworkName, { color: colors.textPrimary }]}>{toNetwork}</Text>
+                    <Feather name="chevron-down" size={12} color={colors.textMuted} />
+                 </TouchableOpacity>
+               </View>
+
                <View style={styles.compactBridgeInput}>
                   <View style={styles.bridgeInputRow}>
                     <TouchableOpacity style={styles.tokenSelectCompact}>
@@ -193,47 +188,33 @@ export const DexScreen: React.FC = () => {
                   </View>
                </View>
                
-               {/* Unified Transfer Route Visual */}
-               <View style={styles.compactTransferRow}>
-                  <View style={styles.transferChain}>
-                    <View style={[styles.chainDot, { backgroundColor: colors.accent }]} />
-                    <Text style={[styles.chainLabel, { color: colors.textSecondary }]}>{fromNetwork}</Text>
-                  </View>
-                  <View style={styles.transferArrowBox}>
-                    <View style={[styles.transferLineSolid, { backgroundColor: colors.border }]} />
-                    <View style={[styles.planeIconBox, { backgroundColor: colors.surfaceMuted }]}>
-                      <Ionicons name="airplane" size={14} color={colors.accent} />
-                    </View>
-                    <View style={[styles.transferLineSolid, { backgroundColor: colors.border }]} />
-                  </View>
-                  <View style={styles.transferChain}>
-                    <View style={[styles.chainDot, { backgroundColor: colors.accentAlt }]} />
-                    <Text style={[styles.chainLabel, { color: colors.textSecondary }]}>{toNetwork}</Text>
-                  </View>
-               </View>
-
                <View style={[styles.outputBanner, { backgroundColor: withAlpha(colors.accent, 0.05) }]}>
-                  <Text style={[styles.outputLabel, { color: colors.textSecondary }]}>RECEIVE ESTIMATE</Text>
-                  <Text style={[styles.outputValue, { color: colors.textPrimary }]}>84.75 USDC</Text>
-                  <Text style={[styles.outputFiat, { color: colors.textMuted }]}>≈ $84.72</Text>
+                  <View style={styles.outputHeader}>
+                    <Text style={[styles.outputLabel, { color: colors.textSecondary }]}>ESTIMATED RECEIVE</Text>
+                    <View style={styles.routeBadge}>
+                      <Ionicons name="flash" size={10} color={colors.accent} />
+                      <Text style={[styles.routeLabelTiny, { color: colors.accent }]}>STARGATE</Text>
+                    </View>
+                  </View>
+                  <View style={styles.outputMain}>
+                    <Text style={[styles.outputValue, { color: colors.textPrimary }]}>84.75 USDC</Text>
+                    <Text style={[styles.outputFiat, { color: colors.textMuted }]}>≈ $84.72</Text>
+                  </View>
                </View>
             </View>
 
-            {/* Compact Optimized Route */}
-            <View style={[styles.routePill, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
-               <View style={styles.routeLeft}>
-                 <Ionicons name="flash" size={14} color={colors.accent} />
-                 <Text style={[styles.routeLabelSmall, { color: colors.textPrimary }]}>Stargate Finance (Fastest)</Text>
-               </View>
-               <Text style={[styles.routeTimeSmall, { color: colors.textSecondary }]}>~ 3 mins</Text>
-            </View>
-
-            {/* Recipient - Now integrated and smaller */}
-            <View style={styles.recipientRowCompact}>
-              <Text style={[styles.recipientTitleSmall, { color: colors.textMuted }]}>RECIPIENT:</Text>
-              <TouchableOpacity style={styles.addressPillCompact}>
+            {/* Compact Integrated Details */}
+            <View style={styles.compactMetaRow}>
+              <View style={styles.metaItem}>
+                <Feather name="clock" size={12} color={colors.textMuted} />
+                <Text style={[styles.metaText, { color: colors.textSecondary }]}>~3 mins</Text>
+              </View>
+              <View style={styles.metaItem}>
+                <Feather name="activity" size={12} color={colors.textMuted} />
+                <Text style={[styles.metaText, { color: colors.textSecondary }]}>0.5% fee</Text>
+              </View>
+              <TouchableOpacity style={styles.addressLink}>
                 <Text style={[styles.addressTextSmall, { color: colors.accent }]} numberOfLines={1}>{recipientAddress}</Text>
-                <Feather name="edit-2" size={12} color={colors.accent} />
               </TouchableOpacity>
             </View>
           </View>
@@ -623,6 +604,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingHorizontal: 8,
   },
+  bridgeContainer: {
+    flex: 1,
+  },
   transferChain: {
     alignItems: 'center',
     gap: 4,
@@ -722,6 +706,83 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     maxWidth: 160,
+  },
+  // One Page Bridge Styles
+  bridgeTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 8,
+  },
+  bridgeNetworkPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 8,
+  },
+  bridgeNetworkName: {
+    fontSize: 13,
+    fontWeight: '800',
+    flex: 1,
+  },
+  outputHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 4,
+  },
+  routeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  routeLabelTiny: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  outputMain: {
+    alignItems: 'center',
+  },
+  compactMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    marginTop: 4,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metaText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  addressLink: {
+    backgroundColor: 'rgba(0,255,255,0.05)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  transferArrowBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
 });
 

@@ -16,7 +16,7 @@ import {
 } from "react-native";
 
 import { RootStackParamList } from "@/src/types/navigation";
-import { useTabContentBottomInset } from "@app/hooks";
+import { useTabContentBottomInset } from "@hooks";
 import { getSupabaseClient } from "@lib/supabase";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
