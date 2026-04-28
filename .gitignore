@@ -24,3 +24,8 @@ AGENTS.md
 plan.md
 Context_Capsule.md
 agent-plans/
+LEVEL2_IMPLEMENTATION_NOTES.md
+
+# Build Artifacts
+dist/
+*.tsbuildinfo
