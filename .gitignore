@@ -15,3 +15,9 @@ apps/mobile/.env
 apps/mobile/.env.*
 !apps/mobile/.env.example
 !apps/mobile/.env*.example
+graphify-out/
+agent-plans/
+AGENTS.md
+Context_Capsule.md
+LEVEL2_IMPLEMENTATION_NOTES.md
+*.tsbuildinfo
