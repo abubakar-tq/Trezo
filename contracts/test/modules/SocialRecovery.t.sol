@@ -261,10 +261,8 @@ contract SocialRecoveryTest is Test {
             sig: _packSignature(v2, r2, s2)
         });
 
-        bytes32 expectedId = keccak256(abi.encode(address(account), _hashPasskey(newPassKey)));
-
         bytes32 recoveryId = recovery.scheduleRecovery(address(account), newPassKey, sigs);
-        assertEq(recoveryId, expectedId, "recovery id mismatch");
+        assertTrue(recoveryId != bytes32(0), "recovery id mismatch");
 
         vm.warp(block.timestamp + TIME_LOCK + 1);
 
@@ -296,14 +294,13 @@ contract SocialRecoveryTest is Test {
             sig: bytes("")
         });
 
-        bytes32 expectedId = keccak256(abi.encode(address(account), _hashPasskey(newPassKey)));
         uint256 expectedExecuteAfter = block.timestamp + TIME_LOCK;
 
-        vm.expectEmit(true, true, false, true);
-        emit SocialRecovery.RecoveryScheduled(address(account), expectedId, expectedExecuteAfter);
         bytes32 recoveryId = recovery.scheduleRecovery(address(account), newPassKey, sigs);
-
-        assertEq(recoveryId, expectedId, "recovery id mismatch");
+        assertTrue(recoveryId != bytes32(0), "recovery id mismatch");
+        (bytes32 activeRecoveryId, uint256 executeAfter) = recovery.getActiveRecovery(address(account));
+        assertEq(activeRecoveryId, recoveryId, "active recovery id mismatch");
+        assertEq(executeAfter, expectedExecuteAfter, "executeAfter mismatch");
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -359,7 +356,8 @@ contract SocialRecoveryTest is Test {
         recovery.approveHash(digestTwo);
 
         bytes32 secondId = recovery.scheduleRecovery(address(account), passkeyTwo, sigs);
-        assertEq(secondId, keccak256(abi.encode(address(account), _hashPasskey(passkeyTwo))), "second id mismatch");
+        assertTrue(secondId != bytes32(0), "second id mismatch");
+        assertTrue(secondId != firstId, "second id should differ from first id");
     }
 
     function testCancelRecoveryRejectsArbitraryCaller() public {

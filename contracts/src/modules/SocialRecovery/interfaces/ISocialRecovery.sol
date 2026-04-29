@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {PasskeyTypes} from "src/common/Types.sol";
+import {RecoveryTypes} from "src/recovery/RecoveryTypes.sol";
 
 interface ISocialRecovery {
 
@@ -28,16 +29,19 @@ interface ISocialRecovery {
     struct RecoveryDetails {
         address[] guardians;
         uint256 threshold;
-        bytes32 activeRecoveryId;
-        uint256 activeRecoveryExecuteAfter;
+        uint256 timelockSeconds;
         uint256 nonce;
     }
 
-    function scheduleRecovery(address wallet, PasskeyTypes.PasskeyInit calldata newPassKey, GuardianSig[] calldata sigs)
-        external
-        returns (bytes32 recoveryId);
+    function scheduleRecovery(
+        address wallet,
+        PasskeyTypes.PasskeyInit calldata newPassKey,
+        RecoveryTypes.RecoveryIntent calldata intent,
+        RecoveryTypes.ChainRecoveryScope[] calldata scopes,
+        GuardianSig[] calldata sigs
+    ) external returns (bytes32 recoveryId);
 
-    function executeRecovery(address wallet, PasskeyTypes.PasskeyInit calldata newPassKey) external;
+    function executeRecovery(address wallet) external;
 
     function cancelRecovery(address wallet, bytes32 recoveryId) external;
 
@@ -48,6 +52,16 @@ interface ISocialRecovery {
     function getRecoveryDetails(address wallet) external view returns (address[] memory guardians, uint256 threshold);
 
     function getRecoveryNonce(address wallet) external view returns (uint256 nonce);
-    
-    function isApproved(bytes32 hash, address guardian) external view returns (bool);
+
+    function getRecoveryTimelock(address wallet) external view returns (uint256 timelockSeconds);
+
+    function getGuardianSetHash(address wallet) external view returns (bytes32);
+
+    function getPolicyHash(address wallet) external view returns (bytes32);
+
+    function getChainScopeHash(RecoveryTypes.ChainRecoveryScope[] calldata scopes) external pure returns (bytes32);
+
+    function getRecoveryDigest(RecoveryTypes.RecoveryIntent calldata intent) external view returns (bytes32);
+
+    function getActiveRecovery(address wallet) external view returns (bytes32 recoveryId, uint256 executeAfter);
 }

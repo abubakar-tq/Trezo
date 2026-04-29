@@ -103,6 +103,12 @@ ping-anvil:
 	@echo "Pinging Anvil network at $(ANVIL_RPC_URL) ..."
 	cast block-number --rpc-url $(ANVIL_RPC_URL)
 
+.PHONY: warp-time
+warp-time:
+	@echo "Fast-forwarding Anvil by 1 day (86400 seconds) and mining a block..."
+	cast rpc evm_increaseTime 86400 --rpc-url $(ANVIL_RPC_URL)
+	cast rpc evm_mine --rpc-url $(ANVIL_RPC_URL)
+
 # ---------- Deterministic infra targets ----------
 
 .PHONY: check-root-factory
