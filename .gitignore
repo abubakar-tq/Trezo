@@ -15,9 +15,15 @@ apps/mobile/.env
 apps/mobile/.env.*
 !apps/mobile/.env.example
 !apps/mobile/.env*.example
+!apps/guardian-approval/.env.example
 graphify-out/
 agent-plans/
 AGENTS.md
 Context_Capsule.md
 LEVEL2_IMPLEMENTATION_NOTES.md
 *.tsbuildinfo
+
+# Local testing scripts
+apps/backend/query_db.js
+apps/guardian-approval/test_*.js
+patch.diff
