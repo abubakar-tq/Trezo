@@ -5,8 +5,8 @@ const extra = {
   eas: {
     projectId: "95fc18a7-8bfb-45e5-a51d-bc853f9ca1e0"
   },
-  supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? "",
-  supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
+  supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_OVERRIDE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || "",
+  supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_OVERRIDE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
   passkeyRpId: process.env.EXPO_PUBLIC_PASSKEY_RP_ID ?? "trezo.app",
   passkeyRpName: process.env.EXPO_PUBLIC_PASSKEY_RP_NAME ?? "Trezo Wallet",
 };

@@ -29,6 +29,14 @@ import AATestScreen from "@features/wallet/screens/AATestScreen";
 import AAWalletDebugScreen from "@features/wallet/screens/AAWalletDebugScreen";
 import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
 import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScreen";
+import AddGuardianScreen from "@features/recovery/screens/AddGuardianScreen";
+import GuardianManagementScreen from "@features/recovery/screens/GuardianManagementScreen";
+import SecurityCenterScreen from "@features/recovery/screens/SecurityCenterScreen";
+import ThresholdConfigurationScreen from "@features/recovery/screens/ThresholdConfigurationScreen";
+import SettingsScreen from "@features/settings/screens/SettingsScreen";
+import ReceiveScreen from "@features/wallet/screens/ReceiveScreen";
+import SendScreen from "@features/wallet/screens/SendScreen";
+import TransactionHistoryScreen from "@features/wallet/screens/TransactionHistoryScreen";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
@@ -363,6 +371,46 @@ const RootNavigation = () => {
                 headerTitle: "Dev Controls",
                 animation: "slide_from_right",
               }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="AddGuardian"
+              component={AddGuardianScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="GuardianManagement"
+              component={GuardianManagementScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="SecurityCenter"
+              component={SecurityCenterScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="ThresholdConfiguration"
+              component={ThresholdConfigurationScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="Receive"
+              component={ReceiveScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="Send"
+              component={SendScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="TransactionHistory"
+              component={TransactionHistoryScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
             />
           </>
         )}

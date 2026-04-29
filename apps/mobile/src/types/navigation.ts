@@ -8,10 +8,10 @@ export type AuthVerificationFlow = "register" | "reset";
 
 export type AuthStackParamList = {
   Splash: { redirectTo?: { name: string; params?: Record<string, unknown> } } | undefined;
-  AuthLanding: undefined; // To be removed
-  Onboarding: undefined;
+  Introduction: undefined;
+  Welcome: undefined;
   PasskeyRegistration: undefined;
-  Login: { email?: string } | undefined;
+  Login: { email?: string; pairingMode?: "resume" } | undefined;
   Register: { email?: string } | undefined;
   ForgotPassword: { email?: string } | undefined;
   VerifyEmail: { email: string; flow: AuthVerificationFlow };
@@ -61,6 +61,15 @@ export type RootStackParamList = {
   SecurityPrivacy: undefined;
   ConnectedDevices: undefined;
   Notifications: undefined;
+  Settings: undefined;
+  AddGuardian: undefined;
+  GuardianManagement: undefined;
+  SecurityCenter: undefined;
+  ThresholdConfiguration: undefined;
+  Receive: undefined;
+  Send: undefined;
+  TransactionHistory: undefined;
+  WalletDashboard: undefined;
 };
 
 // Combined Navigation Types for convenience

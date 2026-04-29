@@ -31,13 +31,18 @@ const config = getDefaultConfig(projectRoot);
 
 // Block any monorepo folders that should not be watched by Metro
 const blockList = exclusionList([
-  `${path.resolve(workspaceRoot, "contracts")}.*`,
+  `${path.resolve(workspaceRoot, "contracts", "out")}.*`,
+  `${path.resolve(workspaceRoot, "contracts", "cache")}.*`,
+  `${path.resolve(workspaceRoot, "contracts", "lib")}.*`,
+  `${path.resolve(workspaceRoot, "contracts", "node_modules")}.*`,
+  `${path.resolve(workspaceRoot, "contracts", "broadcast")}.*`,
 ]);
 
 // 1. Watch only the mobile app and the workspace node_modules
 config.watchFolders = [
   projectRoot,
   path.resolve(workspaceRoot, "node_modules"),
+  path.resolve(workspaceRoot, "contracts", "deployments"),
 ];
 config.resolver.blockList = blockList;
 config.resolver.blacklistRE = blockList;
