@@ -10,7 +10,10 @@ interface BalanceCardProps {
   loading?: boolean;
   address?: string;
   isDeployed?: boolean;
+  isHydrating?: boolean;
+  hasLocalPasskey?: boolean | null;
   onDeploy?: () => void;
+  onEnablePasskey?: () => void;
 }
 
 export const BalanceCard: React.FC<BalanceCardProps> = ({
@@ -18,7 +21,10 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   loading,
   address,
   isDeployed = true,
+  isHydrating = false,
+  hasLocalPasskey = null,
   onDeploy,
+  onEnablePasskey,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
@@ -27,11 +33,27 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
     <View style={[styles.container, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
         <View style={styles.header}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>Balance</Text>
-          {isDeployed ? (
-            <View style={[styles.badge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
-              <Feather name="trending-up" size={10} color={colors.accent} />
-              <Text style={[styles.badgeText, { color: colors.accent }]}>+4.2%</Text>
+          {isHydrating ? (
+            <View style={[styles.badge, { backgroundColor: withAlpha(colors.textSecondary, 0.08) }]}>
+              <Feather name="refresh-cw" size={10} color={colors.textSecondary} />
+              <Text style={[styles.badgeText, { color: colors.textSecondary }]}>Syncing...</Text>
             </View>
+          ) : isDeployed ? (
+            hasLocalPasskey === false ? (
+              <TouchableOpacity
+                onPress={onEnablePasskey}
+                style={[styles.deployBadge, { backgroundColor: withAlpha('#8B5CF6', 0.15), borderColor: withAlpha('#8B5CF6', 0.35) }]}
+                activeOpacity={0.8}
+              >
+                <Feather name="key" size={10} color="#8B5CF6" />
+                <Text style={[styles.badgeText, { color: '#8B5CF6', marginLeft: 4 }]}>Enable Passkey</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.badge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+                <Feather name="trending-up" size={10} color={colors.accent} />
+                <Text style={[styles.badgeText, { color: colors.accent }]}>+4.2%</Text>
+              </View>
+            )
           ) : (
             <TouchableOpacity
               onPress={onDeploy}

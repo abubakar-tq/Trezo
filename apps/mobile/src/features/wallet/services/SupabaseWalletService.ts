@@ -16,18 +16,18 @@ const supabase = getSupabaseClient();
 export interface AAWallet {
   id: string;
   user_id: string;
-  wallet_identity?: string;
+  wallet_identity?: string | null;
   wallet_index: number;
   deployment_mode: 'portable' | 'chain-specific';
   predicted_address: string;
   owner_address: string;
   is_deployed: boolean;
-  deployment_tx_hash?: string;
-  deployment_block_number?: number;
+  deployment_tx_hash?: string | null;
+  deployment_block_number?: number | null;
   wallet_name: string;
   chain_id: number;
   created_at: string;
-  deployed_at?: string;
+  deployed_at?: string | null;
   updated_at: string;
 }
 
@@ -90,23 +90,45 @@ export class SupabaseWalletService {
     walletId?: string;
     walletIndex?: number;
     deploymentMode?: 'portable' | 'chain-specific';
+    isDeployed?: boolean;
+    deploymentTxHash?: string | null;
+    deploymentBlockNumber?: number | null;
+    deployedAt?: string | null;
   }): Promise<AAWallet> {
     console.log(`💾 [SupabaseWalletService] Saving AA wallet for user ${data.userId}`);
     
     try {
+      const now = new Date().toISOString();
+      const payload: Record<string, unknown> = {
+        user_id: data.userId,
+        wallet_identity: data.walletId,
+        wallet_index: data.walletIndex ?? 0,
+        deployment_mode: data.deploymentMode ?? 'chain-specific',
+        predicted_address: data.predictedAddress.toLowerCase(),
+        owner_address: data.ownerAddress.toLowerCase(),
+        wallet_name: data.walletName,
+        chain_id: data.chainId,
+        updated_at: now,
+      };
+
+      if ('isDeployed' in data) {
+        payload.is_deployed = Boolean(data.isDeployed);
+        payload.deployed_at = data.isDeployed ? data.deployedAt ?? now : null;
+        if (!data.isDeployed) {
+          payload.deployment_tx_hash = null;
+          payload.deployment_block_number = null;
+        }
+      }
+      if ('deploymentTxHash' in data) {
+        payload.deployment_tx_hash = data.deploymentTxHash ?? null;
+      }
+      if ('deploymentBlockNumber' in data) {
+        payload.deployment_block_number = data.deploymentBlockNumber ?? null;
+      }
+
       const { data: wallet, error } = await supabase
         .from('aa_wallets')
-        .insert({
-          user_id: data.userId,
-          wallet_identity: data.walletId,
-          wallet_index: data.walletIndex ?? 0,
-          deployment_mode: data.deploymentMode ?? 'chain-specific',
-          predicted_address: data.predictedAddress.toLowerCase(),
-          owner_address: data.ownerAddress.toLowerCase(),
-          wallet_name: data.walletName,
-          chain_id: data.chainId,
-          is_deployed: false,
-        })
+        .upsert(payload, { onConflict: 'user_id,chain_id' })
         .select()
         .single();
       
@@ -155,6 +177,31 @@ export class SupabaseWalletService {
       throw new Error(`Failed to get wallet: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
+
+  async getAAWalletForChain(
+    userId: string,
+    chainId: number,
+  ): Promise<AAWallet | null> {
+    console.log(`🔍 [SupabaseWalletService] Getting AA wallet for user ${userId} on chain ${chainId}`);
+
+    try {
+      const { data, error } = await supabase
+        .from('aa_wallets')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('chain_id', chainId)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      return data as AAWallet | null;
+    } catch (error) {
+      console.error('❌ [SupabaseWalletService] Error getting wallet by chain:', error);
+      throw new Error(`Failed to get wallet by chain: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
   
   /**
    * Update deployment status
@@ -164,23 +211,54 @@ export class SupabaseWalletService {
     txHash: string,
     blockNumber: number
   ): Promise<void> {
+    await this.setDeploymentState(walletId, {
+      isDeployed: true,
+      deploymentTxHash: txHash,
+      deploymentBlockNumber: blockNumber,
+    });
+  }
+
+  async setDeploymentState(
+    walletId: string,
+    params: {
+      isDeployed: boolean;
+      deploymentTxHash?: string | null;
+      deploymentBlockNumber?: number | null;
+      deployedAt?: string | null;
+    },
+  ): Promise<void> {
     console.log(`📝 [SupabaseWalletService] Updating deployment status for wallet ${walletId}`);
-    
+
     try {
+      const payload: Record<string, unknown> = {
+        is_deployed: params.isDeployed,
+        deployed_at: params.isDeployed
+          ? params.deployedAt ?? new Date().toISOString()
+          : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (params.isDeployed) {
+        if ('deploymentTxHash' in params) {
+          payload.deployment_tx_hash = params.deploymentTxHash ?? null;
+        }
+        if ('deploymentBlockNumber' in params) {
+          payload.deployment_block_number = params.deploymentBlockNumber ?? null;
+        }
+      } else {
+        payload.deployment_tx_hash = null;
+        payload.deployment_block_number = null;
+      }
+
       const { error } = await supabase
         .from('aa_wallets')
-        .update({
-          is_deployed: true,
-          deployment_tx_hash: txHash,
-          deployment_block_number: blockNumber,
-          deployed_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq('id', walletId);
-      
+
       if (error) {
         throw error;
       }
-      
+
       console.log(`✅ [SupabaseWalletService] Deployment status updated`);
     } catch (error) {
       console.error('❌ [SupabaseWalletService] Error updating deployment:', error);

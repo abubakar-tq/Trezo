@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,15 +13,16 @@ import {
 } from "react-native";
 
 import {
-    EmailRecoveryService,
-    type EmailRecoverySecurityMode,
-    type LoadedEmailRecoveryMetadata,
+  EmailRecoveryService,
+  type EmailRecoverySecurityMode,
+  type LoadedEmailRecoveryMetadata,
 } from "@/src/features/wallet/services/EmailRecoveryService";
+import LocalSignerService from "@/src/features/wallet/services/LocalSignerService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import {
-    DEFAULT_CHAIN_ID,
-    type SupportedChainId,
+  DEFAULT_CHAIN_ID,
+  type SupportedChainId,
 } from "@/src/integration/chains";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useUserStore } from "@store/useUserStore";
@@ -106,41 +106,48 @@ const EmailRecoveryScreen: React.FC = () => {
   const [storedMetadata, setStoredMetadata] =
     useState<LoadedEmailRecoveryMetadata | null>(null);
   const [metadataWarning, setMetadataWarning] = useState<string | null>(null);
-
-  const installStatusLabel = useMemo(() => {
-    const status =
-      storedMetadata?.installations.find(
-        (i) => i.chainId === Number(resolvedChainId),
-      )?.installStatus ?? "not_installed";
-    switch (status) {
-      case "installed":
-        return "Active";
-      case "pending":
-        return "Pending";
-      default:
-        return "Not active";
-    }
-  }, [resolvedChainId, storedMetadata]);
+  const [checkingLocalSigner, setCheckingLocalSigner] = useState(true);
+  const [canSignForWallet, setCanSignForWallet] = useState(false);
 
   const expectedGuardians = useMemo(
     () => Math.max(parseInt(guardianCountValue, 10) || 0, 0),
     [guardianCountValue],
   );
+  const visibleGuardianEmails = useMemo(
+    () => guardianEmails.slice(0, expectedGuardians),
+    [expectedGuardians, guardianEmails],
+  );
+  const visibleGuardianWeights = useMemo(
+    () => guardianWeights.slice(0, expectedGuardians),
+    [expectedGuardians, guardianWeights],
+  );
   const trimmedGuardians = useMemo(
     () =>
-      guardianEmails
+      visibleGuardianEmails
         .map((email) => EmailRecoveryService.normalizeGuardianEmail(email))
         .filter(Boolean),
-    [guardianEmails],
+    [visibleGuardianEmails],
   );
   const normalizedGuardianWeights = useMemo(
     () =>
-      guardianWeights.map((weight) => Math.max(parseInt(weight, 10) || 0, 0)),
-    [guardianWeights],
+      visibleGuardianWeights.map((weight) => Math.max(parseInt(weight, 10) || 0, 0)),
+    [visibleGuardianWeights],
   );
   const totalGuardianWeight = useMemo(
     () => normalizedGuardianWeights.reduce((sum, weight) => sum + weight, 0),
     [normalizedGuardianWeights],
+  );
+  const parsedThreshold = useMemo(
+    () => Math.max(parseInt(thresholdValue, 10) || 0, 0),
+    [thresholdValue],
+  );
+  const parsedDelayDays = useMemo(
+    () => Math.max(parseInt(delayDays, 10) || 0, 0),
+    [delayDays],
+  );
+  const parsedExpiryDays = useMemo(
+    () => Math.max(parseInt(expiryDays, 10) || 0, 0),
+    [expiryDays],
   );
   const hasDuplicateGuardians = useMemo(() => {
     const normalized = trimmedGuardians.map((email) => email.toLowerCase());
@@ -148,6 +155,99 @@ const EmailRecoveryScreen: React.FC = () => {
   }, [trimmedGuardians]);
   const guardiansReady =
     expectedGuardians > 0 && trimmedGuardians.length === expectedGuardians;
+  const invalidGuardian = useMemo(
+    () => trimmedGuardians.find((email) => !isValidEmail(email)) ?? null,
+    [trimmedGuardians],
+  );
+  const invalidWeightIndex = useMemo(
+    () => normalizedGuardianWeights.findIndex((weight) => weight <= 0),
+    [normalizedGuardianWeights],
+  );
+  const guardianValidationError = useMemo(() => {
+    if (expectedGuardians < 1) {
+      return "Add at least one guardian.";
+    }
+    if (visibleGuardianEmails.length !== expectedGuardians) {
+      return "Guardian slots are still syncing. Try again.";
+    }
+    if (trimmedGuardians.length !== expectedGuardians) {
+      return "Fill in every guardian email before continuing.";
+    }
+    if (invalidGuardian) {
+      return `${invalidGuardian} is not a valid email address.`;
+    }
+    if (hasDuplicateGuardians) {
+      return "Duplicate guardian emails are not allowed.";
+    }
+    if (parsedThreshold < 1) {
+      return "Threshold must be at least 1.";
+    }
+    if (parsedThreshold > expectedGuardians) {
+      return "Threshold cannot exceed the guardian count.";
+    }
+    if (parsedThreshold > totalGuardianWeight) {
+      return "Threshold cannot exceed the total guardian weight.";
+    }
+    if (invalidWeightIndex >= 0) {
+      return `Guardian weight at slot ${invalidWeightIndex + 1} must be greater than zero.`;
+    }
+    if (parsedDelayDays < 1 || parsedExpiryDays < 1) {
+      return "Delay and expiry must both be at least 1 day.";
+    }
+    if (parsedExpiryDays < parsedDelayDays) {
+      return "Expiry must be greater than or equal to the delay.";
+    }
+    return null;
+  }, [
+    expectedGuardians,
+    hasDuplicateGuardians,
+    invalidGuardian,
+    invalidWeightIndex,
+    parsedDelayDays,
+    parsedExpiryDays,
+    parsedThreshold,
+    totalGuardianWeight,
+    trimmedGuardians.length,
+    visibleGuardianEmails.length,
+  ]);
+  const canSubmitGuardianConfig =
+    smartAccountReady &&
+    guardiansReady &&
+    !guardianValidationError &&
+    !installingModule;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSignerStatus = async () => {
+      if (!user?.id) {
+        if (!cancelled) {
+          setCanSignForWallet(false);
+          setCheckingLocalSigner(false);
+        }
+        return;
+      }
+
+      const signerStatus = await LocalSignerService.getWalletSignerStatus({
+        userId: user.id,
+        smartAccountAddress: smartAccountAddress ?? null,
+        chainId: resolvedChainId,
+        expectedPasskeyId: aaAccount?.ownerAddress ?? null,
+      });
+
+      if (!cancelled) {
+        setCanSignForWallet(signerStatus.canSignForWallet);
+        setCheckingLocalSigner(false);
+      }
+    };
+
+    setCheckingLocalSigner(true);
+    void loadSignerStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aaAccount?.ownerAddress, resolvedChainId, smartAccountAddress, user?.id]);
 
   useEffect(() => {
     if (!smartAccountReady || !smartAccountAddress) {
@@ -170,7 +270,7 @@ const EmailRecoveryScreen: React.FC = () => {
           setModuleError(
             error instanceof Error
               ? error.message
-              : "Failed to read recovery status",
+              : "Failed to read module status",
           );
           setModuleInstalledState(false);
         }
@@ -272,13 +372,13 @@ const EmailRecoveryScreen: React.FC = () => {
 
     if (backendStatus === "installed" && !moduleInstalledState) {
       setMetadataWarning(
-        "We see recovery marked active, but this device shows it as inactive. Please verify again.",
+        "Backend says installed, but on-chain check says not installed. Verify again.",
       );
       return;
     }
     if (backendStatus !== "installed" && moduleInstalledState) {
       setMetadataWarning(
-        "Recovery looks active here, but needs a sync. We'll update it now.",
+        "On-chain module is active but backend status needs sync.",
       );
       EmailRecoveryService.syncCurrentChainInstallStatus({
         configId: storedMetadata.config.id,
@@ -325,19 +425,17 @@ const EmailRecoveryScreen: React.FC = () => {
     const parsed = parseInt(value, 10) || 0;
     setGuardianCountValue(value);
     setDerivedGuardians([]);
-
-    // Instead of deleting extra rows, we just hide them in UI, or expand if more are needed
     setGuardianEmails((current) => {
       if (parsed > current.length) {
         return [...current, ...Array(parsed - current.length).fill("")];
       }
-      return current; // Don't wipe previous entries
+      return current.slice(0, parsed);
     });
     setGuardianWeights((current) => {
       if (parsed > current.length) {
         return [...current, ...Array(parsed - current.length).fill("1")];
       }
-      return current; // Don't wipe previous entries
+      return current.slice(0, parsed);
     });
   }, []);
 
@@ -378,106 +476,44 @@ const EmailRecoveryScreen: React.FC = () => {
     setModuleStatusNonce((nonce) => nonce + 1);
   }, [smartAccountReady]);
 
+  const parseGuardianWeights = useCallback((): bigint[] => {
+    return visibleGuardianWeights.map((weight, index) => {
+      const parsed = parseInt(weight, 10) || 0;
+      if (parsed <= 0) {
+        throw new Error(
+          `Guardian weight at index ${index + 1} must be greater than zero.`,
+        );
+      }
+      return BigInt(parsed);
+    });
+  }, [visibleGuardianWeights]);
+
   const handleSaveToCloud = useCallback(async () => {
     if (!smartAccountReady || !smartAccountAddress) {
       Alert.alert(
-        "Trezo account required",
-        "Create your Trezo account before syncing.",
+        "Smart Account Required",
+        "Deploy your smart account before syncing.",
       );
       return;
     }
     if (!user?.id) {
-      Alert.alert("Sign in required", "Please sign in to sync.");
+      Alert.alert("Authentication Required", "Please sign in to sync.");
       return;
     }
-    if (!guardiansReady) {
-      Alert.alert(
-        "Add trusted emails",
-        "Fill in all trusted emails before syncing.",
-      );
-      return;
-    }
-
-    const invalidGuardian = trimmedGuardians.find(
-      (email) => !isValidEmail(email),
-    );
-    if (invalidGuardian) {
-      Alert.alert(
-        "Invalid email",
-        `${invalidGuardian} is not a valid email address.`,
-      );
-      return;
-    }
-
-    const parsedThreshold = parseInt(thresholdValue, 10) || 0;
-    const parsedDelay = parseInt(delayDays, 10) || 0;
-    const parsedExpiry = parseInt(expiryDays, 10) || 0;
-
-    if (parsedThreshold <= 0) {
-      Alert.alert(
-        "Invalid approval requirement",
-        "Approval requirement must be greater than zero.",
-      );
-      return;
-    }
-
-    const computedTotalWeight = guardianWeights
-      .slice(0, expectedGuardians)
-      .reduce((sum, weight) => sum + (parseInt(weight, 10) || 0), 0);
-
-    if (parsedThreshold > computedTotalWeight) {
-      Alert.alert(
-        "Approval requirement too high",
-        "Approval requirement cannot exceed the total weight.",
-      );
-      return;
-    }
-
-    if (hasDuplicateGuardians) {
-      Alert.alert("Duplicate emails", "Each trusted email must be unique.");
-      return;
-    }
-    if (parsedDelay <= 0 || parsedExpiry <= 0) {
-      Alert.alert(
-        "Invalid timing",
-        "Security wait and expiry must be greater than zero.",
-      );
-      return;
-    }
-    if (parsedExpiry < parsedDelay) {
-      Alert.alert(
-        "Invalid timing",
-        "Expiry must be greater than or equal to the security wait.",
-      );
+    if (guardianValidationError) {
+      Alert.alert("Check Guardian Setup", guardianValidationError);
       return;
     }
 
     let parsedWeights: bigint[];
     try {
-      parsedWeights = guardianWeights.map((weight, index) => {
-        const parsed = parseInt(weight, 10) || 0;
-        if (parsed <= 0) {
-          throw new Error(
-            `Weight at row ${index + 1} must be greater than zero.`,
-          );
-        }
-        return BigInt(parsed);
-      });
+      parsedWeights = parseGuardianWeights();
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Weights must be greater than zero.";
-      Alert.alert("Invalid weights", message);
-      return;
-    }
-
-    const totalWeight = parsedWeights.reduce((sum, weight) => sum + weight, 0n);
-    if (BigInt(parsedThreshold) > totalWeight) {
-      Alert.alert(
-        "Invalid approval requirement",
-        "Approval requirement cannot exceed the total weight.",
-      );
+          : "Guardian weights must be greater than zero.";
+      Alert.alert("Invalid Weights", message);
       return;
     }
 
@@ -490,8 +526,8 @@ const EmailRecoveryScreen: React.FC = () => {
         guardianEmails: trimmedGuardians,
         guardianWeights: parsedWeights,
         threshold: BigInt(parsedThreshold),
-        delaySeconds: BigInt(parsedDelay) * 86400n,
-        expirySeconds: BigInt(parsedExpiry) * 86400n,
+        delaySeconds: BigInt(parsedDelayDays) * 86400n,
+        expirySeconds: BigInt(parsedExpiryDays) * 86400n,
         securityMode,
         installStatus: moduleInstalledState ? "installed" : "pending",
         installUserOpHash:
@@ -502,11 +538,14 @@ const EmailRecoveryScreen: React.FC = () => {
         smartAccountAddress,
       });
       setStoredMetadata(refreshedMetadata);
-      Alert.alert("Sync complete", "Settings synced successfully.");
+      Alert.alert(
+        "Sync Complete",
+        "Configuration synced to the cloud successfully.",
+      );
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to sync settings.";
-      Alert.alert("Sync failed", message);
+        error instanceof Error ? error.message : "Failed to sync metadata.";
+      Alert.alert("Sync Failed", message);
     } finally {
       setInstallingModule(false);
     }
@@ -514,14 +553,13 @@ const EmailRecoveryScreen: React.FC = () => {
     smartAccountReady,
     smartAccountAddress,
     user?.id,
-    guardiansReady,
     trimmedGuardians,
-    hasDuplicateGuardians,
     resolvedChainId,
-    guardianWeights,
-    thresholdValue,
-    delayDays,
-    expiryDays,
+    guardianValidationError,
+    parseGuardianWeights,
+    parsedDelayDays,
+    parsedExpiryDays,
+    parsedThreshold,
     securityMode,
     moduleInstalledState,
   ]);
@@ -529,105 +567,32 @@ const EmailRecoveryScreen: React.FC = () => {
   const handleInstallModule = useCallback(async () => {
     if (!smartAccountReady || !smartAccountAddress) {
       Alert.alert(
-        "Trezo account required",
-        "Create your Trezo account before activating email recovery.",
+        "Smart Account Required",
+        "Deploy your smart account before installing email recovery.",
       );
       return;
     }
     if (!user?.id) {
       Alert.alert(
-        "Sign in required",
-        "Please sign in to activate email recovery.",
+        "Authentication Required",
+        "Please sign in to install the email recovery module.",
       );
       return;
     }
-    if (!guardiansReady) {
-      Alert.alert(
-        "Add trusted emails",
-        "Fill in all trusted emails before activating.",
-      );
-      return;
-    }
-
-    const invalidGuardian = trimmedGuardians.find(
-      (email) => !isValidEmail(email),
-    );
-    if (invalidGuardian) {
-      Alert.alert(
-        "Invalid email",
-        `${invalidGuardian} is not a valid email address.`,
-      );
-      return;
-    }
-
-    const parsedThreshold = parseInt(thresholdValue, 10) || 0;
-    const parsedDelay = parseInt(delayDays, 10) || 0;
-    const parsedExpiry = parseInt(expiryDays, 10) || 0;
-
-    if (parsedThreshold <= 0) {
-      Alert.alert(
-        "Invalid approval requirement",
-        "Approval requirement must be greater than zero.",
-      );
-      return;
-    }
-
-    const computedTotalWeight = guardianWeights
-      .slice(0, expectedGuardians)
-      .reduce((sum, weight) => sum + (parseInt(weight, 10) || 0), 0);
-
-    if (parsedThreshold > computedTotalWeight) {
-      Alert.alert(
-        "Approval requirement too high",
-        "Approval requirement cannot exceed the total weight.",
-      );
-      return;
-    }
-
-    if (hasDuplicateGuardians) {
-      Alert.alert("Duplicate emails", "Each trusted email must be unique.");
-      return;
-    }
-    if (parsedDelay <= 0 || parsedExpiry <= 0) {
-      Alert.alert(
-        "Invalid timing",
-        "Security wait and expiry must be greater than zero.",
-      );
-      return;
-    }
-    if (parsedExpiry < parsedDelay) {
-      Alert.alert(
-        "Invalid timing",
-        "Expiry must be greater than or equal to the security wait.",
-      );
+    if (guardianValidationError) {
+      Alert.alert("Check Guardian Setup", guardianValidationError);
       return;
     }
 
     let parsedWeights: bigint[];
     try {
-      parsedWeights = guardianWeights.map((weight, index) => {
-        const parsed = parseInt(weight, 10) || 0;
-        if (parsed <= 0) {
-          throw new Error(
-            `Weight at row ${index + 1} must be greater than zero.`,
-          );
-        }
-        return BigInt(parsed);
-      });
+      parsedWeights = parseGuardianWeights();
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Weights must be greater than zero.";
-      Alert.alert("Invalid weights", message);
-      return;
-    }
-    const totalWeight = parsedWeights.reduce((sum, weight) => sum + weight, 0n);
-    if (BigInt(parsedThreshold) > totalWeight) {
-      Alert.alert(
-        "Invalid approval requirement",
-        "Approval requirement cannot exceed the total weight.",
-      );
+          : "Guardian weights must be greater than zero.";
+      Alert.alert("Invalid Weights", message);
       return;
     }
 
@@ -665,8 +630,8 @@ const EmailRecoveryScreen: React.FC = () => {
           ),
           weights: parsedWeights,
           threshold: BigInt(parsedThreshold),
-          delay: BigInt(parsedDelay) * 86400n,
-          expiry: BigInt(parsedExpiry) * 86400n,
+          delay: BigInt(parsedDelayDays) * 86400n,
+          expiry: BigInt(parsedExpiryDays) * 86400n,
           passkeyId: passkey.credentialIdRaw as Hex,
           chainId: resolvedChainId,
           usePaymaster: true,
@@ -696,8 +661,8 @@ const EmailRecoveryScreen: React.FC = () => {
         guardianEmails: trimmedGuardians,
         guardianWeights: parsedWeights,
         threshold: BigInt(parsedThreshold),
-        delaySeconds: BigInt(parsedDelay) * 86400n,
-        expirySeconds: BigInt(parsedExpiry) * 86400n,
+        delaySeconds: BigInt(parsedDelayDays) * 86400n,
+        expirySeconds: BigInt(parsedExpiryDays) * 86400n,
         securityMode,
         installStatus: "pending",
         installUserOpHash: operationHash,
@@ -712,39 +677,38 @@ const EmailRecoveryScreen: React.FC = () => {
       setLastInstallPayload(signedUserOp);
       setModuleInstalledState(true);
       Alert.alert(
-        "Email recovery activated",
-        "Email recovery activation was submitted.",
+        "Email Recovery Activated",
+        "Email recovery module installation was submitted.",
       );
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to activate email recovery.";
+          : "Failed to install the email recovery module.";
       setModuleError(message);
-      Alert.alert("Activation failed", message);
+      Alert.alert("Installation Failed", message);
     } finally {
       setInstallingModule(false);
     }
   }, [
-    delayDays,
-    expiryDays,
-    guardiansReady,
+    guardianValidationError,
+    parseGuardianWeights,
+    parsedDelayDays,
+    parsedExpiryDays,
+    parsedThreshold,
     resolvedChainId,
     smartAccountAddress,
     smartAccountReady,
-    thresholdValue,
     trimmedGuardians,
     user?.id,
-    guardianWeights,
-    hasDuplicateGuardians,
     securityMode,
   ]);
 
   const handleExportRecoveryKit = useCallback(async () => {
     if (!smartAccountAddress) {
       Alert.alert(
-        "Trezo account required",
-        "Create or load your Trezo account first.",
+        "Smart Account Required",
+        "Create or load your smart account first.",
       );
       return;
     }
@@ -754,8 +718,8 @@ const EmailRecoveryScreen: React.FC = () => {
         await EmailRecoveryService.getVaultKeyBase64(smartAccountAddress);
       if (!vaultKey) {
         Alert.alert(
-          "No recovery kit found",
-          "Enable Extra Security and save recovery once to generate a recovery kit.",
+          "No Vault Key Found",
+          "Enable Extra Security and save/install recovery once to generate a vault key.",
         );
         return;
       }
@@ -766,22 +730,22 @@ const EmailRecoveryScreen: React.FC = () => {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to load vault key.";
-      Alert.alert("Export failed", message);
+      Alert.alert("Export Failed", message);
     }
   }, [navigation, smartAccountAddress]);
 
   const handleImportVaultKey = useCallback(async () => {
     if (!smartAccountAddress) {
       Alert.alert(
-        "Trezo account required",
-        "Create or load your Trezo account first.",
+        "Smart Account Required",
+        "Create or load your smart account first.",
       );
       return;
     }
     if (!vaultKeyInput.trim()) {
       Alert.alert(
-        "Recovery kit required",
-        "Paste your recovery kit key to import.",
+        "Vault Key Required",
+        "Paste your Base64 vault key to import.",
       );
       return;
     }
@@ -800,31 +764,76 @@ const EmailRecoveryScreen: React.FC = () => {
       setStoredMetadata(refreshedMetadata);
 
       Alert.alert(
-        "Recovery kit imported",
-        "Trusted emails are now unlocked on this device.",
+        "Vault Key Imported",
+        "Guardians are now unlocked on this device.",
       );
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to import recovery kit.";
-      Alert.alert("Import failed", message);
+        error instanceof Error ? error.message : "Failed to import vault key.";
+      Alert.alert("Import Failed", message);
     }
   }, [smartAccountAddress, vaultKeyInput]);
 
+  if (checkingLocalSigner || !canSignForWallet) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={24} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Email Recovery</Text>
+          <View style={{ width: 24 }} />
+        </View>
+
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.card}>
+            {checkingLocalSigner ? (
+              <>
+                <Text style={styles.cardTitle}>Checking local signer access...</Text>
+                <ActivityIndicator size="small" color={colors.accentAlt} />
+                <Text style={styles.cardDesc}>
+                  Trezo is verifying whether this device has a wallet passkey that is active for
+                  this account.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardTitle}>This device cannot manage email recovery yet</Text>
+                <Text style={styles.cardDesc}>
+                  Email recovery setup is wallet-authorized. This device may know the wallet and its
+                  saved metadata, but it cannot change or install recovery until a passkey on this
+                  device is active for the wallet.
+                </Text>
+                <TouchableOpacity
+                  style={styles.installButton}
+                  onPress={() => navigation.navigate("RecoveryEntry")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.installButtonText}>Open recovery options</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => navigation.navigate("BackupRecovery")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.secondaryButtonText}>Back to backup & recovery</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Feather name="arrow-left" size={20} color={colors.textPrimary} />
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Feather name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.screenTitle}>Trusted Email</Text>
-        <Text style={styles.screenDesc}>
-          Set up secure recovery using your trusted email contacts.
-        </Text>
+        <Text style={styles.headerTitle}>Email Recovery</Text>
+        <View style={{ width: 24 }} />
       </View>
 
       <ScrollView
@@ -832,38 +841,38 @@ const EmailRecoveryScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.configCard}>
-          <View style={styles.cardSectionHeader}>
-            <Text style={styles.cardSectionLabel}>ACTIVE CONFIGURATION</Text>
-          </View>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Saved Recovery Metadata</Text>
+          <Text style={styles.cardDesc}>
+            Offchain metadata is persisted per wallet. Chain behavior remains
+            unchanged.
+          </Text>
           {loadingStoredMetadata ? (
-            <ActivityIndicator size="small" color={colors.accent} />
+            <ActivityIndicator size="small" color={colors.accentAlt} />
           ) : storedMetadata ? (
             <>
               <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Approval requirement</Text>
+                <Text style={styles.payloadLabel}>Threshold</Text>
                 <Text style={styles.payloadValue}>
                   {storedMetadata.config.threshold}
                 </Text>
               </View>
               <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>
-                  Security wait / Expiry (days)
-                </Text>
+                <Text style={styles.payloadLabel}>Delay / Expiry (days)</Text>
                 <Text style={styles.payloadValue}>
                   {Math.floor(storedMetadata.config.delaySeconds / 86400)} /{" "}
                   {Math.floor(storedMetadata.config.expirySeconds / 86400)}
                 </Text>
               </View>
               <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Privacy mode</Text>
+                <Text style={styles.payloadLabel}>Security mode</Text>
                 <Text style={styles.payloadValue}>
                   {storedMetadata.config.securityMode === "extra"
                     ? "Extra (encrypted)"
                     : "Standard"}
                 </Text>
               </View>
-              <Text style={styles.payloadSubLabel}>Masked Trusted Emails</Text>
+              <Text style={styles.payloadSubLabel}>Masked Guardian Emails</Text>
               {storedMetadata.guardians.map((guardian) => (
                 <View key={guardian.emailHash} style={styles.payloadRow}>
                   <Text style={styles.payloadLabel}>
@@ -876,20 +885,25 @@ const EmailRecoveryScreen: React.FC = () => {
                 </View>
               ))}
               <Text style={styles.payloadSubLabel}>
-                Current Activation Status
+                Current Chain Install Status
               </Text>
-              <Text style={styles.payloadValue}>{installStatusLabel}</Text>
+              <Text style={styles.payloadValue}>
+                {storedMetadata.installations.find(
+                  (i) => i.chainId === Number(resolvedChainId),
+                )?.installStatus ?? "not_installed"}
+              </Text>
               {storedMetadata.installations.find(
                 (i) => i.chainId === Number(resolvedChainId),
               )?.installStatus !== "installed" && (
                 <Text style={styles.moduleHint}>
-                  Recovery not active on this network. Activate to enable it.
+                  Recovery not active on this chain. Install the module to
+                  activate it.
                 </Text>
               )}
             </>
           ) : (
             <Text style={styles.moduleHint}>
-              No trusted email recovery setup found yet.
+              No email recovery metadata found for this wallet yet.
             </Text>
           )}
           {metadataWarning ? (
@@ -897,13 +911,12 @@ const EmailRecoveryScreen: React.FC = () => {
           ) : null}
         </View>
 
-        <View style={styles.configCard}>
-          <View style={styles.cardSectionHeader}>
-            <Text style={styles.cardSectionLabel}>PRIVACY & SECURITY</Text>
-          </View>
-          <Text style={styles.configDesc}>
-            Standard mode stores masked trusted emails. Extra mode encrypts them
-            and requires a recovery kit.
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Privacy & Recovery Kit</Text>
+          <Text style={styles.cardDesc}>
+            Standard mode stores masked guardian emails for easier recovery.
+            Extra mode encrypts guardian emails and requires your vault key on
+            each device.
           </Text>
 
           <View style={styles.inputRow}>
@@ -932,7 +945,7 @@ const EmailRecoveryScreen: React.FC = () => {
           {securityMode === "extra" ? (
             <>
               <Text style={styles.moduleHint}>
-                Recovery kit on this device:{" "}
+                Vault key on this device:{" "}
                 {hasVaultKey ? "Available" : "Not imported"}
               </Text>
 
@@ -951,7 +964,7 @@ const EmailRecoveryScreen: React.FC = () => {
                 style={styles.textInput}
                 value={vaultKeyInput}
                 onChangeText={setVaultKeyInput}
-                placeholder="Paste recovery kit key (Base64)"
+                placeholder="Paste vault key (Base64)"
                 placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -962,31 +975,28 @@ const EmailRecoveryScreen: React.FC = () => {
                 activeOpacity={0.85}
                 disabled={!smartAccountAddress}
               >
-                <Text style={styles.secondaryButtonText}>
-                  Import Recovery Kit
-                </Text>
+                <Text style={styles.secondaryButtonText}>Import Vault Key</Text>
               </TouchableOpacity>
             </>
           ) : (
             <Text style={styles.moduleHint}>
-              Recovery kit export/import is only required in Extra Security
+              Recovery key export/import is only required in Extra Security
               mode.
             </Text>
           )}
         </View>
 
-        <View style={styles.configCard}>
-          <View style={styles.cardSectionHeader}>
-            <Text style={styles.cardSectionLabel}>TRUSTED CONTACTS</Text>
-          </View>
-          <Text style={styles.configDesc}>
-            Add trusted email addresses that will collectively help you regain
-            access.
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Guardian Configuration</Text>
+          <Text style={styles.cardDesc}>
+            Enter guardian email addresses and weights. The app
+            deterministically derives the on-chain EmailAuth guardian contracts
+            from these emails before installing the module.
           </Text>
 
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Total Trusted Emails</Text>
+              <Text style={styles.inputLabel}>Total Guardians</Text>
               <TextInput
                 style={styles.numberInput}
                 value={guardianCountValue}
@@ -996,7 +1006,7 @@ const EmailRecoveryScreen: React.FC = () => {
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Approval Requirement</Text>
+              <Text style={styles.inputLabel}>Threshold</Text>
               <TextInput
                 style={styles.numberInput}
                 value={thresholdValue}
@@ -1017,13 +1027,18 @@ const EmailRecoveryScreen: React.FC = () => {
               </Text>
             )}
           </View>
+          {guardianValidationError ? (
+            <View style={styles.validationBox}>
+              <Text style={styles.validationText}>{guardianValidationError}</Text>
+            </View>
+          ) : null}
 
-          {guardianEmails.map((email, index) => (
+          {visibleGuardianEmails.map((email, index) => (
             <View key={`guardian-${index}`} style={styles.guardianRowContainer}>
               <View style={styles.guardianRow}>
                 <View style={styles.guardianColumn}>
                   <Text style={styles.inputLabel}>
-                    Trusted Email {index + 1}
+                    Guardian {index + 1} Email
                   </Text>
                   <TextInput
                     style={styles.textInput}
@@ -1031,7 +1046,7 @@ const EmailRecoveryScreen: React.FC = () => {
                     onChangeText={(value) =>
                       handleGuardianEmailChange(index, value)
                     }
-                    placeholder="email@example.com"
+                    placeholder="guardian@example.com"
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -1044,7 +1059,7 @@ const EmailRecoveryScreen: React.FC = () => {
                   <Text style={styles.inputLabel}>Weight</Text>
                   <TextInput
                     style={styles.numberInput}
-                    value={guardianWeights[index] ?? "1"}
+                    value={visibleGuardianWeights[index] ?? "1"}
                     onChangeText={(value) => handleWeightChange(index, value)}
                     keyboardType="number-pad"
                     placeholderTextColor={colors.textMuted}
@@ -1053,12 +1068,12 @@ const EmailRecoveryScreen: React.FC = () => {
               </View>
 
               {/* Optional Delete Button */}
-              {guardianEmails.length > 1 && (
+              {visibleGuardianEmails.length > 1 && (
                 <TouchableOpacity
                   style={styles.deleteGuardianButton}
                   onPress={() => handleDeleteGuardian(index)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Remove trusted email ${index + 1}`}
+                  accessibilityLabel={`Remove guardian ${index + 1}`}
                 >
                   <Feather
                     name="trash-2"
@@ -1072,7 +1087,7 @@ const EmailRecoveryScreen: React.FC = () => {
           {derivedGuardians.length > 0 && (
             <View style={styles.payloadBox}>
               <Text style={styles.payloadTitle}>
-                Derived Recovery Addresses
+                Derived Guardian Contracts
               </Text>
               {derivedGuardians.map(({ email, guardianAddress }) => (
                 <View key={email} style={styles.payloadRow}>
@@ -1086,16 +1101,15 @@ const EmailRecoveryScreen: React.FC = () => {
           )}
         </View>
 
-        <View style={styles.configCard}>
-          <View style={styles.cardSectionHeader}>
-            <Text style={styles.cardSectionLabel}>TIMING CONTROLS</Text>
-          </View>
-          <Text style={styles.configDesc}>
-            Configure the security delay and expiration for recovery requests.
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Recovery Timing</Text>
+          <Text style={styles.cardDesc}>
+            Delay and expiry are expressed in days. Recovery can be executed
+            after the delay and before the expiry.
           </Text>
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Security Wait (days)</Text>
+              <Text style={styles.inputLabel}>Delay (days)</Text>
               <TextInput
                 style={styles.numberInput}
                 value={delayDays}
@@ -1119,26 +1133,28 @@ const EmailRecoveryScreen: React.FC = () => {
 
         <View style={styles.moduleCard}>
           <View style={styles.moduleHeader}>
-            <Text style={styles.cardSectionLabel}>RECOVERY ENGINE</Text>
+            <Text style={styles.cardTitle}>Email Recovery Module</Text>
             <TouchableOpacity
               onPress={handleRefreshModuleStatus}
               style={styles.refreshButton}
               disabled={!smartAccountReady || checkingModule}
             >
               {checkingModule ? (
-                <ActivityIndicator size="small" color={colors.accent} />
+                <ActivityIndicator size="small" color={colors.accentAlt} />
               ) : (
                 <Feather
                   name="refresh-ccw"
                   size={16}
-                  color={smartAccountReady ? colors.accent : colors.textMuted}
+                  color={
+                    smartAccountReady ? colors.accentAlt : colors.textMuted
+                  }
                 />
               )}
             </TouchableOpacity>
           </View>
           <Text style={styles.cardDesc}>
-            Activate email recovery so trusted emails can help you regain access
-            if needed.
+            Install the on-chain email recovery module so guardians can approve
+            recovery emails.
           </Text>
           <View
             style={[
@@ -1163,45 +1179,49 @@ const EmailRecoveryScreen: React.FC = () => {
                   ? colors.warning
                   : moduleInstalledState
                     ? colors.success
-                    : colors.accent
+                    : colors.accentAlt
               }
             />
             <Text style={styles.moduleStatusText}>
               {!smartAccountReady
-                ? "Create your Trezo account to enable recovery"
+                ? "Deploy smart account to enable recovery"
                 : checkingModule
-                  ? "Checking status..."
+                  ? "Checking module status..."
                   : moduleInstalledState
-                    ? "Recovery active"
-                    : "Recovery not active"}
+                    ? "Module installed"
+                    : "Module not installed"}
             </Text>
           </View>
           {moduleError && <Text style={styles.moduleError}>{moduleError}</Text>}
           {!smartAccountReady && (
             <Text style={styles.moduleHint}>
-              Create your Trezo account first to enable recovery.
+              Deploy your smart account first. Module installation requires an
+              on-chain contract.
             </Text>
           )}
           {smartAccountReady && !guardiansReady && (
             <Text style={styles.moduleHint}>
-              Add trusted emails and weights before activating.
+              Add guardians and weights before installing.
             </Text>
           )}
-          {__DEV__ && lastUserOpHash && (
+          {guardianValidationError ? (
+            <Text style={styles.moduleError}>{guardianValidationError}</Text>
+          ) : null}
+          {lastUserOpHash && (
             <View style={styles.hashRow}>
-              <Text style={styles.hashLabel}>Request ID</Text>
+              <Text style={styles.hashLabel}>UserOp Hash</Text>
               <Text style={styles.hashValue}>{lastUserOpHash}</Text>
             </View>
           )}
-          {__DEV__ && lastOperationHash && (
+          {lastOperationHash && (
             <View style={styles.hashRow}>
-              <Text style={styles.hashLabel}>Processing ID</Text>
+              <Text style={styles.hashLabel}>Bundler Operation Hash</Text>
               <Text style={styles.hashValue}>{lastOperationHash}</Text>
             </View>
           )}
-          {__DEV__ && lastInstallPayload && (
+          {lastInstallPayload && (
             <View style={styles.payloadBox}>
-              <Text style={styles.payloadTitle}>Latest Setup Details</Text>
+              <Text style={styles.payloadTitle}>Latest Module Payload</Text>
               <View style={styles.payloadRow}>
                 <Text style={styles.payloadLabel}>Sender</Text>
                 <Text style={styles.payloadValue}>
@@ -1215,14 +1235,14 @@ const EmailRecoveryScreen: React.FC = () => {
                 </Text>
               </View>
               <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Sponsorship</Text>
+                <Text style={styles.payloadLabel}>Paymaster</Text>
                 <Text style={styles.payloadValue}>
                   {lastInstallPayload.paymaster
                     ? shortenHex(lastInstallPayload.paymaster)
-                    : "Not sponsored"}
+                    : "Not Sponsored"}
                 </Text>
               </View>
-              <Text style={styles.payloadSubLabel}>Request Data</Text>
+              <Text style={styles.payloadSubLabel}>Call Data</Text>
               <Text style={styles.payloadCode}>
                 {shortenHex(lastInstallPayload.callData, 16)}
               </Text>
@@ -1236,14 +1256,14 @@ const EmailRecoveryScreen: React.FC = () => {
             style={[
               styles.installButton,
               (!smartAccountReady ||
-                !guardiansReady ||
+                !canSubmitGuardianConfig ||
                 moduleInstalledState ||
                 installingModule) &&
                 styles.installButtonDisabled,
             ]}
             disabled={
               !smartAccountReady ||
-              !guardiansReady ||
+              !canSubmitGuardianConfig ||
               moduleInstalledState ||
               installingModule
             }
@@ -1255,8 +1275,8 @@ const EmailRecoveryScreen: React.FC = () => {
             ) : (
               <Text style={styles.installButtonText}>
                 {moduleInstalledState
-                  ? "Recovery Active"
-                  : "Activate Email Recovery"}
+                  ? "Module Installed"
+                  : "Install Email Recovery"}
               </Text>
             )}
           </TouchableOpacity>
@@ -1265,31 +1285,24 @@ const EmailRecoveryScreen: React.FC = () => {
             style={[
               styles.installButton,
               styles.syncButton,
-              (!smartAccountReady || !guardiansReady || installingModule) &&
+              (!smartAccountReady || !canSubmitGuardianConfig || installingModule) &&
                 styles.installButtonDisabled,
             ]}
-            disabled={!smartAccountReady || !guardiansReady || installingModule}
+            disabled={!smartAccountReady || !canSubmitGuardianConfig || installingModule}
             onPress={handleSaveToCloud}
             activeOpacity={0.85}
           >
             {installingModule ? (
-              <ActivityIndicator size="small" color={colors.textOnAccent} />
+              <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <Text style={styles.installButtonText}>Sync to Cloud</Text>
+              <Text style={styles.installButtonText}>
+                Save / Sync Cloud Metadata
+              </Text>
             )}
           </TouchableOpacity>
         </View>
-
-        <View style={styles.helpCard}>
-          <Text style={styles.helpTitle}>Secure Cloud Sync</Text>
-          <Text style={styles.helpText}>
-            Syncing to Trezo Cloud allows you to recover your account from any
-            device using your trusted emails. Your data is protected by your
-            on-chain security module.
-          </Text>
-        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -1300,67 +1313,85 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.background,
     },
     header: {
-      marginBottom: 24,
-      paddingHorizontal: 20,
-      paddingTop: 12,
-    },
-    backButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 16,
+      justifyContent: "space-between",
+      paddingHorizontal: 20,
+      paddingTop: 60,
+      paddingBottom: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderMuted,
     },
-    screenTitle: {
+    headerTitle: {
       color: colors.textPrimary,
-      fontSize: 28,
-      fontWeight: "800",
-    },
-    screenDesc: {
-      color: colors.textSecondary,
-      fontSize: 15,
-      lineHeight: 22,
+      fontSize: 20,
+      fontWeight: "700",
     },
     scrollView: {
       flex: 1,
     },
     scrollContent: {
-      paddingHorizontal: 20,
-      paddingBottom: 40,
-    },
-    configCard: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 24,
-      borderWidth: 1,
-      borderColor: colors.borderMuted,
       padding: 20,
-      marginBottom: 20,
+      paddingBottom: 40,
+      gap: 16,
     },
-    cardSectionHeader: {
+    summaryRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 16,
+      gap: 12,
     },
-    cardSectionLabel: {
-      fontSize: 11,
-      fontWeight: "700",
-      letterSpacing: 1,
-      color: colors.accent,
-      textTransform: "uppercase",
-    },
-    configDesc: {
+    summaryText: {
       color: colors.textSecondary,
-      fontSize: 14,
-      lineHeight: 20,
-      marginBottom: 24,
+      fontSize: 13,
+      fontWeight: "500",
+    },
+    summaryWarning: {
+      color: colors.warning,
+    },
+    validationBox: {
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: withAlpha(colors.warning, 0.28),
+      backgroundColor: withAlpha(colors.warning, 0.12),
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    validationText: {
+      color: colors.warning,
+      fontSize: 12,
+      lineHeight: 18,
+      fontWeight: "600",
+    },
+    card: {
+      backgroundColor: colors.surfaceCard,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 20,
+      gap: 16,
+    },
+    moduleCard: {
+      backgroundColor: colors.surfaceCard,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 20,
+      gap: 16,
+    },
+    cardTitle: {
+      color: colors.textPrimary,
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    cardDesc: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
     },
     inputRow: {
       flexDirection: "row",
-      gap: 12,
-      marginBottom: 16,
+      gap: 16,
     },
     inputGroup: {
       flex: 1,
@@ -1374,253 +1405,196 @@ const createStyles = (colors: ThemeColors) =>
     modeButton: {
       flex: 1,
       borderWidth: 1,
-      borderColor: colors.borderMuted,
-      borderRadius: 16,
-      paddingVertical: 14,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingVertical: 12,
       alignItems: "center",
       backgroundColor: withAlpha(colors.textPrimary, 0.04),
     },
     modeButtonActive: {
-      borderColor: colors.accent,
-      backgroundColor: withAlpha(colors.accent, 0.1),
+      borderColor: colors.accentAlt,
+      backgroundColor: withAlpha(colors.accentAlt, 0.14),
     },
     modeButtonText: {
       color: colors.textPrimary,
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: "700",
     },
     numberInput: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      backgroundColor: withAlpha(colors.textPrimary, 0.06),
       borderWidth: 1,
-      borderColor: colors.borderMuted,
-      borderRadius: 16,
-      paddingHorizontal: 16,
-      paddingVertical: 14,
+      borderColor: colors.border,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
       color: colors.textPrimary,
       fontSize: 16,
-      fontWeight: "700",
+      fontWeight: "600",
       textAlign: "center",
     },
     textInput: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      backgroundColor: withAlpha(colors.textPrimary, 0.06),
       borderWidth: 1,
       borderColor: colors.borderMuted,
-      borderRadius: 16,
-      paddingHorizontal: 16,
-      paddingVertical: 14,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
       color: colors.textPrimary,
       fontSize: 15,
     },
-    summaryRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderMuted,
-      marginBottom: 16,
-    },
-    summaryText: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      fontWeight: "600",
-    },
-    summaryWarning: {
-      color: colors.danger,
-    },
     guardianRowContainer: {
-      marginBottom: 20,
+      flexDirection: "row",
+      alignItems: "flex-end",
+      gap: 12,
     },
     guardianRow: {
+      flex: 1,
       flexDirection: "row",
       gap: 12,
       alignItems: "flex-end",
+    },
+    deleteGuardianButton: {
+      height: 52,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 8,
     },
     guardianColumn: {
       flex: 1,
       gap: 8,
     },
     weightColumn: {
-      width: 90,
+      width: 100,
       gap: 8,
-    },
-    deleteGuardianButton: {
-      marginTop: 8,
-      alignSelf: "flex-end",
-      padding: 8,
-    },
-    moduleCard: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 24,
-      borderWidth: 1,
-      borderColor: colors.borderMuted,
-      padding: 20,
-      marginBottom: 20,
-      gap: 16,
     },
     moduleHeader: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      marginBottom: 4,
     },
     refreshButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.borderMuted, 0.5),
+      backgroundColor: withAlpha(colors.accentAlt, 0.1),
     },
     moduleStatusBadge: {
       flexDirection: "row",
       alignItems: "center",
-      borderRadius: 14,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
       gap: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 12,
     },
     moduleStatusIdle: {
-      backgroundColor: withAlpha(colors.accent, 0.1),
+      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      borderWidth: 1,
+      borderColor: withAlpha(colors.accentAlt, 0.2),
     },
     moduleStatusInstalled: {
-      backgroundColor: withAlpha(colors.success, 0.1),
+      backgroundColor: withAlpha(colors.success, 0.12),
+      borderWidth: 1,
+      borderColor: withAlpha(colors.success, 0.2),
     },
     moduleStatusWarning: {
-      backgroundColor: withAlpha(colors.warning, 0.1),
+      backgroundColor: withAlpha(colors.warning, 0.12),
+      borderWidth: 1,
+      borderColor: withAlpha(colors.warning, 0.2),
     },
     moduleStatusText: {
-      color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: "600",
+      color: colors.textSecondary,
+      fontSize: 13,
       flex: 1,
     },
     moduleError: {
       color: colors.danger,
       fontSize: 12,
-      marginTop: 4,
     },
     moduleHint: {
       color: colors.textMuted,
       fontSize: 12,
-      lineHeight: 16,
+    },
+    hashRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    hashLabel: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    hashValue: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      flex: 1,
+      textAlign: "right",
     },
     payloadBox: {
       backgroundColor: withAlpha(colors.textPrimary, 0.04),
-      borderRadius: 16,
-      padding: 16,
-      marginTop: 8,
+      borderRadius: 12,
+      padding: 12,
       gap: 8,
     },
     payloadTitle: {
       color: colors.textPrimary,
       fontSize: 14,
       fontWeight: "700",
-      marginBottom: 4,
     },
     payloadRow: {
       flexDirection: "row",
       justifyContent: "space-between",
-      alignItems: "center",
-      gap: 12,
+      gap: 8,
     },
     payloadLabel: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      flex: 1,
+      color: colors.textMuted,
+      fontSize: 12,
     },
     payloadValue: {
-      color: colors.textPrimary,
-      fontSize: 13,
-      fontWeight: "600",
-      textAlign: "right",
+      color: colors.textSecondary,
+      fontSize: 12,
     },
     payloadSubLabel: {
       color: colors.textMuted,
       fontSize: 11,
-      fontWeight: "700",
-      textTransform: "uppercase",
-      marginTop: 8,
+      marginTop: 4,
     },
     payloadCode: {
-      color: colors.textPrimary,
-      fontSize: 12,
+      color: colors.textSecondary,
+      fontSize: 11,
       fontFamily: "monospace",
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
-      padding: 8,
-      borderRadius: 8,
     },
     secondaryButton: {
       borderWidth: 1,
-      borderColor: colors.accent,
-      borderRadius: 16,
-      paddingVertical: 14,
+      borderColor: withAlpha(colors.accentAlt, 0.3),
+      borderRadius: 14,
+      paddingVertical: 12,
       alignItems: "center",
-      backgroundColor: withAlpha(colors.accent, 0.05),
-      marginBottom: 12,
+      backgroundColor: withAlpha(colors.accentAlt, 0.1),
     },
     secondaryButtonText: {
-      color: colors.accent,
-      fontSize: 15,
+      color: colors.accentAlt,
+      fontSize: 14,
       fontWeight: "700",
     },
     installButton: {
-      backgroundColor: colors.accent,
+      backgroundColor: colors.accentAlt,
       borderRadius: 16,
       paddingVertical: 14,
       alignItems: "center",
     },
     installButtonDisabled: {
-      opacity: 0.5,
+      opacity: 0.6,
     },
     installButtonText: {
-      color: colors.textOnAccent,
+      color: "#ffffff",
       fontSize: 15,
       fontWeight: "700",
     },
     syncButton: {
       marginTop: 12,
-    },
-    helpCard: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 24,
-      padding: 20,
-      borderWidth: 1,
-      borderColor: colors.borderMuted,
-      marginBottom: 40,
-      gap: 8,
-    },
-    helpTitle: {
-      fontSize: 16,
-      fontWeight: "700",
-      color: colors.textPrimary,
-    },
-    helpText: {
-      fontSize: 13,
-      color: colors.textSecondary,
-      lineHeight: 20,
-    },
-    hashRow: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.04),
-      borderRadius: 12,
-      padding: 10,
-      marginTop: 4,
-    },
-    hashLabel: {
-      color: colors.textMuted,
-      fontSize: 11,
-      marginBottom: 2,
-    },
-    hashValue: {
-      color: colors.textPrimary,
-      fontSize: 12,
-      fontFamily: "monospace",
-    },
-    cardDesc: {
-      color: colors.textSecondary,
-      fontSize: 14,
-      lineHeight: 20,
-      marginBottom: 16,
     },
   });
 

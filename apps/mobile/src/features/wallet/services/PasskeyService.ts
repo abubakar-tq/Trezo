@@ -13,7 +13,6 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getSupabaseWalletService } from './SupabaseWalletService';
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
@@ -78,6 +77,58 @@ function getRpId(): string {
 
   return rpId;
 }
+
+const titleCaseWords = (value: string) =>
+  value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+
+const normalizeDeviceLabel = (value: string | null | undefined) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^unknown$/i.test(trimmed)) return null;
+  if (/^generic$/i.test(trimmed)) return null;
+  return trimmed;
+};
+
+const getCurrentDeviceName = () => {
+  const namedByExpo = normalizeDeviceLabel(Constants.deviceName ?? null);
+  if (namedByExpo) {
+    return namedByExpo;
+  }
+
+  const constants = (Platform.constants ?? {}) as Record<string, unknown>;
+
+  if (Platform.OS === 'android') {
+    const brand = normalizeDeviceLabel(typeof constants.Brand === 'string' ? constants.Brand : null);
+    const model = normalizeDeviceLabel(typeof constants.Model === 'string' ? constants.Model : null);
+    if (brand && model) {
+      return `${titleCaseWords(brand)} ${model}`;
+    }
+    if (model) {
+      return model;
+    }
+    return 'Android Device';
+  }
+
+  if (Platform.OS === 'ios') {
+    const model = normalizeDeviceLabel(typeof constants.model === 'string' ? constants.model : null);
+    if (model) {
+      return model;
+    }
+
+    const interfaceIdiom = typeof constants.interfaceIdiom === 'string' ? constants.interfaceIdiom : null;
+    if (interfaceIdiom === 'pad') {
+      return 'iPad';
+    }
+    return 'iPhone';
+  }
+
+  return 'Mobile Device';
+};
 /**
  * Public passkey metadata stored in AsyncStorage
  * ONE passkey per device - stored in secure enclave
@@ -92,6 +143,7 @@ export interface PasskeyMetadata {
   deviceName: string;         // Device identifier
   deviceType: 'ios' | 'android';
   createdAt: string;          // ISO timestamp
+  source?: 'passkey' | 'biometric-fallback';
 }
 
 /**
@@ -114,6 +166,9 @@ export interface BiometricCapabilities {
 }
 
 export class PasskeyService {
+  static getCurrentDeviceLabel(): string {
+    return getCurrentDeviceName();
+  }
   
   // ==================== BASE64 UTILITIES ====================
   
@@ -133,6 +188,9 @@ export class PasskeyService {
    * Convert base64url to Uint8Array
    */
   private static base64UrlToUint8Array(base64url: string): Uint8Array {
+    if (typeof base64url !== 'string') {
+      throw new Error(`Expected base64url string, received ${typeof base64url}`);
+    }
     // Convert base64url to base64
     const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
     const padding = '='.repeat((4 - (base64.length % 4)) % 4);
@@ -176,6 +234,56 @@ export class PasskeyService {
       if (a[i] !== b[i]) return false;
     }
     return true;
+  }
+
+  private static hexToUint8Array(value: string): Uint8Array {
+    const normalized = value.startsWith('0x') ? value.slice(2) : value;
+    const padded = normalized.length % 2 === 0 ? normalized : `0${normalized}`;
+    const bytes = new Uint8Array(padded.length / 2);
+
+    for (let i = 0; i < padded.length; i += 2) {
+      bytes[i / 2] = parseInt(padded.slice(i, i + 2), 16);
+    }
+
+    return bytes;
+  }
+
+  private static leftPadTo32Bytes(value: Uint8Array): Uint8Array {
+    if (value.length === 32) return value;
+    if (value.length > 32) {
+      return value.slice(value.length - 32);
+    }
+
+    const padded = new Uint8Array(32);
+    padded.set(value, 32 - value.length);
+    return padded;
+  }
+
+  private static coordinateStringToUint8Array(value: string): Uint8Array {
+    const normalized = value.trim();
+    if (normalized.startsWith('0x') || /^[0-9a-fA-F]+$/.test(normalized)) {
+      return this.hexToUint8Array(normalized);
+    }
+    return this.base64UrlToUint8Array(normalized);
+  }
+
+  private static buildMockCredentialId(): string {
+    const mockId = new Uint8Array(32);
+    crypto.getRandomValues(mockId);
+    return this.base64UrlEncode(this.uint8ArrayToBase64(mockId));
+  }
+
+  private static buildMockPublicKeyBase64Url(): string {
+    const x = new Uint8Array(32);
+    const y = new Uint8Array(32);
+    crypto.getRandomValues(x);
+    crypto.getRandomValues(y);
+
+    const rawPublicKey = new Uint8Array(64);
+    rawPublicKey.set(x, 0);
+    rawPublicKey.set(y, 32);
+
+    return this.base64UrlEncode(this.uint8ArrayToBase64(rawPublicKey));
   }
   
   // ==================== PUBLIC API ====================
@@ -362,20 +470,16 @@ export class PasskeyService {
 
           if (authResult.success) {
             // Mock passkey result for biometric authentication
+            const credentialId = this.buildMockCredentialId();
             result = {
-              id: `biometric-${Date.now()}`,
-              rawId: new Uint8Array(32).fill(1), // Mock rawId
+              id: credentialId,
+              rawId: credentialId,
               response: {
                 clientDataJSON: 'biometric-auth',
                 attestationObject: 'biometric-attestation',
-                publicKey: {
-                  kty: 2, // EC2
-                  crv: 1, // P-256
-                  x: '0x1234567890abcdef', // Mock coordinates
-                  y: '0x1234567890abcdef',
-                }
+                publicKey: this.buildMockPublicKeyBase64Url(),
               },
-              type: 'biometric'
+              type: 'biometric',
             };
             debugLog('✅ [PasskeyService] Biometric authentication successful');
           } else {
@@ -397,20 +501,16 @@ export class PasskeyService {
 
         if (authResult.success) {
           // Mock passkey result for biometric authentication
+          const credentialId = this.buildMockCredentialId();
           result = {
-            id: `biometric-${Date.now()}`,
-            rawId: new Uint8Array(32).fill(1), // Mock rawId
+            id: credentialId,
+            rawId: credentialId,
             response: {
               clientDataJSON: 'biometric-auth',
               attestationObject: 'biometric-attestation',
-              publicKey: {
-                kty: 2, // EC2
-                crv: 1, // P-256
-                x: '0x1234567890abcdef', // Mock coordinates
-                y: '0x1234567890abcdef',
-              }
+              publicKey: this.buildMockPublicKeyBase64Url(),
             },
-            type: 'biometric'
+            type: 'biometric',
           };
           debugLog('✅ [PasskeyService] Biometric authentication successful');
         } else {
@@ -439,9 +539,10 @@ export class PasskeyService {
       publicKeyX: publicKey.x,
       publicKeyY: publicKey.y,
       rpId,
-      deviceName: Platform.OS === 'ios' ? 'iPhone' : 'Android Device',
+      deviceName: this.getCurrentDeviceLabel(),
       deviceType: Platform.OS as 'ios' | 'android',
       createdAt: new Date().toISOString(),
+      source: result.type === 'biometric' ? 'biometric-fallback' : 'passkey',
     };
 
     // 9. Save metadata to AsyncStorage (replaces old passkey if exists)
@@ -486,6 +587,12 @@ export class PasskeyService {
       rpId,
       timeout: 60000,
       userVerification: 'required' as const,
+      allowCredentials: [
+        {
+          id: passkey.credentialId,
+          type: 'public-key' as const,
+        },
+      ],
     };
 
     let authResult;
@@ -560,6 +667,12 @@ export class PasskeyService {
     
     if (!authResult) {
       throw new Error('Authentication returned null result');
+    }
+
+    if (authResult.id && authResult.id !== passkey.credentialId) {
+      throw new Error(
+        'The platform returned a different passkey than the one stored for this wallet on this device.',
+      );
     }
     
     // 5. Extract signature components from WebAuthn response
@@ -645,49 +758,6 @@ export class PasskeyService {
     debugLog('📦 [PasskeyService] Encoded passkey data for deployment');
     return encoded;
   }
-
-  /**
-   * Push passkey metadata to Supabase for cross-device visibility
-   */
-  static async syncPasskeyToCloud(userId: string, aaWalletId: string, metadata: PasskeyMetadata): Promise<void> {
-    debugLog('☁️ [PasskeyService] Syncing passkey to Supabase...');
-    const walletService = getSupabaseWalletService();
-    
-    await walletService.savePasskey({
-      userId,
-      aaWalletId,
-      credentialId: metadata.credentialId,
-      publicKey: JSON.stringify({ x: metadata.publicKeyX, y: metadata.publicKeyY }),
-      deviceName: metadata.deviceName,
-      deviceType: metadata.deviceType,
-    });
-    
-    debugLog('✅ [PasskeyService] Passkey synced to cloud');
-  }
-
-  /**
-   * Fetch all passkeys for a user from Supabase
-   */
-  static async fetchCloudPasskeys(userId: string): Promise<PasskeyMetadata[]> {
-    debugLog('☁️ [PasskeyService] Fetching passkeys from Supabase...');
-    const walletService = getSupabaseWalletService();
-    
-    const cloudPasskeys = await walletService.getPasskeys(userId);
-    
-    return cloudPasskeys.map(cp => {
-      const pubKey = JSON.parse(cp.public_key);
-      return {
-        credentialId: cp.credential_id,
-        credentialIdRaw: this.credentialIdToBytes32(cp.credential_id),
-        publicKeyX: pubKey.x,
-        publicKeyY: pubKey.y,
-        rpId: getRpId(),
-        deviceName: cp.device_name,
-        deviceType: cp.device_type as 'ios' | 'android',
-        createdAt: cp.created_at,
-      };
-    });
-  }
   
   // ==================== PRIVATE HELPER METHODS ====================
   
@@ -710,11 +780,30 @@ export class PasskeyService {
     debugLog('📝 [PasskeyService] Response keys:', Object.keys(response));
     
     try {
-      // react-native-passkeys returns the public key in response.publicKey
-      if (response.publicKey) {
+      const publicKeyValue = response.publicKey ?? response.getPublicKey?.();
+
+      if (publicKeyValue) {
         debugLog('✅ [PasskeyService] Found publicKey in response');
-        
-        const publicKeyBytes = this.base64UrlToUint8Array(response.publicKey);
+
+        if (
+          typeof publicKeyValue === 'object' &&
+          typeof publicKeyValue.x === 'string' &&
+          typeof publicKeyValue.y === 'string'
+        ) {
+          const xBytes = this.leftPadTo32Bytes(this.coordinateStringToUint8Array(publicKeyValue.x));
+          const yBytes = this.leftPadTo32Bytes(this.coordinateStringToUint8Array(publicKeyValue.y));
+          return {
+            x: this.uint8ArrayToHex(xBytes),
+            y: this.uint8ArrayToHex(yBytes),
+          };
+        }
+
+        const publicKeyBytes =
+          publicKeyValue instanceof Uint8Array
+            ? publicKeyValue
+            : publicKeyValue instanceof ArrayBuffer
+              ? new Uint8Array(publicKeyValue)
+              : this.base64UrlToUint8Array(publicKeyValue);
         debugLog('📝 [PasskeyService] Public key bytes length:', publicKeyBytes.length);
         
         const parsed = this.normalizePublicKey(publicKeyBytes);
@@ -811,6 +900,13 @@ export class PasskeyService {
    * Parse SPKI (DER) or raw uncompressed public key into x/y.
    */
   private static parseSpkiOrRaw(keyBytes: Uint8Array): { x: string; y: string } | null {
+    // Native passkey libraries often expose 64 raw bytes: x(32) || y(32)
+    if (keyBytes.length === 64) {
+      const x = keyBytes.slice(0, 32);
+      const y = keyBytes.slice(32, 64);
+      return { x: this.uint8ArrayToHex(x), y: this.uint8ArrayToHex(y) };
+    }
+
     // Raw uncompressed: 0x04 || x(32) || y(32)
     if (keyBytes.length === 65 && keyBytes[0] === 0x04) {
       const x = keyBytes.slice(1, 33);

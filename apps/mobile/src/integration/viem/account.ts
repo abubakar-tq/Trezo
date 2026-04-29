@@ -97,18 +97,30 @@ export async function getPasskeyOnchainState({
   }
 
   const publicClient = getPublicClient(chainId);
-  const exists = await publicClient.readContract({
-    address: validator,
-    abi: ABIS.passkeyValidator,
-    functionName: 'hasPasskey',
-    args: [smartAccountAddress, passkeyId],
-  }) as boolean;
+  const [exists, pending] = await Promise.all([
+    publicClient.readContract({
+      address: validator,
+      abi: ABIS.passkeyValidator,
+      functionName: 'hasPasskey',
+      args: [smartAccountAddress, passkeyId],
+    }) as Promise<boolean>,
+    publicClient.readContract({
+      address: validator,
+      abi: ABIS.passkeyValidator,
+      functionName: 'pendingRemovals',
+      args: [smartAccountAddress, passkeyId],
+    }) as Promise<{
+      executeAfter: bigint;
+      requestedAt: bigint;
+      cancelled: boolean;
+    }>,
+  ]);
 
   return {
     exists,
-    executeAfter: 0n,
-    requestedAt: 0n,
-    cancelled: false,
+    executeAfter: pending.executeAfter,
+    requestedAt: pending.requestedAt,
+    cancelled: pending.cancelled,
   };
 }
 

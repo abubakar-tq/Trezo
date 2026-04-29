@@ -56,10 +56,10 @@ export const useAppLockStore = create<AppLockState>((set, get) => ({
     set({
       hasInitialized: true,
       lockEnabled,
-      isLocked: lockEnabled, // Lock by default if enabled
+      isLocked: false, // Start unlocked, let useAppLock determine if lock is needed
       isBiometricAvailable: hasHardware && isEnrolled,
       lastError: null,
-      lastUnlockedAt: 0, // Reset unlock time on initialization
+      lastUnlockedAt: Date.now(), // Set initial time to prevent immediate lock
     });
   },
 

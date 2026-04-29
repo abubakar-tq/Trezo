@@ -24,6 +24,7 @@ import type { TokenBalance } from "../../portfolio/services/PortfolioService";
 import { useWalletData } from "@hooks/useWalletData";
 import { useUserStore } from "@store/useUserStore";
 import { withAlpha } from "@utils/color";
+import { useAccountManagement } from "../hooks/useAccountManagement";
 
 const { width } = Dimensions.get("window");
 
@@ -47,6 +48,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   
   const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress ?? undefined);
+
+  const { isHydrating, hasLocalPasskey } = useAccountManagement();
 
   const [selectedToken, setSelectedToken] = React.useState<TokenBalance | null>(null);
   const [modalVisible, setModalVisible] = React.useState(false);
@@ -118,7 +121,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
             loading={portfolioLoading}
             address={smartAccountAddress ?? undefined}
             isDeployed={smartAccountDeployed}
+            isHydrating={isHydrating}
+            hasLocalPasskey={hasLocalPasskey}
             onDeploy={() => navigation.navigate("DeployAccount")}
+            onEnablePasskey={() => navigation.navigate("RecoveryEntry")}
           />
         </View>
 

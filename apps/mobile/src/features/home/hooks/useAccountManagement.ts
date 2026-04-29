@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { useUserStore } from "@store/useUserStore";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
@@ -8,6 +8,7 @@ import { devFundSmartAccount, DEV_FUNDING_AMOUNT_ETH } from "@/src/features/wall
 import { DEFAULT_CHAIN_ID, isPortableChain, type SupportedChainId } from "@/src/integration/chains";
 import type { AAAccount } from "@/src/features/wallet/store/useWalletStore";
 import { type Address } from "viem";
+import { WalletSyncService } from "@/src/features/wallet/services/WalletSyncService";
 
 export const useAccountManagement = () => {
   const { user, profile, smartAccountAddress, smartAccountDeployed, setSmartAccountAddress, setSmartAccountDeployed } = useUserStore();
@@ -17,9 +18,26 @@ export const useAccountManagement = () => {
   const [fundingAccount, setFundingAccount] = useState(false);
   const [accountActionStatus, setAccountActionStatus] = useState<string | null>(null);
   const [accountModalVisible, setAccountModalVisible] = useState(false);
+  const [isHydrating, setIsHydrating] = useState(true);
+  const [hasLocalPasskey, setHasLocalPasskey] = useState<boolean | null>(null);
 
   const userId = user?.id ?? null;
   const resolvedDeployChainId = (aaAccount?.chainId ?? DEFAULT_CHAIN_ID) as SupportedChainId;
+
+  // On mount: verify actual on-chain deployment state; also check for local passkey
+  useEffect(() => {
+    if (!userId) {
+      setIsHydrating(false);
+      return;
+    }
+    setIsHydrating(true);
+    Promise.all([
+      WalletSyncService.hydrateWalletForUser({ userId, verifyOnChain: true }),
+      PasskeyService.getPasskey(userId).then((pk) => setHasLocalPasskey(Boolean(pk?.credentialIdRaw))),
+    ])
+      .catch(() => {})
+      .finally(() => setIsHydrating(false));
+  }, [userId]);
 
   const fundSmartAccount = useCallback(
     async (targetAddress?: string, options?: { silent?: boolean }) => {
@@ -127,5 +145,7 @@ export const useAccountManagement = () => {
     fundSmartAccount,
     smartAccountAddress,
     smartAccountDeployed,
+    isHydrating,
+    hasLocalPasskey,
   };
 };

@@ -25,6 +25,9 @@ export interface GuardianConfig {
 
 export class GuardianSyncService {
   private static supabase = getSupabaseClient();
+  private static normalizeGuardianAddress(address: string): string {
+    return address.trim().toLowerCase();
+  }
 
   /**
    * Check if user has a deployed AA wallet
@@ -66,7 +69,7 @@ export class GuardianSyncService {
     try {
       const { data, error } = await this.supabase
         .from('guardians')
-        .select('*')
+        .select('guardian_address')
         .eq('aa_wallet_id', aaWalletId)
         .eq('is_active', true);
 
@@ -80,12 +83,14 @@ export class GuardianSyncService {
       // Extract guardian addresses
       const guardians = data.map(g => ({
         address: g.guardian_address,
-        weight: g.weight,
+        weight: 1,
       }));
 
-      // Get threshold from first guardian (all should have same threshold)
-      const threshold = data[0]?.threshold || 1;
+      // Threshold is not modeled per-guardian row in Supabase.
+      // Keep the locally configured threshold, but clamp to current guardian count.
       const totalGuardians = data.length;
+      const localThreshold = useRecoveryStatusStore.getState().requiredSignatures || 1;
+      const threshold = Math.max(1, Math.min(localThreshold, totalGuardians));
 
       // Update local store
       useRecoveryStatusStore.getState().setGuardians(
@@ -142,37 +147,66 @@ export class GuardianSyncService {
         };
       }
 
-      // Deactivate existing guardians
-      const { error: deactivateError } = await this.supabase
+      const normalizedGuardians = Array.from(
+        new Set(guardians.map((guardian) => this.normalizeGuardianAddress(guardian.address)).filter(Boolean)),
+      );
+      if (normalizedGuardians.length === 0) {
+        return {
+          success: false,
+          error: 'NO_VALID_GUARDIANS_CONFIGURED',
+        };
+      }
+
+      // Fetch existing guardian rows so we can deactivate only removed guardians.
+      const { data: existingRows, error: existingError } = await this.supabase
         .from('guardians')
-        .update({ is_active: false })
+        .select('guardian_address,is_active')
         .eq('aa_wallet_id', aaWalletId);
 
-      if (deactivateError) throw deactivateError;
+      if (existingError) throw existingError;
 
-      // Insert new guardians
-      const guardianData = guardians.map((guardian) => ({
+      const removedAddresses = (existingRows ?? [])
+        .filter(
+          (row) => !normalizedGuardians.includes(this.normalizeGuardianAddress(row.guardian_address)),
+        )
+        .map((row) => row.guardian_address);
+
+      const uniqueRemovedAddresses = Array.from(
+        new Set(removedAddresses.map((address) => address.trim())),
+      );
+
+      if (uniqueRemovedAddresses.length > 0) {
+        const { error: deactivateError } = await this.supabase
+          .from('guardians')
+          .update({ is_active: false, removed_at: new Date().toISOString() })
+          .eq('aa_wallet_id', aaWalletId)
+          .in('guardian_address', uniqueRemovedAddresses);
+        if (deactivateError) throw deactivateError;
+      }
+
+      // Upsert desired guardians so existing rows are reactivated instead of violating unique constraints.
+      const guardianData = normalizedGuardians.map((guardianAddress) => ({
         aa_wallet_id: aaWalletId,
-        guardian_address: guardian.address,
-        weight: 1, // Equal weight for all guardians
-        threshold: m,
+        guardian_address: guardianAddress,
         is_active: true,
+        removed_at: null,
       }));
 
-      const { error: insertError } = await this.supabase
+      const { error: upsertError } = await this.supabase
         .from('guardians')
-        .insert(guardianData);
+        .upsert(guardianData, { onConflict: 'aa_wallet_id,guardian_address' });
 
-      if (insertError) throw insertError;
+      if (upsertError) throw upsertError;
 
-      console.log(`✅ [GuardianSync] Synced ${guardians.length} guardians (${m}-of-${n}) to database`);
+      console.log(`✅ [GuardianSync] Synced ${normalizedGuardians.length} guardians (${m}-of-${n}) to database`);
       
       return { success: true };
     } catch (error) {
       console.error(`❌ [GuardianSync] Failed to sync guardians:`, error);
+      const errorMessage = error instanceof Error ? error.message : 'SYNC_FAILED';
       return {
         success: false,
-        error: 'SYNC_FAILED',
+        error: errorMessage,
       };
     }
   }
@@ -354,6 +388,70 @@ export class GuardianSyncService {
         isSynced: false,
         localGuardians: 0,
         dbGuardians: 0,
+      };
+    }
+  }
+
+  static async getDatabaseGuardianStatus(userId: string): Promise<{
+    hasWalletMetadata: boolean;
+    walletMarkedDeployed: boolean;
+    dbGuardians: number;
+    localGuardians: number;
+    isSynced: boolean;
+  }> {
+    try {
+      const localConfig = useRecoveryStatusStore.getState();
+      const localGuardians = localConfig.guardians?.length || 0;
+
+      const { data: wallet, error: walletError } = await this.supabase
+        .from('aa_wallets')
+        .select('id, is_deployed')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (walletError) {
+        throw walletError;
+      }
+
+      if (!wallet) {
+        return {
+          hasWalletMetadata: false,
+          walletMarkedDeployed: false,
+          dbGuardians: 0,
+          localGuardians,
+          isSynced: false,
+        };
+      }
+
+      const { count, error: guardianError } = await this.supabase
+        .from('guardians')
+        .select('id', { count: 'exact', head: true })
+        .eq('aa_wallet_id', wallet.id)
+        .eq('is_active', true);
+
+      if (guardianError) {
+        throw guardianError;
+      }
+
+      const dbGuardians = count ?? 0;
+
+      return {
+        hasWalletMetadata: true,
+        walletMarkedDeployed: Boolean(wallet.is_deployed),
+        dbGuardians,
+        localGuardians,
+        isSynced: localGuardians === dbGuardians && dbGuardians > 0,
+      };
+    } catch (error) {
+      console.error(`❌ [GuardianSync] Failed to get guardian database status:`, error);
+      return {
+        hasWalletMetadata: false,
+        walletMarkedDeployed: false,
+        dbGuardians: 0,
+        localGuardians: 0,
+        isSynced: false,
       };
     }
   }

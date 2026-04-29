@@ -31,6 +31,7 @@ import {
   deriveDefaultWalletId,
 } from "@/src/features/wallet/services/AccountDeploymentService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import WalletSyncService from "@/src/features/wallet/services/WalletSyncService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { isPortableChain, type SupportedChainId } from "@/src/integration/chains";
 import { useUserStore } from "@store/useUserStore";
@@ -47,6 +48,8 @@ export default function DeployAccountScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const user = useUserStore((state) => state.user);
+  const setSmartAccountAddress = useUserStore((state) => state.setSmartAccountAddress);
+  const setSmartAccountDeployed = useUserStore((state) => state.setSmartAccountDeployed);
   const aaAccount = useWalletStore((state) => state.aaAccount);
   const setAAAccount = useWalletStore((state) => state.setAAAccount);
   const setDeploymentStatus = useWalletStore(
@@ -97,6 +100,20 @@ export default function DeployAccountScreen() {
         walletIndex,
         deploymentMode,
       );
+      setSmartAccountAddress(predictedAddress);
+
+      await WalletSyncService.persistWalletMetadata({
+        userId: user.id,
+        predictedAddress,
+        ownerAddress: passkey.credentialIdRaw,
+        walletName: aaAccount?.walletName ?? "Passkey Smart Account",
+        chainId,
+        walletId,
+        walletIndex,
+        deploymentMode,
+      }).catch((error) => {
+        console.warn("[DeployAccount] Failed to persist predicted wallet metadata", error);
+      });
 
       // Proceed to deployment
       await handleDeploy(passkey, predictedAddress as string, walletId, walletIndex, deploymentMode);
@@ -163,6 +180,29 @@ export default function DeployAccountScreen() {
         chainId,
         createdAt: new Date().toISOString(),
         deployedAt: new Date().toISOString(),
+      });
+      setSmartAccountAddress(accountAddress);
+      setSmartAccountDeployed(true);
+
+      await WalletSyncService.persistWalletMetadata({
+        userId: user.id,
+        predictedAddress: accountAddress,
+        ownerAddress: passkey.credentialIdRaw,
+        walletName: aaAccount?.walletName ?? "Passkey Smart Account",
+        chainId,
+        walletId,
+        walletIndex,
+        deploymentMode,
+        isDeployed: true,
+        deploymentTxHash: result.alreadyDeployed ? undefined : result.transactionHash,
+        deploymentBlockNumber: result.alreadyDeployed
+          ? undefined
+          : Number(result.blockNumber),
+        deployedAt: new Date().toISOString(),
+      }).then((wallet) => {
+        WalletSyncService.applyWalletToStores(wallet, true);
+      }).catch((error) => {
+        console.warn("[DeployAccount] Failed to persist deployed wallet metadata", error);
       });
 
       setDeployedAddress(accountAddress);

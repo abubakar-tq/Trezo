@@ -260,7 +260,7 @@ export type RemovePasskeyUserOpParams = {
   chainId: SupportedChainId;
   bundlerUrl: string;
   smartAccountAddress: Address;
-  passkeyIdToRemove: Hex;
+  targetPasskeyId: Hex;
   signingPasskeyId: Hex;
   validatorAddress?: Address;
   nonce?: bigint;
@@ -659,11 +659,16 @@ const buildSmartAccountExecuteUserOp = async ({
   return { userOp: refreshedUserOp, userOpHash };
 };
 
-export const encodeSocialRecoveryInitData = (guardians: readonly Address[], threshold: bigint | number): Hex => {
+export const encodeSocialRecoveryInitData = (
+  guardians: readonly Address[],
+  threshold: bigint | number,
+  timelockSeconds: bigint | number = 86400,
+): Hex => {
   if (!guardians.length) {
     throw new Error("At least one guardian is required to initialize Social Recovery");
   }
   const normalizedThreshold = typeof threshold === "bigint" ? threshold : BigInt(threshold);
+  const normalizedTimelock = typeof timelockSeconds === "bigint" ? timelockSeconds : BigInt(timelockSeconds);
   if (normalizedThreshold === 0n) {
     throw new Error("Threshold must be greater than zero");
   }
@@ -681,7 +686,10 @@ export const encodeSocialRecoveryInitData = (guardians: readonly Address[], thre
     }
     seen.add(key);
   });
-  return encodeAbiParameters(parseAbiParameters("address[], uint256"), [guardians, normalizedThreshold]);
+  return encodeAbiParameters(
+    parseAbiParameters("address[], uint256, uint256"),
+    [guardians, normalizedThreshold, normalizedTimelock],
+  );
 };
 
 export const encodeEmailRecoveryInitData = (
@@ -1064,7 +1072,7 @@ export async function buildInstallEmailRecoveryUserOp(params: InstallEmailRecove
   if (missing.length > 0) {
     throw new Error(
       `Deployment config missing required field(s): ${missing.join(", ")} for chain ${params.chainId}. `
-      + "Sync contracts JSON to mobile (make sync-mobile CHAIN_ID=31337) and restart Metro with cache clear.",
+      + "Generate contracts/deployments/31337.json (make deploy-local or make deploy-email-local) and restart Metro with cache clear.",
     );
   }
   if (!params.passkeyId) {
@@ -1127,26 +1135,36 @@ export async function buildAddPasskeyUserOp(params: AddPasskeyUserOpParams) {
   });
 }
 
-export async function buildRemovePasskeyUserOp(params: RemovePasskeyUserOpParams) {
-  const deployment = getDeployment(params.chainId);
-  if (!deployment) throw new Error(`No deployment found for chain ${params.chainId}`);
-  if (!deployment.entryPoint) {
-    throw new Error("Deployment is missing entry point");
+const resolvePasskeyValidatorAddress = (
+  chainId: SupportedChainId,
+  validatorAddress?: Address,
+): Address => {
+  const deployment = getDeployment(chainId);
+  if (!deployment) throw new Error(`No deployment found for chain ${chainId}`);
+  const resolved = (validatorAddress ?? deployment.passkeyValidator) as Address;
+  if (!resolved || resolved === ZERO_ADDRESS) {
+    throw new Error("Passkey validator address is required");
   }
-  const validatorAddress = (params.validatorAddress ?? deployment.passkeyValidator) as Address;
-  if (!validatorAddress || validatorAddress === ZERO_ADDRESS) {
-    throw new Error("Passkey validator address is required to remove a passkey");
-  }
-  const removePasskeyData = encodeFunctionData({
+  return resolved;
+};
+
+const buildPasskeyValidatorExecuteUserOp = async (
+  params: RemovePasskeyUserOpParams,
+  functionName: "scheduleRemovePasskey" | "cancelRemovePasskey" | "executeRemovePasskey",
+  operationLabel: string,
+) => {
+  const validatorAddress = resolvePasskeyValidatorAddress(params.chainId, params.validatorAddress);
+  const actionData = encodeFunctionData({
     abi: ABIS.passkeyValidator,
-    functionName: "removePasskey",
-    args: [params.passkeyIdToRemove],
+    functionName,
+    args: [params.targetPasskeyId],
   });
   const callData = encodeFunctionData({
     abi: ABIS.smartAccount,
     functionName: "execute",
-    args: [validatorAddress, 0n, removePasskeyData],
+    args: [validatorAddress, 0n, actionData],
   });
+
   return buildSmartAccountExecuteUserOp({
     chainId: params.chainId,
     bundlerUrl: params.bundlerUrl,
@@ -1159,11 +1177,35 @@ export async function buildRemovePasskeyUserOp(params: RemovePasskeyUserOpParams
     paymasterUrl: params.paymasterUrl,
     maxFeePerGas: params.maxFeePerGas,
     maxPriorityFeePerGas: params.maxPriorityFeePerGas,
-    callGasLimit: params.callGasLimit ?? 800_000n,
+    callGasLimit: params.callGasLimit ?? 650_000n,
     verificationGasLimit: params.verificationGasLimit ?? 900_000n,
     preVerificationGas: params.preVerificationGas ?? 100_000n,
-    operationLabel: "buildRemovePasskeyUserOp",
+    operationLabel,
   });
+};
+
+export async function buildScheduleRemovePasskeyUserOp(params: RemovePasskeyUserOpParams) {
+  return buildPasskeyValidatorExecuteUserOp(
+    params,
+    "scheduleRemovePasskey",
+    "buildScheduleRemovePasskeyUserOp",
+  );
+}
+
+export async function buildCancelRemovePasskeyUserOp(params: RemovePasskeyUserOpParams) {
+  return buildPasskeyValidatorExecuteUserOp(
+    params,
+    "cancelRemovePasskey",
+    "buildCancelRemovePasskeyUserOp",
+  );
+}
+
+export async function buildExecuteRemovePasskeyUserOp(params: RemovePasskeyUserOpParams) {
+  return buildPasskeyValidatorExecuteUserOp(
+    params,
+    "executeRemovePasskey",
+    "buildExecuteRemovePasskeyUserOp",
+  );
 }
 
 export async function submitConfiguredUserOp(

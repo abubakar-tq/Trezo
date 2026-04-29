@@ -47,6 +47,13 @@ const RecoveryProgressScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [submittingAction, setSubmittingAction] = useState<"schedule" | "execute" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
+
+  // Live ticker for countdown accuracy
+  useEffect(() => {
+    const ticker = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(ticker);
+  }, []);
 
   const threshold = request?.threshold ?? 0;
   const validApprovals = approvals.filter((approval) => approval.verification_status === "valid");
@@ -68,14 +75,43 @@ const RecoveryProgressScreen: React.FC = () => {
     if (!status.execute_after) {
       return status.status === "ready_to_execute";
     }
-    return new Date(status.execute_after).getTime() <= Date.now();
+    return new Date(status.execute_after).getTime() <= now.getTime();
   });
+
+  // Find the earliest executeAfter timestamp across all scheduled chains
+  const earliestExecuteAfter = useMemo(() => {
+    const pending = chainStatuses.filter(
+      (s) => (s.status === "scheduled" || s.status === "timelock_pending") && s.execute_after,
+    );
+    if (!pending.length) return null;
+    return pending.reduce((earliest, s) => {
+      const t = new Date(s.execute_after!).getTime();
+      return t < earliest ? t : earliest;
+    }, Infinity);
+  }, [chainStatuses]);
+
+  const msToCountdown = (ms: number) => {
+    if (ms <= 0) return "Ready now";
+    const totalSec = Math.floor(ms / 1000);
+    const d = Math.floor(totalSec / 86400);
+    const h = Math.floor((totalSec % 86400) / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    return `${m}m ${s}s`;
+  };
+
+  const timelockCountdown = earliestExecuteAfter && earliestExecuteAfter !== Infinity
+    ? msToCountdown(earliestExecuteAfter - now.getTime())
+    : null;
+
   const deadline = request?.deadline ? new Date(request.deadline) : null;
   const deadlineRemainingLabel = useMemo(() => {
     if (!deadline || Number.isNaN(deadline.getTime())) {
       return "Unknown deadline";
     }
-    const remainingMs = deadline.getTime() - Date.now();
+    const remainingMs = deadline.getTime() - now.getTime();
     if (remainingMs <= 0) {
       return `Expired at ${deadline.toLocaleString()}`;
     }
@@ -84,7 +120,8 @@ const RecoveryProgressScreen: React.FC = () => {
     const hours = Math.floor((minutes % (24 * 60)) / 60);
     const mins = minutes % 60;
     return `${days}d ${hours}h ${mins}m remaining`;
-  }, [deadline]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, request?.deadline]);
   const guardianApprovalMap = useMemo(() => {
     const map = new Map<string, RecoveryApproval>();
     for (const approval of approvals) {
@@ -242,6 +279,18 @@ const RecoveryProgressScreen: React.FC = () => {
           <Text style={styles.summaryValueSmall}>{request?.status ?? "unknown"}</Text>
           <Text style={styles.rowMeta}>Deadline: {deadlineRemainingLabel}</Text>
         </View>
+
+        {/* Timelock countdown — shown when recovery is scheduled and waiting */}
+        {timelockCountdown && (
+          <View style={[styles.statusBanner, { backgroundColor: theme.colors.accent + '14', borderColor: theme.colors.accent + '40' }]}>
+            <Text style={[styles.statusBannerText, { color: theme.colors.accent }]}>
+              ⏳ New passkey activates in: {timelockCountdown}
+            </Text>
+            <Text style={[styles.rowMeta, { marginTop: 4 }]}>
+              Once the timelock expires you can execute recovery and the new passkey will become active on this device.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.statusBanner}>
           <Text style={styles.statusBannerText}>

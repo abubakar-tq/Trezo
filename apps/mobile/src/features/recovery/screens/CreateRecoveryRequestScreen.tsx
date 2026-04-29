@@ -16,7 +16,7 @@ import { SupabaseWalletService } from "@/src/features/wallet/services/SupabaseWa
 import { buildRecoveryIntent, computeRecoveryDigest, type ChainRecoveryScope } from "@/src/integration/viem/recoveryIntent";
 import { getDeployment } from "@/src/integration/viem";
 
-const REQUEST_TTL_SECONDS = 7 * 24 * 60 * 60;
+const REQUEST_TTL_SECONDS = 3 * 24 * 60 * 60; // 3 days
 
 const CreateRecoveryRequestScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();

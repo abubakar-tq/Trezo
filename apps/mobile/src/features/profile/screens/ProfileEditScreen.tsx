@@ -16,7 +16,6 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { MeshBackground } from "@shared/components/MeshBackground";
 
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
@@ -29,7 +28,7 @@ const ProfileEditScreen: React.FC = () => {
   const navigation = useNavigation();
   const { theme } = useAppTheme();
   const { colors } = theme;
-  const styles = useMemo(() => createStyles(colors, theme.mode), [colors, theme.mode]);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const { user, profile } = useUserStore();
   const baselineAvatarUrl = profile?.avatarUrl ?? null;
@@ -64,9 +63,6 @@ const ProfileEditScreen: React.FC = () => {
   }, []);
 
   const pickImage = useCallback(async () => {
-    // Dismiss the options alert first
-    dismissAlert();
-
     // Request permissions
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
@@ -131,9 +127,6 @@ const ProfileEditScreen: React.FC = () => {
   }, []);
 
   const takePhoto = useCallback(async () => {
-    // Dismiss the options alert first
-    dismissAlert();
-
     // Request camera permissions
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
 
@@ -308,7 +301,7 @@ const ProfileEditScreen: React.FC = () => {
             },
           ]
         : []),
-      { text: "Cancel", style: "cancel" as const, onPress: dismissAlert },
+      { text: "Cancel", style: "cancel" as const, onPress: () => {} },
     ];
 
     showAlert("Profile Picture", "Choose an option", options);
@@ -406,7 +399,6 @@ const ProfileEditScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <MeshBackground />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -419,7 +411,7 @@ const ProfileEditScreen: React.FC = () => {
           style={styles.saveButton}
         >
           {isSaving ? (
-            <ActivityIndicator size="small" color={colors.accent} />
+            <ActivityIndicator size="small" color={colors.accentAlt} />
           ) : (
             <Text
               style={[
@@ -459,7 +451,7 @@ const ProfileEditScreen: React.FC = () => {
 
           {isUploading && (
             <View style={styles.uploadingIndicator}>
-              <ActivityIndicator size="small" color={colors.accent} />
+              <ActivityIndicator size="small" color={colors.accentAlt} />
               <Text style={styles.uploadingText}>Updating...</Text>
             </View>
           )}
@@ -486,7 +478,7 @@ const ProfileEditScreen: React.FC = () => {
         {/* Info Card */}
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
-            <Feather name="info" size={16} color={colors.accent} />
+            <Feather name="info" size={16} color={colors.accentAlt} />
             <Text style={styles.infoText}>
               Your profile is synced across all your devices
             </Text>
@@ -504,7 +496,7 @@ const ProfileEditScreen: React.FC = () => {
   );
 };
 
-const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
+const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -530,7 +522,7 @@ const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
       alignItems: "flex-end",
     },
     saveButtonText: {
-      color: colors.accent,
+      color: colors.accentAlt,
       fontSize: 16,
       fontWeight: "600",
     },
@@ -575,7 +567,7 @@ const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
       width: 36,
       height: 36,
       borderRadius: 18,
-      backgroundColor: colors.accent,
+      backgroundColor: colors.accentAlt,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 3,
@@ -601,17 +593,14 @@ const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
       marginBottom: 8,
     },
     input: {
-      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF',
+      backgroundColor: colors.surfaceCard,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 20,
-      paddingHorizontal: 20,
-      paddingVertical: 18,
+      borderRadius: 16,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
       color: colors.textPrimary,
       fontSize: 16,
-      // Zero Depth
-      shadowOpacity: 0,
-      elevation: 0,
     },
     inputHint: {
       color: colors.textMuted,
@@ -619,12 +608,10 @@ const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
       marginTop: 6,
     },
     infoCard: {
-      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.4)' : withAlpha(colors.accent, 0.08),
-      borderRadius: 20,
-      padding: 20,
+      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      borderRadius: 16,
+      padding: 16,
       marginTop: 8,
-      borderWidth: 1,
-      borderColor: colors.border,
     },
     infoRow: {
       flexDirection: "row",
