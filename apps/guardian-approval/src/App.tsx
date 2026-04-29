@@ -49,8 +49,10 @@ type ApprovalMode = 'EOA_ECDSA' | 'APPROVE_HASH' | null;
 const APPROVE_HASH_ABI = parseAbi(['function approveHash(bytes32 hash)']);
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_URL
+  || (import.meta as any).env?.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_ANON_KEY
+  || (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 const supabase: SupabaseClient | null =
   supabaseUrl && supabaseAnonKey
@@ -60,6 +62,88 @@ const supabase: SupabaseClient | null =
 const requestIdFromPath = (): string => {
   const parts = window.location.pathname.split('/').filter(Boolean);
   return parts.at(-1) ?? '';
+};
+
+// ─── Landing page (no request ID in URL) ─────────────────────────────────────
+
+const LandingPage: React.FC = () => {
+  const [input, setInput] = React.useState('');
+  const [error, setError] = React.useState('');
+
+  const handleGo = () => {
+    const trimmed = input.trim();
+    if (!trimmed) { setError('Paste a request ID or full approval link.'); return; }
+    // Accept either a full URL or a bare UUID
+    let id = trimmed;
+    try {
+      const url = new URL(trimmed);
+      const parts = url.pathname.split('/').filter(Boolean);
+      id = parts.at(-1) ?? trimmed;
+    } catch {
+      // Not a URL — treat as bare ID
+    }
+    if (!id) { setError('Could not extract a request ID from the input.'); return; }
+    window.location.href = `/${id}`;
+  };
+
+  return (
+    <div className="min-h-screen bg-background text-white p-6 flex flex-col items-center justify-center">
+      <Toaster position="top-center" toastOptions={{ style: { background: '#1e1e2e', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' } }} />
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+        className="w-full max-w-lg glass rounded-3xl p-8 shadow-2xl"
+      >
+        <div className="flex flex-col items-center text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mb-5">
+            <Shield className="w-8 h-8 text-primary" />
+          </div>
+          <h1 className="text-2xl font-bold mb-2">Trezo Guardian Portal</h1>
+          <p className="text-secondary text-sm leading-relaxed">
+            Authorize wallet recovery requests for wallets you guard.
+          </p>
+        </div>
+
+        {/* Request ID / link entry */}
+        <div className="space-y-3 mb-6">
+          <p className="text-sm font-semibold">Open an approval request</p>
+          <div className="flex gap-2">
+            <input
+              className="flex-1 bg-surface border border-white/10 rounded-xl px-4 py-3 text-sm placeholder:text-secondary focus:outline-none focus:border-primary/50 transition-colors"
+              placeholder="Paste request ID or approval link…"
+              value={input}
+              onChange={e => { setInput(e.target.value); setError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleGo()}
+            />
+            <button
+              onClick={handleGo}
+              className="px-4 py-3 rounded-xl bg-primary hover:bg-primary-hover transition-colors font-semibold flex items-center gap-1.5 shrink-0"
+            >
+              <ArrowRight className="w-4 h-4" />
+              Go
+            </button>
+          </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+        </div>
+
+        {/* How it works */}
+        <div className="p-4 rounded-2xl bg-surface border border-white/5 text-left space-y-2 mb-6">
+          <p className="text-xs text-secondary font-semibold uppercase tracking-wider">How it works</p>
+          <p className="text-sm text-secondary">1. The wallet owner schedules a recovery in the Trezo app</p>
+          <p className="text-sm text-secondary">2. They share a unique approval link with their guardians</p>
+          <p className="text-sm text-secondary">3. Each guardian opens the link and signs the approval</p>
+          <p className="text-sm text-secondary">4. Once threshold is met, recovery can be executed</p>
+        </div>
+
+        <div className="pt-4 border-t border-white/5 flex justify-center">
+          <p className="text-xs text-secondary flex items-center gap-1.5">
+            Powered by Trezo Protocol <ExternalLink className="w-3 h-3" />
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -132,6 +216,27 @@ const GuardianApproval: React.FC = () => {
     };
     void resolve();
   }, [address, request]);
+
+  // ── Check if this guardian has already approved ──────────────────────────
+  useEffect(() => {
+    if (!supabase || !address || !request || isApproved) return;
+
+    const checkExisting = async () => {
+      const { data } = await supabase
+        .from('recovery_approvals')
+        .select('id, verification_status')
+        .eq('request_id', request.id)
+        .eq('guardian_address', address.toLowerCase())
+        .maybeSingle();
+
+      if (data?.verification_status === 'valid') {
+        setIsApproved(true);
+        setMessage('You have already approved this recovery request.');
+      }
+    };
+
+    void checkExisting();
+  }, [address, request, isApproved]);
 
   // ── Derived state ────────────────────────────────────────────────────────
   const guardianIndex = useMemo(() => {
@@ -273,6 +378,13 @@ const GuardianApproval: React.FC = () => {
   };
 
   // ─────────────────────────────────────────────────────────────────────────
+
+  // ── No request ID — show landing page ───────────────────────────────────
+  if (!requestId) {
+    return (
+      <LandingPage />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-white p-6 flex flex-col items-center justify-center">
