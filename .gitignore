@@ -27,3 +27,8 @@ LEVEL2_IMPLEMENTATION_NOTES.md
 apps/backend/query_db.js
 apps/guardian-approval/test_*.js
 patch.diff
+contracts/errors.txt
+decode_calldata.js
+find_error.js
+apps/backend/supabase/.temp/
+apps/guardian-approval/.env
