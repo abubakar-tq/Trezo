@@ -93,7 +93,7 @@ async function main() {
   const localUsers = await listAllUsers(local);
   let localUser = localUsers.find((user) => user.email?.toLowerCase() === (remoteUser.email ?? "").toLowerCase());
   if (!localUser) {
-    const password = crypto.randomBytes(16).toString("hex");
+    const password = "pass";
     const { data, error } = await local.auth.admin.createUser({
       email: remoteUser.email ?? undefined,
       password,

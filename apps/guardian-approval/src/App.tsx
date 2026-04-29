@@ -95,9 +95,11 @@ const App = () => {
       }
 
       const requestRow = Array.isArray(data) ? (data[0] as GuardianRequest | undefined) : undefined;
+      console.log("Fetched request:", requestRow);
       if (!requestRow) {
         setStatus("not-found");
         setMessage("Recovery request not found or no longer open for approvals.");
+        setRequest(null);
         return;
       }
 
@@ -299,7 +301,7 @@ const App = () => {
                 </button>
               ))}
             </div>
-          ) : guardianIndex < 0 ? (
+          ) : request && guardianIndex < 0 ? (
             <>
               <p>Connected wallet: {address}</p>
               <p>Your connected address is not configured as a guardian for this request.</p>
@@ -307,7 +309,7 @@ const App = () => {
                 Disconnect
               </button>
             </>
-          ) : (
+          ) : request ? (
             <>
               <p>Connected wallet: {address}</p>
               <p>Approval mode: {approvalMode ?? "Detecting..."}</p>
@@ -318,7 +320,7 @@ const App = () => {
                 Disconnect
               </button>
             </>
-          )}
+          ) : null}
         </section>
 
         <p className="footer">{message}</p>

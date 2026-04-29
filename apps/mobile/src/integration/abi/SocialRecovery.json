@@ -1151,6 +1151,22 @@
     },
     {
       "type": "error",
+      "name": "SocialRecovery_TimelockTooShort",
+      "inputs": [
+        {
+          "name": "provided",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "minimum",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
       "name": "SocialRecovery_UnknownSignatureKind",
       "inputs": [
         {
