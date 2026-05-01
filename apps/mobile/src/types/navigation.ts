@@ -10,6 +10,7 @@ export type AuthStackParamList = {
   Splash: { redirectTo?: { name: string; params?: Record<string, unknown> } } | undefined;
   Introduction: undefined;
   Welcome: undefined;
+  Onboarding: undefined;
   PasskeyRegistration: undefined;
   Login: { email?: string; pairingMode?: "resume" } | undefined;
   Register: { email?: string } | undefined;
@@ -24,7 +25,7 @@ export type TabStackParamList = {
   Home: undefined;
   Browser: undefined;
   Portfolio: undefined;
-  Dex: undefined;
+  Dex: { initialTab?: 'swap' | 'bridge' } | undefined;
   Profile: undefined;
 };
 
@@ -66,6 +67,7 @@ export type RootStackParamList = {
   GuardianManagement: undefined;
   SecurityCenter: undefined;
   ThresholdConfiguration: undefined;
+  Buy: undefined;
   Receive: undefined;
   Send: undefined;
   TransactionHistory: undefined;
