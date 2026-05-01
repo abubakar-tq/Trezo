@@ -32,6 +32,7 @@ import { withAlpha } from "@utils/color";
 import { isValidEmail } from "@utils/validation";
 import { type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
+import { CardSkeleton, EmptyState, Skeleton, TextLineSkeleton } from "@shared/components/ui";
 
 const shortenHex = (value: string | null | undefined, chars = 6) => {
   if (!value) return "-";
@@ -848,7 +849,11 @@ const EmailRecoveryScreen: React.FC = () => {
             unchanged.
           </Text>
           {loadingStoredMetadata ? (
-            <ActivityIndicator size="small" color={colors.accentAlt} />
+            <View style={{ gap: 12 }}>
+              <Skeleton width="100%" height={60} borderRadius={16} />
+              <Skeleton width="100%" height={60} borderRadius={16} />
+              <Skeleton width="100%" height={60} borderRadius={16} />
+            </View>
           ) : storedMetadata ? (
             <>
               <View style={styles.payloadRow}>
@@ -902,9 +907,17 @@ const EmailRecoveryScreen: React.FC = () => {
               )}
             </>
           ) : (
-            <Text style={styles.moduleHint}>
-              No email recovery metadata found for this wallet yet.
-            </Text>
+            <EmptyState
+              icon="shield"
+              title="No Guardians Found"
+              description="Your wallet is currently unprotected by social recovery. Adding guardians ensures you can recover access if you lose your device."
+              actionLabel="Add your first guardian"
+              onAction={() => {
+                // Focus the guardian email input
+                setGuardianCountValue("1");
+              }}
+              style={{ marginTop: 10 }}
+            />
           )}
           {metadataWarning ? (
             <Text style={styles.moduleError}>{metadataWarning}</Text>
