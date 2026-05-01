@@ -56,6 +56,11 @@ help:
 	@echo "  make verify-infra RPC_URL=<rpc> [ENTRYPOINT=...]"
 	@echo "  make predict-wallet RPC_URL=<rpc> ACCOUNT_FACTORY=<addr> WALLET_ID=<bytes32> VALIDATOR=<addr> PASSKEY_ID_RAW=<bytes32> PASSKEY_PX=<uint256> PASSKEY_PY=<uint256> [WALLET_INDEX=0]"
 	@echo ""
+	@echo "Local dev harness (NEVER on testnet/prod):"
+	@echo "  make deploy-email-recovery-local-harness  # deploy EmailRecoveryHarness on Anvil"
+	@echo "  make test-email-recovery-harness          # run harness Foundry tests"
+	@echo "  make mock-complete-email-recovery-local   # manually complete recovery on Anvil"
+	@echo ""
 	@echo "Examples:"
 	@echo "  make check-root-factory RPC_URL=\$$SEPOLIA_RPC_URL"
 	@echo "  make deploy-sepolia PRIVATE_KEY=\$$PRIVATE_KEY"
@@ -189,6 +194,7 @@ sync-mobile:
 	cp deployments/$(CHAIN_ID).json \
 		$(MOBILE_DIR)/contracts/deployment.$(CHAIN_ID).json
 
+.PHONY: sync-abi
 sync-abi:
 	mkdir -p $(MOBILE_DIR)/abi
 	# ABI-only JSONs for the mobile app
@@ -209,3 +215,26 @@ sync-abi:
 
 	jq '{abi: .abi}' out/EmailRecovery.sol/EmailRecovery.json \
 		> $(MOBILE_DIR)/abi/EmailRecovery.json
+
+# ---------- Local dev harness targets ----------
+# These targets deploy or test the EmailRecoveryHarness, which is a dev-only
+# contract that exposes internal functions for local testing. The harness is
+# NEVER deployed to testnet or production. Production deploys use the real
+# EmailRecovery module through deploy-email-local or deploy-email-sepolia.
+
+.PONY: deploy-email-recovery-local-harness
+deploy-email-recovery-local-harness: build
+	@echo "Deploying EmailRecoveryHarness (DEV-ONLY, local Anvil)..."
+	forge script script/dev/DeployMockEmailRecovery.s.sol:DeployMockEmailRecovery \
+	$(ANVIL_NETWORK_ARGS)
+	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL)
+
+.PHONY: test-email-recovery-harness
+test-email-recovery-harness: build
+	forge test --match-contract EmailRecoveryMultichainHarnessTest -vv
+
+.PHONY: mock-complete-email-recovery-local
+mock-complete-email-recovery-local: build
+	@echo "Running mock email recovery completion on local Anvil (DEV-ONLY)..."
+	forge script script/dev/MockCompleteEmailRecovery.s.sol:MockCompleteEmailRecovery \
+	$(ANVIL_NETWORK_ARGS)

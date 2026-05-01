@@ -1,0 +1,34 @@
+{
+  "milestone": "email-recovery-local-harness",
+  "status": "completed",
+  "goal": "Add a dev-only local EmailRecovery harness for testing Level 3 zk-email recovery without deploying unsafe bypasses to production",
+  "files_changed": [
+    "contracts/test/harness/EmailRecoveryHarness.sol",
+    "contracts/test/modules/EmailRecoveryMultichainHarness.t.sol",
+    "contracts/script/dev/DeployMockEmailRecovery.s.sol",
+    "contracts/script/dev/MockCompleteEmailRecovery.s.sol",
+    "contracts/Makefile",
+    "agent-plans/level-3-zk-email/README.md"
+  ],
+  "tests_run": [
+    "forge test --match-contract EmailRecoveryMultichainHarnessTest -vv",
+    "forge test --match-contract EmailRecoveryTest -vv",
+    "forge test --match-contract EmailRecoveryIntegrationTest -vv"
+  ],
+  "tests_passing": true,
+  "decisions": [
+    "Harness exposes acceptGuardian and processRecovery from EmailRecoveryManager, not recover() directly",
+    "Tests call real completeRecovery(account, recoveryData), not internal recover()",
+    "Harness lives in test/harness/ not in production src/",
+    "Deploy scripts hard-revert on non-local chain IDs (31337/31338/31339)",
+    "make deploy-local unchanged - deploys production-equivalent stack",
+    "Separate make deploy-email-recovery-local-harness for harness only"
+  ],
+  "known_gaps": [],
+  "next_steps": [
+    "Test against real ZK Email staging relayer",
+    "Add Supabase JWT validation to zk-email-recovery-api",
+    "Fix legacy 96-byte path nonce increment in EmailRecovery.sol"
+  ],
+  "updated_at": "2026-05-01"
+}
