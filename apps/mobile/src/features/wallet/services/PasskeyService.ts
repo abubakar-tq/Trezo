@@ -758,6 +758,25 @@ export class PasskeyService {
     debugLog('📦 [PasskeyService] Encoded passkey data for deployment');
     return encoded;
   }
+
+  /**
+   * Fetch all passkeys from cloud storage (Supabase)
+   * Stub implementation - returns empty array for now
+   */
+  static async fetchCloudPasskeys(userId: string): Promise<PasskeyMetadata[]> {
+    debugLog('☁️ [PasskeyService] Fetching cloud passkeys for user:', userId);
+    // TODO: Implement Supabase integration to fetch all passkeys for user
+    return [];
+  }
+
+  /**
+   * Sync passkey metadata to cloud storage (Supabase)
+   * Stub implementation - logs only for now
+   */
+  static async syncPasskeyToCloud(userId: string, metadata: PasskeyMetadata): Promise<void> {
+    debugLog('☁️ [PasskeyService] Syncing passkey to cloud for user:', userId);
+    // TODO: Implement Supabase integration to sync passkey
+  }
   
   // ==================== PRIVATE HELPER METHODS ====================
   

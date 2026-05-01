@@ -3,20 +3,20 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import {
-  buildAddPasskeyUserOp,
-  buildRemovePasskeyUserOp,
-  getDeployment,
-  sendUserOp,
-  waitForUserOperationReceipt,
-  type PasskeyInit,
+    buildAddPasskeyUserOp,
+    buildCancelRemovePasskeyUserOp,
+    getDeployment,
+    sendUserOp,
+    waitForUserOperationReceipt,
+    type PasskeyInit,
 } from "@/src/integration/viem";
 import type {
-  AddPasskeyUserOpParams,
-  RemovePasskeyUserOpParams,
+    AddPasskeyUserOpParams,
+    RemovePasskeyUserOpParams,
 } from "@/src/integration/viem/userOps";
-import type { PasskeyMetadata } from "./PasskeyService";
 import type { Address, Hex } from "viem";
 import type { UserOperation, UserOperationReceipt } from "viem/account-abstraction";
+import type { PasskeyMetadata } from "./PasskeyService";
 
 const STORAGE_PREFIX = "trezo_pending_passkeys_v1_";
 
@@ -155,11 +155,11 @@ export class PasskeyAccountService {
       ? params.paymasterUrl ?? getPaymasterUrl()
       : params.paymasterUrl;
 
-    const { userOp, userOpHash } = await buildRemovePasskeyUserOp({
+    const { userOp, userOpHash } = await buildCancelRemovePasskeyUserOp({
       chainId,
       bundlerUrl,
       smartAccountAddress: params.smartAccountAddress,
-      passkeyIdToRemove: params.passkeyIdToRemove,
+      targetPasskeyId: params.passkeyIdToRemove,
       signingPasskeyId: params.signingPasskeyId,
       validatorAddress: params.validatorAddress,
       nonce: params.nonce,
