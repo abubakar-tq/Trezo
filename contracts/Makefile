@@ -59,7 +59,9 @@ help:
 	@echo "Local dev harness (NEVER on testnet/prod):"
 	@echo "  make deploy-email-recovery-local-harness  # deploy EmailRecoveryHarness on Anvil"
 	@echo "  make test-email-recovery-harness          # run harness Foundry tests"
-	@echo "  make mock-complete-email-recovery-local   # manually complete recovery on Anvil"
+	@echo "  make mock-accept-guardians-local          # accept guardians on harness (Anvil)"
+	@echo "  make mock-vote-recovery-local             # vote for recovery on harness (Anvil)"
+	@echo "  make mock-complete-email-recovery-local   # complete recovery on Anvil"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make check-root-factory RPC_URL=\$$SEPOLIA_RPC_URL"
@@ -80,7 +82,7 @@ deploy-local:
 	$(MAKE) predict-local $(OPTIONAL_ENTRYPOINT_MAKE)
 	$(MAKE) deploy-infra RPC_URL=$(ANVIL_RPC_URL) PRIVATE_KEY=$(LOCAL_PRIVATE_KEY) DEPLOYMENT_NAMESPACE=local $(OPTIONAL_ENTRYPOINT_MAKE)
 	$(MAKE) verify-local $(OPTIONAL_ENTRYPOINT_MAKE)
-	$(MAKE) deploy-email-local
+	$(MAKE) deploy-email-recovery-local-harness
 
 .PHONY: deploy-email-local
 deploy-email-local: build
@@ -233,8 +235,29 @@ deploy-email-recovery-local-harness: build
 test-email-recovery-harness: build
 	forge test --match-contract EmailRecoveryMultichainHarnessTest -vv
 
+.PHONY: mock-accept-guardians-local
+mock-accept-guardians-local: build
+	@echo "Accepting guardians on EmailRecoveryHarness (DEV-ONLY, local Anvil)..."
+	@echo "Required env: ACCOUNT=<smart-account>"
+	@echo "Harness address auto-read from deployments/31337.json"
+	@echo "Optional env: RECOVERY_HARNESS=<override> GUARDIAN_COUNT=<n> ACCEPTANCE_TEMPLATE_IDX=<idx>"
+	forge script script/dev/MockAcceptGuardians.s.sol:MockAcceptGuardians \
+	$(ANVIL_NETWORK_ARGS)
+
+.PHONY: mock-vote-recovery-local
+mock-vote-recovery-local: build
+	@echo "Voting for recovery on EmailRecoveryHarness (DEV-ONLY, local Anvil)..."
+	@echo "Required env: ACCOUNT=<smart-account> RECOVERY_DATA=<hex>"
+	@echo "Harness address auto-read from deployments/31337.json"
+	@echo "Optional env: RECOVERY_HARNESS=<override> VOTE_COUNT=<n> RECOVERY_TEMPLATE_IDX=<idx>"
+	forge script script/dev/MockVoteRecovery.s.sol:MockVoteRecovery \
+	$(ANVIL_NETWORK_ARGS)
+
 .PHONY: mock-complete-email-recovery-local
 mock-complete-email-recovery-local: build
 	@echo "Running mock email recovery completion on local Anvil (DEV-ONLY)..."
+	@echo "Required env: ACCOUNT=<smart-account> RECOVERY_DATA=<hex>"
+	@echo "Harness + PasskeyValidator auto-read from deployments/31337.json"
+	@echo "Optional env: RECOVERY_HARNESS=<override> PASSKEY_VALIDATOR=<override> NEW_PASSKEY_ID=<bytes32> ANVIL_RPC_URL=<override>"
 	forge script script/dev/MockCompleteEmailRecovery.s.sol:MockCompleteEmailRecovery \
 	$(ANVIL_NETWORK_ARGS)

@@ -114,6 +114,7 @@ contract DeployMockEmailRecovery is Script {
         } catch {}
 
         vm.serializeUint(root, "chainId", block.chainid);
+        vm.serializeAddress(root, "emailRecovery", result.emailRecoveryHarness);
         vm.serializeAddress(root, "emailRecoveryHarness", result.emailRecoveryHarness);
         vm.serializeAddress(root, "emailRecoveryCommandHandler", result.emailRecoveryCommandHandler);
         vm.serializeAddress(root, "zkEmailVerifier", result.zkEmailVerifier);
