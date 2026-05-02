@@ -2,6 +2,19 @@
   "abi": [
     {
       "type": "function",
+      "name": "PASSKEY_REMOVAL_DELAY",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint48",
+          "internalType": "uint48"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
       "name": "addPasskey",
       "inputs": [
         {
@@ -22,6 +35,71 @@
       ],
       "outputs": [],
       "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "cancelRemovePasskey",
+      "inputs": [
+        {
+          "name": "passkeyId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "executeRemovePasskey",
+      "inputs": [
+        {
+          "name": "passkeyId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "getPasskeyRecord",
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "id",
+          "type": "bytes32",
+          "internalType": "PasskeyValidator.PasskeyId"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "px",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "py",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "signCounter",
+          "type": "uint32",
+          "internalType": "uint32"
+        },
+        {
+          "name": "counterInitialized",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
     },
     {
       "type": "function",
@@ -198,7 +276,54 @@
     },
     {
       "type": "function",
+      "name": "pendingRemovals",
+      "inputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "executeAfter",
+          "type": "uint48",
+          "internalType": "uint48"
+        },
+        {
+          "name": "requestedAt",
+          "type": "uint48",
+          "internalType": "uint48"
+        },
+        {
+          "name": "cancelled",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
       "name": "removePasskey",
+      "inputs": [
+        {
+          "name": "passkeyId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "scheduleRemovePasskey",
       "inputs": [
         {
           "name": "passkeyId",
@@ -343,6 +468,50 @@
     },
     {
       "type": "event",
+      "name": "PasskeyRemovalCancelled",
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "passkeyId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "PasskeyRemovalScheduled",
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "passkeyId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "executeAfter",
+          "type": "uint48",
+          "indexed": false,
+          "internalType": "uint48"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
       "name": "PasskeyRemoved",
       "inputs": [
         {
@@ -390,6 +559,26 @@
     {
       "type": "error",
       "name": "PasskeyValidator_CannotRemoveLastPasskey",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "PasskeyValidator_PasskeyDoesNotExist",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "PasskeyValidator_RemovalAlreadyScheduled",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "PasskeyValidator_RemovalNotReady",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "PasskeyValidator_RemovalNotScheduled",
       "inputs": []
     }
   ]

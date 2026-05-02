@@ -2,10 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as LocalAuthentication from "expo-local-authentication";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import type { RootStackParamList } from "@/src/types/navigation";
+import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
 import { getSupabaseClient } from "@lib/supabase";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
@@ -20,6 +21,20 @@ export const DeviceVerificationScreen = () => {
   const setGuardNavigation = useAuthFlowStore((state) => state.setGuardNavigation);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [showReLoginModal, setShowReLoginModal] = useState(false);
+  const [hasPendingPairing, setHasPendingPairing] = useState(false);
+
+  // On mount: check for a pending pairing link — if so, show a bypass CTA
+  useEffect(() => {
+    DevicePairingService.getPendingDeepLink()
+      .then((link) => setHasPendingPairing(Boolean(link)))
+      .catch(() => {});
+  }, []);
+
+  const handleContinuePairing = useCallback(() => {
+    setGuardNavigation(false);
+    navigation.reset({ index: 0, routes: [{ name: "PairDevice" }] });
+  }, [navigation, setGuardNavigation]);
+
 
   const handleBiometricAuth = useCallback(async () => {
     try {
@@ -57,8 +72,20 @@ export const DeviceVerificationScreen = () => {
       });
 
       if (result.success) {
-        // Authentication successful - allow navigation to app
+        // Authentication successful — check if we have a pending device-pairing link
         setGuardNavigation(false);
+        try {
+          const pendingLink = await DevicePairingService.getPendingDeepLink();
+          if (pendingLink) {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "PairDevice" }],
+            });
+            return;
+          }
+        } catch {
+          // ignore — fall through to TabNavigation
+        }
         navigation.reset({
           index: 0,
           routes: [{ name: "TabNavigation" }],
@@ -277,6 +304,37 @@ export const DeviceVerificationScreen = () => {
 
   return (
     <View style={styles.container}>
+      {/* Pending pairing banner — shown when a pairing link was detected on mount */}
+      {hasPendingPairing && (
+        <TouchableOpacity
+          onPress={handleContinuePairing}
+          activeOpacity={0.85}
+          style={{
+            width: '100%',
+            marginBottom: 20,
+            borderRadius: 16,
+            padding: 16,
+            backgroundColor: theme.colors.accent + '18',
+            borderWidth: 1,
+            borderColor: theme.colors.accent + '60',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <Ionicons name="phone-portrait-outline" size={24} color={theme.colors.accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 15 }}>
+              Continue Device Pairing
+            </Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 2 }}>
+              You have a pending pairing request. Tap to add this device.
+            </Text>
+          </View>
+          <Ionicons name="arrow-forward" size={20} color={theme.colors.accent} />
+        </TouchableOpacity>
+      )}
+
       <View style={styles.header}>
         <View style={styles.iconContainer}>
           <Ionicons name="shield-checkmark" size={40} color={theme.colors.accent} />

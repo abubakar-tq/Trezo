@@ -90,6 +90,7 @@ export type EmailRecoveryGuardianView = {
   weight: number;
   resolvedEmail: string | null;
   isLocked: boolean;
+  acceptanceStatus: "pending" | "acceptance_email_sent" | "accepted" | "failed";
 };
 
 export type EmailRecoveryChainInstallView = {
@@ -410,7 +411,8 @@ export class EmailRecoveryService {
           normalized_email_encrypted,
           masked_email,
           display_label,
-          weight
+          weight,
+          acceptance_status
         ),
         email_recovery_chain_installs (
           chain_id,
@@ -459,6 +461,7 @@ export class EmailRecoveryService {
           weight: g.weight,
           resolvedEmail,
           isLocked,
+          acceptanceStatus: (g.acceptance_status ?? "pending") as EmailRecoveryGuardianView["acceptanceStatus"],
         } satisfies EmailRecoveryGuardianView;
       }),
     );
@@ -621,5 +624,112 @@ export class EmailRecoveryService {
       smartAccountAddress,
       moduleAddress: deployment.emailRecovery as Address,
     });
+  }
+
+  static async checkGuardianAcceptanceStatus(
+    smartAccountAddress: Address,
+    chainId: SupportedChainId = DEFAULT_CHAIN_ID,
+  ): Promise<{ allAccepted: boolean; acceptedWeight: bigint; threshold: bigint }> {
+    const deployment = getDeployment(chainId);
+    if (!deployment?.emailRecovery) {
+      throw new Error(`No Email Recovery module configured for chain ${chainId}`);
+    }
+
+    const publicClient = getPublicClient(chainId);
+    const emailRecoveryAddr = deployment.emailRecovery as Address;
+
+    const guardianConfig = await publicClient.readContract({
+      address: emailRecoveryAddr,
+      abi: [
+        {
+          name: "getGuardianConfig",
+          type: "function",
+          stateMutability: "view",
+          inputs: [{ name: "account", type: "address" }],
+          outputs: [
+            { name: "guardians", type: "address[]" },
+            { name: "weights", type: "uint256[]" },
+            { name: "threshold", type: "uint256" },
+            { name: "delay", type: "uint256" },
+            { name: "expiry", type: "uint256" },
+            { name: "currentWeight", type: "uint256" },
+          ],
+        },
+      ],
+      functionName: "getGuardianConfig",
+      args: [smartAccountAddress],
+    }) as [Address[], bigint[], bigint, bigint, bigint, bigint];
+
+    const [, , threshold, , , currentWeight] = guardianConfig;
+    const allAccepted = currentWeight >= threshold;
+
+    return { allAccepted, acceptedWeight: currentWeight, threshold };
+  }
+
+  static async refreshGuardianAcceptanceFromChain(
+    smartAccountAddress: Address,
+    configId: string,
+    chainId: SupportedChainId = DEFAULT_CHAIN_ID,
+  ): Promise<void> {
+    const deployment = getDeployment(chainId);
+    if (!deployment?.emailRecovery) return;
+
+    const publicClient = getPublicClient(chainId);
+    const emailRecoveryAddr = deployment.emailRecovery as Address;
+
+    const guardianConfig = await publicClient.readContract({
+      address: emailRecoveryAddr,
+      abi: [
+        {
+          name: "getGuardianConfig",
+          type: "function",
+          stateMutability: "view",
+          inputs: [{ name: "account", type: "address" }],
+          outputs: [
+            { name: "guardians", type: "address[]" },
+            { name: "weights", type: "uint256[]" },
+            { name: "threshold", type: "uint256" },
+            { name: "delay", type: "uint256" },
+            { name: "expiry", type: "uint256" },
+            { name: "currentWeight", type: "uint256" },
+          ],
+        },
+      ],
+      functionName: "getGuardianConfig",
+      args: [smartAccountAddress],
+    }) as [Address[], bigint[], bigint, bigint, bigint, bigint];
+
+    const [onChainGuardians, , , , , currentWeight] = guardianConfig;
+
+    const { data: dbGuardians } = await this.supabase
+      .from("email_recovery_guardians")
+      .select("id, email_hash")
+      .eq("config_id", configId);
+
+    if (!dbGuardians) return;
+
+    const derivedAddresses = await this.deriveGuardianAddresses(
+      smartAccountAddress,
+      dbGuardians.map((g: { email_hash: string }) => g.email_hash),
+      chainId,
+    );
+
+    const onChainSet = new Set(onChainGuardians.map((a: Address) => a.toLowerCase()));
+
+    for (let i = 0; i < dbGuardians.length; i++) {
+      const dbGuardian = dbGuardians[i];
+      const derived = derivedAddresses[i];
+      const isAccepted = derived && onChainSet.has(derived.guardianAddress.toLowerCase());
+      const newStatus = isAccepted ? "accepted" : "pending";
+
+      await this.supabase
+        .from("email_recovery_guardians")
+        .update({
+          acceptance_status: newStatus,
+          accepted_at: isAccepted ? new Date().toISOString() : null,
+          acceptance_checked_at: new Date().toISOString(),
+        })
+        .eq("id", dbGuardian.id);
+    }
   }
 }

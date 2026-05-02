@@ -2,13 +2,50 @@ const { getDefaultConfig } = require("expo/metro-config");
 const { withNativeWind } = require("nativewind/metro");
 const path = require("path");
 
+function escapeRegExp(pattern) {
+  if (pattern instanceof RegExp) {
+    return pattern.source.replace(/\/|\\\//g, "\\" + path.sep);
+  }
+  if (typeof pattern === "string") {
+    const escaped = pattern.replace(/[\-\[\]{}()\*+?.\\^$|]/g, "\\$&");
+    return escaped.replace(/\//g, "\\" + path.sep);
+  }
+  throw new Error(
+    `Expected exclusionList to be called with RegExp or string, got: ${typeof pattern}`,
+  );
+}
+
+function exclusionList(additionalExclusions) {
+  const list = [/\/__tests__\/.*$/];
+  return new RegExp(
+    "(" +
+      (additionalExclusions || []).concat(list).map(escapeRegExp).join("|") +
+      ")$",
+  );
+}
+
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, "../..");
 
 const config = getDefaultConfig(projectRoot);
 
-// 1. Watch all files within the monorepo
-config.watchFolders = [workspaceRoot];
+// Block any monorepo folders that should not be watched by Metro
+const blockList = exclusionList([
+  `${path.resolve(workspaceRoot, "contracts", "out")}.*`,
+  `${path.resolve(workspaceRoot, "contracts", "cache")}.*`,
+  `${path.resolve(workspaceRoot, "contracts", "lib")}.*`,
+  `${path.resolve(workspaceRoot, "contracts", "node_modules")}.*`,
+  `${path.resolve(workspaceRoot, "contracts", "broadcast")}.*`,
+]);
+
+// 1. Watch only the mobile app and the workspace node_modules
+config.watchFolders = [
+  projectRoot,
+  path.resolve(workspaceRoot, "node_modules"),
+  path.resolve(workspaceRoot, "contracts", "deployments"),
+];
+config.resolver.blockList = blockList;
+config.resolver.blacklistRE = blockList;
 
 // 2. Let Metro know where to resolve packages and in what order
 config.resolver.nodeModulesPaths = [

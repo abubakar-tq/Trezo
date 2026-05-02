@@ -35,7 +35,6 @@ const AuthGradientButton: React.FC<AuthGradientButtonProps> = ({
         colors={colors}
         start={{ x: 0, y: 1 }}
         end={{ x: 1, y: 0 }}
-        locations={[0, 0.45, 1]}
         style={styles.gradient}
       >
         <Text style={styles.text}>{label}</Text>

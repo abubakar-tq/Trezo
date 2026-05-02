@@ -10,14 +10,36 @@ import ContactDetailScreen from "@features/contacts/screens/ContactDetailScreen"
 import ContactListScreen from "@features/contacts/screens/ContactListScreen";
 import BackupRecoveryScreen from "@features/profile/screens/BackupRecoveryScreen";
 import BrowserSettingsScreen from "@features/profile/screens/BrowserSettingsScreen";
+import CompromisedWalletScreen from "@features/profile/screens/CompromisedWalletScreen";
+import ConnectedDevicesScreen from "@features/profile/screens/ConnectedDevicesScreen";
+import DevicesPasskeysScreen from "@features/profile/screens/DevicesPasskeysScreen";
 import EmailRecoveryScreen from "@features/profile/screens/EmailRecoveryScreen";
+import EmailRecoveryGroupStatusScreen from "@features/profile/screens/EmailRecoveryGroupStatusScreen";
+import EmailRecoveryStartScreen from "@features/profile/screens/EmailRecoveryStartScreen";
 import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
+import NotificationsScreen from "@features/profile/screens/NotificationsScreen";
+import PairDeviceScreen from "@features/profile/screens/PairDeviceScreen";
 import ProfileEditScreen from "@features/profile/screens/ProfileEditScreen";
 import RecoveryKitExportScreen from "@features/profile/screens/RecoveryKitExportScreen";
+import SecurityPrivacyScreen from "@features/profile/screens/SecurityPrivacyScreen";
+import AddGuardianScreen from "@features/recovery/screens/AddGuardianScreen";
+import CreateRecoveryRequestScreen from "@features/recovery/screens/CreateRecoveryRequestScreen";
+import GuardianManagementScreen from "@features/recovery/screens/GuardianManagementScreen";
+import RecoveryCompleteScreen from "@features/recovery/screens/RecoveryCompleteScreen";
+import RecoveryEntryScreen from "@features/recovery/screens/RecoveryEntryScreen";
+import RecoveryProgressScreen from "@features/recovery/screens/RecoveryProgressScreen";
+import SecurityCenterScreen from "@features/recovery/screens/SecurityCenterScreen";
+import ShareRecoveryScreen from "@features/recovery/screens/ShareRecoveryScreen";
+import ThresholdConfigurationScreen from "@features/recovery/screens/ThresholdConfigurationScreen";
+import SettingsScreen from "@features/settings/screens/SettingsScreen";
 import AATestScreen from "@features/wallet/screens/AATestScreen";
 import AAWalletDebugScreen from "@features/wallet/screens/AAWalletDebugScreen";
+import BuyScreen from "@features/wallet/screens/BuyScreen";
 import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
 import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScreen";
+import ReceiveScreen from "@features/wallet/screens/ReceiveScreen";
+import SendScreen from "@features/wallet/screens/SendScreen";
+import TransactionHistoryScreen from "@features/wallet/screens/TransactionHistoryScreen";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
@@ -33,7 +55,6 @@ const RootNavigation = () => {
   );
   const { theme } = useAppTheme();
   const [showingSplash, setShowingSplash] = useState(true);
-  const [initialAuthState] = useState(isLoggedIn);
 
   console.log(
     "🔄 [RootNavigation] Rendering, isLoggedIn:",
@@ -42,14 +63,10 @@ const RootNavigation = () => {
     showingSplash,
   );
 
-  // Set guard navigation based on initial auth state
   useEffect(() => {
-    // If user is logged in, require device verification
-    // If not logged in, don't guard navigation
-    setGuardNavigation(initialAuthState);
-  }, [initialAuthState, setGuardNavigation]);
+    setGuardNavigation(isLoggedIn);
+  }, [isLoggedIn, setGuardNavigation]);
 
-  // Ensure splash shows for minimum duration
   useEffect(() => {
     console.log("⏱️ [RootNavigation] Starting splash timer");
     const timer = setTimeout(() => {
@@ -60,29 +77,11 @@ const RootNavigation = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Determine the redirect target after splash
-  const getRedirectTarget = () => {
-    console.log(
-      "🎯 [RootNavigation] Getting redirect target, isLoggedIn:",
-      initialAuthState,
-    );
-    if (!initialAuthState) {
-      // User not logged in - go to Auth stack, will show Introduction
-      console.log(
-        "👤 [RootNavigation] User not logged in, showing AuthNavigation",
-      );
-      return null; // Will stay in AuthNavigation which has Introduction as initial
-    }
-
-    // User is logged in - show device verification screen
-    console.log(
-      "🔒 [RootNavigation] User logged in, redirecting to DeviceVerification",
-    );
-    return "DeviceVerification";
-  };
-
-  const splashKey = initialAuthState ? "tabs" : "auth";
-  const redirectTarget = getRedirectTarget();
+  const initialRouteName = showingSplash
+    ? "AppSplash"
+    : isLoggedIn
+      ? "DeviceVerification"
+      : "AuthNavigation";
 
   return (
     <NavigationContainer
@@ -97,13 +96,7 @@ const RootNavigation = () => {
       }
     >
       <Stack.Navigator
-        initialRouteName={
-          showingSplash
-            ? "AppSplash"
-            : initialAuthState
-              ? "DeviceVerification"
-              : "AuthNavigation"
-        }
+        initialRouteName={initialRouteName}
         screenOptions={{
           headerShown: false,
           animation: "slide_from_right",
@@ -114,29 +107,19 @@ const RootNavigation = () => {
       >
         {showingSplash ? (
           <Stack.Screen
-            key={splashKey}
             name="AppSplash"
             component={SplashScreen}
-            initialParams={{
-              redirectTo: redirectTarget ? { name: redirectTarget } : undefined,
-            }}
-            listeners={{
-              focus: () => console.log("👀 [Navigation] AppSplash focused"),
-              blur: () => console.log("👋 [Navigation] AppSplash blurred"),
-            }}
           />
         ) : (
           <>
-            {initialAuthState && (
-              <Stack.Screen
-                name="DeviceVerification"
-                component={DeviceVerificationScreen}
-                listeners={{
-                  focus: () =>
-                    console.log("👀 [Navigation] DeviceVerification focused"),
-                }}
-              />
-            )}
+            <Stack.Screen
+              name="DeviceVerification"
+              component={DeviceVerificationScreen}
+              listeners={{
+                focus: () =>
+                  console.log("👀 [Navigation] DeviceVerification focused"),
+              }}
+            />
             <Stack.Screen
               name="AuthNavigation"
               component={AuthNavigation}
@@ -171,6 +154,30 @@ const RootNavigation = () => {
               }}
             />
             <Stack.Screen
+              name="DevicesPasskeys"
+              component={DevicesPasskeysScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="PairDevice"
+              component={PairDeviceScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="CompromisedWallet"
+              component={CompromisedWalletScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="GuardianRecovery"
               component={GuardianRecoveryScreen}
               options={{
@@ -181,6 +188,62 @@ const RootNavigation = () => {
             <Stack.Screen
               name="EmailRecovery"
               component={EmailRecoveryScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="EmailRecoveryStart"
+              component={EmailRecoveryStartScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="EmailRecoveryGroupStatus"
+              component={EmailRecoveryGroupStatusScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="RecoveryEntry"
+              component={RecoveryEntryScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="CreateRecoveryRequest"
+              component={CreateRecoveryRequestScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="ShareRecoveryRequest"
+              component={ShareRecoveryScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="RecoveryProgress"
+              component={RecoveryProgressScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="RecoveryComplete"
+              component={RecoveryCompleteScreen}
               options={{
                 headerShown: false,
                 animation: "slide_from_right",
@@ -230,6 +293,30 @@ const RootNavigation = () => {
               }}
             />
             <Stack.Screen
+              name="SecurityPrivacy"
+              component={SecurityPrivacyScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="ConnectedDevices"
+              component={ConnectedDevicesScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="Notifications"
+              component={NotificationsScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
               name="AATest"
               component={AATestScreen}
               options={{
@@ -264,6 +351,51 @@ const RootNavigation = () => {
                 headerTitle: "Dev Controls",
                 animation: "slide_from_right",
               }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="AddGuardian"
+              component={AddGuardianScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="GuardianManagement"
+              component={GuardianManagementScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="SecurityCenter"
+              component={SecurityCenterScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="ThresholdConfiguration"
+              component={ThresholdConfigurationScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="Buy"
+              component={BuyScreen}
+              options={{ headerShown: false, animation: "slide_from_bottom" }}
+            />
+            <Stack.Screen
+              name="Receive"
+              component={ReceiveScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="Send"
+              component={SendScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="TransactionHistory"
+              component={TransactionHistoryScreen}
+              options={{ headerShown: false, animation: "slide_from_right" }}
             />
           </>
         )}

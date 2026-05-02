@@ -34,8 +34,7 @@ contract DeployEmailRecovery is Script {
     error MissingRequiredParameter(string param);
 
     uint256 internal constant LOCAL_CHAIN_ID = 31337;
-    address internal constant ANVIL_DEFAULT_ACCOUNT =
-        0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
+    address internal constant ANVIL_DEFAULT_ACCOUNT = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
 
     struct Config {
         bytes32 create2Salt;
@@ -137,11 +136,8 @@ contract DeployEmailRecovery is Script {
         }
 
         if (config.commandHandler == address(0)) {
-            result.emailRecoveryCommandHandler =
-                address(new EmailRecoveryCommandHandler{salt: config.create2Salt}());
-            console2.log(
-                "Deployed EmailRecoveryCommandHandler:", result.emailRecoveryCommandHandler
-            );
+            result.emailRecoveryCommandHandler = address(new EmailRecoveryCommandHandler{salt: config.create2Salt}());
+            console2.log("Deployed EmailRecoveryCommandHandler:", result.emailRecoveryCommandHandler);
         } else {
             result.emailRecoveryCommandHandler = config.commandHandler;
         }
@@ -168,10 +164,7 @@ contract DeployEmailRecovery is Script {
         return result;
     }
 
-    function _deployDkimRegistry(Config memory config)
-        internal
-        returns (address proxy, address implementation)
-    {
+    function _deployDkimRegistry(Config memory config) internal returns (address proxy, address implementation) {
         implementation = address(new UserOverrideableDKIMRegistry{salt: config.create2Salt}());
         proxy = address(
             new ERC1967Proxy{salt: config.create2Salt}(
@@ -195,8 +188,7 @@ contract DeployEmailRecovery is Script {
         groth16Verifier = address(new Groth16Verifier{salt: config.create2Salt}());
         proxy = address(
             new ERC1967Proxy{salt: config.create2Salt}(
-                implementation,
-                abi.encodeCall(Verifier(implementation).initialize, (config.owner, groth16Verifier))
+                implementation, abi.encodeCall(Verifier(implementation).initialize, (config.owner, groth16Verifier))
             )
         );
 
@@ -245,59 +237,26 @@ contract DeployEmailRecovery is Script {
             _trySerializeExistingAddress(root, "passkeyValidator", existingJson, ".passkeyValidator");
             _trySerializeExistingAddress(root, "socialRecovery", existingJson, ".socialRecovery");
             _trySerializeExistingBool(root, "success", existingJson, ".success");
-        } catch { }
+        } catch {}
     }
 
-    function _preserveExistingEmailRecoveryDeployment(string memory root, string memory path)
-        internal
-    {
+    function _preserveExistingEmailRecoveryDeployment(string memory root, string memory path) internal {
         try vm.readFile(path) returns (string memory existingJson) {
             _trySerializeExistingAddress(root, "emailRecovery", existingJson, ".emailRecovery");
             _trySerializeExistingAddress(
-                root,
-                "emailRecoveryCommandHandler",
-                existingJson,
-                ".emailRecoveryCommandHandler"
+                root, "emailRecoveryCommandHandler", existingJson, ".emailRecoveryCommandHandler"
             );
             _trySerializeExistingAddress(root, "zkEmailVerifier", existingJson, ".zkEmailVerifier");
-            _trySerializeExistingAddress(
-                root,
-                "zkEmailDkimRegistry",
-                existingJson,
-                ".zkEmailDkimRegistry"
-            );
+            _trySerializeExistingAddress(root, "zkEmailDkimRegistry", existingJson, ".zkEmailDkimRegistry");
             _trySerializeExistingAddress(root, "zkEmailAuthImpl", existingJson, ".zkEmailAuthImpl");
+            _trySerializeExistingAddress(root, "zkEmailGroth16Verifier", existingJson, ".zkEmailGroth16Verifier");
+            _trySerializeExistingAddress(root, "zkEmailVerifierImpl", existingJson, ".zkEmailVerifierImpl");
+            _trySerializeExistingAddress(root, "zkEmailDkimRegistryImpl", existingJson, ".zkEmailDkimRegistryImpl");
             _trySerializeExistingAddress(
-                root,
-                "zkEmailGroth16Verifier",
-                existingJson,
-                ".zkEmailGroth16Verifier"
+                root, "emailRecoveryKillSwitchAuthorizer", existingJson, ".emailRecoveryKillSwitchAuthorizer"
             );
-            _trySerializeExistingAddress(
-                root,
-                "zkEmailVerifierImpl",
-                existingJson,
-                ".zkEmailVerifierImpl"
-            );
-            _trySerializeExistingAddress(
-                root,
-                "zkEmailDkimRegistryImpl",
-                existingJson,
-                ".zkEmailDkimRegistryImpl"
-            );
-            _trySerializeExistingAddress(
-                root,
-                "emailRecoveryKillSwitchAuthorizer",
-                existingJson,
-                ".emailRecoveryKillSwitchAuthorizer"
-            );
-            _trySerializeExistingUint(
-                root,
-                "emailRecoveryMinimumDelay",
-                existingJson,
-                ".emailRecoveryMinimumDelay"
-            );
-        } catch { }
+            _trySerializeExistingUint(root, "emailRecoveryMinimumDelay", existingJson, ".emailRecoveryMinimumDelay");
+        } catch {}
     }
 
     function _trySerializeExistingAddress(
@@ -305,12 +264,10 @@ contract DeployEmailRecovery is Script {
         string memory key,
         string memory existingJson,
         string memory jsonPath
-    )
-        internal
-    {
+    ) internal {
         try vm.parseJsonAddress(existingJson, jsonPath) returns (address value) {
             vm.serializeAddress(root, key, value);
-        } catch { }
+        } catch {}
     }
 
     function _trySerializeExistingUint(
@@ -318,12 +275,10 @@ contract DeployEmailRecovery is Script {
         string memory key,
         string memory existingJson,
         string memory jsonPath
-    )
-        internal
-    {
+    ) internal {
         try vm.parseJsonUint(existingJson, jsonPath) returns (uint256 value) {
             vm.serializeUint(root, key, value);
-        } catch { }
+        } catch {}
     }
 
     function _trySerializeExistingBool(
@@ -331,12 +286,10 @@ contract DeployEmailRecovery is Script {
         string memory key,
         string memory existingJson,
         string memory jsonPath
-    )
-        internal
-    {
+    ) internal {
         try vm.parseJsonBool(existingJson, jsonPath) returns (bool value) {
             vm.serializeBool(root, key, value);
-        } catch { }
+        } catch {}
     }
 
     function _trySerializeExistingString(
@@ -344,11 +297,9 @@ contract DeployEmailRecovery is Script {
         string memory key,
         string memory existingJson,
         string memory jsonPath
-    )
-        internal
-    {
+    ) internal {
         try vm.parseJsonString(existingJson, jsonPath) returns (string memory value) {
             vm.serializeString(root, key, value);
-        } catch { }
+        } catch {}
     }
 }

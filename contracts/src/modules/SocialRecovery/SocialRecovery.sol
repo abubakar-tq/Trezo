@@ -2,9 +2,12 @@
 pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ISocialRecovery} from "./interfaces/ISocialRecovery.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
+import {RecoveryHash} from "src/recovery/RecoveryHash.sol";
+import {RecoveryTypes} from "src/recovery/RecoveryTypes.sol";
 import {ERC7579ModuleBase} from "lib/modulekit/src/module-bases/ERC7579ModuleBase.sol";
 import "@openzeppelin/contracts/interfaces/IERC1271.sol";
 
@@ -14,6 +17,12 @@ interface ISocialRecoveryAccount {
 }
 
 contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRecoveryModule", "1.0.0") {
+    struct ActiveRecovery {
+        bytes32 recoveryId;
+        uint256 executeAfter;
+        PasskeyTypes.PasskeyInit passkey;
+    }
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -32,6 +41,7 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
     error SocialRecovery_GuardianMustBeNonZero();
     error SocialRecovery_ThresholdMustBeNonZero();
     error SocialRecovery_ThresholdMustBeLessThanGuardians();
+    error SocialRecovery_TimelockTooShort(uint256 provided, uint256 minimum);
     error SocialRecovery_DuplicateGuardian(address guardian);
     error SocialRecovery_UnknownSignatureKind(uint8 kind);
     error SocialRecovery_InvalidEOASignatureLength(uint256 length);
@@ -53,14 +63,10 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
     //////////////////////////////////////////////////////////////*/
 
     mapping(address => RecoveryDetails) private _recoveryDetails;
+    mapping(address => ActiveRecovery) private _activeRecoveries;
     mapping(bytes32 => uint256) public approvedHashes;
-    uint256 internal immutable TIME_LOCK = 1 days;
+    uint256 internal constant DEFAULT_TIME_LOCK = 1 days;
     bytes4 private constant ERC1271_MAGICVALUE = 0x1626ba7e;
-    bytes32 private constant _TYPE_HASH_PASSKEY_INIT =
-        keccak256("PasskeyInit(bytes32 idRaw,uint256 px,uint256 py)");
-    bytes32 private constant _TYPE_HASH_SOCIAL_RECOVERY = keccak256(
-        "SocialRecovery(address wallet,uint256 nonce,PasskeyInit newPassKey)PasskeyInit(bytes32 idRaw,uint256 px,uint256 py)"
-    );
 
     /*//////////////////////////////////////////////////////////////
                             MODULE LIFECYCLE
@@ -77,7 +83,7 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         if (isInitialized(account)) {
             revert ModuleAlreadyInitialized(account);
         }
-        (address[] memory guardians, uint256 threshold) = abi.decode(data, (address[], uint256));
+        (address[] memory guardians, uint256 threshold, uint256 timelockSeconds) = _decodeInstallData(data);
         if (guardians.length == 0) {
             revert SocialRecovery_GuardianLengthMustBeNonZero();
         }
@@ -86,6 +92,15 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         }
         RecoveryDetails storage details = _recoveryDetails[account];
         details.threshold = threshold;
+        
+        uint256 finalTimelock = timelockSeconds == 0 ? DEFAULT_TIME_LOCK : timelockSeconds;
+        // TODO(TESTING): Minimum 1-day timelock is commented out for local testing.
+        // Uncomment before production deployment.
+        // if (finalTimelock < 1 days) {
+        //     revert SocialRecovery_TimelockTooShort(finalTimelock, 1 days);
+        // }
+        details.timelockSeconds = finalTimelock;
+        
         for (uint256 i = 0; i < guardians.length; i++) {
             address guardian = guardians[i];
             if (guardian == address(0)) {
@@ -113,50 +128,112 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
             revert NotInitialized(account);
         }
         delete _recoveryDetails[account];
+        delete _activeRecoveries[account];
     }
 
     /*//////////////////////////////////////////////////////////////
                                 RECOVERY
     //////////////////////////////////////////////////////////////*/
 
+    function scheduleRecovery(
+        address wallet,
+        PasskeyTypes.PasskeyInit calldata newPassKey,
+        RecoveryTypes.RecoveryIntent calldata intent,
+        RecoveryTypes.ChainRecoveryScope[] calldata scopes,
+        GuardianSig[] calldata sigs
+    ) external returns (bytes32 recoveryId) {
+        return _scheduleRecovery(wallet, newPassKey, intent, scopes, sigs);
+    }
+
     function scheduleRecovery(address wallet, PasskeyTypes.PasskeyInit calldata newPassKey, GuardianSig[] calldata sigs)
         external
         returns (bytes32 recoveryId)
     {
+        RecoveryTypes.ChainRecoveryScope[] memory scopes = _legacyScopes(wallet);
+        RecoveryTypes.RecoveryIntent memory intent = _legacyIntent(wallet, newPassKey, scopes[0].nonce, _hashChainScopesMemory(scopes));
+        return _scheduleRecovery(wallet, newPassKey, intent, scopes, sigs);
+    }
+
+    function _scheduleRecovery(
+        address wallet,
+        PasskeyTypes.PasskeyInit calldata newPassKey,
+        RecoveryTypes.RecoveryIntent memory intent,
+        RecoveryTypes.ChainRecoveryScope[] memory scopes,
+        GuardianSig[] calldata sigs
+    ) internal returns (bytes32 recoveryId) {
         if (!isInitialized(wallet)) {
             revert NotInitialized(wallet);
         }
         if (!ISocialRecoveryAccount(wallet).isRecoveryModule(address(this))) {
             revert SocialRecovery_ModuleNotAuthorized();
         }
-        recoveryId = getRecoveryId(wallet, newPassKey);
         RecoveryDetails storage details = _recoveryDetails[wallet];
-        OperationState state = _currentOperationState(details);
-        if (
-            details.activeRecoveryId != bytes32(0) && (state == OperationState.Waiting || state == OperationState.Ready)
-        ) {
-            revert SocialRecovery_OperationAlreadyScheduled(details.activeRecoveryId);
+        ActiveRecovery storage active = _activeRecoveries[wallet];
+        OperationState state = _currentOperationState(active);
+        if (active.recoveryId != bytes32(0) && (state == OperationState.Waiting || state == OperationState.Ready)) {
+            revert SocialRecovery_OperationAlreadyScheduled(active.recoveryId);
+        }
+        if (intent.deadline < block.timestamp) {
+            revert RecoveryTypes.SocialRecovery_DeadlineExpired(intent.deadline);
+        }
+        if (intent.validAfter > 0 && intent.validAfter > block.timestamp) {
+            revert RecoveryTypes.SocialRecovery_NotYetValid(intent.validAfter);
+        }
+        if (intent.newPasskeyHash != RecoveryHash.hashPasskeyInit(newPassKey)) {
+            revert RecoveryTypes.SocialRecovery_PasskeyHashMismatch();
+        }
+        if (intent.chainScopeHash != _hashChainScopesMemory(scopes)) {
+            revert RecoveryTypes.SocialRecovery_ScopeHashMismatch();
+        }
+
+        RecoveryTypes.ChainRecoveryScope memory localScope;
+        bool found;
+        for (uint256 i = 0; i < scopes.length; i++) {
+            if (i > 0 && scopes[i].chainId <= scopes[i - 1].chainId) {
+                revert RecoveryTypes.SocialRecovery_ScopeHashMismatch();
+            }
+            if (scopes[i].chainId == block.chainid) {
+                localScope = scopes[i];
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            revert RecoveryTypes.SocialRecovery_ChainNotInScope(block.chainid);
+        }
+        if (localScope.wallet != wallet) {
+            revert RecoveryTypes.SocialRecovery_ScopeWalletMismatch(wallet, localScope.wallet);
+        }
+        if (localScope.socialRecovery != address(this)) {
+            revert RecoveryTypes.SocialRecovery_ScopeModuleMismatch(address(this), localScope.socialRecovery);
+        }
+        if (localScope.nonce != details.nonce) {
+            revert RecoveryTypes.SocialRecovery_ScopeNonceMismatch(details.nonce, localScope.nonce);
+        }
+        if (localScope.guardianSetHash != getGuardianSetHash(wallet)) {
+            revert RecoveryTypes.SocialRecovery_GuardianSetChanged();
+        }
+        if (localScope.policyHash != getPolicyHash(wallet)) {
+            revert RecoveryTypes.SocialRecovery_PolicyChanged();
         }
         if (sigs.length < details.threshold) {
             revert SocialRecovery_ThresholdMustBeLessThanGuardians();
         }
-        uint256 nonce = details.nonce;
-        if (!verifyGuardianSignatures(wallet, nonce, newPassKey, sigs)) {
+        bytes32 digest = _getRecoveryDigest(intent);
+        if (!verifyGuardianSignatures(wallet, digest, sigs)) {
             revert SocialRecovery_InvalidSignatures();
         }
-        details.activeRecoveryId = recoveryId;
-        details.activeRecoveryExecuteAfter = block.timestamp + TIME_LOCK;
-        details.nonce = nonce + 1;
-        emit RecoveryScheduled(wallet, recoveryId, details.activeRecoveryExecuteAfter);
+        recoveryId = _computeRecoveryId(wallet, details.nonce, newPassKey, intent);
+        active.recoveryId = recoveryId;
+        active.executeAfter = block.timestamp + details.timelockSeconds;
+        active.passkey = PasskeyTypes.PasskeyInit({idRaw: newPassKey.idRaw, px: newPassKey.px, py: newPassKey.py});
+        details.nonce += 1;
+        emit RecoveryScheduled(wallet, recoveryId, active.executeAfter);
         return recoveryId;
     }
 
-    function getRecoveryId(address wallet, PasskeyTypes.PasskeyInit calldata newPassKey)
-        internal
-        pure
-        returns (bytes32)
-    {
-        return keccak256(abi.encode(wallet, _hashPasskeyInit(newPassKey)));
+    function getRecoveryDigest(RecoveryTypes.RecoveryIntent calldata intent) public view override returns (bytes32) {
+        return _getRecoveryDigest(intent);
     }
 
     function getRecoveryDigest(address wallet, uint256 nonce, PasskeyTypes.PasskeyInit calldata newPassKey)
@@ -164,25 +241,32 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         view
         returns (bytes32)
     {
-        return _hashTypedDataV4(
-            keccak256(abi.encode(_TYPE_HASH_SOCIAL_RECOVERY, wallet, nonce, _hashPasskeyInit(newPassKey)))
+        RecoveryTypes.ChainRecoveryScope[] memory scopes = _legacyScopesWithNonce(wallet, nonce);
+        RecoveryTypes.RecoveryIntent memory intent = _legacyIntent(wallet, newPassKey, nonce, _hashChainScopesMemory(scopes));
+        return _getRecoveryDigest(intent);
+    }
+
+    function _getRecoveryDigest(RecoveryTypes.RecoveryIntent memory intent) internal view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                RecoveryTypes.RECOVERY_INTENT_TYPEHASH,
+                intent.requestId,
+                intent.newPasskeyHash,
+                intent.chainScopeHash,
+                intent.validAfter,
+                intent.deadline,
+                intent.metadataHash
+            )
         );
+        return _hashPortableTypedData(structHash);
     }
 
     /*//////////////////////////////////////////////////////////////
                                VALIDATION
     //////////////////////////////////////////////////////////////*/
 
-    function verifyGuardianSignatures(
-        address wallet,
-        uint256 nonce,
-        PasskeyTypes.PasskeyInit calldata newPassKey,
-        GuardianSig[] calldata sigs
-    ) internal view returns (bool) {
+    function verifyGuardianSignatures(address wallet, bytes32 digest, GuardianSig[] calldata sigs) internal view returns (bool) {
         RecoveryDetails storage details = _recoveryDetails[wallet];
-        bytes32 digest = _hashTypedDataV4(
-            keccak256(abi.encode(_TYPE_HASH_SOCIAL_RECOVERY, wallet, nonce, _hashPasskeyInit(newPassKey)))
-        );
         bool[] memory seen = new bool[](details.guardians.length);
         for (uint256 i = 0; i < sigs.length; i++) {
             GuardianSig calldata sig = sigs[i];
@@ -231,29 +315,43 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
                            RECOVERY MANAGEMENT
     //////////////////////////////////////////////////////////////*/
 
-    function executeRecovery(address wallet, PasskeyTypes.PasskeyInit calldata newPassKey) external override {
+    function executeRecovery(address wallet) external override {
+        _executeRecovery(wallet);
+    }
+
+    function executeRecovery(address wallet, PasskeyTypes.PasskeyInit calldata newPassKey) external {
+        ActiveRecovery storage active = _activeRecoveries[wallet];
+        if (active.recoveryId != bytes32(0)) {
+            bytes32 storedHash = keccak256(
+                abi.encode(RecoveryTypes.PASSKEY_INIT_TYPEHASH, active.passkey.idRaw, active.passkey.px, active.passkey.py)
+            );
+            if (storedHash != RecoveryHash.hashPasskeyInit(newPassKey)) {
+                revert SocialRecovery_InvalidRecoveryId(active.recoveryId, bytes32(0));
+            }
+        }
+        _executeRecovery(wallet);
+    }
+
+    function _executeRecovery(address wallet) internal {
         if (!isInitialized(wallet)) {
             revert NotInitialized(wallet);
         }
         if (!ISocialRecoveryAccount(wallet).isRecoveryModule(address(this))) {
             revert SocialRecovery_ModuleNotAuthorized();
         }
-        RecoveryDetails storage details = _recoveryDetails[wallet];
-        bytes32 recoveryId = details.activeRecoveryId;
+        ActiveRecovery storage active = _activeRecoveries[wallet];
+        bytes32 recoveryId = active.recoveryId;
         if (recoveryId == bytes32(0)) {
             revert SocialRecovery_NoActiveRecovery();
         }
-        OperationState state = _currentOperationState(details);
+        OperationState state = _currentOperationState(active);
         if (state != OperationState.Ready) {
             revert SocialRecovery_InvalidRecoveryState(recoveryId, state);
         }
-        bytes32 computedId = getRecoveryId(wallet, newPassKey);
-        if (computedId != recoveryId) {
-            revert SocialRecovery_InvalidRecoveryId(recoveryId, computedId);
-        }
+        PasskeyTypes.PasskeyInit memory newPassKey = active.passkey;
+        delete _activeRecoveries[wallet];
         _applyRecoveryResult(wallet, newPassKey);
         emit RecoveryExecuted(wallet, recoveryId);
-        _resetActiveRecovery(details);
     }
 
     function cancelRecovery(address wallet, bytes32 recoveryId) external override {
@@ -261,20 +359,20 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
             revert NotInitialized(wallet);
         }
         _requireWalletAuthorized(wallet);
-        RecoveryDetails storage details = _recoveryDetails[wallet];
-        bytes32 activeId = details.activeRecoveryId;
+        ActiveRecovery storage active = _activeRecoveries[wallet];
+        bytes32 activeId = active.recoveryId;
         if (activeId == bytes32(0)) {
             revert SocialRecovery_NoActiveRecovery();
         }
         if (activeId != recoveryId) {
             revert SocialRecovery_InvalidRecoveryId(activeId, recoveryId);
         }
-        OperationState state = _currentOperationState(details);
+        OperationState state = _currentOperationState(active);
         if (state != OperationState.Waiting && state != OperationState.Ready) {
             revert SocialRecovery_InvalidRecoveryState(recoveryId, state);
         }
         emit RecoveryCancelled(wallet, recoveryId);
-        _resetActiveRecovery(details);
+        delete _activeRecoveries[wallet];
     }
 
     function addGuardians(address wallet, address[] calldata newGuardians, uint256 newThreshold) external override {
@@ -334,12 +432,7 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         emit GuardiansUpdated(wallet, details.threshold);
     }
 
-    function getRecoveryDetails(address wallet)
-        external
-        view
-        override
-        returns (address[] memory guardians, uint256 threshold)
-    {
+    function getRecoveryDetails(address wallet) external view override returns (address[] memory guardians, uint256 threshold) {
         RecoveryDetails storage details = _recoveryDetails[wallet];
         guardians = details.guardians;
         threshold = details.threshold;
@@ -347,6 +440,34 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
 
     function getRecoveryNonce(address wallet) external view override returns (uint256 nonce) {
         nonce = _recoveryDetails[wallet].nonce;
+    }
+
+    function getRecoveryTimelock(address wallet) external view override returns (uint256 timelockSeconds) {
+        timelockSeconds = _recoveryDetails[wallet].timelockSeconds;
+    }
+
+    function getGuardianSetHash(address wallet) public view override returns (bytes32) {
+        return keccak256(abi.encode(_recoveryDetails[wallet].guardians));
+    }
+
+    function getPolicyHash(address wallet) public view override returns (bytes32) {
+        RecoveryDetails storage details = _recoveryDetails[wallet];
+        return keccak256(abi.encode(details.threshold, details.timelockSeconds));
+    }
+
+    function getChainScopeHash(RecoveryTypes.ChainRecoveryScope[] calldata scopes)
+        external
+        pure
+        override
+        returns (bytes32)
+    {
+        return RecoveryHash.hashChainScopes(scopes);
+    }
+
+    function getActiveRecovery(address wallet) external view override returns (bytes32 recoveryId, uint256 executeAfter) {
+        ActiveRecovery storage active = _activeRecoveries[wallet];
+        recoveryId = active.recoveryId;
+        executeAfter = active.executeAfter;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -375,7 +496,7 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
                             INTERNAL Functions
     //////////////////////////////////////////////////////////////*/
 
-    function _applyRecoveryResult(address wallet, PasskeyTypes.PasskeyInit calldata newPassKey) internal {
+    function _applyRecoveryResult(address wallet, PasskeyTypes.PasskeyInit memory newPassKey) internal {
         ISocialRecoveryAccount(wallet).addPasskeyFromRecovery(newPassKey);
     }
 
@@ -386,10 +507,6 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         if (!ISocialRecoveryAccount(wallet).isRecoveryModule(address(this))) {
             revert SocialRecovery_ModuleNotAuthorized();
         }
-    }
-
-    function _hashPasskeyInit(PasskeyTypes.PasskeyInit calldata passkey) internal pure returns (bytes32) {
-        return keccak256(abi.encode(_TYPE_HASH_PASSKEY_INIT, passkey.idRaw, passkey.px, passkey.py));
     }
 
     function _parseEOASignature(bytes memory signature) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
@@ -406,14 +523,14 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         }
     }
 
-    function _currentOperationState(RecoveryDetails storage details) internal view returns (OperationState) {
-        if (details.activeRecoveryId == bytes32(0)) {
+    function _currentOperationState(ActiveRecovery storage active) internal view returns (OperationState) {
+        if (active.recoveryId == bytes32(0)) {
             return OperationState.Unset;
         }
-        if (details.activeRecoveryExecuteAfter == 0) {
+        if (active.executeAfter == 0) {
             return OperationState.Unset;
         }
-        if (block.timestamp < details.activeRecoveryExecuteAfter) {
+        if (block.timestamp < active.executeAfter) {
             return OperationState.Waiting;
         }
         return OperationState.Ready;
@@ -442,9 +559,109 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         return false;
     }
 
-    function _resetActiveRecovery(RecoveryDetails storage details) internal {
-        details.activeRecoveryId = bytes32(0);
-        details.activeRecoveryExecuteAfter = 0;
+    function _decodeInstallData(bytes calldata data)
+        internal
+        pure
+        returns (address[] memory guardians, uint256 threshold, uint256 timelockSeconds)
+    {
+        if (data.length == 0) {
+            revert SocialRecovery_GuardianLengthMustBeNonZero();
+        }
+        uint256 arrayOffset;
+        assembly {
+            arrayOffset := calldataload(data.offset)
+        }
+        if (arrayOffset == 0x40) {
+            (guardians, threshold) = abi.decode(data, (address[], uint256));
+            timelockSeconds = DEFAULT_TIME_LOCK;
+            return (guardians, threshold, timelockSeconds);
+        }
+        (guardians, threshold, timelockSeconds) = abi.decode(data, (address[], uint256, uint256));
+    }
+
+    function _portableDomainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                RecoveryTypes.PORTABLE_DOMAIN_TYPEHASH,
+                RecoveryTypes.PORTABLE_NAME_HASH,
+                RecoveryTypes.PORTABLE_VERSION_HASH,
+                address(this)
+            )
+        );
+    }
+
+    function _hashPortableTypedData(bytes32 structHash) internal view returns (bytes32) {
+        return MessageHashUtils.toTypedDataHash(_portableDomainSeparator(), structHash);
+    }
+
+    function _computeRecoveryId(
+        address wallet,
+        uint256 nonce,
+        PasskeyTypes.PasskeyInit calldata newPassKey,
+        RecoveryTypes.RecoveryIntent memory intent
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                wallet,
+                nonce,
+                RecoveryHash.hashPasskeyInit(newPassKey),
+                intent.chainScopeHash,
+                intent.deadline,
+                intent.metadataHash
+            )
+        );
+    }
+
+    function _legacyScopes(address wallet) internal view returns (RecoveryTypes.ChainRecoveryScope[] memory scopes) {
+        return _legacyScopesWithNonce(wallet, _recoveryDetails[wallet].nonce);
+    }
+
+    function _legacyScopesWithNonce(address wallet, uint256 nonce)
+        internal
+        view
+        returns (RecoveryTypes.ChainRecoveryScope[] memory scopes)
+    {
+        scopes = new RecoveryTypes.ChainRecoveryScope[](1);
+        scopes[0] = RecoveryTypes.ChainRecoveryScope({
+            chainId: block.chainid,
+            wallet: wallet,
+            socialRecovery: address(this),
+            nonce: nonce,
+            guardianSetHash: getGuardianSetHash(wallet),
+            policyHash: getPolicyHash(wallet)
+        });
+    }
+
+    function _legacyIntent(
+        address wallet,
+        PasskeyTypes.PasskeyInit calldata newPassKey,
+        uint256 nonce,
+        bytes32 chainScopeHash
+    ) internal pure returns (RecoveryTypes.RecoveryIntent memory intent) {
+        intent.requestId = keccak256(abi.encode(wallet, nonce, newPassKey.idRaw));
+        intent.newPasskeyHash = RecoveryHash.hashPasskeyInit(newPassKey);
+        intent.chainScopeHash = chainScopeHash;
+        intent.validAfter = 0;
+        intent.deadline = type(uint48).max;
+        intent.metadataHash = bytes32(0);
+    }
+
+    function _hashChainScopesMemory(RecoveryTypes.ChainRecoveryScope[] memory scopes) internal pure returns (bytes32) {
+        bytes32[] memory hashes = new bytes32[](scopes.length);
+        for (uint256 i = 0; i < scopes.length; i++) {
+            hashes[i] = keccak256(
+                abi.encode(
+                    RecoveryTypes.CHAIN_RECOVERY_SCOPE_TYPEHASH,
+                    scopes[i].chainId,
+                    scopes[i].wallet,
+                    scopes[i].socialRecovery,
+                    scopes[i].nonce,
+                    scopes[i].guardianSetHash,
+                    scopes[i].policyHash
+                )
+            );
+        }
+        return keccak256(abi.encodePacked(hashes));
     }
 
     function _hashKey(address guardian, bytes32 hash) internal pure returns (bytes32) {

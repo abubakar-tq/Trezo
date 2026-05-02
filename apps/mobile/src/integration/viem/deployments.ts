@@ -23,8 +23,8 @@ export type DeploymentAddresses = {
   zkEmailDkimRegistryImpl?: `0x${string}`;
   emailRecoveryKillSwitchAuthorizer?: `0x${string}`;
   emailRecoveryMinimumDelay?: number;
-  usdc: `0x${string}`;
-  deployer: `0x${string}`;
+  usdc?: `0x${string}`;
+  deployer?: `0x${string}`;
   success: boolean;
 };
 

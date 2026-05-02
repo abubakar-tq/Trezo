@@ -1,2 +1,2 @@
-export { useSupabaseAuth } from "@/src/app/hooks/useSupabaseAuth";
+export { useSupabaseAuth } from "@/src/shared/hooks/useSupabaseAuth";
 

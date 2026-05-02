@@ -436,6 +436,44 @@
     },
     {
       "type": "function",
+      "name": "getGuardianSetHash",
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getPolicyHash",
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
       "name": "getPreviousRecoveryRequest",
       "inputs": [
         {
@@ -492,6 +530,25 @@
               "internalType": "uint256"
             }
           ]
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getRecoveryNonce",
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
         }
       ],
       "stateMutability": "view"
@@ -800,6 +857,25 @@
         }
       ],
       "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "multichainRecoveryDataHash",
+      "inputs": [
+        {
+          "name": "recoveryData",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "pure"
     },
     {
       "type": "function",
@@ -1416,6 +1492,96 @@
     },
     {
       "type": "error",
+      "name": "EmailRecoveryChainNotInScope",
+      "inputs": [
+        {
+          "name": "chainId",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "EmailRecoveryDeadlineExpired",
+      "inputs": [
+        {
+          "name": "deadline",
+          "type": "uint48",
+          "internalType": "uint48"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "EmailRecoveryGuardianSetChanged",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "EmailRecoveryPasskeyHashMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "EmailRecoveryPolicyChanged",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "EmailRecoveryScopeHashMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "EmailRecoveryScopeModuleMismatch",
+      "inputs": [
+        {
+          "name": "expected",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "provided",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "EmailRecoveryScopeNonceMismatch",
+      "inputs": [
+        {
+          "name": "expected",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "provided",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "EmailRecoveryScopeWalletMismatch",
+      "inputs": [
+        {
+          "name": "expected",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "provided",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
       "name": "GuardianAlreadyVoted",
       "inputs": []
     },
@@ -1465,6 +1631,17 @@
       "type": "error",
       "name": "InvalidEmailAuthImpl",
       "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "InvalidEmailRecoveryDataVersion",
+      "inputs": [
+        {
+          "name": "version",
+          "type": "uint8",
+          "internalType": "uint8"
+        }
+      ]
     },
     {
       "type": "error",
@@ -1688,6 +1865,27 @@
       "inputs": [
         {
           "name": "recoveryWindow",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "Recovery_EmptyChainScopes",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "Recovery_UnsortedOrDuplicateChainScope",
+      "inputs": [
+        {
+          "name": "previousChainId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "chainId",
           "type": "uint256",
           "internalType": "uint256"
         }

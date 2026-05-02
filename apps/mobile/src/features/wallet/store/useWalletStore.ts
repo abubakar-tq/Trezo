@@ -1,8 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { Hex } from "viem";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 export type WalletAccount = {
+  id: string;
   address: string;
   name: string;
   isActive: boolean;
@@ -56,8 +58,12 @@ export type DeploymentStatus = 'idle' | 'predicting' | 'deploying' | 'deployed' 
 export type PasskeyInfo = {
   id: string;
   credentialId: string;
+  idRaw?: Hex; // Raw credential ID as Hex
   deviceName: string;
   deviceType: string;
+  isOnChain?: boolean; // Whether this passkey is registered on-chain
+  px?: Hex; // Public key X coordinate
+  py?: Hex; // Public key Y coordinate
   lastUsedAt?: string;
   createdAt: string;
 };
@@ -77,6 +83,7 @@ type WalletStore = {
   // Wallet state (EOA)
   accounts: WalletAccount[];
   activeAccount: WalletAccount | null;
+  activeAccountId: string | null;
   isWalletInitialized: boolean;
   
   // Computed properties
@@ -105,6 +112,7 @@ type WalletStore = {
   // Actions
   setAccounts: (accounts: WalletAccount[]) => void;
   setActiveAccount: (account: WalletAccount) => void;
+  setActiveAccountId: (accountId: string | null) => void;
   addAccount: (account: WalletAccount) => void;
   setWalletInitialized: (value: boolean) => void;
   
@@ -136,6 +144,7 @@ type WalletStore = {
 const initialState = {
   accounts: [],
   activeAccount: null,
+  activeAccountId: null,
   isWalletInitialized: false,
   aaAccount: null,
   accountDeploymentStatus: 'idle' as DeploymentStatus,
@@ -166,13 +175,16 @@ export const useWalletStore = create<WalletStore>()(
       setActiveAccount: (account) => {
         set((state) => ({
           activeAccount: account,
+          activeAccountId: account.id,
           accounts: state.accounts.map((acc) =>
-            acc.address === account.address
+            acc.id === account.id
               ? { ...acc, isActive: true }
               : { ...acc, isActive: false }
           ),
         }));
       },
+      
+      setActiveAccountId: (accountId) => set({ activeAccountId: accountId }),
       
       addAccount: (account) =>
         set((state) => ({
@@ -254,6 +266,7 @@ export const useWalletStore = create<WalletStore>()(
       partialize: ({
         accounts,
         activeAccount,
+        activeAccountId,
         isWalletInitialized,
         aaAccount,
         accountDeploymentStatus,
@@ -264,6 +277,7 @@ export const useWalletStore = create<WalletStore>()(
       }) => ({
         accounts,
         activeAccount,
+        activeAccountId,
         isWalletInitialized,
         aaAccount,
         accountDeploymentStatus,

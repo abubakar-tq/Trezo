@@ -80,21 +80,21 @@ const AnimatedSplashBackground: React.FC = () => {
       {/* Floating gradient orbs - positioned and contained */}
       <Animated.View style={[floatingStyle, styles.orb1]}>
         <LinearGradient
-          colors={["rgba(24, 119, 242, 0.4)", "transparent"]}
+          colors={["rgba(139, 92, 246, 0.4)", "transparent"]} // Violet
           style={styles.orb1Gradient}
         />
       </Animated.View>
       
       <Animated.View style={[floatingStyle, styles.orb2]}>
         <LinearGradient
-          colors={["rgba(105, 69, 237, 0.3)", "transparent"]}
+          colors={["rgba(168, 85, 247, 0.3)", "transparent"]} // Purple
           style={styles.orb2Gradient}
         />
       </Animated.View>
       
       <Animated.View style={[floatingStyle, styles.orb3]}>
         <LinearGradient
-          colors={["rgba(168, 85, 247, 0.25)", "transparent"]}
+          colors={["rgba(192, 132, 252, 0.25)", "transparent"]} // Light Purple
           style={styles.orb3Gradient}
         />
       </Animated.View>
@@ -118,7 +118,7 @@ const AnimatedSplashBackground: React.FC = () => {
           style={[circleStyle, styles.circle]}
         >
           <LinearGradient
-            colors={["#1877f2", "#3b82f6", "#60a5fa"]}
+            colors={["#7c3aed", "#8b5cf6", "#a78bfa"]} // Indigo/Violet
             style={styles.circleGradient}
           />
         </Animated.View>
@@ -139,7 +139,7 @@ const AnimatedSplashBackground: React.FC = () => {
         
         <View style={styles.floatingLine2Container}>
           <LinearGradient
-            colors={["rgba(24, 119, 242, 0.5)", "transparent"]}
+            colors={["rgba(168, 85, 247, 0.5)", "transparent"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.floatingLine2}
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     right: 64,
     width: 48,
     height: 8,
-    backgroundColor: 'rgba(96, 165, 250, 0.4)',
+    backgroundColor: 'rgba(139, 92, 246, 0.4)',
     borderRadius: 4,
   },
   floatingLine1Container: {

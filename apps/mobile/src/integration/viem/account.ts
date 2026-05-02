@@ -72,6 +72,113 @@ export async function isExecutorModuleInstalled({
   }) as Promise<boolean>;
 }
 
+export type PasskeyRecordOnChain = {
+  exists: boolean;
+  px: bigint;
+  py: bigint;
+  signCounter: number;
+  counterInitialized: boolean;
+};
+
+export async function checkPasskeyOnChain({
+  chainId,
+  smartAccountAddress,
+  passkeyId,
+  validatorAddress,
+}: {
+  chainId: SupportedChainId;
+  smartAccountAddress: Address;
+  passkeyId: `0x${string}`;
+  validatorAddress?: Address;
+}): Promise<PasskeyRecordOnChain> {
+  const deployment = getDeployment(chainId);
+  const validator = validatorAddress ?? (deployment?.passkeyValidator as Address | undefined);
+  if (!validator) {
+    throw new Error(`No passkey validator configured for chain ${chainId}`);
+  }
+
+  const publicClient = getPublicClient(chainId);
+  const [exists, record] = await Promise.all([
+    publicClient.readContract({
+      address: validator,
+      abi: ABIS.passkeyValidator,
+      functionName: 'hasPasskey',
+      args: [smartAccountAddress, passkeyId],
+    }) as Promise<boolean>,
+    publicClient.readContract({
+      address: validator,
+      abi: ABIS.passkeyValidator,
+      functionName: 'getPasskeyRecord',
+      args: [smartAccountAddress, passkeyId],
+    }) as Promise<{
+      px: bigint;
+      py: bigint;
+      signCounter: number;
+      counterInitialized: boolean;
+    }>,
+  ]);
+
+  return {
+    exists,
+    px: record.px,
+    py: record.py,
+    signCounter: record.signCounter,
+    counterInitialized: record.counterInitialized,
+  };
+}
+
+export type PasskeyOnchainState = {
+  exists: boolean;
+  executeAfter: bigint;
+  requestedAt: bigint;
+  cancelled: boolean;
+};
+
+export async function getPasskeyOnchainState({
+  chainId,
+  smartAccountAddress,
+  passkeyId,
+  validatorAddress,
+}: {
+  chainId: SupportedChainId;
+  smartAccountAddress: Address;
+  passkeyId: `0x${string}`;
+  validatorAddress?: Address;
+}): Promise<PasskeyOnchainState> {
+  const deployment = getDeployment(chainId);
+  const validator = validatorAddress ?? (deployment?.passkeyValidator as Address | undefined);
+  if (!validator) {
+    throw new Error(`No passkey validator configured for chain ${chainId}`);
+  }
+
+  const publicClient = getPublicClient(chainId);
+  const [exists, pending] = await Promise.all([
+    publicClient.readContract({
+      address: validator,
+      abi: ABIS.passkeyValidator,
+      functionName: 'hasPasskey',
+      args: [smartAccountAddress, passkeyId],
+    }) as Promise<boolean>,
+    publicClient.readContract({
+      address: validator,
+      abi: ABIS.passkeyValidator,
+      functionName: 'pendingRemovals',
+      args: [smartAccountAddress, passkeyId],
+    }) as Promise<{
+      executeAfter: bigint;
+      requestedAt: bigint;
+      cancelled: boolean;
+    }>,
+  ]);
+
+  return {
+    exists,
+    executeAfter: pending.executeAfter,
+    requestedAt: pending.requestedAt,
+    cancelled: pending.cancelled,
+  };
+}
+
 /**
  * Dev helper: prefund a predicted account using Anvil's default rich account.
  * Only for local testing; do not ship to production builds.

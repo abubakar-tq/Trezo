@@ -5,67 +5,73 @@ import { withAlpha } from "@utils/color";
 import type { AppTheme, Mode, ThemeColors, ThemeGradients } from "./types";
 
 const darkColors: ThemeColors = {
-  background: "#04030a",
-  surface: "rgba(12, 10, 18, 0.92)", // Added missing surface color
-  surfaceCard: "rgba(12, 10, 18, 0.92)",
-  surfaceElevated: "rgba(15, 23, 42, 0.9)",
-  surfaceMuted: "rgba(12, 10, 18, 0.85)",
-  border: "rgba(255,255,255,0.08)",
-  borderMuted: "rgba(255,255,255,0.05)",
-  text: "#f9fafb", // Added missing text color
-  textPrimary: "#f9fafb",
-  textSecondary: "#cbd5f5",
-  secondaryText: "#cbd5f5", // Added missing secondaryText color
-  textMuted: "#94a3b8",
-  textOnAccent: "#0f172a",
-  accent: "#38bdf8",
-  accentAlt: "#6366f1",
-  success: "#22c55e",
-  warning: "#facc15",
-  danger: "#f43f5e",
+  background: "#050505",
+  surface: "rgba(10, 10, 10, 0.8)",
+  surfaceCard: "rgba(15, 15, 15, 0.6)",
+  surfaceElevated: "rgba(25, 25, 25, 0.9)",
+  surfaceMuted: "rgba(15, 15, 15, 0.4)",
+  border: "rgba(255, 255, 255, 0.06)",
+  borderMuted: "rgba(255, 255, 255, 0.03)",
+  text: "#FFFFFF",
+  textPrimary: "#FFFFFF",
+  textSecondary: "#94A3B8",
+  secondaryText: "#94A3B8",
+  textMuted: "#64748B",
+  textOnAccent: "#000000",
+  textOnHero: "#FFFFFF",
+  accent: "#00FFFF", // Neon Cyan
+  accentAlt: "#FF00FF", // Neon Pink
+  success: "#22C55E",
+  warning: "#F59E0B",
+  danger: "#EF4444",
+  glass: "rgba(255, 255, 255, 0.03)",
+  glassBorder: "rgba(255, 255, 255, 0.08)",
 };
 
 const lightColors: ThemeColors = {
-  background: "#f7f9fc",
-  surface: "#ffffff", // Added missing surface color
-  surfaceCard: "#ffffff",
-  surfaceElevated: "#edf2ff",
-  surfaceMuted: "#f1f5f9",
-  border: "rgba(15,23,42,0.12)",
-  borderMuted: "rgba(15,23,42,0.06)",
-  text: "#0f172a", // Added missing text color
-  textPrimary: "#0f172a",
-  textSecondary: "#1e293b",
-  secondaryText: "#1e293b", // Added missing secondaryText color
-  textMuted: "#64748b",
-  textOnAccent: "#ffffff",
-  accent: "#2563eb",
-  accentAlt: "#7c3aed",
-  success: "#16a34a",
-  warning: "#ca8a04",
-  danger: "#dc2626",
+  background: "#F9FBFF", // Crisp Ice White
+  surface: "#FFFFFF",
+  surfaceCard: "#FFFFFF", // Pure White Card
+  surfaceElevated: "#FFFFFF",
+  surfaceMuted: "#F1F5F9",
+  border: "rgba(0, 0, 0, 0.15)", // Significantly darkened for clear distinction
+  borderMuted: "rgba(0, 0, 0, 0.08)",
+  text: "#0F172A",
+  textPrimary: "#0F172A",
+  textSecondary: "#64748B",
+  secondaryText: "#64748B",
+  textMuted: "#94A3B8",
+  textOnAccent: "#FFFFFF",
+  textOnHero: "#0F172A",
+  accent: "#00A3A3",
+  accentAlt: "#A300A3",
+  success: "#10B981",
+  warning: "#F59E0B",
+  danger: "#EF4444",
+  glass: "#FFFFFF",
+  glassBorder: "rgba(0, 0, 0, 0.12)", // More visible glass boundary
 };
 
 const darkGradients: ThemeGradients = {
-  hero: ["#1d1b4f", "#11182a"],
-  heroAlt: ["#1d1b4f", "#0f172a"],
-  card: ["#1f2937", "#111827"],
-  cardAlt: ["#111827", "#0b1120"],
-  dexHero: ["#0f172a", "#020617"],
-  dexInfo: ["#111827", "#0b1120"],
-  profileHero: ["#1d1b4f", "#101528"],
-  tabBar: ["rgba(12,10,18,0.96)", "rgba(15,23,42,0.85)"],
+  hero: ["#050505", "#050505"], // Solid deep black for hero background
+  heroAlt: ["#101010", "#050505"],
+  card: ["#141414", "#050505"],
+  cardAlt: ["#1A1A1A", "#050505"],
+  dexHero: ["#002020", "#050505"],
+  dexInfo: ["#001515", "#050505"],
+  profileHero: ["#050505", "#050505"],
+  tabBar: ["rgba(5, 5, 5, 0.95)", "rgba(5, 5, 5, 0.85)"],
 };
 
 const lightGradients: ThemeGradients = {
-  hero: ["#e0e7ff", "#f8fafc"],
-  heroAlt: ["#e8f5ff", "#fefefe"],
-  card: ["#f5f8ff", "#eef2ff"],
-  cardAlt: ["#f1f5f9", "#f8fafc"],
-  dexHero: ["#e0f2ff", "#f8fafc"],
-  dexInfo: ["#f1f5f9", "#ffffff"],
-  profileHero: ["#e4ecff", "#f9fbff"],
-  tabBar: ["rgba(226,232,240,0.95)", "rgba(241,245,249,0.9)"],
+  hero: ["#FFFFFF", "#F9FAFB"],
+  heroAlt: ["#F9FAFB", "#FFFFFF"],
+  card: ["#FFFFFF", "#F9FAFB"],
+  cardAlt: ["#F9FAFB", "#FFFFFF"],
+  dexHero: ["#E0F2FF", "#F9FAFB"],
+  dexInfo: ["#F1F5F9", "#FFFFFF"],
+  profileHero: ["#FFFFFF", "#FFFFFF"],
+  tabBar: ["rgba(255, 255, 255, 0.95)", "rgba(249, 250, 251, 0.9)"],
 };
 
 const createNavigationTheme = (
@@ -97,8 +103,12 @@ const createTheme = (mode: Mode): AppTheme => {
     colors,
     gradients,
     shadows: {
-      card: withAlpha(mode === "dark" ? "#000000" : "#94a3b8", mode === "dark" ? 0.35 : 0.18),
-      elevated: withAlpha(mode === "dark" ? "#020617" : "#94a3b8", mode === "dark" ? 0.45 : 0.22),
+      card: mode === "dark" 
+        ? "rgba(0, 0, 0, 0.4)" 
+        : "rgba(71, 85, 105, 0.1)", // Sophisticated Slate Shadow
+      elevated: mode === "dark" 
+        ? "rgba(0, 0, 0, 0.6)" 
+        : "rgba(71, 85, 105, 0.15)",
     },
     navigation,
     statusBarStyle: mode === "dark" ? "light" : "dark",

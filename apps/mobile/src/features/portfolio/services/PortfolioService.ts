@@ -16,6 +16,7 @@ export interface TokenBalance {
   amount: number;
   value: number;
   address: string;
+  change24h?: number;
 }
 
 export interface PortfolioData {
