@@ -2,8 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SUPABASE_DIR="$ROOT_DIR/apps/backend/supabase"
+BACKEND_DIR="$ROOT_DIR/apps/backend"
+SUPABASE_DIR="$BACKEND_DIR/supabase"
 PID_FILE="$SUPABASE_DIR/.temp/functions-serve.pid"
+RUNTIME_ENV_FILE="$SUPABASE_DIR/.temp/functions-runtime.env"
 
 if [[ -f "$PID_FILE" ]]; then
   pid="$(cat "$PID_FILE" || true)"
@@ -15,6 +17,9 @@ if [[ -f "$PID_FILE" ]]; then
   rm -f "$PID_FILE"
 fi
 
+rm -f "$RUNTIME_ENV_FILE"
+echo "[infra-down] removed generated functions runtime env"
+
 echo "[infra-down] stopping local Supabase stack..."
-npx supabase stop --workdir "$SUPABASE_DIR"
+npx supabase stop --workdir "$BACKEND_DIR"
 echo "[infra-down] done"

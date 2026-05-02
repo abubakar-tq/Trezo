@@ -129,6 +129,17 @@ const normalizeHex = (value: string): Hex => {
   return prefixed.toLowerCase() as Hex;
 };
 
+const normalizePrivateKey = (value: string): Hex => {
+  const unquoted = value.trim().replace(/^['"]|['"]$/g, "");
+  const normalized = normalizeHex(unquoted);
+  if (!/^0x[0-9a-fA-F]{64}$/.test(normalized)) {
+    throw new Error(
+      "RECOVERY_RELAYER_PRIVATE_KEY must be a 32-byte hex private key, with or without 0x.",
+    );
+  }
+  return normalized;
+};
+
 const asHex = (value: string, field: string): Hex => {
   const normalized = normalizeHex(value);
   if (!isHex(normalized)) {
@@ -175,11 +186,11 @@ const getSupabaseAdmin = () => {
 };
 
 const getRelayerAccount = () => {
-  const privateKey = Deno.env.get("RECOVERY_RELAYER_PRIVATE_KEY") as Hex | undefined;
-  if (!privateKey) {
+  const privateKey = Deno.env.get("RECOVERY_RELAYER_PRIVATE_KEY");
+  if (!privateKey?.trim()) {
     throw new Error("RECOVERY_RELAYER_PRIVATE_KEY is missing.");
   }
-  return privateKeyToAccount(privateKey);
+  return privateKeyToAccount(normalizePrivateKey(privateKey));
 };
 
 const toChain = (chainId: number, rpcUrl: string) =>

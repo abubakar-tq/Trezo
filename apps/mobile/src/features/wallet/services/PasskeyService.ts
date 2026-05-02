@@ -1130,6 +1130,27 @@ export class PasskeyService {
         .eq('user_id', userId);
 
       if (error) {
+        if (error.code === '42703') {
+          const { data: legacyData, error: legacyError } = await client
+            .from('passkeys')
+            .select('credential_id, device_name, device_type, created_at')
+            .eq('user_id', userId);
+
+          if (legacyError) {
+            console.warn('Failed to fetch cloud passkeys:', legacyError);
+            return [];
+          }
+
+          return (legacyData ?? []).map((row: Record<string, unknown>) => ({
+            credentialId: row.credential_id as string,
+            credentialIdRaw: row.credential_id as string,
+            deviceName: (row.device_name as string) || 'Unknown Device',
+            deviceType: (row.device_type as string) || 'unknown',
+            publicKeyX: '',
+            publicKeyY: '',
+            createdAt: row.created_at as string,
+          }));
+        }
         console.warn('Failed to fetch cloud passkeys:', error);
         return [];
       }
@@ -1169,9 +1190,13 @@ export class PasskeyService {
       const { error } = await client.from('passkeys').upsert(
         {
           user_id: userId,
-          wallet_id: walletId,
+          aa_wallet_id: walletId,
           credential_id: passkey.credentialId,
           credential_id_raw: passkey.credentialIdRaw,
+          public_key: JSON.stringify({
+            x: passkey.publicKeyX,
+            y: passkey.publicKeyY,
+          }),
           public_key_x: passkey.publicKeyX,
           public_key_y: passkey.publicKeyY,
           device_name: passkey.deviceName ?? 'Unknown Device',

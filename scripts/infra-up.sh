@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SUPABASE_DIR="$ROOT_DIR/apps/backend/supabase"
+BACKEND_DIR="$ROOT_DIR/apps/backend"
+SUPABASE_DIR="$BACKEND_DIR/supabase"
 TEMP_DIR="$SUPABASE_DIR/.temp"
 FUNCTIONS_LOG="$TEMP_DIR/functions-serve.log"
 FUNCTIONS_PID_FILE="$TEMP_DIR/functions-serve.pid"
@@ -25,9 +26,9 @@ to_docker_reachable_url() {
 }
 
 echo "[infra-up] Starting local Supabase stack..."
-npx supabase start --workdir "$SUPABASE_DIR"
+npx supabase start --workdir "$BACKEND_DIR"
 
-status_env="$(npx supabase status -o env --workdir "$SUPABASE_DIR")"
+status_env="$(npx supabase status -o env --workdir "$BACKEND_DIR")"
 local_api_url="$(printf '%s\n' "$status_env" | awk -F= '/^API_URL=/{print substr($0,9)}' | tr -d '\"')"
 local_anon_key="$(printf '%s\n' "$status_env" | awk -F= '/^ANON_KEY=/{print substr($0,10)}' | tr -d '\"')"
 local_service_key="$(printf '%s\n' "$status_env" | awk -F= '/^SERVICE_ROLE_KEY=/{print substr($0,18)}' | tr -d '\"')"
@@ -39,13 +40,15 @@ if [[ -f "$SYNC_ENV_FILE" ]]; then
 
   if [[ -n "${REMOTE_SUPABASE_URL:-}" && -n "${REMOTE_SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
     echo "[infra-up] Syncing user data from remote project..."
-    REMOTE_SUPABASE_URL="$REMOTE_SUPABASE_URL" \
-    REMOTE_SUPABASE_SERVICE_ROLE_KEY="$REMOTE_SUPABASE_SERVICE_ROLE_KEY" \
-    SYNC_USER_EMAIL="${SYNC_USER_EMAIL:-}" \
-    SYNC_USER_ID="${SYNC_USER_ID:-}" \
-    LOCAL_SUPABASE_URL="$local_api_url" \
-    LOCAL_SUPABASE_SERVICE_ROLE_KEY="$local_service_key" \
-    node "$ROOT_DIR/scripts/supabase-sync-user.js"
+    if ! REMOTE_SUPABASE_URL="$REMOTE_SUPABASE_URL" \
+      REMOTE_SUPABASE_SERVICE_ROLE_KEY="$REMOTE_SUPABASE_SERVICE_ROLE_KEY" \
+      SYNC_USER_EMAIL="${SYNC_USER_EMAIL:-}" \
+      SYNC_USER_ID="${SYNC_USER_ID:-}" \
+      LOCAL_SUPABASE_URL="$local_api_url" \
+      LOCAL_SUPABASE_SERVICE_ROLE_KEY="$local_service_key" \
+      node "$ROOT_DIR/scripts/supabase-sync-user.js"; then
+      echo "[infra-up] WARNING: remote user sync failed; continuing with local Supabase state."
+    fi
   else
     echo "[infra-up] Sync file exists but remote credentials are missing; skipping sync."
   fi
@@ -78,6 +81,12 @@ SUPABASE_ANON_KEY=$local_anon_key
 SUPABASE_SERVICE_ROLE_KEY=$local_service_key
 EOF
 
+if grep -q '^RECOVERY_RELAYER_PRIVATE_KEY=' "$FUNCTIONS_RUNTIME_ENV_FILE"; then
+  echo "[infra-up] RECOVERY_RELAYER_PRIVATE_KEY present in runtime env"
+else
+  echo "[infra-up] WARNING: RECOVERY_RELAYER_PRIVATE_KEY missing from $FUNCTIONS_RUNTIME_ENV_FILE"
+fi
+
 if [[ -f "$FUNCTIONS_PID_FILE" ]]; then
   old_pid="$(cat "$FUNCTIONS_PID_FILE" || true)"
   if [[ -n "$old_pid" ]] && kill -0 "$old_pid" >/dev/null 2>&1; then
@@ -91,7 +100,7 @@ fi
 
 echo "[infra-up] Starting functions serve in background..."
 nohup npx supabase functions serve \
-  --workdir "$SUPABASE_DIR" \
+  --workdir "$BACKEND_DIR" \
   --env-file "$FUNCTIONS_RUNTIME_ENV_FILE" \
   --no-verify-jwt >"$FUNCTIONS_LOG" 2>&1 &
 
