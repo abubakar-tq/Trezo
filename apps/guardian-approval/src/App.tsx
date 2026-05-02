@@ -64,6 +64,17 @@ const requestIdFromPath = (): string => {
   return parts.at(-1) ?? '';
 };
 
+const isEmailRecoveryPath = (): boolean => {
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  return parts[0] === 'email-recovery' && parts.length >= 3;
+};
+
+const emailRecoveryPathParams = (): { groupId: string; approvalId: string } | null => {
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  if (parts[0] !== 'email-recovery' || parts.length < 3) return null;
+  return { groupId: parts[1]!, approvalId: parts[2]! };
+};
+
 // ─── Landing page (no request ID in URL) ─────────────────────────────────────
 
 const LandingPage: React.FC = () => {
@@ -137,6 +148,184 @@ const LandingPage: React.FC = () => {
         </div>
 
         <div className="pt-4 border-t border-white/5 flex justify-center">
+          <p className="text-xs text-secondary flex items-center gap-1.5">
+            Powered by Trezo Protocol <ExternalLink className="w-3 h-3" />
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+// ─── Email Recovery Approval Component ──────────────────────────────────────
+
+type EmailRecoveryGroupData = {
+  smart_account_address: string;
+  chain_ids: number[];
+  multichain_recovery_data_hash: string;
+  deadline: string;
+  status: string;
+};
+
+type EmailRecoveryConfigData = {
+  threshold: number;
+};
+
+const EmailRecoveryApproval: React.FC = () => {
+  const [group, setGroup] = useState<EmailRecoveryGroupData | null>(null);
+  const [config, setConfig] = useState<EmailRecoveryConfigData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const params = useMemo(() => emailRecoveryPathParams(), []);
+
+  useEffect(() => {
+    if (!supabase || !params) {
+      setLoading(false);
+      setError('Missing Supabase config or path parameters.');
+      return;
+    }
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const { data: groupData, error: groupErr } = await supabase
+          .from('email_recovery_groups')
+          .select('smart_account_address, chain_ids, multichain_recovery_data_hash, deadline, status, config_id')
+          .eq('id', params.groupId)
+          .maybeSingle();
+
+        if (groupErr) { setError(groupErr.message); return; }
+        if (!groupData) { setError('Recovery group not found.'); return; }
+
+        setGroup(groupData as EmailRecoveryGroupData & { config_id: string });
+
+        const { data: configData, error: configErr } = await supabase
+          .from('email_recovery_configs')
+          .select('threshold')
+          .eq('id', (groupData as any).config_id)
+          .maybeSingle();
+
+        if (configErr) { setError(configErr.message); return; }
+        if (configData) setConfig(configData as EmailRecoveryConfigData);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load recovery data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void load();
+  }, [params]);
+
+  const deadlineLabel = useMemo(() => {
+    if (!group) return '';
+    const dl = new Date(group.deadline);
+    const diff = dl.getTime() - Date.now();
+    if (diff <= 0) return 'Expired';
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor((diff % 86400000) / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    return days > 0 ? `${days}d ${hours}h remaining` : `${hours}h ${mins}m remaining`;
+  }, [group]);
+
+  const expired = useMemo(() => {
+    if (!group) return false;
+    return new Date(group.deadline).getTime() < Date.now();
+  }, [group]);
+
+  const maskedWallet = group ? `${group.smart_account_address.slice(0, 8)}...${group.smart_account_address.slice(-6)}` : '';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background text-white p-6 flex flex-col items-center justify-center">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-lg glass rounded-3xl p-8 text-center">
+          <RefreshCw className="w-6 h-6 text-secondary animate-spin mx-auto mb-3" />
+          <p className="text-secondary text-sm">Loading recovery request...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background text-white p-6 flex flex-col items-center justify-center">
+      <Toaster position="top-center" toastOptions={{ style: { background: '#1e1e2e', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' } }} />
+
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+        className="w-full max-w-lg glass rounded-3xl p-8 shadow-2xl"
+      >
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0">
+            <Shield className="w-6 h-6 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold">Recovery Details</h1>
+            <p className="text-secondary text-sm">Informational Only</p>
+          </div>
+        </div>
+
+        {error ? (
+          <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex gap-3 mb-6">
+            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-400">{error}</p>
+          </div>
+        ) : group ? (
+          <>
+            <div className="p-4 rounded-2xl bg-surface border border-white/5 space-y-3 mb-6">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-secondary">Wallet</span>
+                <span className="font-mono text-xs">{maskedWallet}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-secondary flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Deadline</span>
+                <span className={expired ? 'text-yellow-400 font-semibold' : ''}>{deadlineLabel}</span>
+              </div>
+              {config && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-secondary flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Approvals needed</span>
+                  <span className="font-semibold">{config.threshold}</span>
+                </div>
+              )}
+              {group.chain_ids.length > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-secondary">Chains</span>
+                  <span className="font-mono text-xs">{group.chain_ids.length} chain{group.chain_ids.length > 1 ? 's' : ''}</span>
+                </div>
+              )}
+            </div>
+
+            {expired ? (
+              <div className="p-4 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex gap-3 mb-6">
+                <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-yellow-400">This recovery request has expired and can no longer be approved.</p>
+              </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 mb-6">
+                <p className="text-sm text-blue-400 leading-relaxed">
+                  This page is for informational purposes only. Approval happens by replying to the ZK Email relayer email you received.
+                </p>
+                <div className="mt-3 p-3 rounded-xl bg-surface border border-white/10">
+                  <p className="text-xs text-secondary mb-1">Reply command for the recovery email:</p>
+                  <code className="text-xs text-green-400 break-all">
+                    Recover account {group.smart_account_address} using recovery hash {group.multichain_recovery_data_hash}
+                  </code>
+                </div>
+                <p className="text-xs text-secondary mt-2">
+                  Your email reply is verified by the ZK Email relayer using DKIM signatures and zero-knowledge proofs.
+                  This web page cannot approve or confirm recovery. Only a verified email reply counts as approval.
+                </p>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="p-4 rounded-2xl bg-surface border border-white/5 mb-6">
+            <p className="text-sm text-secondary text-center">No recovery data found.</p>
+          </div>
+        )}
+
+        <div className="mt-8 pt-6 border-t border-white/5 flex justify-center">
           <p className="text-xs text-secondary flex items-center gap-1.5">
             Powered by Trezo Protocol <ExternalLink className="w-3 h-3" />
           </p>
@@ -381,6 +570,9 @@ const GuardianApproval: React.FC = () => {
 
   // ── No request ID — show landing page ───────────────────────────────────
   if (!requestId) {
+    if (isEmailRecoveryPath()) {
+      return <EmailRecoveryApproval />;
+    }
     return (
       <LandingPage />
     );

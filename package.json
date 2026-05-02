@@ -9,6 +9,6 @@
   "workspaces": [
     "apps/mobile",
     "apps/guardian-approval",
-    "contracts"
+    "apps/backend"
   ]
 }
