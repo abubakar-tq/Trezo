@@ -20,20 +20,21 @@ import PairDeviceScreen from "@features/profile/screens/PairDeviceScreen";
 import ProfileEditScreen from "@features/profile/screens/ProfileEditScreen";
 import RecoveryKitExportScreen from "@features/profile/screens/RecoveryKitExportScreen";
 import SecurityPrivacyScreen from "@features/profile/screens/SecurityPrivacyScreen";
+import AddGuardianScreen from "@features/recovery/screens/AddGuardianScreen";
 import CreateRecoveryRequestScreen from "@features/recovery/screens/CreateRecoveryRequestScreen";
+import GuardianManagementScreen from "@features/recovery/screens/GuardianManagementScreen";
 import RecoveryCompleteScreen from "@features/recovery/screens/RecoveryCompleteScreen";
 import RecoveryEntryScreen from "@features/recovery/screens/RecoveryEntryScreen";
 import RecoveryProgressScreen from "@features/recovery/screens/RecoveryProgressScreen";
-import ShareRecoveryScreen from "@features/recovery/screens/ShareRecoveryScreen";
-import AATestScreen from "@features/wallet/screens/AATestScreen";
-import AAWalletDebugScreen from "@features/wallet/screens/AAWalletDebugScreen";
-import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
-import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScreen";
-import AddGuardianScreen from "@features/recovery/screens/AddGuardianScreen";
-import GuardianManagementScreen from "@features/recovery/screens/GuardianManagementScreen";
 import SecurityCenterScreen from "@features/recovery/screens/SecurityCenterScreen";
+import ShareRecoveryScreen from "@features/recovery/screens/ShareRecoveryScreen";
 import ThresholdConfigurationScreen from "@features/recovery/screens/ThresholdConfigurationScreen";
 import SettingsScreen from "@features/settings/screens/SettingsScreen";
+import AATestScreen from "@features/wallet/screens/AATestScreen";
+import AAWalletDebugScreen from "@features/wallet/screens/AAWalletDebugScreen";
+import BuyScreen from "@features/wallet/screens/BuyScreen";
+import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
+import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScreen";
 import ReceiveScreen from "@features/wallet/screens/ReceiveScreen";
 import SendScreen from "@features/wallet/screens/SendScreen";
 import TransactionHistoryScreen from "@features/wallet/screens/TransactionHistoryScreen";
@@ -396,6 +397,11 @@ const RootNavigation = () => {
               name="ThresholdConfiguration"
               component={ThresholdConfigurationScreen}
               options={{ headerShown: false, animation: "slide_from_right" }}
+            />
+            <Stack.Screen
+              name="Buy"
+              component={BuyScreen}
+              options={{ headerShown: false, animation: "slide_from_bottom" }}
             />
             <Stack.Screen
               name="Receive"

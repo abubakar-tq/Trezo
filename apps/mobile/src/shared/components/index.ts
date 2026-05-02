@@ -16,4 +16,8 @@ export * from "./TokenRegistry";
 // Design System - Component Tiers
 export * from "./Tier1";
 export * from "./Tier2";
+export * from './modals/AccountPickerModal';
+export * from './modals/AssetPickerModal';
+export * from './modals/NetworkPickerModal';
 export * from "./Tier3";
+export * from "./modals";

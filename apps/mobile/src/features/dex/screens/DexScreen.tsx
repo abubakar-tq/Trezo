@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,14 @@ import {
   Dimensions,
 } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '@theme';
 import { withAlpha } from '@utils/color';
-import { TabScreenContainer, MeshBackground, TokenIcon } from '@shared/components';
-import { useTabContentBottomInset } from '@hooks';
+import * as Haptics from 'expo-haptics';
+import { TabScreenContainer, MeshBackground, TokenIcon, AssetPickerModal, NetworkPickerModal, AccountPickerModal, type Asset, type Network, type Account } from '@shared/components';
+import { useTabContentBottomInset, useWalletData } from '@hooks';
+import { useWalletStore } from '../../wallet/store/useWalletStore';
 
 const { width } = Dimensions.get('window');
 
@@ -21,14 +25,62 @@ type DexTab = 'swap' | 'bridge';
 export const DexScreen: React.FC = () => {
   const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
+  const insets = useSafeAreaInsets();
+  const route = useRoute<any>();
   const contentBottomInset = useTabContentBottomInset();
+  const { tokens } = useWalletData();
+  const { accounts, activeAccountId, setActiveAccount } = useWalletStore();
+  
   const [activeTab, setActiveTab] = useState<DexTab>('swap');
-  const [fromNetwork, setFromNetwork] = useState('Ethereum');
-  const [toNetwork, setToNetwork] = useState('Arbitrum');
+  
+  // Modal visibility states
+  const [isAssetPickerVisible, setIsAssetPickerVisible] = useState(false);
+  const [isNetworkPickerVisible, setIsNetworkPickerVisible] = useState(false);
+  const [isAccountPickerVisible, setIsAccountPickerVisible] = useState(false);
+  const [pickingType, setPickingType] = useState<'from' | 'to'>('from');
+  
+  const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts[0];
+
+  // Selection states
+  const [fromNetwork, setFromNetwork] = useState<Network>({ id: 'ethereum', name: 'Ethereum', chainId: 1, color: '#627EEA' });
+  const [toNetwork, setToNetwork] = useState<Network>({ id: 'arbitrum', name: 'Arbitrum', chainId: 42161, color: '#28A0F0' });
+  
+  const [fromToken, setFromToken] = useState<Asset>({ symbol: 'USDC', name: 'USD Coin' });
+  const [toToken, setToToken] = useState<Asset>({ symbol: 'ETH', name: 'Ethereum' });
+  
   const [recipientAddress, setRecipientAddress] = useState('0x4b0c...3796');
   
+  // Handle deep linking from Home "Swap" button
+  useEffect(() => {
+    if (route.params?.initialTab) {
+      setActiveTab(route.params.initialTab);
+    }
+  }, [route.params?.initialTab]);
+
   const isDark = resolvedMode === 'dark';
   const glassBackground = isDark ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF';
+
+  const handleAssetSelect = (asset: Asset) => {
+    if (pickingType === 'from') setFromToken(asset);
+    else setToToken(asset);
+  };
+
+  const handleNetworkSelect = (network: Network) => {
+    if (pickingType === 'from') setFromNetwork(network);
+    else setToNetwork(network);
+  };
+
+  const handleAccountSelect = (account: any) => {
+    const walletAccount: any = {
+      address: account.address,
+      name: account.name,
+      isActive: true,
+      createdAt: account.createdAt || new Date().toISOString()
+    };
+    setActiveAccount(walletAccount);
+    setIsAccountPickerVisible(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
 
   return (
     <TabScreenContainer includeBottomInset>
@@ -36,64 +88,89 @@ export const DexScreen: React.FC = () => {
       
       <ScrollView 
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomInset + 40 }]}
+        contentContainerStyle={[
+          styles.scrollContent, 
+          { 
+            paddingTop: Math.max(insets.top, 16),
+            paddingBottom: contentBottomInset + 40 
+          }
+        ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Tabs */}
+        {/* Header - Minimalist & Focused */}
         <View style={styles.header}>
-          <View style={styles.tabContainer}>
-            <TouchableOpacity 
-              onPress={() => setActiveTab('swap')}
-              style={[styles.tab, activeTab === 'swap' && styles.activeTab]}
-            >
-              <Text style={[styles.tabText, { color: activeTab === 'swap' ? colors.textPrimary : colors.textSecondary }]}>Swap</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => setActiveTab('bridge')}
-              style={[styles.tab, activeTab === 'bridge' && styles.activeTab]}
-            >
-              <Text style={[styles.tabText, { color: activeTab === 'bridge' ? colors.textPrimary : colors.textSecondary }]}>Bridge</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.headerActions}>
-            <TouchableOpacity style={[styles.iconButton, { backgroundColor: colors.glass }]}>
-              <Ionicons name="options-outline" size={20} color={colors.textPrimary} />
-            </TouchableOpacity>
-            <View style={styles.profilePlaceholder}>
-               <View style={[styles.avatar, { backgroundColor: colors.accent }]} />
-            </View>
-          </View>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Exchange</Text>
         </View>
 
-        {/* Network Selection Row (Swap specific) */}
-        {activeTab === 'swap' && (
-          <TouchableOpacity style={[styles.networkSelector, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
-            <View style={styles.networkInfo}>
-               <View style={[styles.networkIcon, { backgroundColor: '#627EEA' }]}>
-                 <Text style={styles.networkIconText}>Ξ</Text>
-               </View>
-               <Text style={[styles.networkName, { color: colors.textPrimary }]}>{fromNetwork}</Text>
-            </View>
-            <Feather name="chevron-down" size={16} color={colors.textSecondary} />
+        {/* Tab Switcher - Centered Segmented Control */}
+        <View style={[styles.tabContainer, { backgroundColor: colors.surfaceCard }]}>
+          <TouchableOpacity 
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab('swap');
+            }}
+            style={[styles.tab, activeTab === 'swap' && { backgroundColor: colors.accent }]}
+          >
+            <Text style={[
+              styles.tabText, 
+              { color: activeTab === 'swap' ? colors.textOnAccent : colors.textSecondary }
+            ]}>Swap</Text>
           </TouchableOpacity>
-        )}
+          <TouchableOpacity 
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab('bridge');
+            }}
+            style={[styles.tab, activeTab === 'bridge' && { backgroundColor: colors.accent }]}
+          >
+            <Text style={[
+              styles.tabText, 
+              { color: activeTab === 'bridge' ? colors.textOnAccent : colors.textSecondary }
+            ]}>Bridge</Text>
+          </TouchableOpacity>
+        </View>
 
-        {/* Main Interface Card */}
+        {/* Main Swap/Bridge Interface Card */}
         {activeTab === 'swap' ? (
           <View style={[styles.mainCard, { backgroundColor: glassBackground, borderColor: colors.border }]}>
+            {/* Integrated Network Header */}
+            <TouchableOpacity 
+              style={[styles.integratedNetworkBar, { borderBottomColor: withAlpha(colors.border, 0.1) }]}
+              onPress={() => {
+                setPickingType('from');
+                setIsNetworkPickerVisible(true);
+              }}
+            >
+              <View style={styles.networkInfo}>
+                 <View style={[styles.networkIcon, { backgroundColor: fromNetwork.color }]}>
+                   <Text style={styles.networkIconText}>{fromNetwork.name[0]}</Text>
+                 </View>
+                 <Text style={[styles.networkName, { color: colors.textPrimary }]}>{fromNetwork.name}</Text>
+              </View>
+              <View style={styles.networkAction}>
+                <Text style={[styles.networkActionText, { color: colors.textSecondary }]}>Switch Network</Text>
+                <Feather name="chevron-right" size={14} color={colors.textMuted} />
+              </View>
+            </TouchableOpacity>
+
             {/* Pay Section */}
             <View style={styles.inputContainer}>
               <View style={styles.inputHeader}>
                 <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Pay with</Text>
-                <TouchableOpacity>
+                <TouchableOpacity onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
                   <Text style={[styles.maxButton, { color: colors.accent }]}>Max</Text>
                 </TouchableOpacity>
               </View>
               <View style={styles.inputRow}>
-                <TouchableOpacity style={styles.tokenSelect}>
-                  <TokenIcon symbol="USDC" size={32} style={{ marginRight: 8 }} />
-                  <Text style={[styles.tokenSymbol, { color: colors.textPrimary }]}>USDC</Text>
+                <TouchableOpacity 
+                  style={[styles.tokenSelect, { backgroundColor: withAlpha(colors.textSecondary, 0.05) }]}
+                  onPress={() => {
+                    setPickingType('from');
+                    setIsAssetPickerVisible(true);
+                  }}
+                >
+                  <TokenIcon symbol={fromToken.symbol} size={32} />
+                  <Text style={[styles.tokenSymbol, { color: colors.textPrimary }]}>{fromToken.symbol}</Text>
                   <Feather name="chevron-down" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
                 <TextInput 
@@ -105,7 +182,7 @@ export const DexScreen: React.FC = () => {
                 />
               </View>
               <View style={styles.inputFooter}>
-                <Text style={[styles.balanceText, { color: colors.danger }]}>Balance: 0.00</Text>
+                <Text style={[styles.balanceText, { color: colors.textSecondary }]}>Balance: 124.50 {fromToken.symbol}</Text>
                 <Text style={[styles.fiatValue, { color: colors.textMuted }]}>$84.99</Text>
               </View>
             </View>
@@ -113,8 +190,16 @@ export const DexScreen: React.FC = () => {
             {/* Swap Middle Divider */}
             <View style={styles.dividerContainer}>
               <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-              <TouchableOpacity style={[styles.swapIconButton, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
-                <Ionicons name="swap-vertical" size={18} color={colors.textPrimary} />
+              <TouchableOpacity 
+                style={[styles.swapIconButton, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  const tempToken = fromToken;
+                  setFromToken(toToken);
+                  setToToken(tempToken);
+                }}
+              >
+                <Ionicons name="swap-vertical" size={20} color={colors.accent} />
               </TouchableOpacity>
               <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
             </View>
@@ -125,106 +210,146 @@ export const DexScreen: React.FC = () => {
                 <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Receive</Text>
               </View>
               <View style={styles.inputRow}>
-                <TouchableOpacity style={styles.tokenSelect}>
-                  <TokenIcon symbol="ETH" size={32} style={{ marginRight: 8 }} />
-                  <Text style={[styles.tokenSymbol, { color: colors.textPrimary }]}>ETH</Text>
+                <TouchableOpacity 
+                  style={[styles.tokenSelect, { backgroundColor: withAlpha(colors.textSecondary, 0.05) }]}
+                  onPress={() => {
+                    setPickingType('to');
+                    setIsAssetPickerVisible(true);
+                  }}
+                >
+                  <TokenIcon symbol={toToken.symbol} size={32} />
+                  <Text style={[styles.tokenSymbol, { color: colors.textPrimary }]}>{toToken.symbol}</Text>
                   <Feather name="chevron-down" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
                 <Text style={[styles.amountResult, { color: colors.textPrimary }]}>0.02451</Text>
               </View>
               <View style={styles.inputFooter}>
-                <Text style={[styles.balanceText, { color: colors.textMuted }]}>Balance: 0.00</Text>
+                <Text style={[styles.balanceText, { color: colors.textMuted }]}>No balance</Text>
                 <Text style={[styles.fiatValue, { color: colors.textMuted }]}>≈$83.56 (-0.69%)</Text>
               </View>
             </View>
           </View>
         ) : (
-          /* "One Page" Compact Bridge Redesign */
+          /* "One Page" Compact Bridge Card */
           <View style={styles.bridgeContainer}>
             <View style={[styles.unifiedBridgeCard, { backgroundColor: glassBackground, borderColor: colors.border }]}>
-               {/* Integrated Network & Token Row */}
-               <View style={styles.bridgeTopRow}>
-                 <TouchableOpacity style={[styles.bridgeNetworkPill, { backgroundColor: withAlpha(colors.accent, 0.05), borderColor: colors.border }]}>
-                    <View style={[styles.miniIcon, { backgroundColor: '#627EEA' }]}>
-                      <Text style={styles.miniIconText}>Ξ</Text>
-                    </View>
-                    <Text style={[styles.bridgeNetworkName, { color: colors.textPrimary }]}>{fromNetwork}</Text>
-                    <Feather name="chevron-down" size={12} color={colors.textMuted} />
-                 </TouchableOpacity>
-                 
-                  <View style={styles.transferArrowBox}>
-                    <Ionicons name="arrow-forward" size={16} color={colors.accent} />
+               {/* Integrated Network Selection Integrated */}
+               <View style={styles.bridgeNetworksIntegrated}>
+                  <View style={styles.bridgeNetworkHalf}>
+                    <Text style={[styles.bridgeMiniLabel, { color: colors.textMuted }]}>FROM</Text>
+                    <TouchableOpacity 
+                      style={[styles.bridgeNetworkPillIntegrated, { backgroundColor: withAlpha(colors.textSecondary, 0.03) }]}
+                      onPress={() => {
+                        setPickingType('from');
+                        setIsNetworkPickerVisible(true);
+                      }}
+                    >
+                      <View style={[styles.miniIcon, { backgroundColor: fromNetwork.color }]}>
+                        <Text style={styles.miniIconText}>{fromNetwork.name[0]}</Text>
+                      </View>
+                      <Text style={[styles.bridgeNetworkNameText, { color: colors.textPrimary }]} numberOfLines={1}>{fromNetwork.name}</Text>
+                      <Feather name="chevron-down" size={10} color={colors.textMuted} />
+                    </TouchableOpacity>
                   </View>
 
-                 <TouchableOpacity style={[styles.bridgeNetworkPill, { backgroundColor: withAlpha(colors.accentAlt, 0.05), borderColor: colors.border }]}>
-                    <View style={[styles.miniIcon, { backgroundColor: '#96BED9' }]}>
-                      <Text style={styles.miniIconText}>A</Text>
-                    </View>
-                    <Text style={[styles.bridgeNetworkName, { color: colors.textPrimary }]}>{toNetwork}</Text>
-                    <Feather name="chevron-down" size={12} color={colors.textMuted} />
-                 </TouchableOpacity>
+                  <View style={styles.bridgeArrowBox}>
+                    <Ionicons name="arrow-forward" size={14} color={colors.accent} />
+                  </View>
+
+                  <View style={styles.bridgeNetworkHalf}>
+                    <Text style={[styles.bridgeMiniLabel, { color: colors.textMuted, textAlign: 'right' }]}>TO</Text>
+                    <TouchableOpacity 
+                      style={[styles.bridgeNetworkPillIntegrated, { backgroundColor: withAlpha(colors.textSecondary, 0.03) }]}
+                      onPress={() => {
+                        setPickingType('to');
+                        setIsNetworkPickerVisible(true);
+                      }}
+                    >
+                      <View style={[styles.miniIcon, { backgroundColor: toNetwork.color }]}>
+                        <Text style={styles.miniIconText}>{toNetwork.name[0]}</Text>
+                      </View>
+                      <Text style={[styles.bridgeNetworkNameText, { color: colors.textPrimary }]} numberOfLines={1}>{toNetwork.name}</Text>
+                      <Feather name="chevron-down" size={10} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
                </View>
 
-               <View style={styles.compactBridgeInput}>
-                  <View style={styles.bridgeInputRow}>
-                    <TouchableOpacity style={styles.tokenSelectCompact}>
-                       <TokenIcon symbol="USDC" size={32} />
-                       <Text style={[styles.tokenSymbol, { color: colors.textPrimary, fontSize: 18 }]}>USDC</Text>
-                       <Feather name="chevron-down" size={14} color={colors.textMuted} />
+               <View style={styles.bridgeInputIntegrated}>
+                  <View style={styles.inputHeader}>
+                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Bridge Amount</Text>
+                    <TouchableOpacity onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
+                      <Text style={[styles.maxButton, { color: colors.accent }]}>Use Max</Text>
                     </TouchableOpacity>
+                  </View>
+                  
+                  <View style={styles.bridgeInputRowIntegrated}>
+                    <TouchableOpacity 
+                      style={[styles.tokenSelectCompactIntegrated, { backgroundColor: withAlpha(colors.textSecondary, 0.05) }]}
+                      onPress={() => {
+                        setPickingType('from');
+                        setIsAssetPickerVisible(true);
+                      }}
+                    >
+                       <TokenIcon symbol={fromToken.symbol} size={28} />
+                       <Text style={[styles.tokenSymbolText, { color: colors.textPrimary }]}>{fromToken.symbol}</Text>
+                       <Feather name="chevron-down" size={12} color={colors.textMuted} />
+                    </TouchableOpacity>
+                    
                     <TextInput 
-                      style={[styles.bridgeAmountInputCompact, { color: colors.textPrimary }]}
+                      style={[styles.bridgeAmountInputIntegrated, { color: colors.textPrimary }]}
                       placeholder="0.00"
                       placeholderTextColor={colors.textMuted}
                       keyboardType="decimal-pad"
                       defaultValue="85.00"
                     />
                   </View>
-                  <View style={styles.bridgeInputFooter}>
-                    <Text style={[styles.balanceTextSmall, { color: colors.textMuted }]}>Balance: 0.00</Text>
-                    <TouchableOpacity>
-                      <Text style={[styles.maxButtonSmall, { color: colors.accent }]}>USE MAX</Text>
-                    </TouchableOpacity>
-                  </View>
                </View>
                
-               <View style={[styles.outputBanner, { backgroundColor: withAlpha(colors.accent, 0.05) }]}>
-                  <View style={styles.outputHeader}>
-                    <Text style={[styles.outputLabel, { color: colors.textSecondary }]}>ESTIMATED RECEIVE</Text>
-                    <View style={styles.routeBadge}>
-                      <Ionicons name="flash" size={10} color={colors.accent} />
-                      <Text style={[styles.routeLabelTiny, { color: colors.accent }]}>STARGATE</Text>
+               <View style={[styles.outputBannerIntegrated, { backgroundColor: withAlpha(colors.accent, 0.04), borderColor: withAlpha(colors.accent, 0.1) }]}>
+                  <View style={styles.outputHeaderRow}>
+                    <Text style={[styles.outputLabelText, { color: colors.textSecondary }]}>YOU RECEIVE</Text>
+                    <View style={[styles.routeBadgeCompact, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+                      <Ionicons name="flash" size={8} color={colors.accent} />
+                      <Text style={[styles.routeLabelTextTiny, { color: colors.accent }]}>STARGATE</Text>
                     </View>
                   </View>
-                  <View style={styles.outputMain}>
-                    <Text style={[styles.outputValue, { color: colors.textPrimary }]}>84.75 USDC</Text>
-                    <Text style={[styles.outputFiat, { color: colors.textMuted }]}>≈ $84.72</Text>
+                  <View style={styles.outputValueRow}>
+                    <Text style={[styles.outputValueLarge, { color: colors.textPrimary }]}>84.75 {fromToken.symbol}</Text>
+                    <Text style={[styles.outputFiatText, { color: colors.textMuted }]}>≈ $84.72</Text>
                   </View>
                </View>
             </View>
 
-            {/* Compact Integrated Details */}
-            <View style={styles.compactMetaRow}>
-              <View style={styles.metaItem}>
-                <Feather name="clock" size={12} color={colors.textMuted} />
-                <Text style={[styles.metaText, { color: colors.textSecondary }]}>~3 mins</Text>
+            {/* Bridge Meta Info - Cleanly aligned */}
+            <View style={styles.bridgeMetaContainer}>
+              <View style={styles.metaBadgeGroup}>
+                <View style={[styles.metaBadge, { backgroundColor: colors.surfaceCard }]}>
+                  <Feather name="clock" size={10} color={colors.textSecondary} />
+                  <Text style={[styles.metaBadgeText, { color: colors.textSecondary }]}>3m</Text>
+                </View>
+                <View style={[styles.metaBadge, { backgroundColor: colors.surfaceCard }]}>
+                  <Feather name="activity" size={10} color={colors.textSecondary} />
+                  <Text style={[styles.metaBadgeText, { color: colors.textSecondary }]}>0.5%</Text>
+                </View>
               </View>
-              <View style={styles.metaItem}>
-                <Feather name="activity" size={12} color={colors.textMuted} />
-                <Text style={[styles.metaText, { color: colors.textSecondary }]}>0.5% fee</Text>
-              </View>
-              <TouchableOpacity style={styles.addressLink}>
-                <Text style={[styles.addressTextSmall, { color: colors.accent }]} numberOfLines={1}>{recipientAddress}</Text>
+              
+              <TouchableOpacity style={[styles.recipientPill, { backgroundColor: withAlpha(colors.accentAlt, 0.08) }]}>
+                <Ionicons name="wallet-outline" size={12} color={colors.accentAlt} />
+                <Text style={[styles.recipientTextSmall, { color: colors.accentAlt }]} numberOfLines={1}>
+                  {recipientAddress.slice(0, 6)}...{recipientAddress.slice(-4)}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
 
-        {/* Transaction Details - Unified for both */}
-        <View style={[styles.detailsCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.5), borderColor: colors.border, marginTop: activeTab === 'bridge' ? 0 : 12 }]}>
+        
+
+        {/* Detailed Transaction Stats */}
+        <View style={[styles.detailsCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.5), borderColor: colors.border, marginTop: activeTab === 'bridge' ? 12 : 12 }]}>
           <View style={styles.detailRow}>
             <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Rate</Text>
-            <Text style={[styles.detailValue, { color: colors.accent }]}>1 ETH = 3,450.20 USDC</Text>
+            <Text style={[styles.detailValue, { color: colors.textPrimary }]}>1 ETH = 3,450.20 USDC</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Slippage</Text>
@@ -235,19 +360,44 @@ export const DexScreen: React.FC = () => {
               <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Trezo fee</Text>
               <Feather name="info" size={12} color={colors.textMuted} style={{ marginLeft: 4 }} />
             </View>
-            <Text style={[styles.detailValue, { color: colors.textPrimary }]}>0.5%</Text>
+            <Text style={[styles.detailValue, { color: colors.accent, fontWeight: '900' }]}>FREE</Text>
           </View>
         </View>
 
-        {/* Action Button */}
+        {/* Ultimate Action Button */}
         <TouchableOpacity 
-          style={[styles.mainActionButton, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}
-          disabled
+          style={[styles.mainActionButton, { backgroundColor: colors.accent }]}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.mainActionButtonText, { color: colors.textMuted }]}>Insufficient balance</Text>
+          <Text style={[styles.mainActionButtonText, { color: colors.textOnAccent }]}>
+            {activeTab === 'swap' ? 'Review Swap' : 'Review Bridge'}
+          </Text>
         </TouchableOpacity>
 
+
       </ScrollView>
+
+      <AccountPickerModal
+        isVisible={isAccountPickerVisible}
+        onClose={() => setIsAccountPickerVisible(false)}
+        onSelect={handleAccountSelect}
+        accounts={accounts}
+        selectedAddress={activeAccount?.address}
+      />
+
+      <AssetPickerModal
+        isVisible={isAssetPickerVisible}
+        onClose={() => setIsAssetPickerVisible(false)}
+        onSelect={handleAssetSelect}
+        assets={tokens}
+      />
+
+      <NetworkPickerModal
+        isVisible={isNetworkPickerVisible}
+        onClose={() => setIsNetworkPickerVisible(false)}
+        onSelect={handleNetworkSelect}
+        selectedNetworkId={pickingType === 'from' ? fromNetwork.id : toNetwork.id}
+      />
     </TabScreenContainer>
   );
 };
@@ -257,35 +407,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 8,
     paddingHorizontal: 16,
+    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+    marginTop: 10,
   },
-  tabContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-  },
-  tab: {
-    paddingVertical: 8,
-  },
-  activeTab: {
-    borderBottomWidth: 0, // We'll use text color only for minimalist look, or add a dot
-  },
-  tabText: {
+  title: {
     fontSize: 28,
     fontWeight: '900',
-    letterSpacing: -0.5,
+    letterSpacing: -0.8,
   },
-  headerActions: {
+  headerRightGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+  },
+  accountSelectorMini: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
+  miniAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniAvatarText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#FFF',
   },
   iconButton: {
     width: 40,
@@ -293,29 +454,39 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  profilePlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
-  avatar: {
-    flex: 1,
-  },
-  networkSelector: {
+  tabContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
+    padding: 4,
+    borderRadius: 16,
     marginBottom: 20,
-    alignSelf: 'flex-start',
-    minWidth: 140,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  mainCard: {
+    borderRadius: 32,
+    padding: 0,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  integratedNetworkBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
   },
   networkInfo: {
     flexDirection: 'row',
@@ -325,7 +496,7 @@ const styles = StyleSheet.create({
   networkIcon: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -336,101 +507,20 @@ const styles = StyleSheet.create({
   },
   networkName: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  bridgeNetworkRow: {
+  networkAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    gap: 8,
-  },
-  networkPill: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 1,
     gap: 4,
   },
-  pillLabel: {
-    fontSize: 11,
+  networkActionText: {
+    fontSize: 12,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  pillContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  pillName: {
-    fontSize: 14,
-    fontWeight: '800',
-    flex: 1,
-  },
-  miniIcon: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  miniIconText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  bridgeSwapButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  recipientCard: {
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  recipientHeader: {
-    marginBottom: 12,
-  },
-  recipientTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  addressSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 16,
-  },
-  addressLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  chainIndicator: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-  },
-  addressText: {
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: 'monospace',
-  },
-  mainCard: {
-    borderRadius: 24,
-    padding: 16,
-    borderWidth: 1,
-    marginBottom: 12,
   },
   inputContainer: {
-    gap: 12,
+    padding: 20,
+    gap: 10,
   },
   inputHeader: {
     flexDirection: 'row',
@@ -438,50 +528,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
   },
   maxButton: {
     fontSize: 13,
-    fontWeight: '800',
-    textTransform: 'uppercase',
+    fontWeight: '900',
   },
   inputRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 16,
   },
   tokenSelect: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 10,
+    borderRadius: 16,
     gap: 10,
-  },
-  tokenIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tokenIconText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFF',
+    minWidth: 110,
   },
   tokenSymbol: {
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 16,
   },
   amountInput: {
-    fontSize: 32,
-    fontWeight: '800',
+    fontSize: 36,
+    fontWeight: '900',
     textAlign: 'right',
     flex: 1,
+    letterSpacing: -1,
+    padding: 0,
   },
   amountResult: {
-    fontSize: 32,
-    fontWeight: '800',
+    fontSize: 36,
+    fontWeight: '900',
     textAlign: 'right',
+    letterSpacing: -1,
   },
   inputFooter: {
     flexDirection: 'row',
@@ -489,38 +574,195 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   balanceText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   fiatValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 12,
+    height: 24,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    opacity: 0.3,
   },
   swapIconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    marginHorizontal: 12,
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -24,
+    zIndex: 10,
+  },
+  bridgeContainer: {
+    gap: 16,
+  },
+  unifiedBridgeCard: {
+    borderRadius: 32,
+    padding: 20,
+    borderWidth: 1,
+    gap: 20,
+  },
+  bridgeNetworksIntegrated: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  bridgeNetworkHalf: {
+    flex: 1,
+    gap: 8,
+  },
+  bridgeMiniLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  bridgeNetworkPillIntegrated: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 12,
+    gap: 8,
+  },
+  miniIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniIconText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  bridgeNetworkNameText: {
+    fontSize: 13,
+    fontWeight: '800',
+    flex: 1,
+  },
+  bridgeArrowBox: {
+    marginTop: 20,
+  },
+  bridgeInputIntegrated: {
+    gap: 10,
+  },
+  bridgeInputRowIntegrated: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  tokenSelectCompactIntegrated: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 14,
+    gap: 8,
+  },
+  tokenSymbolText: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  bridgeAmountInputIntegrated: {
+    fontSize: 32,
+    fontWeight: '900',
+    flex: 1,
+    textAlign: 'right',
+    letterSpacing: -1,
+    padding: 0,
+  },
+  outputBannerIntegrated: {
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    gap: 8,
+  },
+  outputHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  outputLabelText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  routeBadgeCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  routeLabelTextTiny: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  outputValueRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  outputValueLarge: {
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  outputFiatText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  bridgeMetaContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  metaBadgeGroup: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  metaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    gap: 4,
+  },
+  metaBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  recipientPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 100,
+    gap: 6,
+  },
+  recipientTextSmall: {
+    fontSize: 11,
+    fontWeight: '800',
+    maxWidth: 120,
   },
   detailsCard: {
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 16,
     borderWidth: 1,
     gap: 12,
-    marginBottom: 24,
   },
   detailRow: {
     flexDirection: 'row',
@@ -532,257 +774,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   detailLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  detailValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
+  detailValue: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
   mainActionButton: {
-    height: 60,
-    borderRadius: 20,
+    height: 56,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
+    marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   mainActionButtonText: {
     fontSize: 16,
-    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  // Unified Bridge Styles
-  unifiedBridgeCard: {
-    borderRadius: 24,
-    padding: 16,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  compactBridgeInput: {
-    gap: 8,
-    marginBottom: 20,
-  },
-  bridgeInputRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 16,
-  },
-  tokenSelectCompact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    padding: 8,
-    borderRadius: 12,
-  },
-  bridgeAmountInputCompact: {
-    fontSize: 28,
-    fontWeight: '900',
-    flex: 1,
-    textAlign: 'right',
-  },
-  bridgeInputFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  balanceTextSmall: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  maxButtonSmall: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  compactTransferRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    paddingHorizontal: 8,
-  },
-  bridgeContainer: {
-    flex: 1,
-  },
-  transferChain: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  chainDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  chainLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  transferArrowBox: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 12,
-  },
-  transferLineSolid: {
-    flex: 1,
-    height: 1,
-    opacity: 0.5,
-  },
-  planeIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 8,
-  },
-  outputBanner: {
-    borderRadius: 16,
-    padding: 12,
-    alignItems: 'center',
-    gap: 4,
-  },
-  outputLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  outputValue: {
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  outputFiat: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  routePill: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  routeLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  routeLabelSmall: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  routeTimeSmall: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  recipientRowCompact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  recipientTitleSmall: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  addressPillCompact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(0,255,255,0.05)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  addressTextSmall: {
-    fontSize: 12,
-    fontWeight: '600',
-    maxWidth: 160,
-  },
-  // One Page Bridge Styles
-  bridgeTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    gap: 8,
-  },
-  bridgeNetworkPill: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 8,
-  },
-  bridgeNetworkName: {
-    fontSize: 13,
-    fontWeight: '800',
-    flex: 1,
-  },
-  outputHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 4,
-  },
-  routeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  routeLabelTiny: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  outputMain: {
-    alignItems: 'center',
-  },
-  compactMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    marginTop: 4,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  metaText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  addressLink: {
-    backgroundColor: 'rgba(0,255,255,0.05)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  transferArrowBoxCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    letterSpacing: 1.5,
   },
 });
 

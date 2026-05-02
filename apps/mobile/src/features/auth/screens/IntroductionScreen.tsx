@@ -92,7 +92,7 @@ const IntroductionScreen: React.FC = () => {
         </View>
 
         <View style={{ paddingBottom: 48, paddingHorizontal: 24 }}>
-          <Button title="Get Started" onPress={handleGetStarted} variant="primary" size="large" fullWidth />
+          <Button label="Get Started" onPress={handleGetStarted} variant="primary" size="lg" fullWidth />
         </View>
       </SafeAreaView>
     </LinearGradient>

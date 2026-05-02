@@ -17,7 +17,6 @@ module.exports = function (api) {
           allowUndefined: true,
         },
       ],
-      "react-native-reanimated/plugin",
       [
         "module-resolver",
         {
@@ -37,6 +36,7 @@ module.exports = function (api) {
           },
         },
       ],
+      "react-native-reanimated/plugin",
     ],
   };
 };

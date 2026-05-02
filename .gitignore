@@ -32,3 +32,6 @@ decode_calldata.js
 find_error.js
 apps/backend/supabase/.temp/
 apps/guardian-approval/.env
+.context/
+*.context.md
+

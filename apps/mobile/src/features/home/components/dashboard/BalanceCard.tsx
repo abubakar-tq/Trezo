@@ -1,9 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
 import { withAlpha } from '@utils/color';
-import Svg, { Path } from 'react-native-svg';
+import { Sparkline } from '@shared/components/Sparkline';
 
 interface BalanceCardProps {
   balance: number;
@@ -28,6 +27,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
+  const { width } = Dimensions.get('window');
 
   return (
     <View style={[styles.container, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
@@ -82,18 +82,6 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
           </Text>
         </View>
 
-        {/* SVG chart — viewBox + extra vertical room prevents line clipping */}
-        <View style={styles.pulseContainer}>
-          <Svg height="48" width="100%" viewBox="0 0 320 48">
-            <Path
-              d="M4 36 Q 44 16, 84 32 T 164 24 T 244 38 T 316 18"
-              fill="none"
-              stroke={isDeployed ? colors.accent : '#F59E0B'}
-              strokeWidth="1.5"
-              strokeOpacity={isDeployed ? "0.6" : "0.35"}
-            />
-          </Svg>
-        </View>
 
         <View style={[styles.footer, { borderTopColor: colors.glassBorder }]}>
           <View style={[styles.addressBox, { backgroundColor: colors.surfaceMuted }]}>
@@ -160,13 +148,14 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   currency: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 20,
+    fontWeight: '800',
+    marginRight: 2,
   },
   balance: {
-    fontSize: 25,
-    fontWeight: '800',
-    letterSpacing: -0.5,
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: -1,
   },
   pulseContainer: {
     marginTop: 16,

@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, FlatList, Animated, StyleSheet } from 'react-native';
 import { Feather } from "@expo/vector-icons";
+import { MARKET_CHAIN_OPTIONS, type EvmChain, type MarketToken } from "@lib/api/web3Data";
+import { MarketTokenSkeleton } from "@shared/components/ui";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
-import { MARKET_CHAIN_OPTIONS, type MarketToken, type EvmChain } from "@lib/api/web3Data";
-import { MarketTokenSkeleton } from "@shared/components/ui";
+import React, { useMemo } from 'react';
+import { Animated, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface MarketSectionProps {
   tokens: MarketToken[];
@@ -144,20 +144,16 @@ export const MarketSection: React.FC<MarketSectionProps> = ({
       </View>
 
       {isInitialLoading ? (
-        <FlatList
-          data={skeletonData}
-          keyExtractor={(item) => `market-skeleton-${item}`}
-          renderItem={() => <MarketTokenSkeleton />}
-          scrollEnabled={false}
-        />
+        <View style={styles.tokenList}>
+          {skeletonData.map((_, index) => (
+            <MarketTokenSkeleton key={`market-skeleton-${index}`} />
+          ))}
+        </View>
       ) : (
-        <FlatList
-          data={filteredTokens}
-          keyExtractor={(item) => `${item.chain}-${item.address}`}
-          renderItem={renderTokenItem}
-          scrollEnabled={false}
-          ListEmptyComponent={renderEmptyComponent}
-        />
+        <View style={styles.tokenList}>
+          {filteredTokens.map((item) => renderTokenItem({ item }))}
+          {filteredTokens.length === 0 && renderEmptyComponent()}
+        </View>
       )}
     </View>
   );
@@ -237,5 +233,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '500',
+    padding: 0,
+    margin: 0,
+  },
+  tokenList: {
+    gap: 8,
   },
 });
