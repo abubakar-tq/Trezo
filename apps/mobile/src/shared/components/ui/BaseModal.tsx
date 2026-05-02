@@ -21,8 +21,10 @@ import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
 
 export interface BaseModalProps extends Omit<ModalProps, "children"> {
-  visible: boolean;
-  onDismiss: () => void;
+  visible?: boolean;
+  isVisible?: boolean; // Alias for visible
+  onDismiss?: () => void;
+  onClose?: () => void; // Alias for onDismiss
   title?: string;
   children: React.ReactNode;
   showCloseButton?: boolean;
@@ -32,7 +34,9 @@ export interface BaseModalProps extends Omit<ModalProps, "children"> {
 
 export const BaseModal: React.FC<BaseModalProps> = ({
   visible,
+  isVisible,
   onDismiss,
+  onClose,
   title,
   children,
   showCloseButton = true,
@@ -44,16 +48,19 @@ export const BaseModal: React.FC<BaseModalProps> = ({
   const { colors } = theme;
   const styles = createStyles(colors);
 
+  const isModalVisible = visible ?? isVisible ?? false;
+  const handleDismiss = onDismiss ?? onClose ?? (() => {});
+
   return (
     <Modal
-      visible={visible}
+      visible={isModalVisible}
       transparent
       animationType="fade"
       statusBarTranslucent
-      onRequestClose={onDismiss}
+      onRequestClose={handleDismiss}
       {...modalProps}
     >
-      <Pressable style={styles.overlay} onPress={onDismiss}>
+      <Pressable style={styles.overlay} onPress={handleDismiss}>
         <Pressable
           style={[styles.content, maxHeight ? { maxHeight } : undefined]}
           onPress={(e) => e.stopPropagation()}
@@ -64,7 +71,7 @@ export const BaseModal: React.FC<BaseModalProps> = ({
               {showCloseButton && (
                 <TouchableOpacity
                   activeOpacity={0.7}
-                  onPress={onDismiss}
+                  onPress={handleDismiss}
                   style={styles.closeButton}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >

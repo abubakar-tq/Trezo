@@ -758,7 +758,7 @@ export class PasskeyService {
     debugLog('📦 [PasskeyService] Encoded passkey data for deployment');
     return encoded;
   }
-  
+
   // ==================== PRIVATE HELPER METHODS ====================
   
   /**

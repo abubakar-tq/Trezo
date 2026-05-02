@@ -1,29 +1,30 @@
-import React, { useMemo } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-} from "react-native";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { useWalletData } from "@hooks/useWalletData";
 import { useNavigation } from "@react-navigation/native";
-import { Feather } from "@expo/vector-icons";
-import { useAppTheme } from "@theme";
-import TabScreenContainer from "@shared/components/TabScreenContainer";
 import { MeshBackground } from "@shared/components/MeshBackground";
-import { 
-  BalanceCard, 
-  ActionGrid, 
-  ActivityFeed,
-} from "../components/dashboard";
-import { MarketExplorer } from "../components/dashboard/MarketExplorer";
-import { SecurityStatus } from "../components/dashboard/SecurityStatus";
+import TabScreenContainer from "@shared/components/TabScreenContainer";
+import { useAppTheme } from "@theme";
+import { withAlpha } from "@utils/color";
+import * as Haptics from 'expo-haptics';
+import React, { useMemo, useState } from "react";
+import {
+    Dimensions,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { useUserStore } from "../../../store/useUserStore";
 import { TokenDetailModal } from "../../portfolio/components/TokenDetailModal";
 import type { TokenBalance } from "../../portfolio/services/PortfolioService";
-import { useWalletData } from "@hooks/useWalletData";
-import { useUserStore } from "@store/useUserStore";
-import { withAlpha } from "@utils/color";
+import {
+    ActionGrid,
+    ActivityFeed,
+    BalanceCard,
+} from "../components/dashboard";
+import { MarketExplorer } from "../components/dashboard/MarketExplorer";
 import { useAccountManagement } from "../hooks/useAccountManagement";
 
 const { width } = Dimensions.get("window");
@@ -46,14 +47,29 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   // Live wallet state from store (replaces hardcoded placeholder)
   const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
+  const { accounts, activeAccount, setActiveAccount } = useWalletStore();
   
   const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress ?? undefined);
 
   const { isHydrating, hasLocalPasskey } = useAccountManagement();
 
   const [selectedToken, setSelectedToken] = React.useState<TokenBalance | null>(null);
-  const [modalVisible, setModalVisible] = React.useState(false);
-  const marketRef = React.useRef<any>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [securityTooltipVisible, setSecurityTooltipVisible] = useState(false);
+  const [isAccountPickerVisible, setIsAccountPickerVisible] = React.useState(false);
+
+  const handleAccountSelect = (account: any) => {
+    // Map the Account type from modal to WalletAccount type from store if needed
+    const walletAccount: any = {
+      address: account.address,
+      name: account.name,
+      isActive: true,
+      createdAt: account.createdAt || new Date().toISOString()
+    };
+    setActiveAccount(walletAccount);
+    setIsAccountPickerVisible(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
 
   // Use live data
   const portfolioBalance = totalBalanceUSD;
@@ -84,6 +100,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     }).format(price);
   };
 
+  // Get security status for icon color
+  const getSecurityStatus = () => {
+    if (!smartAccountDeployed) return { color: colors.warning, message: 'Account not deployed' };
+    if (!hasLocalPasskey) return { color: colors.accentAlt, message: 'Passkey not enabled' };
+    return { color: colors.success, message: 'Fully secured' };
+  };
+
+  const securityStatus = getSecurityStatus();
+
   return (
     <TabScreenContainer includeBottomInset>
       <MeshBackground />
@@ -96,16 +121,27 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.brandName, { color: colors.textPrimary }]}>TREZO</Text>
+          
           <View style={styles.headerRight}>
             <TouchableOpacity 
-              onPress={() => marketRef.current?.focusSearch()} 
-              style={[styles.headerAction, { backgroundColor: colors.glass, marginRight: 8 }]}
+              onPress={() => setSecurityTooltipVisible(true)}
+              style={[styles.headerAction, { backgroundColor: colors.glass }]}
+              activeOpacity={0.7}
             >
-              <Feather name="search" size={18} color={colors.textPrimary} strokeWidth={1.5} />
+              <Ionicons name="shield-checkmark" size={18} color={securityStatus.color} />
             </TouchableOpacity>
+
+            <View style={[styles.statusBadge, { backgroundColor: withAlpha(smartAccountDeployed ? colors.success : colors.warning, 0.12) }]}>
+              <View style={[styles.statusDot, { backgroundColor: smartAccountDeployed ? colors.success : colors.warning }]} />
+              <Text style={[styles.statusText, { color: smartAccountDeployed ? colors.success : colors.warning }]}>
+                {smartAccountDeployed ? 'Active' : 'Unactivated'}
+              </Text>
+            </View>
+
             <TouchableOpacity 
               onPress={() => navigation.navigate("Notifications")}
               style={[styles.headerAction, { backgroundColor: colors.glass }]}
+              activeOpacity={0.7}
             >
               <Feather name="bell" size={18} color={colors.textPrimary} strokeWidth={1.5} />
               <View style={[styles.notiDot, { backgroundColor: colors.accentAlt }]} />
@@ -131,7 +167,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
         <View style={styles.sectionWrapper}>
           <View style={[styles.glassSection, styles.glassSectionAction, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginBottom: 12 }]}>Quick Actions</Text>
-            <ActionGrid onActionPress={(action) => navigation.navigate("Action", { action: action.key })} />
+            <ActionGrid onActionPress={(action) => {
+              if (action.key === 'swap' || action.key === 'bridge') {
+                navigation.navigate('Dex', { initialTab: action.key });
+              } else {
+                const screenName = action.key.charAt(0).toUpperCase() + action.key.slice(1);
+                navigation.navigate(screenName);
+              }
+            }} />
           </View>
         </View>
 
@@ -140,7 +183,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
         <View style={styles.sectionWrapper}>
           <View style={[styles.glassSection, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginBottom: 12 }]}>Market Trends</Text>
-            <MarketExplorer ref={marketRef} />
+            <MarketExplorer />
           </View>
         </View>
 
@@ -152,10 +195,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
           </View>
         </View>
 
-        <View style={styles.sectionWrapper}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginLeft: 4, marginBottom: 12 }]}>Security Status</Text>
-          <SecurityStatus />
-        </View>
       </ScrollView>
 
       {selectedToken && (
@@ -164,6 +203,33 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
           onClose={() => setModalVisible(false)} 
           token={selectedToken} 
         />
+      )}
+
+      {/* Security Status Tooltip */}
+      {securityTooltipVisible && (
+        <View style={[styles.tooltipOverlay, { backgroundColor: 'rgba(0,0,0,0.3)' }]}>
+          <TouchableOpacity 
+            style={styles.tooltipBackdrop}
+            onPress={() => setSecurityTooltipVisible(false)}
+          />
+          <View style={[styles.tooltipContainer, { backgroundColor: colors.surfaceCard }]}>
+            <View style={[styles.tooltipHeader, { borderBottomColor: colors.border }]}>
+              <Ionicons name="shield-checkmark" size={24} color={securityStatus.color} />
+              <Text style={[styles.tooltipTitle, { color: colors.textPrimary }]}>
+                Security Status
+              </Text>
+            </View>
+            <Text style={[styles.tooltipMessage, { color: colors.textSecondary }]}>
+              {securityStatus.message}
+            </Text>
+            <TouchableOpacity 
+              style={[styles.tooltipButton, { backgroundColor: colors.accent }]}
+              onPress={() => setSecurityTooltipVisible(false)}
+            >
+              <Text style={[styles.tooltipButtonText, { color: '#fff' }]}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
     </TabScreenContainer>
   );
@@ -181,13 +247,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 36,
+    paddingHorizontal: 20,
     marginBottom: 16,
   },
   brandName: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: "900",
-    letterSpacing: 2.5,
+    letterSpacing: -0.5,
   },
   headerAction: {
     width: 44,
@@ -201,6 +267,28 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'transparent', // Will be overridden if needed
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   notiDot: {
     position: 'absolute',
@@ -253,6 +341,72 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 2,
     marginBottom: 16,
+  },
+  accountTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 14,
+    gap: 6,
+  },
+  avatarMini: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarMiniText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#000',
+  },
+  tooltipOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tooltipBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  tooltipContainer: {
+    width: 280,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  tooltipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    marginBottom: 12,
+  },
+  tooltipTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  tooltipMessage: {
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  tooltipButton: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  tooltipButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
 

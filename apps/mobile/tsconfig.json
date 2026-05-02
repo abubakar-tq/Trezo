@@ -19,5 +19,6 @@
       "@services/*": ["src/services/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", "nativewind-env.d.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "*.ts", "*.tsx", "nativewind-env.d.ts"],
+  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"]
 }

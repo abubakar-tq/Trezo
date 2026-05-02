@@ -20,7 +20,10 @@ import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
 
-const TAB_ICON_MAP: Record<string, React.ComponentProps<typeof Feather>["name"]> = {
+const TAB_ICON_MAP: Record<
+  string,
+  React.ComponentProps<typeof Feather>["name"]
+> = {
   Home: "home",
   Browser: "globe",
   Portfolio: "pie-chart",
@@ -31,7 +34,11 @@ const TAB_ICON_MAP: Record<string, React.ComponentProps<typeof Feather>["name"]>
 const INDICATOR_HORIZONTAL_MARGIN = 6;
 const INDICATOR_VERTICAL_MARGIN = 6;
 
-const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }) => {
+const TabBar: React.FC<BottomTabBarProps> = ({
+  state,
+  descriptors,
+  navigation,
+}) => {
   const { theme } = useAppTheme();
   const { colors, mode } = theme;
   const insets = useSafeAreaInsets();
@@ -43,8 +50,10 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation })
   const tabLayouts = useRef<Record<string, { x: number; width: number }>>({});
 
   useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
     const showSub = Keyboard.addListener(showEvent, () => {
       Animated.timing(visibility, {
@@ -93,13 +102,16 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation })
     }).start();
   }, [state.index, state.routes, indicatorLeft, indicatorWidth]);
 
-  const glass = useMemo(() => ({
-    background: withAlpha(colors.surfaceElevated, mode === "dark" ? 0.86 : 0.96),
-    border: withAlpha(colors.borderMuted, mode === "dark" ? 0.65 : 0.35),
-    separator: withAlpha(colors.borderMuted, mode === "dark" ? 0.5 : 0.28),
-    accentFill: withAlpha(colors.accent, mode === "dark" ? 0.28 : 0.18),
-    accentBorder: withAlpha(colors.accent, mode === "dark" ? 0.55 : 0.34),
-  }), [colors, mode]);
+  const glass = useMemo(
+    () => ({
+      background: withAlpha(colors.surfaceElevated, 0.96),
+      border: withAlpha(colors.borderMuted, mode === "dark" ? 0.65 : 0.35),
+      separator: withAlpha(colors.borderMuted, mode === "dark" ? 0.5 : 0.28),
+      accentFill: withAlpha(colors.accent, 0.2),
+      accentBorder: withAlpha(colors.accent, mode === "dark" ? 0.55 : 0.34),
+    }),
+    [colors, mode],
+  );
 
   const animatedContainerStyle = useMemo(
     () => ({
@@ -125,13 +137,21 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation })
         styles.container,
         animatedContainerStyle,
         {
-          paddingBottom: Math.max(insets.bottom, Platform.OS === "ios" ? 18 : 12),
+          paddingBottom: Math.max(
+            insets.bottom,
+            Platform.OS === "ios" ? 18 : 12,
+          ),
           shadowColor: withAlpha(colors.textPrimary, 0.45),
         },
       ]}
       pointerEvents={Platform.OS === "ios" ? undefined : "box-none"}
     >
-      <View style={[styles.glassBackground, { backgroundColor: glass.background, borderColor: glass.border }]} />
+      <View
+        style={[
+          styles.glassBackground,
+          { backgroundColor: glass.background, borderColor: glass.border },
+        ]}
+      />
 
       <View style={styles.row}>
         <Animated.View
@@ -152,7 +172,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation })
           const label =
             typeof options?.tabBarLabel === "string"
               ? options.tabBarLabel
-              : options?.title ?? route.name;
+              : (options?.title ?? route.name);
           const iconName = TAB_ICON_MAP[route.name] ?? "circle";
 
           const handlePress = () => {
@@ -185,9 +205,15 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation })
                   width: event.nativeEvent.layout.width,
                 };
                 if (state.index === index) {
-                  indicatorLeft.setValue(event.nativeEvent.layout.x + INDICATOR_HORIZONTAL_MARGIN);
+                  indicatorLeft.setValue(
+                    event.nativeEvent.layout.x + INDICATOR_HORIZONTAL_MARGIN,
+                  );
                   indicatorWidth.setValue(
-                    Math.max(event.nativeEvent.layout.width - INDICATOR_HORIZONTAL_MARGIN * 2, 0),
+                    Math.max(
+                      event.nativeEvent.layout.width -
+                        INDICATOR_HORIZONTAL_MARGIN * 2,
+                      0,
+                    ),
                   );
                 }
               }}
@@ -213,7 +239,10 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation })
               {index < state.routes.length - 1 ? (
                 <View
                   pointerEvents="none"
-                  style={[styles.separator, { backgroundColor: glass.separator }]}
+                  style={[
+                    styles.separator,
+                    { backgroundColor: glass.separator },
+                  ]}
                 />
               ) : null}
             </Pressable>

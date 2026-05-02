@@ -84,11 +84,7 @@ const PortfolioScreen: React.FC = () => {
             <Text style={[styles.headerKicker, { color: colors.accent }]}>MY VAULT</Text>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>PERFORMANCE</Text>
           </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity style={[styles.iconButton, { backgroundColor: withAlpha(colors.textPrimary, 0.05), borderColor: colors.border }]}>
-              <Feather name="activity" size={18} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
+          
         </View>
 
         {/* Unified Institutional Performance Card */}

@@ -67,3 +67,5 @@ scripts/graphify-solidity-parser-scripts
 agent-artifacts/
 .kilo/
 kilo.jsonc
+.context/
+*.context.md

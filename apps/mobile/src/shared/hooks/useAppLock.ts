@@ -1,9 +1,9 @@
 import { useEffect } from "react";
 import { AppState, AppStateStatus } from "react-native";
 
-import { useAppLockStore } from "@store/useAppLockStore";
-import { useAuthFlowStore } from "@store/useAuthFlowStore";
-import { useUserStore } from "@store/useUserStore";
+import { useAppLockStore } from "../../store/useAppLockStore";
+import { useAuthFlowStore } from "../../store/useAuthFlowStore";
+import { useUserStore } from "../../store/useUserStore";
 
 const APP_LOCK_TIMEOUT_MS = 2 * 60 * 1000;
 

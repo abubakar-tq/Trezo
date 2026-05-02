@@ -63,33 +63,6 @@ const BackupRecoveryScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.section}>
-          <Text style={styles.sectionHeader}>LEVEL 1 DEVICE ACCESS</Text>
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.optionRow}
-              onPress={() => navigation.navigate("DevicesPasskeys")}
-              activeOpacity={0.85}
-            >
-              <View style={styles.optionInfo}>
-                <View
-                  style={[
-                    styles.iconBadge,
-                    { backgroundColor: withAlpha(colors.accentAlt, 0.15) },
-                  ]}
-                >
-                  <Feather name="smartphone" size={20} color={colors.accentAlt} />
-                </View>
-                <View style={styles.optionText}>
-                  <Text style={styles.optionLabel}>Devices & Passkeys</Text>
-                  <Text style={styles.optionDesc}>Add device, review pairings, schedule removals</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={20} color={colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.section}>
           <Text style={styles.sectionHeader}>ONCHAIN RECOVERY</Text>
           <View style={styles.card}>
             <TouchableOpacity

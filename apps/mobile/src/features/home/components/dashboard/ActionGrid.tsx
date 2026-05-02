@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
 import { withAlpha } from '@utils/color';
 
-export type QuickActionKey = 'buy' | 'swap' | 'send' | 'receive';
+export type QuickActionKey = 'buy' | 'swap' | 'bridge' | 'send' | 'receive';
 
 export type QuickAction = {
   key: QuickActionKey;

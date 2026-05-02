@@ -17,3 +17,4 @@ export * from "./TokenRegistry";
 export * from "./Tier1";
 export * from "./Tier2";
 export * from "./Tier3";
+export * from "./modals";

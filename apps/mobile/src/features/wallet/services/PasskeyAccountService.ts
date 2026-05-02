@@ -11,12 +11,12 @@ import {
   type PasskeyInit,
 } from "@/src/integration/viem";
 import type {
-  AddPasskeyUserOpParams,
-  RemovePasskeyUserOpParams,
+    AddPasskeyUserOpParams,
+    RemovePasskeyUserOpParams,
 } from "@/src/integration/viem/userOps";
-import type { PasskeyMetadata } from "./PasskeyService";
 import type { Address, Hex } from "viem";
 import type { UserOperation, UserOperationReceipt } from "viem/account-abstraction";
+import type { PasskeyMetadata } from "./PasskeyService";
 
 const STORAGE_PREFIX = "trezo_pending_passkeys_v1_";
 

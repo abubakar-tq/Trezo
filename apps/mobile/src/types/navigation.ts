@@ -25,7 +25,7 @@ export type TabStackParamList = {
   Home: undefined;
   Browser: undefined;
   Portfolio: undefined;
-  Dex: undefined;
+  Dex: { initialTab?: 'swap' | 'bridge' } | undefined;
   Profile: undefined;
 };
 
@@ -69,6 +69,7 @@ export type RootStackParamList = {
   GuardianManagement: undefined;
   SecurityCenter: undefined;
   ThresholdConfiguration: undefined;
+  Buy: undefined;
   Receive: undefined;
   Send: undefined;
   TransactionHistory: undefined;

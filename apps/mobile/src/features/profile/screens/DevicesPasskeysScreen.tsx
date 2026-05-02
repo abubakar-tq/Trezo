@@ -22,7 +22,10 @@ import { PasskeyAccountService } from "@/src/features/wallet/services/PasskeyAcc
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { SupabaseWalletService } from "@/src/features/wallet/services/SupabaseWalletService";
 import WalletSyncService from "@/src/features/wallet/services/WalletSyncService";
+import { CardSkeleton, EmptyState, Skeleton } from "@shared/components/ui";
 import { RootStackParamList } from "@/src/types/navigation";
+import { useWalletStore, type PasskeyInfo } from "@/src/features/wallet/store/useWalletStore";
+import type { Address, Hex } from "viem";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
@@ -62,6 +65,15 @@ const DevicesPasskeysScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [checkingLocalSigner, setCheckingLocalSigner] = useState(true);
   const [canSignForWallet, setCanSignForWallet] = useState(false);
+
+  const { passkeys, setPasskeys, addPasskey, removePasskey, aaAccount, activeChainId } = useWalletStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  const resolvedChainId = useMemo(() => 
+    (aaAccount?.chainId || activeChainId || DEFAULT_CHAIN_ID), 
+    [aaAccount?.chainId, activeChainId]
+  );
 
   useEffect(() => {
     setWalletAddress(walletFromStore);
@@ -127,6 +139,26 @@ const DevicesPasskeysScreen: React.FC = () => {
 
     const localPasskey = await PasskeyService.getPasskey(user.id);
     setCurrentPasskeyId(localPasskey?.credentialIdRaw ?? null);
+
+    try {
+      const cloudPasskeys = await PasskeyService.fetchCloudPasskeys(user.id);
+      const formattedPasskeys: PasskeyInfo[] = cloudPasskeys.map((cp: any) => ({
+        id: cp.credentialId,
+        credentialId: cp.credentialId,
+        idRaw: cp.credentialIdRaw as Hex,
+        deviceName: cp.deviceName || "Unknown Device",
+        deviceType: cp.deviceType || "Unknown",
+        isOnChain: true,
+        px: cp.publicKeyX as Hex,
+        py: cp.publicKeyY as Hex,
+        createdAt: cp.createdAt,
+      }));
+      const currentStorePasskeys = useWalletStore.getState().passkeys;
+      const localOnly = currentStorePasskeys.filter(lp => !lp.isOnChain && !formattedPasskeys.find(fp => fp.id === lp.id));
+      useWalletStore.getState().setPasskeys([...formattedPasskeys, ...localOnly]);
+    } catch (error) {
+      console.error("Failed to load passkeys:", error);
+    }
     await DevicePairingService.ensureLocalDeviceSynced({
       userId: user.id,
       walletAddress: address,
@@ -168,6 +200,124 @@ const DevicesPasskeysScreen: React.FC = () => {
 
     return () => clearInterval(timer);
   }, [loadData, user?.id]);
+
+  const handleAddPasskey = async () => {
+    if (!user?.id) {
+      Alert.alert("Error", "User not found. Please sign in again.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const metadata = await PasskeyService.createPasskey(user.id);
+      
+      await PasskeyAccountService.enqueuePendingPasskey(user.id, metadata);
+      
+      addPasskey({
+        id: metadata.credentialId,
+        credentialId: metadata.credentialId,
+        idRaw: metadata.credentialIdRaw as Hex,
+        deviceName: metadata.deviceName || "This Device",
+        deviceType: metadata.deviceType || "Smartphone",
+        isOnChain: false,
+        px: metadata.publicKeyX as Hex,
+        py: metadata.publicKeyY as Hex,
+        createdAt: metadata.createdAt,
+      });
+
+      Alert.alert("Passkey Created", "A new passkey has been added locally. You can now sync it to the blockchain.");
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("User cancelled")) return;
+      console.error("Failed to create passkey:", error);
+      Alert.alert("Error", "Failed to create passkey. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRegisterOnChain = async (pk: PasskeyInfo) => {
+    if (!user?.id || !walletAddress) {
+      Alert.alert("Error", "Smart account not found.");
+      return;
+    }
+
+    const signingPasskey = passkeys.find(p => p.isOnChain);
+    if (!signingPasskey) {
+      Alert.alert("Error", "No on-chain passkey found to sign this transaction. Please use your initial setup passkey.");
+      return;
+    }
+
+    try {
+      setProcessingId(pk.id);
+      
+      const { userOp, userOpHash } = await PasskeyAccountService.buildAddPasskeyUserOp({
+        smartAccountAddress: walletAddress as Address,
+        pendingPasskey: {
+          idRaw: pk.idRaw!,
+          credentialId: pk.id,
+          px: pk.px!, 
+          py: pk.py!,
+          createdAt: pk.createdAt,
+        },
+        signingPasskeyId: signingPasskey.idRaw!,
+        chainId: resolvedChainId as any,
+        usePaymaster: true,
+      });
+
+      const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
+      const encodedSignature = PasskeyService.encodeSignatureForContract(signature) as Hex;
+      const signedUserOp = { ...userOp, signature: encodedSignature };
+
+      await PasskeyAccountService.submitAddPasskeyUserOp(signedUserOp as any, resolvedChainId as any);
+
+      if (aaAccount?.id) {
+        await PasskeyService.syncPasskeyToCloud(user.id, aaAccount.id, {
+          credentialId: pk.id,
+          credentialIdRaw: pk.idRaw || "0x",
+          publicKeyX: pk.px || "0x",
+          publicKeyY: pk.py || "0x",
+          deviceName: pk.deviceName,
+          deviceType: (pk.deviceType as 'ios' | 'android') || 'ios',
+          createdAt: pk.createdAt,
+          rpId: "",
+        });
+      }
+
+      removePasskey(pk.id);
+      addPasskey({ ...pk, isOnChain: true });
+
+      Alert.alert("Success", "Passkey registration submitted on-chain and synced to cloud!");
+    } catch (error) {
+      console.error("On-chain registration failed:", error);
+      Alert.alert("Error", "Failed to register passkey on-chain.");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRemovePasskey = (pk: PasskeyInfo) => {
+    Alert.alert(
+      "Remove Passkey",
+      pk.isOnChain 
+        ? "This passkey is registered on-chain. Removing it locally won't remove it on-chain."
+        : "Are you sure you want to remove this passkey from this device?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Remove", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              removePasskey(pk.id);
+              Alert.alert("Success", "Passkey removed.");
+            } catch (error) {
+              Alert.alert("Error", "Failed to remove passkey.");
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handleCreatePairing = useCallback(async () => {
     if (!user?.id || !walletAddress) {
@@ -353,37 +503,18 @@ const DevicesPasskeysScreen: React.FC = () => {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         {(checkingLocalSigner || !canSignForWallet) ? (
-          <View style={styles.card}>
+          <View style={{ gap: 14 }}>
             {checkingLocalSigner ? (
-              <>
-                <Text style={styles.cardTitle}>Checking local signer access...</Text>
-                <ActivityIndicator size="small" color={theme.colors.accentAlt} />
-                <Text style={styles.muted}>
-                  Trezo is verifying whether this device has an active wallet passkey.
-                </Text>
-              </>
+              <CardSkeleton height={160} />
             ) : (
-              <>
-                <Text style={styles.cardTitle}>This device cannot manage passkeys yet</Text>
-                <Text style={styles.muted}>
-                  Devices and passkey changes are wallet-authorized actions. Use a trusted device to
-                  approve pairing, or open recovery if this device still needs access.
-                </Text>
-                <TouchableOpacity
-                  style={styles.primaryButton}
-                  onPress={() => navigation.navigate("RecoveryEntry")}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.primaryButtonLabel}>Open recovery options</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => navigation.navigate("PairDevice")}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.actionLabel}>Resume device pairing</Text>
-                </TouchableOpacity>
-              </>
+              <EmptyState
+                icon="shield-off"
+                title="Authorization Required"
+                description="This device is not yet registered to authorize security changes. Use a trusted device to approve this pairing, or use recovery if you lost your primary device."
+                actionLabel="Open recovery options"
+                onAction={() => navigation.navigate("RecoveryEntry")}
+                style={{ backgroundColor: withAlpha(theme.colors.surfaceCard, 0.8) }}
+              />
             )}
           </View>
         ) : (
@@ -439,6 +570,43 @@ const DevicesPasskeysScreen: React.FC = () => {
                     </TouchableOpacity>
                   </View>
                 ) : null}
+              </View>
+            ))
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>My Passkeys</Text>
+            <TouchableOpacity onPress={handleAddPasskey} disabled={isSubmitting}>
+              {isSubmitting ? <ActivityIndicator size="small" /> : <Feather name="plus-circle" size={24} color={theme.colors.accentAlt} />}
+            </TouchableOpacity>
+          </View>
+          {passkeys.length === 0 ? (
+            <Text style={styles.muted}>No passkeys set up yet.</Text>
+          ) : (
+            passkeys.map(pk => (
+              <View key={pk.id} style={styles.deviceRow}>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={styles.deviceTitle}>{pk.deviceName}</Text>
+                  <Text style={styles.muted}>
+                    {pk.isOnChain ? "Synced to Trezo Network" : "Local Passkey (Not Synced)"}
+                  </Text>
+                </View>
+                <View style={styles.actionsRow}>
+                  {!pk.isOnChain && (
+                    <TouchableOpacity 
+                      onPress={() => handleRegisterOnChain(pk)}
+                      disabled={processingId === pk.id}
+                      style={[styles.actionButton, processingId === pk.id && styles.disabledButton]}
+                    >
+                      <Feather name="upload-cloud" size={16} color={theme.colors.textPrimary} />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={() => handleRemovePasskey(pk)} style={styles.actionButton}>
+                    <Feather name="trash-2" size={16} color={theme.colors.danger} />
+                  </TouchableOpacity>
+                </View>
               </View>
             ))
           )}
@@ -542,6 +710,11 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.borderMuted,
       padding: 14,
       gap: 12,
+    },
+    cardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
     },
     cardTitle: {
       color: colors.textPrimary,
