@@ -59,6 +59,52 @@ const supabase: SupabaseClient | null =
     ? createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } })
     : null;
 
+const isFunctionsHttpError = (error: unknown): error is {
+  context?: {
+    status?: number;
+    json?: () => Promise<Record<string, unknown>>;
+    text?: () => Promise<string>;
+  };
+} => {
+  return Boolean(error && typeof error === 'object' && 'context' in error);
+};
+
+const parseFunctionInvokeErrorMessage = async (error: unknown): Promise<string | null> => {
+  if (!isFunctionsHttpError(error) || !error.context) {
+    return null;
+  }
+
+  const context = error.context;
+  try {
+    if (typeof context.json === 'function') {
+      const payload = await context.json();
+      const payloadMessage = payload?.error ?? payload?.message;
+      if (typeof payloadMessage === 'string' && payloadMessage.trim().length > 0) {
+        return payloadMessage;
+      }
+    }
+  } catch {
+    // Ignore JSON parsing failures and fall back to text/status.
+  }
+
+  try {
+    if (typeof context.text === 'function') {
+      const text = await context.text();
+      if (text.trim().length > 0) {
+        return text;
+      }
+    }
+  } catch {
+    // Ignore text parsing failures.
+  }
+
+  if (typeof context.status === 'number') {
+    return `Guardian approval failed with HTTP ${context.status}.`;
+  }
+
+  return null;
+};
+
 const requestIdFromPath = (): string => {
   const parts = window.location.pathname.split('/').filter(Boolean);
   return parts.at(-1) ?? '';
@@ -540,7 +586,12 @@ const GuardianApproval: React.FC = () => {
       });
 
       if (fnError) {
-        const msg = (fnData as any)?.error ?? fnError.message ?? 'Failed to submit approval.';
+        const functionMessage = await parseFunctionInvokeErrorMessage(fnError);
+        const msg =
+          (fnData as any)?.error ??
+          functionMessage ??
+          fnError.message ??
+          'Failed to submit approval.';
         throw new Error(msg);
       }
 

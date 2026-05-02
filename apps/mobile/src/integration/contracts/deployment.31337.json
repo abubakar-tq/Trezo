@@ -7,7 +7,7 @@
   "entryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
   "infraVersion": "TREZO_INFRA_V2",
   "isHarnessDeployment": true,
-  "passkeyValidator": "0x44FC9409B8408C71242FF651c44CA44A75B69577",
+  "passkeyValidator": "0x4F42aB1C50918e119513659602591b0C655cAB6e",
   "portable": false,
   "proxyFactory": "0x37F9e2137239e95C2b655F508f08726ABd42c60E",
   "rootFactory": "0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7",
