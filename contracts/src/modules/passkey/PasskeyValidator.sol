@@ -474,4 +474,13 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     function hasPasskey(address account, PasskeyId id) external view returns (bool) {
         return passkeyIds[account].contains(PasskeyId.unwrap(id));
     }
+
+    function getPasskeyRecord(address account, PasskeyId id)
+        external
+        view
+        returns (uint256 px, uint256 py, uint32 signCounter, bool counterInitialized)
+    {
+        PasskeyRecord storage rec = passkeys[account][id];
+        return (rec.px, rec.py, rec.signCounter, rec.counterInitialized);
+    }
 }
