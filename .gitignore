@@ -44,6 +44,7 @@ apps/mobile/.env.*
 graphify-out/
 plan.md
 agent-plans/
+.github/skills/
 AGENTS.md
 Context_Capsule.md
 LEVEL2_IMPLEMENTATION_NOTES.md
