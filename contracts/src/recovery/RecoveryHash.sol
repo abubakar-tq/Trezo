@@ -28,12 +28,88 @@ library RecoveryHash {
         );
     }
 
+    function hashChainScope(RecoveryTypes.RecoveryModuleScope calldata scope) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                RecoveryTypes.RECOVERY_MODULE_SCOPE_TYPEHASH,
+                scope.chainId,
+                scope.wallet,
+                scope.recoveryModule,
+                scope.nonce,
+                scope.guardianSetHash,
+                scope.policyHash
+            )
+        );
+    }
+
+    function hashChainScopeMemory(RecoveryTypes.RecoveryModuleScope memory scope) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                RecoveryTypes.RECOVERY_MODULE_SCOPE_TYPEHASH,
+                scope.chainId,
+                scope.wallet,
+                scope.recoveryModule,
+                scope.nonce,
+                scope.guardianSetHash,
+                scope.policyHash
+            )
+        );
+    }
+
     function hashChainScopes(RecoveryTypes.ChainRecoveryScope[] calldata scopes) internal pure returns (bytes32) {
         bytes32[] memory hashes = new bytes32[](scopes.length);
         for (uint256 i = 0; i < scopes.length; i++) {
             hashes[i] = hashChainScope(scopes[i]);
         }
         return keccak256(abi.encodePacked(hashes));
+    }
+
+    function hashChainScopes(RecoveryTypes.RecoveryModuleScope[] calldata scopes) internal pure returns (bytes32) {
+        assertSortedUniqueChainScopes(scopes);
+
+        bytes32[] memory hashes = new bytes32[](scopes.length);
+        for (uint256 i = 0; i < scopes.length; i++) {
+            hashes[i] = hashChainScope(scopes[i]);
+        }
+        return keccak256(abi.encodePacked(hashes));
+    }
+
+    function hashChainScopesMemory(RecoveryTypes.RecoveryModuleScope[] memory scopes) internal pure returns (bytes32) {
+        assertSortedUniqueChainScopesMemory(scopes);
+
+        bytes32[] memory hashes = new bytes32[](scopes.length);
+        for (uint256 i = 0; i < scopes.length; i++) {
+            hashes[i] = hashChainScopeMemory(scopes[i]);
+        }
+        return keccak256(abi.encodePacked(hashes));
+    }
+
+    function assertSortedUniqueChainScopes(RecoveryTypes.RecoveryModuleScope[] calldata scopes) internal pure {
+        if (scopes.length == 0) {
+            revert RecoveryTypes.Recovery_EmptyChainScopes();
+        }
+
+        for (uint256 i = 1; i < scopes.length; i++) {
+            uint256 previousChainId = scopes[i - 1].chainId;
+            uint256 chainId = scopes[i].chainId;
+            if (chainId <= previousChainId) {
+                revert RecoveryTypes.Recovery_UnsortedOrDuplicateChainScope(previousChainId, chainId);
+            }
+        }
+    }
+
+    function assertSortedUniqueChainScopesMemory(RecoveryTypes.RecoveryModuleScope[] memory scopes) internal pure {
+        if (scopes.length == 0) {
+            revert RecoveryTypes.Recovery_EmptyChainScopes();
+        }
+
+        for (uint256 i = 1; i < scopes.length; i++) {
+            uint256 previousChainId = scopes[i - 1].chainId;
+            uint256 chainId = scopes[i].chainId;
+            if (chainId <= previousChainId) {
+                revert RecoveryTypes.Recovery_UnsortedOrDuplicateChainScope(previousChainId, chainId);
+            }
+        }
     }
 
     function hashRecoveryIntent(RecoveryTypes.RecoveryIntent calldata intent) internal pure returns (bytes32) {
@@ -48,6 +124,25 @@ library RecoveryHash {
                 intent.metadataHash
             )
         );
+    }
+
+    function hashRecoveryIntentMemory(RecoveryTypes.RecoveryIntent memory intent) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                RecoveryTypes.RECOVERY_INTENT_TYPEHASH,
+                intent.requestId,
+                intent.newPasskeyHash,
+                intent.chainScopeHash,
+                intent.validAfter,
+                intent.deadline,
+                intent.metadataHash
+            )
+        );
+    }
+
+    function hashEmailRecoveryData(RecoveryTypes.EmailRecoveryData calldata data) internal pure returns (bytes32) {
+        assertSortedUniqueChainScopes(data.scopes);
+        return keccak256(abi.encode(data.version, data.newPasskey, data.intent, data.scopes));
     }
 
     function portableDomainSeparator(address verifyingContract) internal pure returns (bytes32) {

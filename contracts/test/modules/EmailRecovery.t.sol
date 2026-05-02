@@ -4,17 +4,15 @@ pragma solidity ^0.8.30;
 import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {
-    EmailAuth,
-    EmailAuthMsg,
-    EmailProof
-} from "@zk-email/ether-email-auth-contracts/src/EmailAuth.sol";
+import {EmailAuth, EmailAuthMsg, EmailProof} from "@zk-email/ether-email-auth-contracts/src/EmailAuth.sol";
 import {CommandUtils} from "@zk-email/ether-email-auth-contracts/src/libraries/CommandUtils.sol";
 import {UserOverrideableDKIMRegistry} from "@zk-email/contracts/UserOverrideableDKIMRegistry.sol";
 
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
+import {RecoveryHash} from "src/recovery/RecoveryHash.sol";
+import {RecoveryTypes} from "src/recovery/RecoveryTypes.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 import {EmailRecovery} from "src/modules/EmailRecovery/EmailRecovery.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
@@ -22,10 +20,7 @@ import {EmailRecoveryCommandHandler} from "email-recovery/handlers/EmailRecovery
 import {MockGroth16Verifier} from "lib/email-recovery/src/test/MockGroth16Verifier.sol";
 import {IEmailRecoveryManager} from "lib/email-recovery/src/interfaces/IEmailRecoveryManager.sol";
 import {IGuardianManager} from "lib/email-recovery/src/interfaces/IGuardianManager.sol";
-import {
-    GuardianStorage,
-    GuardianStatus
-} from "lib/email-recovery/src/libraries/EnumerableGuardianMap.sol";
+import {GuardianStorage, GuardianStatus} from "lib/email-recovery/src/libraries/EnumerableGuardianMap.sol";
 
 contract EmailRecoveryTest is AccountFactoryTestHelper {
     using Strings for uint256;
@@ -34,8 +29,7 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
     bytes32 internal constant GUARDIAN_SALT_1 = keccak256("guardian-salt-1");
     bytes32 internal constant GUARDIAN_SALT_2 = keccak256("guardian-salt-2");
     bytes32 internal constant GUARDIAN_SALT_3 = keccak256("guardian-salt-3");
-    bytes32 internal constant DKIM_PUBLIC_KEY_HASH =
-        0x0ea9c777dc7110e5a9e89b13f0cfc540e3845ba120b2b6dc24024d61488d4788;
+    bytes32 internal constant DKIM_PUBLIC_KEY_HASH = 0x0ea9c777dc7110e5a9e89b13f0cfc540e3845ba120b2b6dc24024d61488d4788;
 
     string internal constant DKIM_DOMAIN = "gmail.com";
 
@@ -64,14 +58,10 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         killSwitchAuthorizer = makeAddr("kill-switch-authorizer");
         proofTimestamp = block.timestamp;
 
-        (, , , accountFactory, passkeyValidator,) = _deployAccountStack();
+        (,,, accountFactory, passkeyValidator,) = _deployAccountStack();
 
         proxy = _createAuthorizedAccount(
-            accountFactory,
-            ACCOUNT_SALT,
-            0,
-            address(passkeyValidator),
-            PassKeyDemo.getPasskeyInit(0)
+            accountFactory, ACCOUNT_SALT, 0, address(passkeyValidator), PassKeyDemo.getPasskeyInit(0)
         );
 
         _deployZkEmailInfra();
@@ -94,6 +84,14 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         IEmailRecoveryManager.RecoveryConfig memory recoveryConfig = emailRecovery.getRecoveryConfig(proxy);
         assertEq(recoveryConfig.delay, RECOVERY_DELAY, "recovery delay");
         assertEq(recoveryConfig.expiry, RECOVERY_EXPIRY, "recovery expiry");
+
+        assertEq(emailRecovery.getRecoveryNonce(proxy), 0, "initial recovery nonce");
+        assertEq(
+            emailRecovery.getGuardianSetHash(proxy),
+            keccak256(abi.encode(guardians, guardianWeights)),
+            "guardian set hash"
+        );
+        assertEq(emailRecovery.getPolicyHash(proxy), _expectedPolicyHash(), "policy hash");
 
         assertFalse(emailRecovery.canStartRecoveryRequest(proxy), "accepted guardians below threshold");
     }
@@ -131,9 +129,7 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         EmailAuthMsg memory mismatchedRecovery = _recoveryMessage(1, wrongHash);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IEmailRecoveryManager.InvalidRecoveryDataHash.selector, wrongHash, recoveryHash
-            )
+            abi.encodeWithSelector(IEmailRecoveryManager.InvalidRecoveryDataHash.selector, wrongHash, recoveryHash)
         );
         emailRecovery.handleRecovery(mismatchedRecovery, 0);
     }
@@ -151,9 +147,7 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         assertEq(currentWeight, RECOVERY_THRESHOLD, "current weight should reach threshold");
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IEmailRecoveryManager.DelayNotPassed.selector, block.timestamp, executeAfter
-            )
+            abi.encodeWithSelector(IEmailRecoveryManager.DelayNotPassed.selector, block.timestamp, executeAfter)
         );
         emailRecovery.completeRecovery(proxy, abi.encode(newPasskey));
     }
@@ -206,6 +200,207 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         assertTrue(block.timestamp < executeBefore, "recovery must complete before expiry");
     }
 
+    function testMultichainRecoveryDataHashDiffersFromLegacyHash() public view {
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        bytes memory recoveryData = _validMultichainRecoveryData(newPasskey);
+
+        assertEq(emailRecovery.multichainRecoveryDataHash(recoveryData), keccak256(recoveryData), "multichain hash");
+        assertTrue(
+            emailRecovery.multichainRecoveryDataHash(recoveryData) != emailRecovery.recoveryDataHash(newPasskey),
+            "legacy and multichain hashes should differ"
+        );
+    }
+
+    function testCompleteMultichainRecoveryAddsNewPasskeyAndIncrementsNonce() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        bytes memory recoveryData = _validMultichainRecoveryData(newPasskey);
+        bytes32 recoveryHash = emailRecovery.multichainRecoveryDataHash(recoveryData);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+        emailRecovery.completeRecovery(proxy, recoveryData);
+
+        assertEq(emailRecovery.getRecoveryNonce(proxy), 1, "recovery nonce should increment");
+        assertEq(passkeyValidator.passkeyCount(proxy), 2, "new passkey should be added");
+        assertTrue(
+            passkeyValidator.hasPasskey(proxy, PasskeyValidator.PasskeyId.wrap(newPasskey.idRaw)),
+            "validator should contain recovered passkey"
+        );
+    }
+
+    function testCompleteMultichainRecoveryRejectsChainNotInScope() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        RecoveryTypes.RecoveryModuleScope[] memory scopes = _singleScope(newPasskey);
+        scopes[0].chainId = block.chainid + 1;
+        bytes memory recoveryData = _multichainRecoveryData(newPasskey, scopes, _defaultDeadline());
+        bytes32 recoveryHash = emailRecovery.multichainRecoveryDataHash(recoveryData);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+
+        vm.expectRevert(abi.encodeWithSelector(EmailRecovery.EmailRecoveryChainNotInScope.selector, block.chainid));
+        emailRecovery.completeRecovery(proxy, recoveryData);
+    }
+
+    function testCompleteMultichainRecoveryRejectsUnsortedScopes() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        RecoveryTypes.RecoveryModuleScope[] memory scopes = new RecoveryTypes.RecoveryModuleScope[](2);
+        scopes[0] = _scope(block.chainid + 1, proxy, address(emailRecovery), 0);
+        scopes[1] = _scope(block.chainid, proxy, address(emailRecovery), 0);
+        bytes memory recoveryData =
+            _multichainRecoveryDataWithScopeHash(newPasskey, scopes, _defaultDeadline(), bytes32(0));
+        bytes32 recoveryHash = emailRecovery.multichainRecoveryDataHash(recoveryData);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RecoveryTypes.Recovery_UnsortedOrDuplicateChainScope.selector, block.chainid + 1, block.chainid
+            )
+        );
+        emailRecovery.completeRecovery(proxy, recoveryData);
+    }
+
+    function testCompleteMultichainRecoveryRejectsDuplicateScopes() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        RecoveryTypes.RecoveryModuleScope[] memory scopes = new RecoveryTypes.RecoveryModuleScope[](2);
+        scopes[0] = _scope(block.chainid, proxy, address(emailRecovery), 0);
+        scopes[1] = _scope(block.chainid, proxy, address(emailRecovery), 0);
+        bytes memory recoveryData =
+            _multichainRecoveryDataWithScopeHash(newPasskey, scopes, _defaultDeadline(), bytes32(0));
+        bytes32 recoveryHash = emailRecovery.multichainRecoveryDataHash(recoveryData);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RecoveryTypes.Recovery_UnsortedOrDuplicateChainScope.selector, block.chainid, block.chainid
+            )
+        );
+        emailRecovery.completeRecovery(proxy, recoveryData);
+    }
+
+    function testCompleteMultichainRecoveryRejectsWrongLocalNonce() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        RecoveryTypes.RecoveryModuleScope[] memory scopes = _singleScope(newPasskey);
+        scopes[0].nonce = 1;
+        bytes memory recoveryData = _multichainRecoveryData(newPasskey, scopes, _defaultDeadline());
+        bytes32 recoveryHash = emailRecovery.multichainRecoveryDataHash(recoveryData);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+
+        vm.expectRevert(abi.encodeWithSelector(EmailRecovery.EmailRecoveryScopeNonceMismatch.selector, 0, 1));
+        emailRecovery.completeRecovery(proxy, recoveryData);
+    }
+
+    function testCompleteMultichainRecoveryRejectsWrongGuardianSetHash() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        RecoveryTypes.RecoveryModuleScope[] memory scopes = _singleScope(newPasskey);
+        scopes[0].guardianSetHash = keccak256("wrong-guardian-set");
+        bytes memory recoveryData = _multichainRecoveryData(newPasskey, scopes, _defaultDeadline());
+        bytes32 recoveryHash = emailRecovery.multichainRecoveryDataHash(recoveryData);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+
+        vm.expectRevert(EmailRecovery.EmailRecoveryGuardianSetChanged.selector);
+        emailRecovery.completeRecovery(proxy, recoveryData);
+    }
+
+    function testCompleteMultichainRecoveryRejectsWrongPolicyHash() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        RecoveryTypes.RecoveryModuleScope[] memory scopes = _singleScope(newPasskey);
+        scopes[0].policyHash = keccak256("wrong-policy");
+        bytes memory recoveryData = _multichainRecoveryData(newPasskey, scopes, _defaultDeadline());
+        bytes32 recoveryHash = emailRecovery.multichainRecoveryDataHash(recoveryData);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+
+        vm.expectRevert(EmailRecovery.EmailRecoveryPolicyChanged.selector);
+        emailRecovery.completeRecovery(proxy, recoveryData);
+    }
+
+    function testCompleteMultichainRecoveryRejectsExpiredIntent() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        uint48 deadline = uint48(block.timestamp + 1 hours);
+        bytes memory recoveryData = _multichainRecoveryData(newPasskey, _singleScope(newPasskey), deadline);
+        bytes32 recoveryHash = emailRecovery.multichainRecoveryDataHash(recoveryData);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+
+        vm.expectRevert(abi.encodeWithSelector(EmailRecovery.EmailRecoveryDeadlineExpired.selector, deadline));
+        emailRecovery.completeRecovery(proxy, recoveryData);
+    }
+
+    function testCompleteMultichainRecoveryRejectsSamePayloadAfterNonceIncrement() public {
+        _acceptThresholdGuardians();
+
+        PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
+        bytes memory recoveryData = _validMultichainRecoveryData(newPasskey);
+        bytes32 recoveryHash = emailRecovery.multichainRecoveryDataHash(recoveryData);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+        emailRecovery.completeRecovery(proxy, recoveryData);
+
+        _handleRecovery(0, recoveryHash);
+        _handleRecovery(1, recoveryHash);
+
+        (executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
+        vm.warp(executeAfter + 1);
+
+        vm.expectRevert(abi.encodeWithSelector(EmailRecovery.EmailRecoveryScopeNonceMismatch.selector, 1, 0));
+        emailRecovery.completeRecovery(proxy, recoveryData);
+    }
+
     function testKillSwitchBlocksRecoveryRequests() public {
         _acceptThresholdGuardians();
         assertTrue(emailRecovery.canStartRecoveryRequest(proxy), "threshold should be met");
@@ -216,8 +411,7 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         assertFalse(emailRecovery.canStartRecoveryRequest(proxy), "kill switch should block recovery");
 
         PasskeyTypes.PasskeyInit memory newPasskey = PassKeyDemo.getPasskeyInit(1);
-        EmailAuthMsg memory recoveryMessage =
-            _recoveryMessage(0, emailRecovery.recoveryDataHash(newPasskey));
+        EmailAuthMsg memory recoveryMessage = _recoveryMessage(0, emailRecovery.recoveryDataHash(newPasskey));
 
         vm.expectRevert(abi.encodeWithSelector(IGuardianManager.KillSwitchEnabled.selector));
         emailRecovery.handleRecovery(recoveryMessage, 0);
@@ -253,9 +447,7 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         (uint256 executeAfter,,,) = emailRecovery.getRecoveryRequest(proxy);
         vm.warp(executeAfter + 1);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(EmailRecovery.InvalidPasskey.selector, bytes32(0))
-        );
+        vm.expectRevert(abi.encodeWithSelector(EmailRecovery.InvalidPasskey.selector, bytes32(0)));
         emailRecovery.completeRecovery(proxy, abi.encode(invalidPasskey));
     }
 
@@ -312,20 +504,96 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         assertFalse(emailRecovery.canStartRecoveryRequest(proxy), "uninstalled module cannot start recovery");
     }
 
+    function _validMultichainRecoveryData(PasskeyTypes.PasskeyInit memory newPasskey)
+        internal
+        view
+        returns (bytes memory)
+    {
+        return _multichainRecoveryData(newPasskey, _singleScope(newPasskey), _defaultDeadline());
+    }
+
+    function _multichainRecoveryData(
+        PasskeyTypes.PasskeyInit memory newPasskey,
+        RecoveryTypes.RecoveryModuleScope[] memory scopes,
+        uint48 deadline
+    ) internal pure returns (bytes memory) {
+        return _multichainRecoveryDataWithScopeHash(
+            newPasskey, scopes, deadline, RecoveryHash.hashChainScopesMemory(scopes)
+        );
+    }
+
+    function _multichainRecoveryDataWithScopeHash(
+        PasskeyTypes.PasskeyInit memory newPasskey,
+        RecoveryTypes.RecoveryModuleScope[] memory scopes,
+        uint48 deadline,
+        bytes32 chainScopeHash
+    ) internal pure returns (bytes memory) {
+        RecoveryTypes.RecoveryIntent memory intent = RecoveryTypes.RecoveryIntent({
+            requestId: keccak256("email-recovery-request"),
+            newPasskeyHash: RecoveryHash.hashPasskeyInitMemory(newPasskey),
+            chainScopeHash: chainScopeHash,
+            validAfter: 0,
+            deadline: deadline,
+            metadataHash: bytes32(0)
+        });
+
+        return abi.encode(uint8(1), newPasskey, intent, scopes);
+    }
+
+    function _singleScope(
+        PasskeyTypes.PasskeyInit memory /*newPasskey*/
+    )
+        internal
+        view
+        returns (RecoveryTypes.RecoveryModuleScope[] memory)
+    {
+        RecoveryTypes.RecoveryModuleScope[] memory scopes = new RecoveryTypes.RecoveryModuleScope[](1);
+        scopes[0] = _scope(block.chainid, proxy, address(emailRecovery), emailRecovery.getRecoveryNonce(proxy));
+        return scopes;
+    }
+
+    function _scope(uint256 chainId, address wallet, address recoveryModule, uint256 nonce)
+        internal
+        view
+        returns (RecoveryTypes.RecoveryModuleScope memory)
+    {
+        return RecoveryTypes.RecoveryModuleScope({
+            chainId: chainId,
+            wallet: wallet,
+            recoveryModule: recoveryModule,
+            nonce: nonce,
+            guardianSetHash: emailRecovery.getGuardianSetHash(proxy),
+            policyHash: emailRecovery.getPolicyHash(proxy)
+        });
+    }
+
+    function _defaultDeadline() internal view returns (uint48) {
+        return uint48(block.timestamp + 30 days);
+    }
+
+    function _expectedPolicyHash() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                RECOVERY_THRESHOLD,
+                RECOVERY_DELAY,
+                RECOVERY_EXPIRY,
+                emailRecovery.commandHandler(),
+                address(emailRecovery),
+                uint256(1)
+            )
+        );
+    }
+
     function _deployZkEmailInfra() internal {
         vm.startPrank(killSwitchAuthorizer);
 
         UserOverrideableDKIMRegistry dkimImpl = new UserOverrideableDKIMRegistry();
         ERC1967Proxy dkimProxy = new ERC1967Proxy(
             address(dkimImpl),
-            abi.encodeCall(
-                dkimImpl.initialize, (killSwitchAuthorizer, killSwitchAuthorizer, uint256(0))
-            )
+            abi.encodeCall(dkimImpl.initialize, (killSwitchAuthorizer, killSwitchAuthorizer, uint256(0)))
         );
         dkimRegistry = UserOverrideableDKIMRegistry(address(dkimProxy));
-        dkimRegistry.setDKIMPublicKeyHash(
-            DKIM_DOMAIN, DKIM_PUBLIC_KEY_HASH, killSwitchAuthorizer, new bytes(0)
-        );
+        dkimRegistry.setDKIMPublicKeyHash(DKIM_DOMAIN, DKIM_PUBLIC_KEY_HASH, killSwitchAuthorizer, new bytes(0));
 
         verifier = new MockGroth16Verifier();
         emailAuthImpl = new EmailAuth();
@@ -396,15 +664,11 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         });
     }
 
-    function _recoveryMessage(uint256 guardianIndex, bytes32 recoveryHash)
-        internal
-        returns (EmailAuthMsg memory)
-    {
+    function _recoveryMessage(uint256 guardianIndex, bytes32 recoveryHash) internal returns (EmailAuthMsg memory) {
         string memory accountString = CommandUtils.addressToChecksumHexString(proxy);
         string memory recoveryHashString = uint256(recoveryHash).toHexString(32);
-        string memory command = string.concat(
-            "Recover account ", accountString, " using recovery hash ", recoveryHashString
-        );
+        string memory command =
+            string.concat("Recover account ", accountString, " using recovery hash ", recoveryHashString);
 
         bytes[] memory commandParams = new bytes[](2);
         commandParams[0] = abi.encode(proxy);
@@ -418,10 +682,7 @@ contract EmailRecoveryTest is AccountFactoryTestHelper {
         });
     }
 
-    function _mockEmailProof(string memory command, bytes32 accountSalt)
-        internal
-        returns (EmailProof memory proof)
-    {
+    function _mockEmailProof(string memory command, bytes32 accountSalt) internal returns (EmailProof memory proof) {
         proof.domainName = DKIM_DOMAIN;
         proof.publicKeyHash = DKIM_PUBLIC_KEY_HASH;
         proof.timestamp = ++proofTimestamp;
