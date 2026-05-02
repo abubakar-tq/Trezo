@@ -17,6 +17,25 @@ module.exports = function (api) {
           allowUndefined: true,
         },
       ],
+      [
+        "module-resolver",
+        {
+          root: ["./"],
+          alias: {
+            "@": "./",
+            "@app": "./src/app",
+            "@features": "./src/features",
+            "@shared": "./src/shared",
+            "@theme": "./src/theme",
+            "@types": "./src/types",
+            "@lib": "./src/lib",
+            "@store": "./src/store",
+            "@utils": "./src/utils",
+            "@hooks": "./src/shared/hooks",
+            "@services": "./src/services",
+          },
+        },
+      ],
       "react-native-reanimated/plugin",
     ],
   };

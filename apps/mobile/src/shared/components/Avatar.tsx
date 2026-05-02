@@ -48,11 +48,11 @@ const Avatar: React.FC<AvatarProps> = ({ size = 44, uri, label }) => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "rgba(120, 92, 255, 0.2)",
+    backgroundColor: "rgba(0, 255, 255, 0.15)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(0, 255, 255, 0.2)",
   },
   initials: {
     color: "#f9fafb",

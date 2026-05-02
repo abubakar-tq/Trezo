@@ -17,11 +17,14 @@ export type ThemeColors = {
   secondaryText: string;
   textMuted: string;
   textOnAccent: string;
+  textOnHero: string;
   accent: string;
   accentAlt: string;
   success: string;
   warning: string;
   danger: string;
+  glass: string;
+  glassBorder: string;
 };
 
 export type ThemeGradients = {

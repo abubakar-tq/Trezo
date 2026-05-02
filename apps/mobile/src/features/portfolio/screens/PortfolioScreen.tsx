@@ -1,469 +1,436 @@
-import { useTabContentBottomInset } from "@app/hooks";
-import { TabScreenContainer } from "@shared/components";
-import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions,
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
-
-import { PortfolioService, type PortfolioData } from "@/src/features/portfolio/services/PortfolioService";
-import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
-import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
+import { TabScreenContainer, MeshBackground, Sparkline } from "@shared/components";
+import { BalanceCard, AssetList } from "../../home/components/dashboard";
+import { useWalletData } from "@hooks/useWalletData";
+import { useMarketData } from "@hooks/useMarketData";
+import { useTabContentBottomInset } from "@hooks";
 import { withAlpha } from "@utils/color";
+import { TokenDetailModal } from "../components/TokenDetailModal";
+import type { TokenBalance } from "../services/PortfolioService";
+import { TokenIcon } from "@shared/components/visuals/TokenIcon";
+import { ActivityIndicator } from "react-native";
+import { formatUnits } from "viem";
 
-const portfolioAssets: Array<{ symbol: string; name: string; price: number; amount: number; value: number }> = [
-  { symbol: "ETH", name: "Ethereum", price: 3245.32, amount: 0, value: 0 },
-];
+const { width } = Dimensions.get("window");
 
-const allocationGroups: Array<{ label: string; percentage: number }> = [
-  // { label: "Layer 1", percentage: 46 },
-  // { label: "Layer 2", percentage: 24 },
-  // { label: "DeFi", percentage: 18 },
-  // { label: "Stablecoins", percentage: 12 },
-];
-
-const yieldPositions: Array<{ protocol: string; asset: string; apy: string; tvl: string }> = [
-  // { protocol: "Lido", asset: "stETH", apy: "4.7%", tvl: "$25.4B" },
-  // { protocol: "Marinade", asset: "mSOL", apy: "7.2%", tvl: "$512M" },
-  // { protocol: "Aave v3", asset: "USDC", apy: "3.4%", tvl: "$6.1B" },
-];
 
 const PortfolioScreen: React.FC = () => {
-  const { theme } = useAppTheme();
-  const { colors, gradients } = theme;
-  const aaAccount = useWalletStore((state) => state.aaAccount);
-  
-  const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { theme, resolvedMode } = useAppTheme();
+  const { colors } = theme;
   const contentBottomInset = useTabContentBottomInset();
-  const allocationPalette = useMemo(
-    () => [colors.accent, colors.accentAlt, colors.warning, colors.success],
-    [colors],
-  );
+  const isDark = resolvedMode === 'dark';
   
-  // Load portfolio data from blockchain
-  useEffect(() => {
-    const loadPortfolio = async () => {
-      if (!aaAccount?.predictedAddress) {
-        setLoading(false);
-        return;
-      }
-      
-      setLoading(true);
-      const data = await PortfolioService.getPortfolio(aaAccount.predictedAddress);
-      setPortfolio(data);
-      setLoading(false);
-    };
-    
-    loadPortfolio();
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(loadPortfolio, 30000);
-    return () => clearInterval(interval);
-  }, [aaAccount?.predictedAddress]);
-  
-  const portfolioAssets = portfolio?.tokens || [];
+  const smartAccountAddress = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
+  const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress);
+  const { assets: marketAssets, loading: marketLoading, refresh: refreshMarket } = useMarketData(5);
+
+  const [selectedPeriod, setSelectedPeriod] = useState('1W');
+  const [selectedToken, setSelectedToken] = useState<TokenBalance | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  // High-fidelity performance graph data mapping
+  const graphDataMap: Record<string, number[]> = {
+    '1D': [7800, 7850, 7900, 7820, 7880, 7950, 8020, 8100, 8050, 8150, 8200, 8100],
+    '1W': [6200, 6400, 6300, 6800, 7200, 7100, 7500, 7400, 7800, 8200, 8100, 8500],
+    '1M': [5000, 5200, 5800, 5500, 6000, 6500, 6200, 6800, 7200, 7500, 8000, 8500],
+    '1Y': [1200, 2500, 3800, 4200, 4500, 5000, 5800, 6200, 7000, 7500, 8200, 8500],
+    'ALL': [500, 800, 1500, 2200, 3000, 4500, 5500, 6200, 7000, 7800, 8200, 8500],
+  };
+
+  const handleAssetPress = (token: TokenBalance) => {
+    setSelectedToken(token);
+    setModalVisible(true);
+  };
+
+  // Format tokens for AssetList
+  const displayTokens = useMemo(() => {
+    return tokens.map((t: any) => {
+      // Ensure we have a valid balance and symbol
+      const balance = t.balance_formatted || (t.balance ? formatUnits(t.balance, t.decimals || 18) : "0");
+      return {
+        symbol: t.symbol || "UNKNOWN",
+        name: t.name || "Unknown Token",
+        amount: parseFloat(balance),
+        price: t.usd_price || 0,
+        value: t.usd_value || 0,
+        change24h: 0,
+        address: t.token_address || "0x"
+      };
+    });
+  }, [tokens]);
 
   return (
-    <TabScreenContainer style={styles.screen}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={{ paddingBottom: contentBottomInset }}
+    <TabScreenContainer includeBottomInset>
+      <MeshBackground intensity={isDark ? 0.3 : 0.8} />
+      
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomInset + 40 }]}
         showsVerticalScrollIndicator={false}
       >
-      <LinearGradient colors={gradients.hero} style={styles.summaryCard}>
-        <Text style={styles.summaryLabel}>Net worth</Text>
-        {loading ? (
-          <ActivityIndicator size="large" color={colors.accent} style={{ marginVertical: 20 }} />
-        ) : (
-          <>
-            <Text style={styles.summaryValue}>
-              {PortfolioService.formatUSD(portfolio?.totalValue || 0)}
-            </Text>
-            <Text style={styles.summaryChange}>
-              {portfolio?.change24h || 0}% over 24 hours
-            </Text>
-
-            <View style={styles.pillRow}>
-              <View style={styles.summaryPill}>
-                <Text style={styles.pillLabel}>Cost basis</Text>
-                <Text style={styles.pillValue}>
-                  {PortfolioService.formatUSD(portfolio?.costBasis || 0)}
-                </Text>
-              </View>
-              <View style={styles.summaryPill}>
-                <Text style={styles.pillLabel}>Unrealized P&L</Text>
-                <Text style={[
-                  styles.pillValue, 
-                  { color: (portfolio?.unrealizedPnL || 0) > 0 ? colors.success : colors.textMuted }
-                ]}>
-                  {portfolio?.unrealizedPnL && portfolio.unrealizedPnL > 0 ? '+' : ''}
-                  {PortfolioService.formatUSD(portfolio?.unrealizedPnL || 0)}
-                </Text>
-              </View>
-            </View>
-          </>
-        )}
-      </LinearGradient>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Networks</Text>
-        <View style={styles.chainGrid}>
-          {[
-            { key: 'ethereum', name: 'Ethereum', icon: 'circle', color: '#627EEA', balance: portfolio?.totalValue ? portfolio.totalValue * 0.45 : 0 },
-            { key: 'polygon', name: 'Polygon', icon: 'hexagon', color: '#8247E5', balance: portfolio?.totalValue ? portfolio.totalValue * 0.20 : 0 },
-            { key: 'arbitrum', name: 'Arbitrum', icon: 'triangle', color: '#28A0F0', balance: portfolio?.totalValue ? portfolio.totalValue * 0.15 : 0 },
-            { key: 'optimism', name: 'Optimism', icon: 'circle', color: '#FF0420', balance: portfolio?.totalValue ? portfolio.totalValue * 0.10 : 0 },
-            { key: 'base', name: 'Base', icon: 'square', color: '#0052FF', balance: portfolio?.totalValue ? portfolio.totalValue * 0.05 : 0 },
-            { key: 'bsc', name: 'BNB Chain', icon: 'octagon', color: '#F3BA2F', balance: portfolio?.totalValue ? portfolio.totalValue * 0.03 : 0 },
-            { key: 'avalanche', name: 'Avalanche', icon: 'triangle', color: '#E84142', balance: portfolio?.totalValue ? portfolio.totalValue * 0.02 : 0 },
-          ].map((chain) => (
-            <TouchableOpacity 
-              key={chain.key} 
-              style={styles.chainCard}
-              activeOpacity={0.7}
-            >
-              <LinearGradient
-                colors={[withAlpha(chain.color, 0.15), withAlpha(chain.color, 0.05)]}
-                style={styles.chainCardInner}
-              >
-                <View style={[styles.chainIcon, { backgroundColor: withAlpha(chain.color, 0.2), borderColor: withAlpha(chain.color, 0.4) }]}>
-                  <Feather name={chain.icon as any} size={20} color={chain.color} />
-                </View>
-                <Text style={styles.chainName}>{chain.name}</Text>
-                <Text style={styles.chainBalance}>
-                  {PortfolioService.formatUSD(chain.balance)}
-                </Text>
-                <Text style={[styles.chainPercentage, { color: withAlpha(colors.textPrimary, 0.5) }]}>
-                  {chain.balance > 0 && portfolio?.totalValue ? 
-                    `${((chain.balance / portfolio.totalValue) * 100).toFixed(1)}%` : 
-                    '0%'
-                  }
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Holdings</Text>
-        {portfolioAssets.length > 0 ? (
-          <>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableCell, { flex: 1.5 }]}>Asset</Text>
-              <Text style={[styles.tableCell, styles.tableAlignRight, { flex: 1 }]}>Price</Text>
-              <Text style={[styles.tableCell, styles.tableAlignRight, { flex: 1 }]}>Amount</Text>
-              <Text style={[styles.tableCell, styles.tableAlignRight, { flex: 1 }]}>Value</Text>
-            </View>
-            {portfolioAssets.map((asset, index) => (
-              <View key={`${asset.symbol}-${asset.address}`} style={[styles.tableRow, index < portfolioAssets.length - 1 && styles.tableDivider]}>
-                <View style={{ flex: 1.5 }}>
-                  <Text style={styles.assetSymbol}>{asset.symbol}</Text>
-                  <Text style={styles.assetName}>{asset.name}</Text>
-                </View>
-                <Text style={[styles.tableValue, styles.tableAlignRight, { flex: 1 }]}>
-                  {PortfolioService.formatUSD(asset.price)}
-                </Text>
-                <Text style={[styles.tableValue, styles.tableAlignRight, { flex: 1 }]}>
-                  {asset.amount.toFixed(4)}
-                </Text>
-                <Text style={[styles.tableValue, styles.tableAlignRight, { flex: 1 }]}>
-                  {PortfolioService.formatUSD(asset.value)}
-                </Text>
-              </View>
-            ))}
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            <Feather name="inbox" size={48} color={withAlpha(colors.textPrimary, 0.2)} />
-            <Text style={styles.emptyText}>No holdings yet</Text>
-            <Text style={styles.emptySubtext}>
-              {aaAccount?.predictedAddress ? 'Your portfolio will appear here once you receive assets' : 'Connect a wallet to view your holdings'}
-            </Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.headerKicker, { color: colors.accent }]}>MY VAULT</Text>
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>PERFORMANCE</Text>
           </View>
-        )}
-      </View>
+          
+        </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Yield strategies</Text>
-        {yieldPositions.map((position, index) => (
-          <LinearGradient
-            key={position.protocol}
-            colors={gradients.cardAlt}
-            style={[styles.yieldCard, index > 0 && { marginTop: 12 }]}
-          >
-            <Text style={styles.yieldProtocol}>{position.protocol}</Text>
-            <Text style={styles.yieldAsset}>{position.asset}</Text>
-            <View style={styles.yieldRow}>
+        {/* Unified Institutional Performance Card */}
+        <View style={styles.sectionWrapper}>
+          <View style={[styles.omniCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : colors.surface, borderColor: colors.border }]}>
+            {/* Top Row: Balance & Growth */}
+            <View style={styles.omniHeader}>
               <View>
-                <Text style={styles.yieldLabel}>APY</Text>
-                <Text style={[styles.yieldValue, { color: colors.success }]}>{position.apy}</Text>
+                <Text style={[styles.omniLabel, { color: colors.textSecondary }]}>Total Portfolio</Text>
+                <View style={styles.omniBalanceRow}>
+                  <Text style={[styles.omniCurrency, { color: colors.textSecondary }]}>$</Text>
+                  <Text style={[styles.omniBalance, { color: colors.textPrimary }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {walletLoading ? "---" : (totalBalanceUSD >= 1000000000 
+                      ? `${(totalBalanceUSD / 1000000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}B`
+                      : totalBalanceUSD >= 1000000 
+                        ? `${(totalBalanceUSD / 1000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`
+                        : totalBalanceUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
+                  </Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.yieldLabel}>TVL</Text>
-                <Text style={styles.yieldValue}>{position.tvl}</Text>
-              </View>
-              <View>
-                <Text style={styles.yieldLabel}>Status</Text>
-                <Text style={styles.yieldValue}>Auto-compounding</Text>
+              <View style={[styles.omniGrowthBadge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+                <Feather name="trending-up" size={12} color={colors.accent} style={{ marginRight: 4 }} />
+                <Text style={[styles.omniGrowthText, { color: colors.accent }]}>+4.2%</Text>
               </View>
             </View>
-          </LinearGradient>
-        ))}
-      </View>
-      </ScrollView>
+
+            {/* Performance Value */}
+            <Text style={[styles.omniPerformance, { color: colors.textSecondary }]}>
+              +${(totalBalanceUSD * 0.042).toLocaleString(undefined, { maximumFractionDigits: 2 })} this week
+            </Text>
+            
+            {/* Graph */}
+            <View style={styles.omniGraphWrapper}>
+              <Sparkline 
+                data={graphDataMap[selectedPeriod] || graphDataMap['1W']} 
+                width={width - 80} 
+                height={120} 
+                color={colors.accent}
+                strokeWidth={3}
+                fillOpacity={0.15}
+              />
+            </View>
+            
+            {/* Period Picker */}
+            <View style={styles.omniPeriodPicker}>
+              {['1D', '1W', '1M', '1Y', 'ALL'].map((period) => (
+                <TouchableOpacity 
+                  key={period} 
+                  style={[styles.omniPeriodPill, selectedPeriod === period && { backgroundColor: colors.accent }]}
+                  onPress={() => setSelectedPeriod(period)}
+                >
+                  <Text style={[styles.omniPeriodText, { color: selectedPeriod === period ? colors.textOnAccent : colors.textSecondary }]}>{period}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* Market Section - The New "Market Part" */}
+        <View style={styles.sectionWrapper}>
+          <View style={styles.sectionHeadingRow}>
+            <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>MARKET TRENDS</Text>
+            <TouchableOpacity onPress={() => refreshMarket()}>
+              <Text style={[styles.seeAll, { color: colors.accent }]}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.marketScroll}>
+            {marketLoading && marketAssets.length === 0 ? (
+              <View style={{ width: width - 40, height: 140, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator color={colors.accent} />
+              </View>
+            ) : (
+              marketAssets.map((asset) => {
+                const price = parseFloat(asset.priceUsd);
+                const change = parseFloat(asset.changePercent24Hr);
+                
+                return (
+                  <TouchableOpacity 
+                    key={asset.id} 
+                    style={[styles.marketCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : colors.surface, borderColor: colors.border }]}
+                    onPress={() => handleAssetPress({
+                      symbol: asset.symbol,
+                      name: asset.name,
+                      amount: 0,
+                      price: price,
+                      value: 0,
+                      change24h: change,
+                      address: asset.id
+                    })}
+                  >
+                    <View style={styles.marketHeader}>
+                      <TokenIcon symbol={asset.symbol} size={32} />
+                      <View style={[styles.miniChange, { backgroundColor: withAlpha(change >= 0 ? colors.accent : colors.danger, 0.1) }]}>
+                        <Text style={[styles.miniChangeText, { color: change >= 0 ? colors.accent : colors.danger }]}>
+                          {change >= 0 ? '+' : ''}{change.toFixed(1)}%
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.marketName, { color: colors.textPrimary }]} numberOfLines={1}>{asset.name}</Text>
+                    <Text style={[styles.marketPrice, { color: colors.textSecondary }]}>
+                      ${price > 1 ? price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : price.toFixed(3)}
+                    </Text>
+                    <View style={styles.miniGraph}>
+                       <Sparkline 
+                         data={change >= 0 ? [10, 12, 11, 13, 14, 15] : [15, 14, 16, 14, 12, 10]} 
+                         width={100} 
+                         height={30} 
+                         color={change >= 0 ? colors.accent : colors.danger} 
+                         strokeWidth={2} 
+                       />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
+
+        {/* Holdings Section */}
+        <View style={styles.sectionWrapper}>
+          <View style={[styles.glassSection, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Asset Holdings</Text>
+            <AssetList 
+              assets={displayTokens} 
+              formatPrice={(p) => `$${p.toLocaleString()}`} 
+              predictedAddress={smartAccountAddress}
+              onAssetPress={handleAssetPress}
+            />
+          </View>
+        </View>
+
+       </ScrollView>
+
+      {selectedToken && (
+        <TokenDetailModal 
+          visible={modalVisible} 
+          onClose={() => setModalVisible(false)} 
+          token={selectedToken} 
+        />
+      )}
     </TabScreenContainer>
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    screen: {
-      flex: 1,
-    },
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-      paddingHorizontal: 16,
-      paddingTop: 8,
-    },
-    summaryCard: {
-      borderRadius: 28,
-      padding: 24,
-      marginTop: 12,
-      marginBottom: 24,
-      borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.25),
-      backgroundColor: colors.surfaceElevated,
-    },
-    summaryLabel: {
-      color: colors.textMuted,
-      fontSize: 14,
-      textTransform: "uppercase",
-      letterSpacing: 1,
-    },
-    summaryValue: {
-      color: colors.textPrimary,
-      fontSize: 34,
-      fontWeight: "800",
-      marginTop: 8,
-    },
-    summaryChange: {
-      color: colors.success,
-      fontWeight: "600",
-      marginTop: 6,
-    },
-    pillRow: {
-      flexDirection: "row",
-      columnGap: 12,
-      marginTop: 20,
-    },
-    summaryPill: {
-      flex: 1,
-      borderRadius: 18,
-      padding: 16,
-      backgroundColor: withAlpha(colors.textPrimary, 0.06),
-    },
-    pillLabel: {
-      color: colors.textMuted,
-      fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-    },
-    pillValue: {
-      color: colors.textPrimary,
-      fontSize: 18,
-      fontWeight: "700",
-      marginTop: 10,
-    },
-    section: {
-      marginBottom: 24,
-    },
-    sectionTitle: {
-      color: colors.textPrimary,
-      fontSize: 18,
-      fontWeight: "700",
-      marginBottom: 16,
-    },
-    chainGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 12,
-    },
-    chainCard: {
-      width: "48%",
-      borderRadius: 18,
-      overflow: "hidden",
-    },
-    chainCardInner: {
-      padding: 16,
-      borderWidth: 1,
-      borderColor: withAlpha(colors.textPrimary, 0.08),
-      borderRadius: 18,
-      minHeight: 140,
-    },
-    chainIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      borderWidth: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 12,
-    },
-    chainName: {
-      fontSize: 13,
-      fontWeight: "600",
-      color: withAlpha(colors.textPrimary, 0.7),
-      marginBottom: 8,
-    },
-    chainBalance: {
-      fontSize: 20,
-      fontWeight: "700",
-      color: colors.textPrimary,
-      marginBottom: 4,
-    },
-    chainPercentage: {
-      fontSize: 12,
-      fontWeight: "500",
-    },
-    allocationBars: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 22,
-      borderWidth: 1,
-      borderColor: colors.borderMuted,
-      padding: 18,
-    },
-    allocationRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      columnGap: 14,
-      marginBottom: 14,
-    },
-    allocationIndicator: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-    },
-    allocationLabel: {
-      color: colors.textSecondary,
-      fontSize: 14,
-      fontWeight: "600",
-    },
-    progressTrack: {
-      height: 6,
-      borderRadius: 999,
-      backgroundColor: withAlpha(colors.textMuted, 0.22),
-      marginTop: 8,
-      overflow: "hidden",
-    },
-    progressFill: {
-      height: 6,
-      borderRadius: 999,
-    },
-    allocationPercent: {
-      color: colors.textMuted,
-      fontSize: 13,
-      fontWeight: "600",
-    },
-    tableHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingVertical: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderMuted,
-    },
-    tableCell: {
-      color: colors.textMuted,
-      fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 1,
-    },
-    tableAlignRight: {
-      textAlign: "right",
-    },
-    tableRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingVertical: 16,
-    },
-    tableDivider: {
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderMuted,
-    },
-    assetSymbol: {
-      color: colors.textPrimary,
-      fontSize: 16,
-      fontWeight: "700",
-    },
-    assetName: {
-      color: colors.textMuted,
-      marginTop: 4,
-    },
-    tableValue: {
-      color: colors.textSecondary,
-      fontSize: 14,
-    },
-    yieldCard: {
-      borderRadius: 22,
-      padding: 20,
-      borderWidth: 1,
-      borderColor: colors.borderMuted,
-    },
-    yieldProtocol: {
-      color: colors.textMuted,
-      fontSize: 13,
-      textTransform: "uppercase",
-      letterSpacing: 1,
-    },
-    yieldAsset: {
-      color: colors.textPrimary,
-      fontSize: 18,
-      fontWeight: "700",
-      marginTop: 12,
-    },
-    yieldRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginTop: 18,
-    },
-    yieldLabel: {
-      color: colors.textMuted,
-      fontSize: 12,
-      textTransform: "uppercase",
-    },
-    yieldValue: {
-      color: colors.textPrimary,
-      fontSize: 15,
-      fontWeight: "600",
-      marginTop: 6,
-    },
-    emptyState: {
-      alignItems: "center",
-      justifyContent: "center",
-      paddingVertical: 48,
-      paddingHorizontal: 32,
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: colors.borderMuted,
-    },
-    emptyText: {
-      fontSize: 16,
-      fontWeight: "600",
-      color: colors.textPrimary,
-      marginTop: 16,
-      marginBottom: 8,
-    },
-    emptySubtext: {
-      fontSize: 14,
-      color: colors.textSecondary,
-      textAlign: "center",
-      lineHeight: 20,
-    },
-  });
+const styles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingTop: 16,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  headerKicker: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+  },
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  balanceContainer: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+  },
+  sectionWrapper: {
+    marginBottom: 32,
+    paddingHorizontal: 20,
+  },
+  omniCard: {
+    borderRadius: 32,
+    padding: 24,
+    borderWidth: 1,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  omniHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  omniLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  omniBalanceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  omniCurrency: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginRight: 2,
+  },
+  omniBalance: {
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: -1,
+  },
+  omniGrowthBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  omniGrowthText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  omniPerformance: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  omniGraphWrapper: {
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  omniPeriodPicker: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 18,
+    padding: 4,
+    marginTop: 12,
+  },
+  omniPeriodPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    minWidth: 48,
+    alignItems: 'center',
+  },
+  omniPeriodText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  sectionHeadingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  sectionHeading: {
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  seeAll: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  assetCount: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  marketScroll: {
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+  },
+  marketCard: {
+    width: 150,
+    padding: 16,
+    borderRadius: 24,
+    borderWidth: 1,
+    marginRight: 12,
+  },
+  marketHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  marketName: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  marketPrice: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  miniChange: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  miniChangeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  miniGraph: {
+    height: 30,
+    marginTop: 4,
+  },
+  assetsContainer: {
+    borderRadius: 30,
+    padding: 12,
+    borderWidth: 1,
+  },
+  glassSection: {
+    borderRadius: 20,
+    paddingVertical: 22,
+    paddingHorizontal: 25,
+    borderWidth: 1,
+    shadowOpacity: 0,
+    elevation: 0, 
+    overflow: 'visible',
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginBottom: 16,
+  },
+});
 
 export default PortfolioScreen;

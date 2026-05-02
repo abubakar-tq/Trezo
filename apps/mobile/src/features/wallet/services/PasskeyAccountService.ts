@@ -4,14 +4,19 @@ import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import {
   buildAddPasskeyUserOp,
+  buildScheduleRemovePasskeyUserOp,
   getDeployment,
   sendUserOp,
+  waitForUserOperationReceipt,
   type PasskeyInit,
 } from "@/src/integration/viem";
-import type { AddPasskeyUserOpParams } from "@/src/integration/viem/userOps";
-import type { PasskeyMetadata } from "./PasskeyService";
+import type {
+    AddPasskeyUserOpParams,
+    RemovePasskeyUserOpParams,
+} from "@/src/integration/viem/userOps";
 import type { Address, Hex } from "viem";
-import type { UserOperation } from "viem/account-abstraction";
+import type { UserOperation, UserOperationReceipt } from "viem/account-abstraction";
+import type { PasskeyMetadata } from "./PasskeyService";
 
 const STORAGE_PREFIX = "trezo_pending_passkeys_v1_";
 
@@ -28,6 +33,24 @@ export type PendingPasskeyRecord = {
 export type AddPasskeyBuildRequest = {
   smartAccountAddress: Address;
   pendingPasskey: PendingPasskeyRecord;
+  signingPasskeyId: Hex;
+  validatorAddress?: Address;
+  chainId?: SupportedChainId;
+  bundlerUrl?: string;
+  paymasterUrl?: string;
+  usePaymaster?: boolean;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+};
+
+export type RemovePasskeyBuildRequest = {
+  smartAccountAddress: Address;
+  targetPasskeyId: Hex;
   signingPasskeyId: Hex;
   validatorAddress?: Address;
   chainId?: SupportedChainId;
@@ -123,6 +146,36 @@ export class PasskeyAccountService {
     return { userOp, userOpHash };
   }
 
+  static async buildRemovePasskeyUserOp(
+    params: RemovePasskeyBuildRequest,
+  ): Promise<PasskeyUserOpResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const paymasterUrl = params.usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl()
+      : params.paymasterUrl;
+
+    const { userOp, userOpHash } = await buildScheduleRemovePasskeyUserOp({
+      chainId,
+      bundlerUrl,
+      smartAccountAddress: params.smartAccountAddress,
+      targetPasskeyId: params.targetPasskeyId,
+      signingPasskeyId: params.signingPasskeyId,
+      validatorAddress: params.validatorAddress,
+      nonce: params.nonce,
+      nonceKey: params.nonceKey,
+      usePaymaster: params.usePaymaster,
+      paymasterUrl,
+      maxFeePerGas: params.maxFeePerGas,
+      maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+      callGasLimit: params.callGasLimit,
+      verificationGasLimit: params.verificationGasLimit,
+      preVerificationGas: params.preVerificationGas,
+    } satisfies RemovePasskeyUserOpParams);
+
+    return { userOp, userOpHash };
+  }
+
   static async submitAddPasskeyUserOp(
     signedUserOp: UserOperation<"0.7">,
     chainId: SupportedChainId = DEFAULT_CHAIN_ID,
@@ -140,5 +193,14 @@ export class PasskeyAccountService {
       entryPoint = deployment.entryPoint;
     }
     return sendUserOp(signedUserOp, chainId, bundlerUrl, entryPoint);
+  }
+
+  static async waitForReceipt(
+    userOpHash: Hex,
+    chainId: SupportedChainId = DEFAULT_CHAIN_ID,
+    bundlerUrl: string = getBundlerUrl(),
+    timeoutMs = 120_000,
+  ): Promise<UserOperationReceipt<"0.7">> {
+    return waitForUserOperationReceipt(userOpHash, chainId, bundlerUrl, timeoutMs);
   }
 }

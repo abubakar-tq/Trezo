@@ -61,6 +61,7 @@ export const useWallet = () => {
       const { address, mnemonic } = await walletService.generateWallet();
       
       const newAccount: WalletAccount = {
+        id: address,
         address,
         name,
         isActive: true,
@@ -93,6 +94,7 @@ export const useWallet = () => {
       const address = await walletService.importFromMnemonic(mnemonic);
       
       const newAccount: WalletAccount = {
+        id: address,
         address,
         name,
         isActive: true,
@@ -125,6 +127,7 @@ export const useWallet = () => {
       const address = await walletService.importFromPrivateKey(privateKey);
       
       const newAccount: WalletAccount = {
+        id: address,
         address,
         name,
         isActive: true,

@@ -1,27 +1,46 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import React from "react";
+import React, { useEffect, useState } from "react";
 
+import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
 import { AuthStackParamList } from "@/src/types/navigation";
 import {
     AuthResultScreen,
     ForgotPasswordScreen,
-    IntroductionScreen,
     LoginScreen,
+    OnboardingScreen,
     RegisterScreen,
     ResetPasswordScreen,
     SplashScreen,
     VerifyEmailScreen,
-    WelcomeScreen,
 } from "@features/auth";
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 const AuthNavigation = () => {
-  console.log('🔐 [AuthNavigation] Rendering');
-  
+  const [initialRouteName, setInitialRouteName] = useState<keyof AuthStackParamList>("Onboarding");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    DevicePairingService.getPendingDeepLink()
+      .then((pending: unknown) => {
+        if (cancelled) return;
+        if (pending) {
+          setInitialRouteName("Login");
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  console.log('🔐 [AuthNavigation] Rendering, initialRoute:', initialRouteName);
+
   return (
 		<Stack.Navigator
-			initialRouteName="Introduction"
+			initialRouteName={initialRouteName}
 			screenOptions={{
 				headerShown: false,
 				animation: "slide_from_right",
@@ -31,21 +50,20 @@ const AuthNavigation = () => {
 				animationTypeForReplace: "push",
 			}}
 		>
-	  <Stack.Screen 
-	  	name="Splash" 
-	  	component={SplashScreen}
-	  	listeners={{ focus: () => console.log('👀 [AuthNav] Splash focused') }}
-	  />
-	  <Stack.Screen 
-	  	name="Introduction" 
-	  	component={IntroductionScreen}
-	  	listeners={{ focus: () => console.log('👀 [AuthNav] Introduction focused') }}
-	  />
-	  <Stack.Screen name="Welcome" component={WelcomeScreen} />
-	  <Stack.Screen name="Login" component={LoginScreen} />
-	  <Stack.Screen name="Register" component={RegisterScreen} />
-	  <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-	  <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+      <Stack.Screen 
+      	name="Splash" 
+      	component={SplashScreen}
+      	listeners={{ focus: () => console.log('👀 [AuthNav] Splash focused') }}
+      />
+      <Stack.Screen 
+      	name="Onboarding" 
+      	component={OnboardingScreen}
+      	listeners={{ focus: () => console.log('👀 [AuthNav] Onboarding focused') }}
+      />
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+      <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
 		<Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
 		<Stack.Screen name="AuthResult" component={AuthResultScreen} />
 	</Stack.Navigator>

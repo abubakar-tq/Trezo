@@ -5,11 +5,7 @@ import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.so
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    EmailAuth,
-    EmailAuthMsg,
-    EmailProof
-} from "@zk-email/ether-email-auth-contracts/src/EmailAuth.sol";
+import {EmailAuth, EmailAuthMsg, EmailProof} from "@zk-email/ether-email-auth-contracts/src/EmailAuth.sol";
 import {CommandUtils} from "@zk-email/ether-email-auth-contracts/src/libraries/CommandUtils.sol";
 import {UserOverrideableDKIMRegistry} from "@zk-email/contracts/UserOverrideableDKIMRegistry.sol";
 
@@ -19,6 +15,8 @@ import {SendPackedUserOp} from "script/SendPackedUserOp.s.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
+import {RecoveryHash} from "src/recovery/RecoveryHash.sol";
+import {RecoveryTypes} from "src/recovery/RecoveryTypes.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 import {EmailRecovery} from "src/modules/EmailRecovery/EmailRecovery.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
@@ -34,8 +32,7 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
     bytes32 internal constant ACCOUNT_SALT = keccak256("integration-email-recovery");
     bytes32 internal constant GUARDIAN_SALT_1 = keccak256("integration-guardian-salt-1");
     bytes32 internal constant GUARDIAN_SALT_2 = keccak256("integration-guardian-salt-2");
-    bytes32 internal constant DKIM_PUBLIC_KEY_HASH =
-        0x0ea9c777dc7110e5a9e89b13f0cfc540e3845ba120b2b6dc24024d61488d4788;
+    bytes32 internal constant DKIM_PUBLIC_KEY_HASH = 0x0ea9c777dc7110e5a9e89b13f0cfc540e3845ba120b2b6dc24024d61488d4788;
 
     string internal constant DKIM_DOMAIN = "gmail.com";
 
@@ -71,13 +68,8 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
         killSwitchAuthorizer = makeAddr("kill-switch-authorizer");
         proofTimestamp = block.timestamp;
 
-        (
-            HelperConfig _helperConfig,
-            ,
-            ,
-            AccountFactory _accountFactory,
-            PasskeyValidator _passkeyValidator,
-        ) = _deployAccountStack();
+        (HelperConfig _helperConfig,,, AccountFactory _accountFactory, PasskeyValidator _passkeyValidator,) =
+            _deployAccountStack();
         helperConfig = _helperConfig;
         accountFactory = _accountFactory;
         passkeyValidator = _passkeyValidator;
@@ -88,11 +80,7 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
         bundler = makeAddr("bundler");
 
         proxy = _createAuthorizedAccount(
-            accountFactory,
-            ACCOUNT_SALT,
-            0,
-            address(passkeyValidator),
-            PassKeyDemo.getPasskeyInit(0)
+            accountFactory, ACCOUNT_SALT, 0, address(passkeyValidator), PassKeyDemo.getPasskeyInit(0)
         );
 
         _deployZkEmailInfra();
@@ -113,20 +101,21 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
         assertTrue(emailRecovery.canStartRecoveryRequest(proxy), "accepted guardians should meet threshold");
 
         PasskeyTypes.PasskeyInit memory recoveredPasskey = PassKeyDemo.getPasskeyInit(1);
-        bytes32 recoveryHash = emailRecovery.recoveryDataHash(recoveredPasskey);
+        bytes memory recoveryData = _validMultichainRecoveryData(recoveredPasskey);
+        bytes32 recoveryHash = emailRecovery.multichainRecoveryDataHash(recoveryData);
 
         _handleRecovery(0, recoveryHash);
         _handleRecovery(1, recoveryHash);
 
-        (uint256 executeAfter,, uint256 currentWeight, bytes32 storedHash) =
-            emailRecovery.getRecoveryRequest(proxy);
+        (uint256 executeAfter,, uint256 currentWeight, bytes32 storedHash) = emailRecovery.getRecoveryRequest(proxy);
         assertEq(currentWeight, RECOVERY_THRESHOLD, "current weight should reach threshold");
         assertEq(storedHash, recoveryHash, "stored recovery hash mismatch");
 
         vm.warp(executeAfter + 1);
-        emailRecovery.completeRecovery(proxy, abi.encode(recoveredPasskey));
+        emailRecovery.completeRecovery(proxy, recoveryData);
 
         assertEq(passkeyValidator.passkeyCount(proxy), 2, "passkey count not incremented");
+        assertEq(emailRecovery.getRecoveryNonce(proxy), 1, "recovery nonce not incremented");
         assertTrue(
             passkeyValidator.hasPasskey(proxy, PasskeyValidator.PasskeyId.wrap(recoveredPasskey.idRaw)),
             "missing recovered passkey"
@@ -138,20 +127,43 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
         assertEq(allowance, 1e18, "user operation did not execute through recovered passkey");
     }
 
+    function _validMultichainRecoveryData(PasskeyTypes.PasskeyInit memory newPasskey)
+        internal
+        view
+        returns (bytes memory)
+    {
+        RecoveryTypes.RecoveryModuleScope[] memory scopes = new RecoveryTypes.RecoveryModuleScope[](1);
+        scopes[0] = RecoveryTypes.RecoveryModuleScope({
+            chainId: block.chainid,
+            wallet: proxy,
+            recoveryModule: address(emailRecovery),
+            nonce: emailRecovery.getRecoveryNonce(proxy),
+            guardianSetHash: emailRecovery.getGuardianSetHash(proxy),
+            policyHash: emailRecovery.getPolicyHash(proxy)
+        });
+
+        RecoveryTypes.RecoveryIntent memory intent = RecoveryTypes.RecoveryIntent({
+            requestId: keccak256("integration-email-recovery-request"),
+            newPasskeyHash: RecoveryHash.hashPasskeyInitMemory(newPasskey),
+            chainScopeHash: RecoveryHash.hashChainScopesMemory(scopes),
+            validAfter: 0,
+            deadline: uint48(block.timestamp + 30 days),
+            metadataHash: bytes32(0)
+        });
+
+        return abi.encode(uint8(1), newPasskey, intent, scopes);
+    }
+
     function _deployZkEmailInfra() internal {
         vm.startPrank(killSwitchAuthorizer);
 
         UserOverrideableDKIMRegistry dkimImpl = new UserOverrideableDKIMRegistry();
         ERC1967Proxy dkimProxy = new ERC1967Proxy(
             address(dkimImpl),
-            abi.encodeCall(
-                dkimImpl.initialize, (killSwitchAuthorizer, killSwitchAuthorizer, uint256(0))
-            )
+            abi.encodeCall(dkimImpl.initialize, (killSwitchAuthorizer, killSwitchAuthorizer, uint256(0)))
         );
         dkimRegistry = UserOverrideableDKIMRegistry(address(dkimProxy));
-        dkimRegistry.setDKIMPublicKeyHash(
-            DKIM_DOMAIN, DKIM_PUBLIC_KEY_HASH, killSwitchAuthorizer, new bytes(0)
-        );
+        dkimRegistry.setDKIMPublicKeyHash(DKIM_DOMAIN, DKIM_PUBLIC_KEY_HASH, killSwitchAuthorizer, new bytes(0));
 
         verifier = new MockGroth16Verifier();
         emailAuthImpl = new EmailAuth();
@@ -190,8 +202,7 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
         bytes memory functionData = abi.encodeWithSelector(
             SmartAccount.installRecoveryExecutorModule.selector, address(emailRecovery), initData
         );
-        bytes memory executeCalldata =
-            abi.encodeWithSelector(SmartAccount.execute.selector, proxy, 0, functionData);
+        bytes memory executeCalldata = abi.encodeWithSelector(SmartAccount.execute.selector, proxy, 0, functionData);
 
         PackedUserOperation memory userOp =
             sendUserOp.generatePasskeySignedUserOperation(executeCalldata, config, proxy, 0);
@@ -205,10 +216,7 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
         vm.prank(bundler);
         IEntryPoint(entryPoint).handleOps(ops, payable(bundler));
 
-        assertTrue(
-            SmartAccount(payable(proxy)).isRecoveryModule(address(emailRecovery)),
-            "recovery module not enabled"
-        );
+        assertTrue(SmartAccount(payable(proxy)).isRecoveryModule(address(emailRecovery)), "recovery module not enabled");
     }
 
     function _sendUserOperationWithPasskey(uint256 passkeyIndex, bytes32 passkeyPrivateKey) internal {
@@ -252,15 +260,11 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
         });
     }
 
-    function _recoveryMessage(uint256 guardianIndex, bytes32 recoveryHash)
-        internal
-        returns (EmailAuthMsg memory)
-    {
+    function _recoveryMessage(uint256 guardianIndex, bytes32 recoveryHash) internal returns (EmailAuthMsg memory) {
         string memory accountString = CommandUtils.addressToChecksumHexString(proxy);
         string memory recoveryHashString = uint256(recoveryHash).toHexString(32);
-        string memory command = string.concat(
-            "Recover account ", accountString, " using recovery hash ", recoveryHashString
-        );
+        string memory command =
+            string.concat("Recover account ", accountString, " using recovery hash ", recoveryHashString);
 
         bytes[] memory commandParams = new bytes[](2);
         commandParams[0] = abi.encode(proxy);
@@ -274,10 +278,7 @@ contract EmailRecoveryIntegrationTest is AccountFactoryTestHelper {
         });
     }
 
-    function _mockEmailProof(string memory command, bytes32 accountSalt)
-        internal
-        returns (EmailProof memory proof)
-    {
+    function _mockEmailProof(string memory command, bytes32 accountSalt) internal returns (EmailProof memory proof) {
         proof.domainName = DKIM_DOMAIN;
         proof.publicKeyHash = DKIM_PUBLIC_KEY_HASH;
         proof.timestamp = ++proofTimestamp;

@@ -1,8 +1,7 @@
 # Compiler files
 cache/
 out/
-.gas-snapshot       # Gas reports
-
+.gas-snapshot       
 # Local npm dependencies for zk-email/email-recovery toolchain
 node_modules/
 .npm/
@@ -23,6 +22,7 @@ pnpm-debug.log*
 !/deployments/chains/
 !/deployments/chains/*.json
 /deployments/chains/31337.json
+
 
 
 # Docs

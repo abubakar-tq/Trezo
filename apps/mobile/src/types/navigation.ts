@@ -10,8 +10,9 @@ export type AuthStackParamList = {
   Splash: { redirectTo?: { name: string; params?: Record<string, unknown> } } | undefined;
   Introduction: undefined;
   Welcome: undefined;
+  Onboarding: undefined;
   PasskeyRegistration: undefined;
-  Login: { email?: string } | undefined;
+  Login: { email?: string; pairingMode?: "resume" } | undefined;
   Register: { email?: string } | undefined;
   ForgotPassword: { email?: string } | undefined;
   VerifyEmail: { email: string; flow: AuthVerificationFlow };
@@ -24,7 +25,7 @@ export type TabStackParamList = {
   Home: undefined;
   Browser: undefined;
   Portfolio: undefined;
-  Dex: undefined;
+  Dex: { initialTab?: 'swap' | 'bridge' } | undefined;
   Profile: undefined;
 };
 
@@ -36,8 +37,18 @@ export type RootStackParamList = {
   TabNavigation: undefined;
   BrowserSettings: undefined;
   BackupRecovery: undefined;
+  DevicesPasskeys: undefined;
+  PairDevice: { requestId?: string; secret?: string } | undefined;
+  CompromisedWallet: undefined;
   GuardianRecovery: undefined;
   EmailRecovery: undefined;
+  EmailRecoveryStart: undefined;
+  EmailRecoveryGroupStatus: { groupId: string };
+  RecoveryEntry: undefined;
+  CreateRecoveryRequest: { walletAddress?: string } | undefined;
+  ShareRecoveryRequest: { requestId: string };
+  RecoveryProgress: { requestId: string };
+  RecoveryComplete: { requestId: string };
   RecoveryKitExport: {
     vaultKey: string;
     smartAccountAddress: string;
@@ -50,6 +61,19 @@ export type RootStackParamList = {
   AADebug: undefined;
   DeployAccount: undefined;
   DevCreateAccount: undefined;
+  SecurityPrivacy: undefined;
+  ConnectedDevices: undefined;
+  Notifications: undefined;
+  Settings: undefined;
+  AddGuardian: undefined;
+  GuardianManagement: undefined;
+  SecurityCenter: undefined;
+  ThresholdConfiguration: undefined;
+  Buy: undefined;
+  Receive: undefined;
+  Send: undefined;
+  TransactionHistory: undefined;
+  WalletDashboard: undefined;
 };
 
 // Combined Navigation Types for convenience
