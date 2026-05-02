@@ -42,6 +42,7 @@ apps/mobile/.env.*
 !apps/mobile/.env*.example
 !apps/guardian-approval/.env.example
 graphify-out/
+plan.md
 agent-plans/
 AGENTS.md
 Context_Capsule.md
