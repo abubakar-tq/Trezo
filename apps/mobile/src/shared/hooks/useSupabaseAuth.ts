@@ -75,6 +75,29 @@ const normalizeProfile = (
   return { username, avatarUrl, avatarRemoved: false };
 };
 
+const withTimeout = async <T,>(
+	promise: Promise<T>,
+	timeoutMs: number,
+	label: string,
+): Promise<T> => {
+	let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+	const timeoutPromise = new Promise<never>((_, reject) => {
+		timeoutHandle = setTimeout(() => {
+			reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+		}, timeoutMs);
+	});
+
+	try {
+		return await Promise.race([promise, timeoutPromise]);
+	} finally {
+		if (timeoutHandle) {
+			clearTimeout(timeoutHandle);
+		}
+	}
+};
+
+const STARTUP_SYNC_TIMEOUT_MS = 7000;
+
 type UseSupabaseAuthResult = {
 	session: Session | null;
 	loading: boolean;
@@ -160,7 +183,11 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 			if (session?.user && isAuthenticated) {
 				try {
 					// Fetch profile from database first (this updates the store)
-					const dbProfile = await ProfileSyncService.fetchAndSyncProfile(session.user.id);
+					const dbProfile = await withTimeout(
+						ProfileSyncService.fetchAndSyncProfile(session.user.id),
+						STARTUP_SYNC_TIMEOUT_MS,
+						"Profile sync",
+					);
 					
 					// Only use session metadata as fallback if database has no profile
 					if (!dbProfile || !dbProfile.username) {
@@ -180,9 +207,17 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 					}
 
 					// Check if AA wallet exists and fetch guardians
-					const aaWalletId = await GuardianSyncService.getAAWalletId(session.user.id);
+					const aaWalletId = await withTimeout(
+						GuardianSyncService.getAAWalletId(session.user.id),
+						STARTUP_SYNC_TIMEOUT_MS,
+						"AA wallet lookup",
+					);
 					if (aaWalletId) {
-						await GuardianSyncService.fetchAndSyncGuardians(aaWalletId);
+						await withTimeout(
+							GuardianSyncService.fetchAndSyncGuardians(aaWalletId),
+							STARTUP_SYNC_TIMEOUT_MS,
+							"Guardian sync",
+						);
 						console.log("✅ Guardians synced from database");
 					} else {
 						console.log("📝 No AA wallet found, guardians stored locally only");

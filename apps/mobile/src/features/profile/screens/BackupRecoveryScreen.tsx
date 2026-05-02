@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
-import React, { useCallback, useMemo } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { getRecoveryRequestService } from "@/src/features/wallet/services/RecoveryRequestService";
@@ -18,24 +18,48 @@ const BackupRecoveryScreen: React.FC = () => {
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const [openingGuardianRecovery, setOpeningGuardianRecovery] = useState(false);
+
+  const withTimeout = useCallback(async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => reject(new Error("Timed out")), timeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
+  }, []);
 
   const handleGuardianRecoveryPress = useCallback(async () => {
+    if (openingGuardianRecovery) {
+      return;
+    }
+
+    setOpeningGuardianRecovery(true);
     try {
       if (!user?.id) {
         navigation.navigate("RecoveryEntry");
         return;
       }
 
-      const activeRequest = await getRecoveryRequestService().getLatestActiveRecoveryRequestForUser(
-        user.id,
-        smartAccountAddress,
+      const activeRequest = await withTimeout(
+        getRecoveryRequestService().getLatestActiveRecoveryRequestForUser(
+          user.id,
+          smartAccountAddress,
+        ),
+        4000,
       );
       if (activeRequest) {
         navigation.navigate("RecoveryProgress", { requestId: activeRequest.id });
         return;
       }
 
-      const localPasskey = await PasskeyService.getPasskey(user.id);
+      const localPasskey = await withTimeout(PasskeyService.getPasskey(user.id), 2500);
       if (localPasskey?.credentialIdRaw) {
         navigation.navigate("GuardianRecovery");
         return;
@@ -44,8 +68,10 @@ const BackupRecoveryScreen: React.FC = () => {
       navigation.navigate("RecoveryEntry");
     } catch {
       navigation.navigate("RecoveryEntry");
+    } finally {
+      setOpeningGuardianRecovery(false);
     }
-  }, [navigation, smartAccountAddress, user?.id]);
+  }, [navigation, openingGuardianRecovery, smartAccountAddress, user?.id, withTimeout]);
 
   return (
     <View style={styles.container}>
@@ -96,6 +122,7 @@ const BackupRecoveryScreen: React.FC = () => {
               style={styles.optionRow}
               onPress={() => void handleGuardianRecoveryPress()}
               activeOpacity={0.85}
+              disabled={openingGuardianRecovery}
             >
               <View style={styles.optionInfo}>
                 <View
@@ -108,10 +135,18 @@ const BackupRecoveryScreen: React.FC = () => {
                 </View>
                 <View style={styles.optionText}>
                   <Text style={styles.optionLabel}>Guardian Recovery</Text>
-                  <Text style={styles.optionDesc}>Start the on-chain guardian recovery flow</Text>
+                  <Text style={styles.optionDesc}>
+                    {openingGuardianRecovery
+                      ? "Opening guardian recovery..."
+                      : "Start the on-chain guardian recovery flow"}
+                  </Text>
                 </View>
               </View>
-              <Feather name="chevron-right" size={20} color={colors.textMuted} />
+              {openingGuardianRecovery ? (
+                <ActivityIndicator size="small" color={colors.accentAlt} />
+              ) : (
+                <Feather name="chevron-right" size={20} color={colors.textMuted} />
+              )}
             </TouchableOpacity>
           </View>
         </View>

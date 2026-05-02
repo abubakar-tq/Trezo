@@ -21,6 +21,21 @@ const RecoveryEntryScreen: React.FC = () => {
   const [hasLocalPasskey, setHasLocalPasskey] = useState(false);
   const [activeRequest, setActiveRequest] = useState<RecoveryRequest | null>(null);
 
+  const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => reject(new Error("Timed out")), timeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
+  };
+
   const activeRequestTimeLabel = useMemo(() => {
     if (!activeRequest?.deadline) {
       return null;
@@ -55,8 +70,8 @@ const RecoveryEntryScreen: React.FC = () => {
 
       try {
         const [passkey, latestActiveRequest] = await Promise.all([
-          PasskeyService.getPasskey(user.id),
-          getRecoveryRequestService().getLatestActiveRecoveryRequestForUser(user.id),
+          withTimeout(PasskeyService.getPasskey(user.id), 2500),
+          withTimeout(getRecoveryRequestService().getLatestActiveRecoveryRequestForUser(user.id), 4000),
         ]);
 
         if (!mounted) return;
