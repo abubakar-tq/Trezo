@@ -293,7 +293,7 @@ const DevicesPasskeysScreen: React.FC = () => {
 
       const payload = {
         smartAccountAddress: walletAddress as `0x${string}`,
-        passkeyIdToRemove: device.passkey_id as `0x${string}`,
+        targetPasskeyId: device.passkey_id as `0x${string}`,
         signingPasskeyId: passkey.credentialIdRaw as `0x${string}`,
         chainId: DEFAULT_CHAIN_ID,
         usePaymaster: true,

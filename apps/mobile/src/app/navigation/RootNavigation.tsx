@@ -14,6 +14,8 @@ import CompromisedWalletScreen from "@features/profile/screens/CompromisedWallet
 import ConnectedDevicesScreen from "@features/profile/screens/ConnectedDevicesScreen";
 import DevicesPasskeysScreen from "@features/profile/screens/DevicesPasskeysScreen";
 import EmailRecoveryScreen from "@features/profile/screens/EmailRecoveryScreen";
+import EmailRecoveryGroupStatusScreen from "@features/profile/screens/EmailRecoveryGroupStatusScreen";
+import EmailRecoveryStartScreen from "@features/profile/screens/EmailRecoveryStartScreen";
 import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
 import NotificationsScreen from "@features/profile/screens/NotificationsScreen";
 import PairDeviceScreen from "@features/profile/screens/PairDeviceScreen";
@@ -52,7 +54,6 @@ const RootNavigation = () => {
   );
   const { theme } = useAppTheme();
   const [showingSplash, setShowingSplash] = useState(true);
-  const [initialAuthState] = useState(isLoggedIn);
 
   console.log(
     "🔄 [RootNavigation] Rendering, isLoggedIn:",
@@ -61,14 +62,10 @@ const RootNavigation = () => {
     showingSplash,
   );
 
-  // Set guard navigation based on initial auth state
   useEffect(() => {
-    // If user is logged in, require device verification
-    // If not logged in, don't guard navigation
-    setGuardNavigation(initialAuthState);
-  }, [initialAuthState, setGuardNavigation]);
+    setGuardNavigation(isLoggedIn);
+  }, [isLoggedIn, setGuardNavigation]);
 
-  // Ensure splash shows for minimum duration
   useEffect(() => {
     console.log("⏱️ [RootNavigation] Starting splash timer");
     const timer = setTimeout(() => {
@@ -79,29 +76,11 @@ const RootNavigation = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Determine the redirect target after splash
-  const getRedirectTarget = () => {
-    console.log(
-      "🎯 [RootNavigation] Getting redirect target, isLoggedIn:",
-      initialAuthState,
-    );
-    if (!initialAuthState) {
-      // User not logged in - go to Auth stack
-      console.log(
-        "👤 [RootNavigation] User not logged in, showing AuthNavigation",
-      );
-      return null;
-    }
-
-    // User is logged in - show device verification screen
-    console.log(
-      "🔒 [RootNavigation] User logged in, redirecting to DeviceVerification",
-    );
-    return "DeviceVerification";
-  };
-
-  const splashKey = initialAuthState ? "tabs" : "auth";
-  const redirectTarget = getRedirectTarget();
+  const initialRouteName = showingSplash
+    ? "AppSplash"
+    : isLoggedIn
+      ? "DeviceVerification"
+      : "AuthNavigation";
 
   return (
     <NavigationContainer
@@ -116,13 +95,7 @@ const RootNavigation = () => {
       }
     >
       <Stack.Navigator
-        initialRouteName={
-          showingSplash
-            ? "AppSplash"
-            : initialAuthState
-              ? "DeviceVerification"
-              : "AuthNavigation"
-        }
+        initialRouteName={initialRouteName}
         screenOptions={{
           headerShown: false,
           animation: "slide_from_right",
@@ -133,29 +106,19 @@ const RootNavigation = () => {
       >
         {showingSplash ? (
           <Stack.Screen
-            key={splashKey}
             name="AppSplash"
             component={SplashScreen}
-            initialParams={{
-              redirectTo: redirectTarget ? { name: redirectTarget } : undefined,
-            }}
-            listeners={{
-              focus: () => console.log("👀 [Navigation] AppSplash focused"),
-              blur: () => console.log("👋 [Navigation] AppSplash blurred"),
-            }}
           />
         ) : (
           <>
-            {initialAuthState && (
-              <Stack.Screen
-                name="DeviceVerification"
-                component={DeviceVerificationScreen}
-                listeners={{
-                  focus: () =>
-                    console.log("👀 [Navigation] DeviceVerification focused"),
-                }}
-              />
-            )}
+            <Stack.Screen
+              name="DeviceVerification"
+              component={DeviceVerificationScreen}
+              listeners={{
+                focus: () =>
+                  console.log("👀 [Navigation] DeviceVerification focused"),
+              }}
+            />
             <Stack.Screen
               name="AuthNavigation"
               component={AuthNavigation}
@@ -224,6 +187,22 @@ const RootNavigation = () => {
             <Stack.Screen
               name="EmailRecovery"
               component={EmailRecoveryScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="EmailRecoveryStart"
+              component={EmailRecoveryStartScreen}
+              options={{
+                headerShown: false,
+                animation: "slide_from_right",
+              }}
+            />
+            <Stack.Screen
+              name="EmailRecoveryGroupStatus"
+              component={EmailRecoveryGroupStatusScreen}
               options={{
                 headerShown: false,
                 animation: "slide_from_right",

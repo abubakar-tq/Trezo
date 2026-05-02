@@ -60,6 +60,10 @@ export type PasskeyInfo = {
   deviceType: string;
   lastUsedAt?: string;
   createdAt: string;
+  idRaw?: string;
+  px?: string;
+  py?: string;
+  isOnChain?: boolean;
 };
 
 export type GuardianInfo = {

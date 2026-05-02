@@ -56,6 +56,12 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
   );
   const [emailRecoveryActive, setEmailRecoveryActive] = useState(false);
   const [emailRecoveryLoading, setEmailRecoveryLoading] = useState(false);
+  const [emailGuardiansAllAccepted, setEmailGuardiansAllAccepted] = useState(false);
+  const [emailGuardiansInfo, setEmailGuardiansInfo] = useState<{
+    total: number;
+    accepted: number;
+    threshold: number;
+  } | null>(null);
 
   const smartAccountAddress = useMemo(
     () => (aaAccount?.predictedAddress ?? storedSmartAccountAddress ?? undefined) as Address | undefined,
@@ -79,6 +85,16 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
             install.installStatus === "pending",
         );
         setEmailRecoveryActive(Boolean(activeInstall));
+
+        if (metadata) {
+          const total = metadata.guardians.length;
+          const accepted = metadata.guardians.filter(
+            (g) => g.acceptanceStatus === "accepted",
+          ).length;
+          const threshold = metadata.config.threshold;
+          setEmailGuardiansAllAccepted(accepted >= threshold);
+          setEmailGuardiansInfo({ total, accepted, threshold });
+        }
       })
       .catch(() => {
         if (!cancelled) setEmailRecoveryActive(false);
@@ -408,9 +424,11 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
             >
               {emailRecoveryLoading
                 ? "Checking email recovery status..."
-                : emailRecoveryActive
-                  ? "Email recovery is active on this account."
-                  : "Add a trusted email to unlock an extra recovery path."}
+                : !emailRecoveryActive
+                  ? "Add a trusted email to unlock an extra recovery path."
+                  : !emailGuardiansAllAccepted && emailGuardiansInfo
+                    ? `Awaiting guardian approval (${emailGuardiansInfo.accepted}/${emailGuardiansInfo.total} accepted, ${emailGuardiansInfo.threshold} needed). Guardians must accept through the ZK Email flow before recovery is possible.`
+                    : "Email recovery is active. All required guardians have accepted."}
             </Text>
 
             <TouchableOpacity

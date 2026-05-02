@@ -55,12 +55,21 @@ const SecurityPrivacyScreen: React.FC = () => {
         const cloudPasskeys = await PasskeyService.fetchCloudPasskeys(user.id);
         
         // 3. Map cloud passkeys to store format
-        const formattedPasskeys: PasskeyInfo[] = cloudPasskeys.map(cp => ({
+        const formattedPasskeys: PasskeyInfo[] = cloudPasskeys.map((cp: {
+          credentialId: string;
+          credentialIdRaw: string;
+          deviceName: string;
+          deviceType: string;
+          publicKeyX: string;
+          publicKeyY: string;
+          createdAt: string;
+        }) => ({
           id: cp.credentialId,
+          credentialId: cp.credentialId,
           idRaw: cp.credentialIdRaw as Hex,
           deviceName: cp.deviceName,
           deviceType: cp.deviceType,
-          isOnChain: true, // If it's in Supabase, we assume it's on-chain or intended to be
+          isOnChain: true,
           px: cp.publicKeyX,
           py: cp.publicKeyY,
           createdAt: cp.createdAt,
@@ -101,6 +110,7 @@ const SecurityPrivacyScreen: React.FC = () => {
       // Update store with isOnChain: false
       addPasskey({
         id: metadata.credentialId,
+        credentialId: metadata.credentialId,
         idRaw: metadata.credentialIdRaw as Hex,
         deviceName: metadata.deviceName || "This Device",
         deviceType: metadata.deviceType || "Smartphone",
@@ -146,13 +156,13 @@ const SecurityPrivacyScreen: React.FC = () => {
       const { userOp, userOpHash } = await PasskeyAccountService.buildAddPasskeyUserOp({
         smartAccountAddress: smartAccountAddress as Address,
         pendingPasskey: {
-          idRaw: pk.idRaw,
+          idRaw: pk.idRaw as Hex,
           credentialId: pk.id,
-          px: pk.px, 
-          py: pk.py,
+          px: pk.px ?? "",
+          py: pk.py ?? "",
           createdAt: pk.createdAt,
         },
-        signingPasskeyId: signingPasskey.idRaw,
+        signingPasskeyId: signingPasskey.idRaw as Hex,
         chainId: resolvedChainId as any,
         usePaymaster: true,
       });
@@ -172,13 +182,13 @@ const SecurityPrivacyScreen: React.FC = () => {
       if (aaAccount?.id) {
         await PasskeyService.syncPasskeyToCloud(user.id, aaAccount.id, {
           credentialId: pk.id,
-          credentialIdRaw: pk.idRaw,
-          publicKeyX: pk.px,
-          publicKeyY: pk.py,
+          credentialIdRaw: pk.idRaw ?? "",
+          publicKeyX: pk.px ?? "",
+          publicKeyY: pk.py ?? "",
           deviceName: pk.deviceName,
           deviceType: pk.deviceType as any,
           createdAt: pk.createdAt,
-          rpId: "", // Not needed for storage
+          rpId: "",
         });
       }
 

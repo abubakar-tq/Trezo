@@ -4,7 +4,7 @@ import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import {
   buildAddPasskeyUserOp,
-  buildRemovePasskeyUserOp,
+  buildScheduleRemovePasskeyUserOp,
   getDeployment,
   sendUserOp,
   waitForUserOperationReceipt,
@@ -50,7 +50,7 @@ export type AddPasskeyBuildRequest = {
 
 export type RemovePasskeyBuildRequest = {
   smartAccountAddress: Address;
-  passkeyIdToRemove: Hex;
+  targetPasskeyId: Hex;
   signingPasskeyId: Hex;
   validatorAddress?: Address;
   chainId?: SupportedChainId;
@@ -155,11 +155,11 @@ export class PasskeyAccountService {
       ? params.paymasterUrl ?? getPaymasterUrl()
       : params.paymasterUrl;
 
-    const { userOp, userOpHash } = await buildRemovePasskeyUserOp({
+    const { userOp, userOpHash } = await buildScheduleRemovePasskeyUserOp({
       chainId,
       bundlerUrl,
       smartAccountAddress: params.smartAccountAddress,
-      passkeyIdToRemove: params.passkeyIdToRemove,
+      targetPasskeyId: params.targetPasskeyId,
       signingPasskeyId: params.signingPasskeyId,
       validatorAddress: params.validatorAddress,
       nonce: params.nonce,

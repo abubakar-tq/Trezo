@@ -1111,6 +1111,84 @@ export class PasskeyService {
   private static base64UrlEncode(str: string): string {
     return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   }
+
+  static async fetchCloudPasskeys(userId: string): Promise<Array<{
+    credentialId: string;
+    credentialIdRaw: string;
+    deviceName: string;
+    deviceType: string;
+    publicKeyX: string;
+    publicKeyY: string;
+    createdAt: string;
+  }>> {
+    try {
+      const { getSupabaseClient } = require('@lib/supabase') as typeof import('@lib/supabase');
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('passkeys')
+        .select('credential_id, credential_id_raw, device_name, device_type, public_key_x, public_key_y, created_at')
+        .eq('user_id', userId);
+
+      if (error) {
+        console.warn('Failed to fetch cloud passkeys:', error);
+        return [];
+      }
+
+      return (data ?? []).map((row: Record<string, unknown>) => ({
+        credentialId: row.credential_id as string,
+        credentialIdRaw: row.credential_id_raw as string,
+        deviceName: (row.device_name as string) || 'Unknown Device',
+        deviceType: (row.device_type as string) || 'unknown',
+        publicKeyX: row.public_key_x as string,
+        publicKeyY: row.public_key_y as string,
+        createdAt: row.created_at as string,
+      }));
+    } catch (err) {
+      console.warn('Failed to fetch cloud passkeys:', err);
+      return [];
+    }
+  }
+
+  static async syncPasskeyToCloud(
+    userId: string,
+    walletId: string,
+    passkey: {
+      credentialId: string;
+      credentialIdRaw: string;
+      publicKeyX: string;
+      publicKeyY: string;
+      deviceName?: string;
+      deviceType?: string;
+      createdAt: string;
+      rpId: string;
+    },
+  ): Promise<void> {
+    try {
+      const { getSupabaseClient } = require('@lib/supabase') as typeof import('@lib/supabase');
+      const client = getSupabaseClient();
+      const { error } = await client.from('passkeys').upsert(
+        {
+          user_id: userId,
+          wallet_id: walletId,
+          credential_id: passkey.credentialId,
+          credential_id_raw: passkey.credentialIdRaw,
+          public_key_x: passkey.publicKeyX,
+          public_key_y: passkey.publicKeyY,
+          device_name: passkey.deviceName ?? 'Unknown Device',
+          device_type: passkey.deviceType ?? 'unknown',
+          created_at: passkey.createdAt,
+          rp_id: passkey.rpId,
+        },
+        { onConflict: 'credential_id' },
+      );
+
+      if (error) {
+        console.warn('Failed to sync passkey to cloud:', error);
+      }
+    } catch (err) {
+      console.warn('Failed to sync passkey to cloud:', err);
+    }
+  }
 }
 
 export default PasskeyService;

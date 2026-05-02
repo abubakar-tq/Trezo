@@ -240,6 +240,9 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 		[setError],
 	);
 
+	const applySessionRef = useRef(applySession);
+	applySessionRef.current = applySession;
+
 	useEffect(() => {
 		let isMounted = true;
 
@@ -266,16 +269,16 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 
 		client.auth
 			.getSession()
-			.then(({ data, error: sessionError }) => {
+			.then(async ({ data, error: sessionError }) => {
 				if (!isMounted) return;
 				if (sessionError) {
 					setError(sessionError);
-					applySession(null);
+					await applySessionRef.current(null);
 					return;
 				}
 
 				const session = data.session ?? null;
-				applySession(session);
+				await applySessionRef.current(session);
 			})
 			.finally(() => {
 				if (isMounted) {
@@ -285,7 +288,7 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 
 		const { data: subscription } = client.auth.onAuthStateChange(
 			(event, session) => {
-		applySession(session);
+		applySessionRef.current(session);
 
 				if (event === "TOKEN_REFRESHED") {
 					setError(null);
@@ -297,7 +300,7 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 			isMounted = false;
 			subscription.subscription.unsubscribe();
 		};
-	}, [applySession, setError, setIsLoggedIn, setIsOnboarded, setProfile, setSession, setUser]);
+	}, [setError, setIsLoggedIn, setIsOnboarded, setProfile, setSession, setUser]);
 
 	useEffect(() => {
 		if (!isSupabaseConfigured) return;

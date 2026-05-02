@@ -10,6 +10,7 @@ export type AuthStackParamList = {
   Splash: { redirectTo?: { name: string; params?: Record<string, unknown> } } | undefined;
   Introduction: undefined;
   Welcome: undefined;
+  Onboarding: undefined;
   PasskeyRegistration: undefined;
   Login: { email?: string; pairingMode?: "resume" } | undefined;
   Register: { email?: string } | undefined;
@@ -41,6 +42,8 @@ export type RootStackParamList = {
   CompromisedWallet: undefined;
   GuardianRecovery: undefined;
   EmailRecovery: undefined;
+  EmailRecoveryStart: undefined;
+  EmailRecoveryGroupStatus: { groupId: string };
   RecoveryEntry: undefined;
   CreateRecoveryRequest: { walletAddress?: string } | undefined;
   ShareRecoveryRequest: { requestId: string };

@@ -1300,6 +1300,62 @@ const EmailRecoveryScreen: React.FC = () => {
               </Text>
             )}
           </TouchableOpacity>
+
+          {moduleInstalledState && smartAccountReady && (
+            <View style={styles.guardianAcceptanceSection}>
+              <Text style={styles.cardTitle}>Guardian Approval Status</Text>
+              <Text style={styles.cardDesc}>
+                Each guardian must accept their role through the ZK Email verification flow before recovery is possible. On Anvil, run `make mock-accept-guardians-local` to simulate acceptance.
+              </Text>
+              {storedMetadata ? (
+                <>
+                  {storedMetadata.guardians.map((guardian, index) => (
+                    <View key={guardian.emailHash} style={styles.guardianStatusRow}>
+                      <View style={styles.guardianInfo}>
+                        <Text style={styles.guardianEmailText}>
+                          {guardian.resolvedEmail ?? guardian.maskedEmail}
+                          {guardian.isLocked ? " (locked)" : ""}
+                        </Text>
+                        <Text style={styles.guardianWeightText}>weight {guardian.weight}</Text>
+                      </View>
+                      <View style={[
+                        styles.acceptanceBadge,
+                        guardian.acceptanceStatus === "accepted"
+                          ? styles.acceptanceBadgeAccepted
+                          : styles.acceptanceBadgePending,
+                      ]}>
+                        <Text style={[
+                          styles.acceptanceBadgeText,
+                          guardian.acceptanceStatus === "accepted"
+                            ? styles.acceptanceBadgeTextAccepted
+                            : styles.acceptanceBadgeTextPending,
+                        ]}>
+                          {guardian.acceptanceStatus === "accepted" ? "Accepted" : "Awaiting Approval"}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                  <View style={styles.acceptanceSummaryRow}>
+                    <Text style={styles.acceptanceSummaryText}>
+                      {storedMetadata.guardians.filter((g) => g.acceptanceStatus === "accepted").length}/{storedMetadata.guardians.length} accepted
+                      ({storedMetadata.config.threshold} needed)
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <Text style={styles.cardDesc}>Loading guardian status...</Text>
+              )}
+              <TouchableOpacity
+                style={[styles.installButton, styles.startRecoveryButton]}
+                onPress={() => navigation.navigate("EmailRecoveryStart")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.installButtonText}>
+                  Start Email Recovery
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -1595,6 +1651,69 @@ const createStyles = (colors: ThemeColors) =>
     },
     syncButton: {
       marginTop: 12,
+    },
+    startRecoveryButton: {
+      marginTop: 12,
+      backgroundColor: colors.success,
+    },
+    guardianAcceptanceSection: {
+      backgroundColor: colors.surfaceCard,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 20,
+      gap: 12,
+    },
+    guardianStatusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 8,
+      gap: 12,
+    },
+    guardianInfo: {
+      flex: 1,
+    },
+    guardianEmailText: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    guardianWeightText: {
+      color: colors.textMuted,
+      fontSize: 12,
+    },
+    acceptanceBadge: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 10,
+    },
+    acceptanceBadgeAccepted: {
+      backgroundColor: withAlpha(colors.success, 0.12),
+    },
+    acceptanceBadgePending: {
+      backgroundColor: withAlpha(colors.warning, 0.12),
+    },
+    acceptanceBadgeText: {
+      fontSize: 11,
+      fontWeight: "700",
+      textTransform: "uppercase",
+    },
+    acceptanceBadgeTextAccepted: {
+      color: colors.success,
+    },
+    acceptanceBadgeTextPending: {
+      color: colors.warning,
+    },
+    acceptanceSummaryRow: {
+      paddingTop: 4,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    acceptanceSummaryText: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: "600",
     },
   });
 

@@ -1,6 +1,5 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
 
 import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
 import { AuthStackParamList } from "@/src/types/navigation";
@@ -18,7 +17,7 @@ import {
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 const AuthNavigation = () => {
-  const [initialRouteName, setInitialRouteName] = useState<keyof AuthStackParamList | null>(null);
+  const [initialRouteName, setInitialRouteName] = useState<keyof AuthStackParamList>("Onboarding");
 
   useEffect(() => {
     let cancelled = false;
@@ -26,29 +25,18 @@ const AuthNavigation = () => {
     DevicePairingService.getPendingDeepLink()
       .then((pending: unknown) => {
         if (cancelled) return;
-        // If there's a pending pairing link, route to Login with pairingMode so the
-        // user can authenticate and then resume the pairing flow
-        setInitialRouteName(pending ? "Login" : "Onboarding");
+        if (pending) {
+          setInitialRouteName("Login");
+        }
       })
-      .catch(() => {
-        if (cancelled) return;
-        setInitialRouteName("Onboarding");
-      });
+      .catch(() => {});
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  console.log('🔐 [AuthNavigation] Rendering');
-
-  if (!initialRouteName) {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#000000" }}>
-        <ActivityIndicator size="large" color="#ffffff" />
-      </View>
-    );
-  }
+  console.log('🔐 [AuthNavigation] Rendering, initialRoute:', initialRouteName);
 
   return (
 		<Stack.Navigator
