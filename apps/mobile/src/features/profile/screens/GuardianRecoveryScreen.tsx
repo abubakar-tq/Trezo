@@ -33,6 +33,14 @@ const shortenHex = (value: string | null | undefined, chars = 6) => {
   return `${value.slice(0, chars + 2)}…${value.slice(-chars)}`;
 };
 
+// TODO(TESTING): Timelock selector - hardcode to 1 day before production.
+const TIMELOCK_OPTIONS = [
+  { label: "5 min", seconds: 300 },
+  { label: "30 min", seconds: 1800 },
+  { label: "1 hour", seconds: 3600 },
+  { label: "1 day", seconds: 86400 },
+] as const;
+
 const GuardianRecoveryScreen: React.FC = () => {
   const navigation = useNavigation();
   const { theme } = useAppTheme();
@@ -78,13 +86,6 @@ const GuardianRecoveryScreen: React.FC = () => {
   const [viewMode, setViewMode] = useState<"form" | "list">(
     storedGuardians.length > 0 ? "list" : "form"
   );
-  // TODO(TESTING): Timelock selector - hardcoded to 1 day in production
-  const TIMELOCK_OPTIONS = [
-    { label: "5 min", seconds: 300 },
-    { label: "30 min", seconds: 1800 },
-    { label: "1 hour", seconds: 3600 },
-    { label: "1 day", seconds: 86400 },
-  ];
   const [selectedTimelockIdx, setSelectedTimelockIdx] = useState(3); // default 1 day
   const [syncStatus, setSyncStatus] = useState<{
     hasWalletMetadata: boolean;
@@ -402,6 +403,7 @@ const GuardianRecoveryScreen: React.FC = () => {
     resolvedChainId,
     requiredSignatures,
     savedGuardianAddresses,
+    selectedTimelockIdx,
     smartAccountAddress,
     smartAccountReady,
     user?.id,

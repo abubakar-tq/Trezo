@@ -6,6 +6,7 @@ import { getDeployment } from "@/src/integration/viem/deployments";
 import { getPublicClient } from "@/src/integration/viem/clients";
 import { ABIS } from "@/src/integration/viem/abis";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { useUserStore } from "@store/useUserStore";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import type { Hex, Address } from "viem";
@@ -25,12 +26,15 @@ const shortHex = (value: string, head = 10, tail = 6) =>
 
 export const PasskeyVerifyCard: React.FC = () => {
   const userId = useUserStore((state) => state.user?.id ?? null);
-  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const storedSmartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const aaAccount = useWalletStore((state) => state.aaAccount);
+  const activeChainId = useWalletStore((state) => state.activeChainId);
   const [status, setStatus] = useState<"idle" | "checking" | "done" | "error">("idle");
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const chainId = DEFAULT_CHAIN_ID as SupportedChainId;
+  const smartAccountAddress = aaAccount?.predictedAddress ?? storedSmartAccountAddress;
+  const chainId = (aaAccount?.chainId ?? activeChainId ?? DEFAULT_CHAIN_ID) as SupportedChainId;
   const deployment = getDeployment(chainId);
   const validator = deployment?.passkeyValidator as Hex | undefined;
 
