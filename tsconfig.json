@@ -1,5 +1,0 @@
-{
-  "compilerOptions": {},
-  "exclude": ["contracts/lib", "contracts"],
-  "extends": "expo/tsconfig.base"
-}
