@@ -34,8 +34,9 @@ type SettingsItem = {
 const baseSettingsItems: SettingsItem[] = [
   { label: "Contacts", icon: "book", route: "ContactList" },
   { label: "Browser settings", icon: "globe", route: "BrowserSettings" },
-  { label: "Security & Privacy", icon: "shield", route: "SecurityPrivacy" },
+  { label: "Devices & passkeys", icon: "smartphone", route: "DevicesPasskeys" },
   { label: "Notifications", icon: "bell", route: "Notifications" },
+  { label: "Backup & recovery", icon: "cloud", route: "BackupRecovery" },
 ];
 
 const settingsItems: SettingsItem[] = [
