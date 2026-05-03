@@ -1,20 +1,23 @@
 /**
  * BuyScreen.tsx
  * 
- * Minimalistic Buy Crypto Screen
- * Single-screen layout, no scrolling
- * Clean, sophisticated design matching home tab aesthetic
+ * Refactored Buy Crypto Screen
+ * - Supports Provider Abstraction (Transak/Mock)
+ * - Real-time status polling
+ * - Local Anvil fulfillment support
  */
 
-import { Feather, FontAwesome5 } from "@expo/vector-icons";
+import { Feather, FontAwesome5, Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Dimensions,
   Image,
   KeyboardAvoidingView,
@@ -24,7 +27,8 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  ScrollView
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -32,6 +36,8 @@ import { useWalletData } from "@hooks/useWalletData";
 import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal";
 import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
 import { useWalletStore } from "../store/useWalletStore";
+import { RampService } from "../../../services/RampService";
+import { RampOrder, RampStatus } from "../../../types/ramp";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -45,10 +51,17 @@ export const BuyScreen: React.FC = () => {
   const { tokens } = useWalletData();
   const { accounts, activeAccountId, setActiveAccount } = useWalletStore();
   
+  // Input State
   const [amount, setAmount] = useState("");
   const [isAssetPickerVisible, setIsAssetPickerVisible] = useState(false);
   const [isAccountPickerVisible, setIsAccountPickerVisible] = useState(false);
   
+  // Order State
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [activeOrder, setActiveOrder] = useState<RampOrder | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const pollInterval = useRef<NodeJS.Timeout | null>(null);
+
   const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts[0];
 
   const [selectedAsset, setSelectedAsset] = useState<Asset>({
@@ -57,17 +70,45 @@ export const BuyScreen: React.FC = () => {
     logo: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
   });
 
-  // Calculate crypto amount
+  // Calculate crypto amount (Rough estimate for UI)
   const estimatedCrypto = useMemo(() => {
     const val = parseFloat(amount || "0");
     if (isNaN(val) || val <= 0) return "0.0000";
-    
     const basePrice = selectedAsset.symbol === 'ETH' ? 2500 : 
-                      selectedAsset.symbol === 'BTC' ? 45000 : 
+                      selectedAsset.symbol === 'BTC' ? 65000 : 
                       selectedAsset.symbol === 'USDC' ? 1 : 100;
-    
     return (val / basePrice).toFixed(4);
   }, [amount, selectedAsset]);
+
+  // Polling Logic
+  useEffect(() => {
+    if (isPolling && activeOrder?.id) {
+      pollInterval.current = setInterval(async () => {
+        try {
+          const updatedOrder = await RampService.getOrder(activeOrder.id);
+          setActiveOrder(updatedOrder);
+          
+          if (['completed', 'failed', 'local_mock_completed', 'expired'].includes(updatedOrder.internalStatus)) {
+            stopPolling();
+            if (updatedOrder.internalStatus === 'local_mock_completed' || updatedOrder.internalStatus === 'completed') {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+          }
+        } catch (error) {
+          console.error("Polling error:", error);
+        }
+      }, 3000);
+    }
+    return () => stopPolling();
+  }, [isPolling, activeOrder?.id]);
+
+  const stopPolling = () => {
+    if (pollInterval.current) {
+      clearInterval(pollInterval.current);
+      pollInterval.current = null;
+    }
+    setIsPolling(false);
+  };
 
   const handleAmountChange = (value: string) => {
     const cleaned = value.replace(/[^0-9.]/g, '');
@@ -78,24 +119,86 @@ export const BuyScreen: React.FC = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const handleReviewPurchase = async () => {
+  const handleBuy = async () => {
     const val = parseFloat(amount || "0");
     if (val <= 0) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
-    
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    
-    const banxaUrl = `https://checkout.banxa.com/?fiatAmount=${amount}&fiatCode=USD&coinCode=${selectedAsset.symbol}&walletAddress=${activeAccount?.address || ''}`;
-    
-    await WebBrowser.openBrowserAsync(banxaUrl);
+
+    setIsProcessing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      const session = await RampService.createSession({
+        walletAddress: activeAccount.address,
+        chainId: 31337, // Local Anvil for Demo
+        fiatCurrency: 'USD',
+        fiatAmount: val,
+        cryptoCurrency: selectedAsset.symbol,
+      });
+
+      // Get initial order data
+      const order = await RampService.getOrder(session.orderId);
+      setActiveOrder(order);
+      setIsPolling(true);
+
+      if (session.provider === 'transak' && session.widgetUrl) {
+        await WebBrowser.openBrowserAsync(session.widgetUrl);
+      } else if (session.provider === 'mock') {
+        // Mock provider just shows the status card immediately
+      }
+
+    } catch (error: any) {
+      console.error("Buy error:", error);
+      Alert.alert("Error", error.message || "Failed to create session");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleAccountSelect = (account: any) => {
-    setActiveAccount(account);
-    setIsAccountPickerVisible(false);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleCompleteMock = async () => {
+    if (!activeOrder) return;
+    
+    try {
+      setIsProcessing(true);
+      await RampService.completeMockOrder(activeOrder.id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to complete mock order");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const resetOrder = () => {
+    setActiveOrder(null);
+    setAmount("");
+    stopPolling();
+  };
+
+  const getStatusColor = (status: RampStatus) => {
+    switch (status) {
+      case 'completed':
+      case 'local_mock_completed': return colors.success;
+      case 'failed':
+      case 'expired': return colors.error;
+      case 'processing': return colors.accent;
+      default: return colors.textSecondary;
+    }
+  };
+
+  const getStatusText = (status: RampStatus) => {
+    switch (status) {
+      case 'created': return 'Order Initiated';
+      case 'widget_opened': return 'Awaiting Payment';
+      case 'payment_pending': return 'Confirming Payment';
+      case 'processing': return 'Funding Wallet...';
+      case 'completed': return 'Funds Delivered';
+      case 'local_mock_completed': return 'Mock Funding Successful';
+      case 'failed': return 'Transaction Failed';
+      default: return status.toUpperCase();
+    }
   };
 
   const displayAddress = activeAccount?.address 
@@ -120,135 +223,171 @@ export const BuyScreen: React.FC = () => {
               navigation.goBack();
             }} 
             style={styles.backButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Feather name="x" size={24} color={colors.textPrimary} />
+            <Feather name="chevron-left" size={28} color={colors.textPrimary} />
           </TouchableOpacity>
           
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-            Buy
+            Buy Crypto
           </Text>
           
-          <TouchableOpacity 
-            onPress={() => setIsAccountPickerVisible(true)}
-            style={styles.walletChip}
-          >
-            <View style={[styles.walletDot, { backgroundColor: colors.success }]} />
-            <Text style={[styles.walletChipText, { color: colors.textSecondary }]}>
-              {activeAccount?.name || 'Primary Wallet'}
-            </Text>
-          </TouchableOpacity>
+          <View style={{ width: 44 }} />
         </View>
 
-        {/* Main Content - No Scroll, Single Screen */}
-        <View style={styles.content}>
-          
-          {/* Token Selector Card - Compact */}
-          <TouchableOpacity 
-            style={[styles.tokenCard, { backgroundColor: colors.surfaceCard }]}
-            onPress={() => setIsAssetPickerVisible(true)}
-            activeOpacity={0.9}
-          >
-            <View style={styles.tokenLeft}>
-              {selectedAsset.logo ? (
-                <Image 
-                  source={{ uri: selectedAsset.logo }} 
-                  style={styles.tokenIcon}
-                />
-              ) : (
-                <View style={[styles.tokenAvatar, { backgroundColor: withAlpha(colors.accent, 0.12) }]}>
-                  <Text style={[styles.tokenAvatarText, { color: colors.accent }]}>
-                    {selectedAsset.symbol[0]}
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          {!activeOrder ? (
+            <>
+              {/* Wallet Selector */}
+              <TouchableOpacity 
+                onPress={() => setIsAccountPickerVisible(true)}
+                style={[styles.accountCard, { backgroundColor: colors.surfaceCard }]}
+              >
+                <View style={styles.accountInfo}>
+                  <View style={[styles.accountDot, { backgroundColor: colors.success }]} />
+                  <Text style={[styles.accountName, { color: colors.textPrimary }]}>
+                    {activeAccount?.name || 'Primary Account'}
                   </Text>
                 </View>
+                <Text style={[styles.accountAddress, { color: colors.textMuted }]}>
+                  {displayAddress}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Amount Entry Area */}
+              <View style={styles.entrySection}>
+                <View style={styles.amountInputRow}>
+                  <Text style={[styles.currencySymbol, { color: colors.textPrimary }]}>$</Text>
+                  <TextInput
+                    style={[styles.amountInput, { color: colors.textPrimary }]}
+                    value={amount}
+                    onChangeText={handleAmountChange}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    placeholderTextColor={withAlpha(colors.textPrimary, 0.1)}
+                    maxLength={7}
+                    autoFocus
+                  />
+                </View>
+                
+                <Text style={[styles.estimatedCrypto, { color: colors.textMuted }]}>
+                  ≈ {estimatedCrypto} {selectedAsset.symbol}
+                </Text>
+
+                {/* Asset Selector Chip */}
+                <TouchableOpacity 
+                  style={[styles.assetChip, { backgroundColor: withAlpha(colors.accent, 0.1) }]}
+                  onPress={() => setIsAssetPickerVisible(true)}
+                >
+                  <Image source={{ uri: selectedAsset.logo }} style={styles.assetLogo} />
+                  <Text style={[styles.assetChipText, { color: colors.accent }]}>{selectedAsset.symbol}</Text>
+                  <Feather name="chevron-down" size={14} color={colors.accent} />
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            /* ACTIVE ORDER STATUS CARD */
+            <View style={[styles.statusContainer, { backgroundColor: colors.surfaceCard }]}>
+              <View style={[styles.statusIconContainer, { backgroundColor: withAlpha(getStatusColor(activeOrder.internalStatus), 0.1) }]}>
+                {['completed', 'local_mock_completed'].includes(activeOrder.internalStatus) ? (
+                  <Ionicons name="checkmark-circle" size={64} color={colors.success} />
+                ) : activeOrder.internalStatus === 'failed' ? (
+                  <Ionicons name="close-circle" size={64} color={colors.error} />
+                ) : (
+                  <ActivityIndicator size="large" color={colors.accent} />
+                )}
+              </View>
+
+              <Text style={[styles.statusTitle, { color: colors.textPrimary }]}>
+                {getStatusText(activeOrder.internalStatus)}
+              </Text>
+              
+              <Text style={[styles.statusSubtitle, { color: colors.textMuted }]}>
+                {activeOrder.fiatAmount} {activeOrder.fiatCurrency} → {estimatedCrypto} {activeOrder.cryptoCurrency}
+              </Text>
+
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+              <View style={styles.detailsList}>
+                <View style={styles.detailItem}>
+                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Provider</Text>
+                  <Text style={[styles.detailValue, { color: colors.textPrimary, textTransform: 'capitalize' }]}>
+                    {activeOrder.provider}
+                  </Text>
+                </View>
+                
+                <View style={styles.detailItem}>
+                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Destination</Text>
+                  <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{displayAddress}</Text>
+                </View>
+
+                {(activeOrder.txHash || activeOrder.localFulfillmentTxHash) && (
+                  <View style={styles.detailItem}>
+                    <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Transaction</Text>
+                    <Text style={[styles.detailValue, { color: colors.accent }]} numberOfLines={1}>
+                      {(activeOrder.txHash || activeOrder.localFulfillmentTxHash)?.slice(0, 10)}...{(activeOrder.txHash || activeOrder.localFulfillmentTxHash)?.slice(-8)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* DEV TOOLS: Complete Mock Order */}
+              {activeOrder.provider === 'mock' && !['local_mock_completed', 'completed', 'failed'].includes(activeOrder.internalStatus) && (
+                <TouchableOpacity 
+                  style={[styles.mockButton, { backgroundColor: colors.accent }]}
+                  onPress={handleCompleteMock}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <FontAwesome5 name="magic" size={16} color="#fff" />
+                      <Text style={styles.mockButtonText}>Complete Mock Order</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               )}
-              <View style={styles.tokenDetails}>
-                <Text style={[styles.tokenSymbol, { color: colors.textPrimary }]}>
-                  {selectedAsset.symbol}
-                </Text>
-                <Text style={[styles.tokenName, { color: colors.textMuted }]}>
-                  {selectedAsset.name}
-                </Text>
-              </View>
-            </View>
-            <Feather name="chevron-down" size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
 
-          {/* Amount Input Section */}
-          <View style={[styles.amountCard, { backgroundColor: colors.surfaceCard }]}>
-            <Text style={[styles.amountLabel, { color: colors.textMuted }]}>
-              Enter amount in USD
-            </Text>
-            <View style={styles.amountInputRow}>
-              <Text style={[styles.dollarSign, { color: colors.textPrimary }]}>$</Text>
-              <TextInput
-                style={[styles.amountInput, { color: colors.textPrimary }]}
-                value={amount}
-                onChangeText={handleAmountChange}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor={withAlpha(colors.textPrimary, 0.15)}
-                maxLength={7}
-                selectionColor={colors.accent}
-                autoFocus
-              />
+              {['completed', 'local_mock_completed', 'failed'].includes(activeOrder.internalStatus) && (
+                <TouchableOpacity 
+                  style={[styles.doneButton, { borderColor: colors.border }]}
+                  onPress={resetOrder}
+                >
+                  <Text style={[styles.doneButtonText, { color: colors.textPrimary }]}>Done</Text>
+                </TouchableOpacity>
+              )}
             </View>
-            
-            {/* Conversion Display */}
-            <View style={[styles.conversionRow, { borderTopColor: withAlpha(colors.border, 0.08) }]}>
-              <View style={styles.conversionLeft}>
-                <Feather name="arrow-down" size={14} color={colors.accent} />
-                <Text style={[styles.conversionText, { color: colors.textSecondary }]}>
-                  You get
-                </Text>
-              </View>
-              <Text style={[styles.conversionAmount, { color: colors.textPrimary }]}>
-                {estimatedCrypto} {selectedAsset.symbol}
-              </Text>
-            </View>
-          </View>
+          )}
+        </ScrollView>
 
-          {/* Banxa Info - Subtle text style */}
-          <View style={styles.banxaInfo}>
-            <View style={styles.banxaLeft}>
-              <FontAwesome5 name="bolt" size={12} color={colors.accent} />
-              <Text style={[styles.banxaTitle, { color: colors.textPrimary }]}>
-                Banxa
-              </Text>
-            </View>
-            <Text style={[styles.banxaSubtitle, { color: colors.textMuted }]}>
-              2% fee • 5-10 min
-            </Text>
-          </View>
-
-          {/* Spacer to push button down */}
-          <View style={styles.spacer} />
-        </View>
-
-        {/* Fixed Bottom Action */}
-        <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <TouchableOpacity 
-            activeOpacity={0.9}
-            onPress={handleReviewPurchase}
-            disabled={!isValidAmount}
-          >
-            <LinearGradient
-              colors={isValidAmount ? [colors.accent, colors.accent] : ['#ccc', '#bbb']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[styles.actionButton, { opacity: isValidAmount ? 1 : 0.5 }]}
+        {/* Footer Action Button */}
+        {!activeOrder && (
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <TouchableOpacity 
+              activeOpacity={0.9}
+              onPress={handleBuy}
+              disabled={!isValidAmount || isProcessing}
             >
-              <Text style={styles.actionText}>
-                {isValidAmount ? `Buy ${estimatedCrypto} ${selectedAsset.symbol}` : 'Enter Amount'}
-              </Text>
-              <Feather name="arrow-right" size={18} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
-          
-          <Text style={[styles.termsText, { color: colors.textMuted }]}>
-            Powered by Banxa • Prices include fees
-          </Text>
-        </View>
+              <LinearGradient
+                colors={isValidAmount ? [colors.accent, colors.accent] : [colors.border, colors.border]}
+                style={[styles.buyButton, { opacity: isValidAmount ? 1 : 0.5 }]}
+              >
+                {isProcessing ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Text style={styles.buyButtonText}>Buy {selectedAsset.symbol}</Text>
+                    <Feather name="arrow-right" size={20} color="#fff" />
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+            
+            <Text style={[styles.poweredBy, { color: colors.textMuted }]}>
+              Powered by Trezo Multi-Ramp Engine
+            </Text>
+          </View>
+        )}
 
       </KeyboardAvoidingView>
 
@@ -256,7 +395,7 @@ export const BuyScreen: React.FC = () => {
       <AccountPickerModal
         isVisible={isAccountPickerVisible}
         onClose={() => setIsAccountPickerVisible(false)}
-        onSelect={handleAccountSelect}
+        onSelect={(acc) => { setActiveAccount(acc); setIsAccountPickerVisible(false); }}
         accounts={accounts}
         selectedAddress={activeAccount?.address}
       />
@@ -264,7 +403,7 @@ export const BuyScreen: React.FC = () => {
       <AssetPickerModal
         isVisible={isAssetPickerVisible}
         onClose={() => setIsAssetPickerVisible(false)}
-        onSelect={(asset) => setSelectedAsset(asset)}
+        onSelect={(asset) => { setSelectedAsset(asset); setIsAssetPickerVisible(false); }}
         assets={tokens}
       />
     </View>
@@ -282,175 +421,193 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingBottom: 20,
-    zIndex: 10,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
   },
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 14,
     justifyContent: 'center',
-    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
   },
-  walletChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'transparent',
-  },
-  walletDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  walletChipText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
+  scrollContent: {
     paddingHorizontal: 24,
-    gap: 16,
+    paddingTop: 20,
+    paddingBottom: 100,
   },
-  tokenCard: {
+  accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 16,
+    padding: 16,
+    borderRadius: 20,
+    marginBottom: 40,
   },
-  tokenLeft: {
+  accountInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  tokenIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  accountDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  tokenAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+  accountName: {
+    fontSize: 15,
+    fontWeight: '600',
   },
-  tokenAvatarText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  tokenDetails: {
-    gap: 2,
-  },
-  tokenSymbol: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  tokenName: {
+  accountAddress: {
     fontSize: 13,
     fontWeight: '500',
   },
-  amountCard: {
-    padding: 20,
-    borderRadius: 20,
-  },
-  amountLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 12,
+  entrySection: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   amountInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    gap: 4,
   },
-  dollarSign: {
+  currencySymbol: {
     fontSize: 32,
-    fontWeight: '600',
-    marginRight: 4,
+    fontWeight: '500',
+    marginTop: 8,
   },
   amountInput: {
-    fontSize: 40,
+    fontSize: 64,
     fontWeight: '700',
-    flex: 1,
-    letterSpacing: -0.5,
-    padding: 0,
-    margin: 0,
+    textAlign: 'center',
   },
-  conversionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-    borderTopWidth: 1,
+  estimatedCrypto: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginTop: 8,
   },
-  conversionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  conversionText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  conversionAmount: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  banxaInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
-  banxaLeft: {
+  assetChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    marginTop: 24,
   },
-  banxaTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+  assetLogo: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
   },
-  banxaSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
+  assetChipText: {
+    fontSize: 15,
+    fontWeight: '700',
   },
-  spacer: {
-    flex: 1,
-  },
-  bottomContainer: {
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 24,
     paddingTop: 16,
   },
-  actionButton: {
-    height: 60,
-    borderRadius: 20,
+  buyButton: {
+    height: 64,
+    borderRadius: 24,
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+    gap: 12,
   },
-  actionText: {
-    fontSize: 17,
+  buyButtonText: {
+    fontSize: 18,
     fontWeight: '800',
     color: '#fff',
   },
-  termsText: {
-    fontSize: 11,
-    fontWeight: '500',
+  poweredBy: {
     textAlign: 'center',
+    fontSize: 12,
     marginTop: 12,
+    fontWeight: '500',
+  },
+  statusContainer: {
+    borderRadius: 32,
+    padding: 32,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  statusIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  statusTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  statusSubtitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 24,
+  },
+  divider: {
+    width: '100%',
+    height: 1,
+    marginBottom: 24,
+    opacity: 0.1,
+  },
+  detailsList: {
+    width: '100%',
+    gap: 16,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  mockButton: {
+    width: '100%',
+    height: 56,
+    borderRadius: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 32,
+  },
+  mockButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  doneButton: {
+    width: '100%',
+    height: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  doneButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
 
