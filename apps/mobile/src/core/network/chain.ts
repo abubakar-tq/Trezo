@@ -1,82 +1,73 @@
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { Platform } from "react-native";
 
-/**
- * Chain Configuration for Local Anvil Testnet
- * 
- * IMPORTANT: Update LAPTOP_IP with your actual WiFi IP address
- * Find it with: ipconfig (Windows) or ifconfig (Mac/Linux)
- * Current value should match your network IP
- */
+import { DEFAULT_CHAIN_ID, getChainConfig, type SupportedChainId } from "@/src/integration/chains";
+
 export const CHAIN_CONFIG = {
-  chainId: 31337, // Anvil default
-  name: 'Anvil Local Testnet',
-  // Try to get IP from environment, fallback to a default
-  LAPTOP_IP: process.env.EXPO_PUBLIC_LAPTOP_IP || '10.70.81.26', 
+  chainId: DEFAULT_CHAIN_ID,
+  name: "Anvil",
+  LAPTOP_IP: process.env.EXPO_PUBLIC_LAPTOP_IP || "10.70.81.26",
 };
 
-// Detect device/simulator
-const isExpoGo = Constants.appOwnership === 'expo';
-const isPhysicalDevice = Constants.isDevice ?? true;
-const isIOSSimulator = Platform.OS === 'ios' && !isPhysicalDevice;
-const isAndroidEmulator = Platform.OS === 'android' && !isPhysicalDevice;
+const getDisabledChainReason = (chainId: SupportedChainId): string => {
+  const chain = getChainConfig(chainId);
+  const missing: string[] = [];
 
-/**
- * Get RPC URL based on platform and environment
- *
- * Physical devices (dev clients/installed APK/IPA) must hit your laptop IP.
- * Emulator/simulator use their loopback helpers.
- */
-export const getRpcUrl = (): string => {
-  // Android emulator
-  if (isAndroidEmulator) {
-    const url = 'http://10.0.2.2:8545';
-    console.log(`🌐 [Chain] RPC URL (Android Emulator): ${url}`);
-    return url;
+  if (!chain.rpcUrl) missing.push("rpcUrl");
+  if (!chain.bundlerUrl) missing.push("bundlerUrl");
+  if (!chain.entryPoint) missing.push("entryPoint");
+  if (!chain.accountFactory) missing.push("accountFactory");
+
+  if (missing.length > 0) {
+    return `missing ${missing.join(", ")}`;
   }
 
-  // iOS simulator
-  if (isIOSSimulator) {
-    const url = 'http://localhost:8545';
-    console.log(`🌐 [Chain] RPC URL (iOS Simulator): ${url}`);
-    return url;
+  return "isEnabled=false";
+};
+
+const requireEnabledChain = (chainId: SupportedChainId) => {
+  const chain = getChainConfig(chainId);
+  if (!chain.isEnabled) {
+    throw new Error(`Chain ${chain.name} (${chainId}) is disabled: ${getDisabledChainReason(chainId)}.`);
   }
-
-  // Physical device or Expo Go
-  const url = `http://${CHAIN_CONFIG.LAPTOP_IP}:8545`;
-  console.log(`🌐 [Chain] RPC URL (Physical Device): ${url}`);
-  return url;
+  return chain;
 };
 
-/**
- * Get Bundler URL (ERC-4337)
- */
-export const getBundlerUrl = (): string => {
-  if (isAndroidEmulator) return 'http://10.0.2.2:4337';
-  if (isIOSSimulator) return 'http://localhost:4337';
-  return `http://${CHAIN_CONFIG.LAPTOP_IP}:4337`;
+export const getRpcUrl = (chainId: SupportedChainId = DEFAULT_CHAIN_ID): string => {
+  const chain = requireEnabledChain(chainId);
+  if (!chain.rpcUrl) {
+    throw new Error(`RPC URL missing for chain ${chain.name} (${chainId}).`);
+  }
+  return chain.rpcUrl;
 };
 
-/**
- * Get Paymaster URL (Gasless transactions)
- */
-export const getPaymasterUrl = (): string => {
-  if (isAndroidEmulator) return 'http://10.0.2.2:3000';
-  if (isIOSSimulator) return 'http://localhost:3000';
-  return `http://${CHAIN_CONFIG.LAPTOP_IP}:3000`;
+export const getBundlerUrl = (chainId: SupportedChainId = DEFAULT_CHAIN_ID): string => {
+  const chain = requireEnabledChain(chainId);
+  if (!chain.bundlerUrl) {
+    throw new Error(`Bundler URL missing for chain ${chain.name} (${chainId}).`);
+  }
+  return chain.bundlerUrl;
 };
 
-/**
- * Log current network configuration
- */
-export const logNetworkConfig = () => {
-  console.log('📡 [Chain Config]', {
+export const getPaymasterUrl = (chainId: SupportedChainId = DEFAULT_CHAIN_ID): string => {
+  const chain = requireEnabledChain(chainId);
+  if (!chain.paymasterUrl) {
+    throw new Error(`Paymaster URL missing for chain ${chain.name} (${chainId}).`);
+  }
+  return chain.paymasterUrl;
+};
+
+export const logNetworkConfig = (chainId: SupportedChainId = DEFAULT_CHAIN_ID) => {
+  const chain = getChainConfig(chainId);
+  console.log("📡 [Chain Config]", {
     platform: Platform.OS,
-    isPhysicalDevice,
-    isExpoGo,
-    chainId: CHAIN_CONFIG.chainId,
-    rpcUrl: getRpcUrl(),
-    bundlerUrl: getBundlerUrl(),
-    paymasterUrl: getPaymasterUrl(),
+    chainId,
+    chainName: chain.name,
+    environment: chain.environment,
+    isEnabled: chain.isEnabled,
+    rpcUrl: chain.rpcUrl,
+    bundlerUrl: chain.bundlerUrl,
+    paymasterUrl: chain.paymasterUrl,
+    entryPoint: chain.entryPoint,
+    accountFactory: chain.accountFactory,
   });
 };

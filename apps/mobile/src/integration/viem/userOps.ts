@@ -8,7 +8,6 @@ import {
   decodeAbiParameters,
   type Address,
   type Hex,
-  type Transport,
   createClient,
 } from "viem";
 import {
@@ -272,6 +271,26 @@ export type RemovePasskeyUserOpParams = {
   callGasLimit?: bigint;
   verificationGasLimit?: bigint;
   preVerificationGas?: bigint;
+};
+
+export type BuildSmartAccountExecutionUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  target: Address;
+  value: bigint | number;
+  data: Hex;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+  operationLabel?: string;
 };
 
 type RpcRequestClient = {
@@ -658,6 +677,34 @@ const buildSmartAccountExecuteUserOp = async ({
 
   return { userOp: refreshedUserOp, userOpHash };
 };
+
+export async function buildSmartAccountExecutionUserOp(
+  params: BuildSmartAccountExecutionUserOpParams,
+) {
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.target, toBigInt(params.value), params.data],
+  });
+
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 1_000_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 1_000_000n,
+    preVerificationGas: params.preVerificationGas ?? 100_000n,
+    operationLabel: params.operationLabel ?? "buildSmartAccountExecutionUserOp",
+  });
+}
 
 export const encodeSocialRecoveryInitData = (
   guardians: readonly Address[],
