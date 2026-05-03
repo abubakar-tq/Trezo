@@ -55,6 +55,7 @@ const RootNavigation = () => {
   );
   const { theme } = useAppTheme();
   const [showingSplash, setShowingSplash] = useState(true);
+  const splashTarget = isLoggedIn ? "DeviceVerification" : "AuthNavigation";
 
   console.log(
     "🔄 [RootNavigation] Rendering, isLoggedIn:",
@@ -68,20 +69,24 @@ const RootNavigation = () => {
   }, [isLoggedIn, setGuardNavigation]);
 
   useEffect(() => {
+    if (!showingSplash) {
+      return;
+    }
+
     console.log("⏱️ [RootNavigation] Starting splash timer");
     const timer = setTimeout(() => {
       console.log("✅ [RootNavigation] Splash complete, hiding splash");
       setShowingSplash(false);
+      if (navigationRef.isReady()) {
+        navigationRef.resetRoot({
+          index: 0,
+          routes: [{ name: splashTarget }],
+        });
+      }
     }, 2500);
 
     return () => clearTimeout(timer);
-  }, []);
-
-  const initialRouteName = showingSplash
-    ? "AppSplash"
-    : isLoggedIn
-      ? "DeviceVerification"
-      : "AuthNavigation";
+  }, [showingSplash, splashTarget]);
 
   return (
     <NavigationContainer
@@ -96,7 +101,7 @@ const RootNavigation = () => {
       }
     >
       <Stack.Navigator
-        initialRouteName={initialRouteName}
+        initialRouteName="AppSplash"
         screenOptions={{
           headerShown: false,
           animation: "slide_from_right",
@@ -105,300 +110,296 @@ const RootNavigation = () => {
           contentStyle: { backgroundColor: theme.colors.background },
         }}
       >
-        {showingSplash ? (
-          <Stack.Screen
-            name="AppSplash"
-            component={SplashScreen}
-          />
-        ) : (
-          <>
-            <Stack.Screen
-              name="DeviceVerification"
-              component={DeviceVerificationScreen}
-              listeners={{
-                focus: () =>
-                  console.log("👀 [Navigation] DeviceVerification focused"),
-              }}
-            />
-            <Stack.Screen
-              name="AuthNavigation"
-              component={AuthNavigation}
-              listeners={{
-                focus: () =>
-                  console.log("👀 [Navigation] AuthNavigation focused"),
-              }}
-            />
-            <Stack.Screen
-              name="TabNavigation"
-              component={TabNavigation}
-              listeners={{
-                focus: () =>
-                  console.log("👀 [Navigation] TabNavigation focused"),
-              }}
-            />
-            <Stack.Screen
-              name="BrowserSettings"
-              component={BrowserSettingsScreen}
-              options={{
-                headerShown: true,
-                headerTitle: "Browser",
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="BackupRecovery"
-              component={BackupRecoveryScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="DevicesPasskeys"
-              component={DevicesPasskeysScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="PairDevice"
-              component={PairDeviceScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="CompromisedWallet"
-              component={CompromisedWalletScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="GuardianRecovery"
-              component={GuardianRecoveryScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="EmailRecovery"
-              component={EmailRecoveryScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="EmailRecoveryStart"
-              component={EmailRecoveryStartScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="EmailRecoveryGroupStatus"
-              component={EmailRecoveryGroupStatusScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="RecoveryEntry"
-              component={RecoveryEntryScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="CreateRecoveryRequest"
-              component={CreateRecoveryRequestScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="ShareRecoveryRequest"
-              component={ShareRecoveryScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="RecoveryProgress"
-              component={RecoveryProgressScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="RecoveryComplete"
-              component={RecoveryCompleteScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="RecoveryKitExport"
-              component={RecoveryKitExportScreen}
-              options={{
-                headerShown: true,
-                headerTitle: "Recovery Kit",
-                animation: "slide_from_right",
-                headerStyle: { backgroundColor: theme.colors.background },
-                headerTintColor: theme.colors.text,
-              }}
-            />
-            <Stack.Screen
-              name="ProfileEdit"
-              component={ProfileEditScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="ContactList"
-              component={ContactListScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="AddContact"
-              component={AddContactScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="ContactDetail"
-              component={ContactDetailScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="SecurityPrivacy"
-              component={SecurityPrivacyScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="ConnectedDevices"
-              component={ConnectedDevicesScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="Notifications"
-              component={NotificationsScreen}
-              options={{
-                headerShown: false,
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="AATest"
-              component={AATestScreen}
-              options={{
-                headerShown: true,
-                headerTitle: "AA Wallet Testing",
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="AADebug"
-              component={AAWalletDebugScreen}
-              options={{
-                headerShown: true,
-                headerTitle: "AA Wallet Debug",
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="DeployAccount"
-              component={DeployAccountScreen}
-              options={{
-                headerShown: true,
-                headerTitle: "Deploy Account",
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="DevCreateAccount"
-              component={DevCreateAccountScreen}
-              options={{
-                headerShown: true,
-                headerTitle: "Dev Controls",
-                animation: "slide_from_right",
-              }}
-            />
-            <Stack.Screen
-              name="Settings"
-              component={SettingsScreen}
-              options={{ headerShown: false, animation: "slide_from_right" }}
-            />
-            <Stack.Screen
-              name="AddGuardian"
-              component={AddGuardianScreen}
-              options={{ headerShown: false, animation: "slide_from_right" }}
-            />
-            <Stack.Screen
-              name="GuardianManagement"
-              component={GuardianManagementScreen}
-              options={{ headerShown: false, animation: "slide_from_right" }}
-            />
-            <Stack.Screen
-              name="SecurityCenter"
-              component={SecurityCenterScreen}
-              options={{ headerShown: false, animation: "slide_from_right" }}
-            />
-            <Stack.Screen
-              name="ThresholdConfiguration"
-              component={ThresholdConfigurationScreen}
-              options={{ headerShown: false, animation: "slide_from_right" }}
-            />
-            <Stack.Screen
-              name="Buy"
-              component={BuyScreen}
-              options={{ headerShown: false, animation: "slide_from_bottom" }}
-            />
-            <Stack.Screen
-              name="Receive"
-              component={ReceiveScreen}
-              options={{ headerShown: false, animation: "slide_from_right" }}
-            />
-            <Stack.Screen
-              name="Send"
-              component={SendScreen}
-              options={{ headerShown: false, animation: "slide_from_right" }}
-            />
-            <Stack.Screen
-              name="TransactionHistory"
-              component={TransactionHistoryScreen}
-              options={{ headerShown: false, animation: "slide_from_right" }}
-            />
-          </>
-        )}
+        <Stack.Screen
+          name="AppSplash"
+          component={SplashScreen}
+          initialParams={{ redirectTo: { name: splashTarget } }}
+        />
+        <Stack.Screen
+          name="DeviceVerification"
+          component={DeviceVerificationScreen}
+          listeners={{
+            focus: () =>
+              console.log("👀 [Navigation] DeviceVerification focused"),
+          }}
+        />
+        <Stack.Screen
+          name="AuthNavigation"
+          component={AuthNavigation}
+          listeners={{
+            focus: () =>
+              console.log("👀 [Navigation] AuthNavigation focused"),
+          }}
+        />
+        <Stack.Screen
+          name="TabNavigation"
+          component={TabNavigation}
+          listeners={{
+            focus: () =>
+              console.log("👀 [Navigation] TabNavigation focused"),
+          }}
+        />
+        <Stack.Screen
+          name="BrowserSettings"
+          component={BrowserSettingsScreen}
+          options={{
+            headerShown: true,
+            headerTitle: "Browser",
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="BackupRecovery"
+          component={BackupRecoveryScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="DevicesPasskeys"
+          component={DevicesPasskeysScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="PairDevice"
+          component={PairDeviceScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="CompromisedWallet"
+          component={CompromisedWalletScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="GuardianRecovery"
+          component={GuardianRecoveryScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="EmailRecovery"
+          component={EmailRecoveryScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="EmailRecoveryStart"
+          component={EmailRecoveryStartScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="EmailRecoveryGroupStatus"
+          component={EmailRecoveryGroupStatusScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="RecoveryEntry"
+          component={RecoveryEntryScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="CreateRecoveryRequest"
+          component={CreateRecoveryRequestScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="ShareRecoveryRequest"
+          component={ShareRecoveryScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="RecoveryProgress"
+          component={RecoveryProgressScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="RecoveryComplete"
+          component={RecoveryCompleteScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="RecoveryKitExport"
+          component={RecoveryKitExportScreen}
+          options={{
+            headerShown: true,
+            headerTitle: "Recovery Kit",
+            animation: "slide_from_right",
+            headerStyle: { backgroundColor: theme.colors.background },
+            headerTintColor: theme.colors.text,
+          }}
+        />
+        <Stack.Screen
+          name="ProfileEdit"
+          component={ProfileEditScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="ContactList"
+          component={ContactListScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="AddContact"
+          component={AddContactScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="ContactDetail"
+          component={ContactDetailScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="SecurityPrivacy"
+          component={SecurityPrivacyScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="ConnectedDevices"
+          component={ConnectedDevicesScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="Notifications"
+          component={NotificationsScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="AATest"
+          component={AATestScreen}
+          options={{
+            headerShown: true,
+            headerTitle: "AA Wallet Testing",
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="AADebug"
+          component={AAWalletDebugScreen}
+          options={{
+            headerShown: true,
+            headerTitle: "AA Wallet Debug",
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="DeployAccount"
+          component={DeployAccountScreen}
+          options={{
+            headerShown: true,
+            headerTitle: "Deploy Account",
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="DevCreateAccount"
+          component={DevCreateAccountScreen}
+          options={{
+            headerShown: true,
+            headerTitle: "Dev Controls",
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="AddGuardian"
+          component={AddGuardianScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="GuardianManagement"
+          component={GuardianManagementScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="SecurityCenter"
+          component={SecurityCenterScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="ThresholdConfiguration"
+          component={ThresholdConfigurationScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="Buy"
+          component={BuyScreen}
+          options={{ headerShown: false, animation: "slide_from_bottom" }}
+        />
+        <Stack.Screen
+          name="Receive"
+          component={ReceiveScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="Send"
+          component={SendScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="TransactionHistory"
+          component={TransactionHistoryScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
