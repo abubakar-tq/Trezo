@@ -29,7 +29,6 @@ apps/mobile/dist/
 apps/guardian-approval/dist/
 
 # Foundry generated/vendor
-contracts/lib/
 contracts/out/
 contracts/cache/
 contracts/broadcast/
@@ -46,6 +45,7 @@ plan.md
 agent-plans/
 .github/skills/
 AGENTS.md
+RTK.md
 Context_Capsule.md
 LEVEL2_IMPLEMENTATION_NOTES.md
 *.tsbuildinfo
@@ -71,3 +71,8 @@ agent-artifacts/
 kilo.jsonc
 .context/
 *.context.md
+.agents/
+.roo/.env
+.roo/.env.*
+.roo/
+.rooignore
