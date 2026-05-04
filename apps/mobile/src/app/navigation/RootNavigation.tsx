@@ -56,44 +56,28 @@ const RootNavigation = () => {
   const { theme } = useAppTheme();
   const [showingSplash, setShowingSplash] = useState(true);
 
-  console.log(
-    "🔄 [RootNavigation] Rendering, isLoggedIn:",
-    isLoggedIn,
-    "showingSplash:",
-    showingSplash,
-  );
-
   useEffect(() => {
     setGuardNavigation(isLoggedIn);
   }, [isLoggedIn, setGuardNavigation]);
 
   useEffect(() => {
-    console.log("⏱️ [RootNavigation] Starting splash timer");
-    const timer = setTimeout(() => {
-      console.log("✅ [RootNavigation] Splash complete, hiding splash");
-      setShowingSplash(false);
-    }, 2500);
-
+    const timer = setTimeout(() => setShowingSplash(false), 2500);
     return () => clearTimeout(timer);
   }, []);
 
-  const initialRouteName = showingSplash
-    ? "AppSplash"
-    : isLoggedIn
-      ? "DeviceVerification"
-      : "AuthNavigation";
+  useEffect(() => {
+    if (!showingSplash) {
+      const target = isLoggedIn ? "DeviceVerification" : "AuthNavigation";
+      navigationRef.current?.reset({ index: 0, routes: [{ name: target }] });
+    }
+  }, [showingSplash, isLoggedIn]);
+
+  const initialRouteName = "AppSplash";
 
   return (
     <NavigationContainer
       ref={navigationRef}
       theme={theme.navigation}
-      onReady={() => console.log("✅ [Navigation] NavigationContainer ready")}
-      onStateChange={(state) =>
-        console.log(
-          "📍 [Navigation] State changed:",
-          JSON.stringify(state?.routes[state.index], null, 2),
-        )
-      }
     >
       <Stack.Navigator
         initialRouteName={initialRouteName}
@@ -115,26 +99,14 @@ const RootNavigation = () => {
             <Stack.Screen
               name="DeviceVerification"
               component={DeviceVerificationScreen}
-              listeners={{
-                focus: () =>
-                  console.log("👀 [Navigation] DeviceVerification focused"),
-              }}
             />
             <Stack.Screen
               name="AuthNavigation"
               component={AuthNavigation}
-              listeners={{
-                focus: () =>
-                  console.log("👀 [Navigation] AuthNavigation focused"),
-              }}
             />
             <Stack.Screen
               name="TabNavigation"
               component={TabNavigation}
-              listeners={{
-                focus: () =>
-                  console.log("👀 [Navigation] TabNavigation focused"),
-              }}
             />
             <Stack.Screen
               name="BrowserSettings"

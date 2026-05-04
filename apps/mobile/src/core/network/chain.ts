@@ -12,7 +12,7 @@ export const CHAIN_CONFIG = {
   chainId: 31337, // Anvil default
   name: 'Anvil Local Testnet',
   // Try to get IP from environment, fallback to a default
-  LAPTOP_IP: process.env.EXPO_PUBLIC_LAPTOP_IP || '10.70.81.26', 
+  LAPTOP_IP: process.env.EXPO_PUBLIC_LAPTOP_IP || '10.45.194.26', 
 };
 
 // Detect device/simulator
@@ -29,23 +29,9 @@ const isAndroidEmulator = Platform.OS === 'android' && !isPhysicalDevice;
  */
 export const getRpcUrl = (): string => {
   // Android emulator
-  if (isAndroidEmulator) {
-    const url = 'http://10.0.2.2:8545';
-    console.log(`🌐 [Chain] RPC URL (Android Emulator): ${url}`);
-    return url;
-  }
-
-  // iOS simulator
-  if (isIOSSimulator) {
-    const url = 'http://localhost:8545';
-    console.log(`🌐 [Chain] RPC URL (iOS Simulator): ${url}`);
-    return url;
-  }
-
-  // Physical device or Expo Go
-  const url = `http://${CHAIN_CONFIG.LAPTOP_IP}:8545`;
-  console.log(`🌐 [Chain] RPC URL (Physical Device): ${url}`);
-  return url;
+  if (isAndroidEmulator) return 'http://10.0.2.2:8545';
+  if (isIOSSimulator) return 'http://localhost:8545';
+  return `http://${CHAIN_CONFIG.LAPTOP_IP}:8545`;
 };
 
 /**

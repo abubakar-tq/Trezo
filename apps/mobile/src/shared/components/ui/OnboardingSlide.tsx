@@ -17,8 +17,6 @@ const OnboardingSlide: React.FC<OnboardingSlideProps> = ({
   subtitle,
   index,
 }) => {
-  console.log('🎨 [OnboardingSlide] Rendering slide:', index, title);
-  
   return (
     <View style={{ width, flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
       <Animated.View

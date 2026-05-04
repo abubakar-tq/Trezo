@@ -20,9 +20,6 @@ coverage/
 .next/
 metro-cache/
 web-build/
-
-# Mobile build artifacts
-apps/mobile/android/
 apps/mobile/dist/
 
 # Guardian approval build

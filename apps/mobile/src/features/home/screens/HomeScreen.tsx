@@ -85,7 +85,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     return tokens.map((t: any) => ({
       symbol: t.symbol,
       name: t.name,
-      amount: parseFloat(t.balance_formatted || "0"),
+      // balance_formatted is now always set; fallback to balance for safety
+      amount: parseFloat(t.balance_formatted ?? t.balance ?? "0"),
       price: t.usd_price || 0,
       value: t.usd_value || 0,
       change24h: 0,

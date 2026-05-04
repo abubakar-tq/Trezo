@@ -146,8 +146,30 @@ export const startSupabaseOAuth = async (
 
       throw new Error(errorDescription ?? "Authentication failed.");
     }
+
+    // Exchange the auth callback URL for a session.
+    // Supabase JS v2 defaults to PKCE flow: callback has ?code=XXX (not #access_token).
+    const callbackUrl = authResult.url;
+    const [baseUrl, hashFragment = ""] = callbackUrl.split("#");
+    const queryParams = new URLSearchParams(baseUrl.split("?")[1] ?? "");
+    const hashParams = new URLSearchParams(hashFragment);
+
+    const pkceCode = queryParams.get("code");
+    if (pkceCode) {
+      await client.auth.exchangeCodeForSession(pkceCode);
+      return;
+    }
+
+    const accessToken = hashParams.get("access_token");
+    const refreshToken = hashParams.get("refresh_token");
+    if (accessToken && refreshToken) {
+      await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      return;
+    }
   }
 
+  // Fallback: on Android the Linking event may have already set the session
+  // before openAuthSessionAsync resolved.
   await client.auth.getSession();
 };
 

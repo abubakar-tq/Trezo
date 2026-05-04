@@ -34,33 +34,16 @@ export const ThemedAlert: React.FC<ThemedAlertProps> = ({
       ? buttons
       : [{ text: "OK", onPress: onDismiss || (() => {}), style: "default" }];
 
-  console.log(
-    `📋 [ThemedAlert] Rendering ${defaultButtons.length} buttons:`,
-    defaultButtons.map((b) => b.text),
-  );
-
   const handleButtonPress = (button: ThemedAlertButton) => {
-    console.log(`🔘 [ThemedAlert] Button pressed: "${button.text}"`);
     try {
-      // Execute the button's onPress callback
       const result = button.onPress() as any;
-
-      // If it's a Promise (async function), handle it asynchronously
       if (result && typeof result.catch === "function") {
         result.catch((error: any) => {
-          console.error(
-            `❌ [ThemedAlert] Error in async onPress for "${button.text}":`,
-            error,
-          );
+          console.error(`[ThemedAlert] Error in async onPress for "${button.text}":`, error);
         });
       }
-
-      console.log(`✅ [ThemedAlert] onPress executed for "${button.text}"`);
     } catch (error) {
-      console.error(
-        `❌ [ThemedAlert] Error in onPress for "${button.text}":`,
-        error,
-      );
+      console.error(`[ThemedAlert] Error in onPress for "${button.text}":`, error);
     }
 
     // NOTE: No automatic dismiss - buttons must call onDismiss/dismissAlert manually if needed

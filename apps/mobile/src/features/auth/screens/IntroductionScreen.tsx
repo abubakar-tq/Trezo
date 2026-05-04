@@ -40,8 +40,6 @@ const IntroductionScreen: React.FC = () => {
   const flatListRef = useRef<FlatList<typeof pages[number]>>(null);
   const { navigate }: NavigationProp<AuthStackParamList> = useNavigation();
 
-  console.log('📱 [IntroductionScreen] Rendering, currentPage:', currentPage);
-
   const handleScroll = (event: { nativeEvent: { contentOffset: { x: number } } }) => {
     const offsetX = event.nativeEvent.contentOffset.x;
     const pageIndex = Math.round(offsetX / width);
@@ -49,7 +47,6 @@ const IntroductionScreen: React.FC = () => {
   };
 
   const handleGetStarted = () => {
-    console.log('👉 [IntroductionScreen] Get Started pressed, navigating to Welcome');
     navigate("Welcome");
   };
 

@@ -36,8 +36,6 @@ const AuthNavigation = () => {
     };
   }, []);
 
-  console.log('🔐 [AuthNavigation] Rendering, initialRoute:', initialRouteName);
-
   return (
 		<Stack.Navigator
 			initialRouteName={initialRouteName}
@@ -50,16 +48,8 @@ const AuthNavigation = () => {
 				animationTypeForReplace: "push",
 			}}
 		>
-      <Stack.Screen 
-      	name="Splash" 
-      	component={SplashScreen}
-      	listeners={{ focus: () => console.log('👀 [AuthNav] Splash focused') }}
-      />
-      <Stack.Screen 
-      	name="Onboarding" 
-      	component={OnboardingScreen}
-      	listeners={{ focus: () => console.log('👀 [AuthNav] Onboarding focused') }}
-      />
+      <Stack.Screen name="Splash" component={SplashScreen} />
+      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
