@@ -22,7 +22,7 @@ import { AllowanceService } from "@/src/features/swaps/services/AllowanceService
 import { SwapExecutionService } from "@/src/features/swaps/services/SwapExecutionService";
 import { SwapPreparationService } from "@/src/features/swaps/services/SwapPreparationService";
 import { SwapQuoteService } from "@/src/features/swaps/services/SwapQuoteService";
-import type { SwapPlan, SwapQuote } from "@/src/features/swaps/types/swap";
+import type { SwapIntent, SwapPlan, SwapQuote } from "@/src/features/swaps/types/swap";
 import WalletPersistenceService from "@/src/features/wallet/services/SupabaseWalletService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { getEnabledChains, type SupportedChainId } from "@/src/integration/chains";
@@ -146,8 +146,8 @@ export const DexScreen: React.FC = () => {
   }, [sellToken, sellTokenBalanceRaw]);
 
   const providerCount = useMemo(
-    () => SwapQuoteService.getProvidersForChain(selectedChainId).length,
-    [selectedChainId],
+    () => SwapQuoteService.getProvidersForNetwork(networkKey).length,
+    [networkKey],
   );
 
   const assetPickerList = useMemo(
@@ -294,6 +294,7 @@ export const DexScreen: React.FC = () => {
         }
 
         const nextQuote = await SwapQuoteService.getQuote({
+          networkKey,
           chainId: selectedChainId,
           account: walletAddress,
           sellToken,
@@ -303,6 +304,7 @@ export const DexScreen: React.FC = () => {
         });
 
         const allowance = await AllowanceService.isApprovalRequired({
+          networkKey,
           chainId: selectedChainId,
           token: sellToken,
           sellAmountRaw,
@@ -328,18 +330,9 @@ export const DexScreen: React.FC = () => {
       cancelled = true;
       clearTimeout(debounce);
     };
-  }, [buyToken, selectedChainId, sellAmountDecimal, sellToken, slippagePct, walletAddress]);
+  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, slippagePct, walletAddress]);
 
-  const buildIntent = (): {
-    userId: string;
-    aaWalletId: string;
-    walletAddress: Address;
-    chainId: SupportedChainId;
-    sellToken: TokenMetadata;
-    buyToken: TokenMetadata;
-    sellAmountDecimal: string;
-    slippageBps: number;
-  } | null => {
+  const buildIntent = (): SwapIntent | null => {
     if (!user?.id || !walletId || !walletAddress || !sellToken || !buyToken) {
       return null;
     }
@@ -348,6 +341,7 @@ export const DexScreen: React.FC = () => {
       userId: user.id,
       aaWalletId: walletId,
       walletAddress,
+      networkKey,
       chainId: selectedChainId,
       sellToken,
       buyToken,
