@@ -1,4 +1,5 @@
-import type { WalletAccount } from '@/src/features/wallet/store/useWalletStore';
+import { useWalletStore, type WalletAccount } from '@/src/features/wallet/store/useWalletStore';
+import { useUserStore } from '@/src/store/useUserStore';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
 import { withAlpha } from '../../../utils/color';
@@ -39,16 +40,21 @@ export const AccountPickerModal: React.FC<AccountPickerModalProps> = ({
   const { colors } = theme;
   const isDark = resolvedMode === 'dark';
 
-  // Fallback seed data if no accounts exist
-  const displayAccounts = accounts.length > 0 ? accounts : [
-    {
-      id: 'default',
-      address: selectedAddress || '0x742d...40Af',
-      name: 'Primary Wallet',
-      isActive: true,
-      createdAt: new Date().toISOString()
-    }
-  ];
+  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const aaAccount = useWalletStore((state) => state.aaAccount);
+
+  const smartAccount: WalletAccount | null = (smartAccountAddress || aaAccount?.predictedAddress) ? {
+    id: 'smart-account',
+    address: (smartAccountAddress || aaAccount?.predictedAddress) as string,
+    name: 'Smart Account',
+    isActive: true,
+    createdAt: new Date().toISOString()
+  } : null;
+
+  const displayAccounts = [...accounts];
+  if (smartAccount) {
+    displayAccounts.unshift(smartAccount);
+  }
 
   const handleSelect = (account: WalletAccount) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -94,7 +100,7 @@ export const AccountPickerModal: React.FC<AccountPickerModalProps> = ({
     >
       <Pressable style={[styles.overlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.3)' }]} onPress={onClose} />
       
-      <View style={[styles.content, { backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF' }]}>
+      <View style={[styles.content, { backgroundColor: colors.surfaceCard }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
         
         <View style={styles.header}>

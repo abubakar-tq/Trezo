@@ -70,11 +70,10 @@ export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
       </View>
 
       {/* Label */}
-      <HeadlineText isDark={isDark}>{label}</HeadlineText>
+      <HeadlineText>{label}</HeadlineText>
 
       {/* Message */}
       <BodyText
-        isDark={isDark}
         color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
       >
         {message}
@@ -108,12 +107,10 @@ export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
           onPress={onAuthenticate}
           isLoading={isAnimating}
           disabled={!isSupported || isAnimating}
-          isDark={isDark}
         />
         <GhostButton
           label="Use Passcode Instead"
           onPress={onCancel}
-          isDark={isDark}
         />
       </View>
     </View>

@@ -6,6 +6,7 @@
 
 import React from "react";
 import { View, ViewProps } from "react-native";
+import { useAppTheme } from "@theme";
 import { BodyText, CaptionText, DisplayText, HeadlineText } from "../Tier1/Text";
 import { Colors } from "../TokenRegistry";
 
@@ -15,11 +16,11 @@ interface RecoveryScoreWidgetProps extends Omit<ViewProps, "style"> {
   compact?: boolean;
 }
 
-const getScoreColor = (score: number) => {
+const getScoreColor = (score: number, colors: any) => {
   if (score === 100) return Colors.success; // Emerald
-  if (score >= 75) return "#06b6d4"; // Teal/Cyan
-  if (score >= 41) return Colors.warning; // Amber
-  return "#6b7280"; // Gray (neutral)
+  if (score >= 75) return colors.accent;    // Teal/Cyan → colors.accent
+  if (score >= 41) return Colors.warning;   // Amber
+  return colors.textMuted;                  // Gray → colors.textMuted
 };
 
 const getScoreLabel = (score: number) => {
@@ -35,7 +36,8 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
   compact = false,
   ...props
 }) => {
-  const color = getScoreColor(score);
+  const { theme: { colors } } = useAppTheme();
+  const color = getScoreColor(score, colors);
   const label = getScoreLabel(score);
 
   if (compact) {
@@ -53,8 +55,8 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
             alignItems: "center",
           }}
         >
-          <CaptionText isDark={isDark}>Security Score</CaptionText>
-          <HeadlineText isDark={isDark} color={color}>
+          <CaptionText>Security Score</CaptionText>
+          <HeadlineText color={color}>
             {score}%
           </HeadlineText>
         </View>
@@ -75,7 +77,7 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
             }}
           />
         </View>
-        <CaptionText isDark={isDark} color={color}>
+        <CaptionText color={color}>
           {label}
         </CaptionText>
       </View>
@@ -95,12 +97,12 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
       {...props}
     >
       {/* Title */}
-      <HeadlineText isDark={isDark}>Recovery Score</HeadlineText>
+      <HeadlineText>Recovery Score</HeadlineText>
 
       {/* Large Score */}
       <View style={{ justifyContent: "center", alignItems: "center" }}>
         <DisplayText color={color}>{score}%</DisplayText>
-        <BodyText isDark={isDark} color={color} style={{ marginTop: 4 }}>
+        <BodyText color={color} style={{ marginTop: 4 }}>
           {label}
         </BodyText>
       </View>
@@ -126,31 +128,26 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
       {/* Breakdown */}
       <View style={{ gap: 6, marginTop: 8 }}>
         <BreakdownRow
-          isDark={isDark}
           label="Passkey"
           points={20}
           active={score >= 20}
         />
         <BreakdownRow
-          isDark={isDark}
           label="Email Recovery"
           points={25}
           active={score >= 45}
         />
         <BreakdownRow
-          isDark={isDark}
           label="Phone Recovery"
           points={20}
           active={score >= 65}
         />
         <BreakdownRow
-          isDark={isDark}
           label="Active Guardians"
           points={25}
           active={score >= 90}
         />
         <BreakdownRow
-          isDark={isDark}
           label="Threshold Configured"
           points={10}
           active={score >= 100}
@@ -161,14 +158,12 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
 };
 
 interface BreakdownRowProps {
-  isDark: boolean;
   label: string;
   points: number;
   active: boolean;
 }
 
 const BreakdownRow: React.FC<BreakdownRowProps> = ({
-  isDark,
   label,
   points,
   active,
@@ -181,9 +176,8 @@ const BreakdownRow: React.FC<BreakdownRowProps> = ({
       opacity: active ? 1 : 0.4,
     }}
   >
-    <CaptionText isDark={isDark}>{label}</CaptionText>
+    <CaptionText>{label}</CaptionText>
     <CaptionText
-      isDark={isDark}
       color={active ? Colors.success : Colors.textTertiary}
     >
       +{points}%

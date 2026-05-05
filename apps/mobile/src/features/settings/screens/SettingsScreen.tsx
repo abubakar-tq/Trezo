@@ -24,6 +24,7 @@ import {
     HeadlineText
 } from "../../../shared/components/Tier1/Text";
 import { Colors, Spacing } from "../../../shared/components/TokenRegistry";
+import { useAppTheme } from "@theme";
 
 interface SettingsScreenProps {
   isDark?: boolean;
@@ -38,6 +39,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onLogout,
   onExportAccount,
 }) => {
+  const { theme: { colors } } = useAppTheme();
   const [biometricsEnabled, setBiometricsEnabled] = useState(true);
   const [transactionNotifications, setTransactionNotifications] =
     useState(true);
@@ -50,7 +52,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     <SafeAreaView
       style={{
         flex: 1,
-        backgroundColor: isDark ? Colors.background : "#ffffff",
+        backgroundColor: colors.background,
       }}
     >
       <ScrollView
@@ -63,9 +65,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       >
         {/* HEADER */}
         <View style={{ gap: Spacing.sp2 }}>
-          <HeadlineText isDark={isDark}>Settings</HeadlineText>
+          <HeadlineText>Settings</HeadlineText>
           <BodyText
-            isDark={isDark}
             color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
           >
             Customize your app experience and security preferences.
@@ -76,7 +77,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <View style={{ gap: Spacing.sp2 }}>
           <CaptionText color={Colors.primary}>SECURITY</CaptionText>
 
-          <CardLevel1 isDark={isDark}>
+          <CardLevel1>
             <View
               style={{
                 flexDirection: "row",
@@ -86,11 +87,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <View style={{ flex: 1, gap: Spacing.sp1 }}>
-                <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
+                <BodyText style={{ fontWeight: "600" }}>
                   Biometric Login
                 </BodyText>
                 <BodyText
-                  isDark={isDark}
                   color={
                     isDark ? Colors.textTertiary : Colors.lightTextTertiary
                   }
@@ -103,18 +103,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 value={biometricsEnabled}
                 onValueChange={setBiometricsEnabled}
                 trackColor={{ false: Colors.surfaceMid, true: Colors.primary }}
-                thumbColor={Colors.background}
+                thumbColor={colors.background}
               />
             </View>
           </CardLevel1>
 
-          <CardLevel1 isDark={isDark}>
+          <CardLevel1>
             <View style={{ gap: Spacing.sp2 }}>
-              <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
+              <BodyText style={{ fontWeight: "600" }}>
                 Change Passkey
               </BodyText>
               <BodyText
-                isDark={isDark}
                 color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
                 style={{ fontSize: 12 }}
               >
@@ -122,13 +121,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </BodyText>
               <SecondaryButton
                 label="Update"
-                isDark={isDark}
                 onPress={() => {}}
               />
             </View>
           </CardLevel1>
 
-          <CardLevel1 isDark={isDark}>
+          <CardLevel1>
             <View style={{ gap: Spacing.sp2 }}>
               <View
                 style={{
@@ -138,15 +136,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 }}
               >
                 <BodyText
-                  isDark={isDark}
                   style={{ fontWeight: "600", flex: 1 }}
                 >
                   Export Account Data
                 </BodyText>
-                <Badge isDark={isDark} status="warning" label="⚠️ Advanced" />
+                <Badge status="warning" label="⚠️ Advanced" />
               </View>
               <BodyText
-                isDark={isDark}
                 color={Colors.warning}
                 style={{ fontSize: 12 }}
               >
@@ -154,7 +150,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </BodyText>
               <SecondaryButton
                 label="Export"
-                isDark={isDark}
                 onPress={onExportAccount}
               />
             </View>
@@ -165,7 +160,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <View style={{ gap: Spacing.sp2 }}>
           <CaptionText color={Colors.primary}>NOTIFICATIONS</CaptionText>
 
-          <CardLevel1 isDark={isDark}>
+          <CardLevel1>
             <View
               style={{
                 flexDirection: "row",
@@ -175,11 +170,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <View style={{ flex: 1, gap: Spacing.sp1 }}>
-                <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
+                <BodyText style={{ fontWeight: "600" }}>
                   Transaction Alerts
                 </BodyText>
                 <BodyText
-                  isDark={isDark}
                   color={
                     isDark ? Colors.textTertiary : Colors.lightTextTertiary
                   }
@@ -192,12 +186,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 value={transactionNotifications}
                 onValueChange={setTransactionNotifications}
                 trackColor={{ false: Colors.surfaceMid, true: Colors.primary }}
-                thumbColor={Colors.background}
+                thumbColor={colors.background}
               />
             </View>
           </CardLevel1>
 
-          <CardLevel1 isDark={isDark}>
+          <CardLevel1>
             <View
               style={{
                 flexDirection: "row",
@@ -207,11 +201,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <View style={{ flex: 1, gap: Spacing.sp1 }}>
-                <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
+                <BodyText style={{ fontWeight: "600" }}>
                   Network Alerts
                 </BodyText>
                 <BodyText
-                  isDark={isDark}
                   color={
                     isDark ? Colors.textTertiary : Colors.lightTextTertiary
                   }
@@ -224,7 +217,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 value={networkAlerts}
                 onValueChange={setNetworkAlerts}
                 trackColor={{ false: Colors.surfaceMid, true: Colors.primary }}
-                thumbColor={Colors.background}
+                thumbColor={colors.background}
               />
             </View>
           </CardLevel1>
@@ -234,7 +227,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <View style={{ gap: Spacing.sp2 }}>
           <CaptionText color={Colors.primary}>APPEARANCE</CaptionText>
 
-          <CardLevel1 isDark={isDark}>
+          <CardLevel1>
             <View
               style={{
                 flexDirection: "row",
@@ -244,11 +237,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <View style={{ flex: 1, gap: Spacing.sp1 }}>
-                <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
+                <BodyText style={{ fontWeight: "600" }}>
                   Dark Mode
                 </BodyText>
                 <BodyText
-                  isDark={isDark}
                   color={
                     isDark ? Colors.textTertiary : Colors.lightTextTertiary
                   }
@@ -261,7 +253,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 value={isDark}
                 onValueChange={onToggleDarkMode}
                 trackColor={{ false: Colors.surfaceMid, true: Colors.primary }}
-                thumbColor={Colors.background}
+                thumbColor={colors.background}
               />
             </View>
           </CardLevel1>
@@ -271,13 +263,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <View style={{ gap: Spacing.sp2 }}>
           <CaptionText color={Colors.primary}>SUPPORT</CaptionText>
 
-          <CardLevel1 isDark={isDark}>
+          <CardLevel1>
             <View style={{ gap: Spacing.sp2 }}>
-              <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
+              <BodyText style={{ fontWeight: "600" }}>
                 Help & FAQ
               </BodyText>
               <BodyText
-                isDark={isDark}
                 color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
                 style={{ fontSize: 12 }}
               >
@@ -285,19 +276,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </BodyText>
               <SecondaryButton
                 label="View Help"
-                isDark={isDark}
                 onPress={() => {}}
               />
             </View>
           </CardLevel1>
 
-          <CardLevel1 isDark={isDark}>
+          <CardLevel1>
             <View style={{ gap: Spacing.sp2 }}>
-              <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
+              <BodyText style={{ fontWeight: "600" }}>
                 Report Issue
               </BodyText>
               <BodyText
-                isDark={isDark}
                 color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
                 style={{ fontSize: 12 }}
               >
@@ -305,7 +294,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </BodyText>
               <SecondaryButton
                 label="Contact Support"
-                isDark={isDark}
                 onPress={() => {}}
               />
             </View>
@@ -313,7 +301,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </View>
 
         {/* APP INFO */}
-        <Surface isDark={isDark} elevation={1}>
+        <Surface elevation={1}>
           <View style={{ gap: Spacing.sp2 }}>
             <CaptionText color={Colors.primary}>APP INFORMATION</CaptionText>
 
@@ -325,14 +313,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <BodyText
-                isDark={isDark}
                 color={
                   isDark ? Colors.textSecondary : Colors.lightTextSecondary
                 }
               >
                 Version
               </BodyText>
-              <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
+              <BodyText style={{ fontWeight: "600" }}>
                 {appVersion}
               </BodyText>
             </View>
@@ -345,14 +332,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <BodyText
-                isDark={isDark}
                 color={
                   isDark ? Colors.textSecondary : Colors.lightTextSecondary
                 }
               >
                 Build
               </BodyText>
-              <BodyText isDark={isDark} style={{ fontWeight: "600" }}>
+              <BodyText style={{ fontWeight: "600" }}>
                 {buildNumber}
               </BodyText>
             </View>
@@ -361,10 +347,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
         {/* LOGOUT */}
         <View style={{ gap: Spacing.sp2 }}>
-          <GhostButton label="Logout" isDark={isDark} onPress={onLogout} />
+          <GhostButton label="Logout" onPress={onLogout} />
 
           <BodyText
-            isDark={isDark}
             color={Colors.danger}
             style={{ fontSize: 12, textAlign: "center" }}
           >

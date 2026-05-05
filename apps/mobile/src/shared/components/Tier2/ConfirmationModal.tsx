@@ -9,6 +9,7 @@ import { Modal, TouchableOpacity, View, ViewProps } from "react-native";
 import { GhostButton, PrimaryButton } from "../Tier1/Button";
 import { BodyText, HeadlineText } from "../Tier1/Text";
 import { BorderRadius, Colors } from "../TokenRegistry";
+import { useAppTheme } from "@theme";
 
 interface ConfirmationModalProps extends Omit<ViewProps, "style"> {
   isVisible: boolean;
@@ -34,6 +35,8 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   isLoading = false,
   ...props
 }) => {
+  const { theme: { colors } } = useAppTheme();
+
   return (
     <Modal visible={isVisible} transparent={true} animationType="fade">
       {/* Backdrop */}
@@ -66,11 +69,10 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           {...props}
         >
           {/* Title */}
-          <HeadlineText isDark={isDark}>{title}</HeadlineText>
+          <HeadlineText>{title}</HeadlineText>
 
           {/* Message */}
           <BodyText
-            isDark={isDark}
             color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
           >
             {message}
@@ -82,14 +84,12 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
               label={primaryLabel}
               onPress={onPrimaryPress}
               isLoading={isLoading}
-              isDark={isDark}
               disabled={isLoading}
             />
             {secondaryLabel && (
               <GhostButton
                 label={secondaryLabel}
                 onPress={onSecondaryPress}
-                isDark={isDark}
               />
             )}
           </View>

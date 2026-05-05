@@ -5,6 +5,7 @@
 
 import React from "react";
 import { View, ViewProps } from "react-native";
+import { useAppTheme } from "@theme";
 import { CaptionText, OverlineText } from "../Tier1/Text";
 import { Colors } from "../TokenRegistry";
 
@@ -85,10 +86,10 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
 
       {/* Labels */}
       <View style={{ marginTop: 12, gap: 8 }}>
-        <CaptionText isDark={isDark} color={Colors.textSecondary}>
+        <CaptionText color={Colors.textSecondary}>
           Step {currentStep + 1} of {steps.length}
         </CaptionText>
-        <OverlineText isDark={isDark}>{steps[currentStep]?.label}</OverlineText>
+        <OverlineText>{steps[currentStep]?.label}</OverlineText>
       </View>
     </View>
   );
