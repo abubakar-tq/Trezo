@@ -302,18 +302,32 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 
 		const client = getSupabaseClient();
 
-		client.auth
-			.getSession()
-			.then(async ({ data, error: sessionError }) => {
+		// Hard timeout so an unreachable Supabase URL (e.g. a stale OVERRIDE pointing
+		// at a local instance that isn't running) doesn't keep the splash spinner up forever.
+		withTimeout(client.auth.getSession(), 5000, "Supabase getSession")
+			.then(({ data, error: sessionError }) => {
 				if (!isMounted) return;
 				if (sessionError) {
 					setError(sessionError);
-					await applySessionRef.current(null);
+					setSession(null);
+					setUser(null);
+					setIsLoggedIn(false);
 					return;
 				}
-
 				const session = data.session ?? null;
-				await applySessionRef.current(session);
+				setSession(session);
+				setUser(session?.user ?? null);
+				setIsLoggedIn(Boolean(session));
+				applySessionRef.current(session).catch((err) =>
+					console.warn("[useSupabaseAuth] Background sync error:", err),
+				);
+			})
+			.catch((err) => {
+				if (!isMounted) return;
+				console.warn("[useSupabaseAuth] getSession failed/timed out:", err);
+				setSession(null);
+				setUser(null);
+				setIsLoggedIn(false);
 			})
 			.finally(() => {
 				if (isMounted) {
