@@ -11,6 +11,9 @@ LOCAL_PRIVATE_KEY ?= $(DEFAULT_ANVIL_KEY)
 # Where the Expo app lives (relative to contracts/)
 MOBILE_DIR ?= ../apps/mobile/src/integration
 
+# Where the Ponder indexer lives (relative to contracts/)
+INDEXER_DIR ?= ../apps/backend/indexer
+
 
 # Chain IDs (must match the actual networks)
 CHAIN_ID_LOCAL    ?= 31337
@@ -190,6 +193,7 @@ check-root-factory-sepolia:
 .PHONY: check-chain-support-sepolia
 check-chain-support-sepolia:
 	$(MAKE) check-chain-support RPC_URL=$(SEPOLIA_RPC_URL)
+
 # ---------- Sync artifacts to mobile ----------
 
 # Needs: jq installed
@@ -228,6 +232,18 @@ sync-abi:
 
 	jq '{abi: .abi}' out/EmailRecovery.sol/EmailRecovery.json \
 		> $(MOBILE_DIR)/abi/EmailRecovery.json
+
+# ---------- Sync deployment JSON to indexer ----------
+
+# Copies deployment JSON into the indexer directory so addresses.ts can read them.
+# Run after deploy-local or deploy-fork-base.
+.PHONY: sync-indexer
+sync-indexer:
+	@echo "Syncing deployment artifacts to $(INDEXER_DIR)"
+	mkdir -p $(INDEXER_DIR)/../../../contracts/deployments
+	@echo "Deployment JSONs are read directly from contracts/deployments/ by addresses.ts"
+	@echo "No copy needed — indexer reads from relative path ../../../contracts/deployments/"
+	@echo "Done."
 
 # ── Base Fork Deploy ─────────────────────────────────────────────────────────
 
