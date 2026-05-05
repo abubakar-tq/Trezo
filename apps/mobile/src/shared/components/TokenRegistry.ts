@@ -1,38 +1,7 @@
 /**
  * Trezo Mobile: Design Token Registry
- * Single source of truth for all visual decisions
- * Ensures consistency across all components and screens
+ * Layout and motion tokens. All colors live in theme/themes.ts via useAppTheme().
  */
-
-// ============================================================================
-// COLOR TOKENS (Semantic)
-// ============================================================================
-export const Colors = {
-  // Primary Action
-  primary: '#4f46e5', // Indigo — buttons, primary actions
-
-  // Semantic States
-  success: '#10b981', // Emerald — active guardians, protected state
-  warning: '#f59e0b', // Amber — pending, incomplete states
-  danger: '#ef4444', // Red — inactive guardian, failed states
-
-  // Neutrals & Backgrounds (Dark Mode)
-  background: '#04030a', // Darkest background
-  surface: '#1a1625', // Primary surface
-  surfaceMid: '#221e30', // Mid-level surface
-  card: '#2d2a3d', // Card/elevated surface
-  textPrimary: '#ffffff', // Primary text
-  textSecondary: '#a0aec0', // Secondary text
-  textTertiary: '#718096', // Tertiary text (muted)
-
-  // Light Mode (future support)
-  lightBackground: '#ffffff',
-  lightSurface: '#f7fafc',
-  lightCard: '#edf2f7',
-  lightTextPrimary: '#1a202c',
-  lightTextSecondary: '#4a5568',
-  lightTextTertiary: '#718096',
-};
 
 // ============================================================================
 // TYPOGRAPHY SCALE

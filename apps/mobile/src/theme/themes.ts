@@ -19,22 +19,28 @@ const darkColors: ThemeColors = {
   textMuted: "#64748B",
   textOnAccent: "#000000",
   textOnHero: "#FFFFFF",
-  accent: "#00FFFF", // Neon Cyan
-  accentAlt: "#FF00FF", // Neon Pink
+  accent: "#00FFFF",
+  accentAlt: "#FF00FF",
+  accentSoft: "rgba(0, 255, 255, 0.12)",
   success: "#22C55E",
+  successSoft: "rgba(34, 197, 94, 0.12)",
   warning: "#F59E0B",
+  warningSoft: "rgba(245, 158, 11, 0.12)",
   danger: "#EF4444",
+  dangerSoft: "rgba(248, 113, 113, 0.15)",
   glass: "rgba(255, 255, 255, 0.03)",
   glassBorder: "rgba(255, 255, 255, 0.08)",
+  inputBackground: "#171419",
+  inputBorder: "#333333",
 };
 
 const lightColors: ThemeColors = {
-  background: "#F9FBFF", // Crisp Ice White
+  background: "#F9FBFF",
   surface: "#FFFFFF",
-  surfaceCard: "#FFFFFF", // Pure White Card
+  surfaceCard: "#FFFFFF",
   surfaceElevated: "#FFFFFF",
   surfaceMuted: "#F1F5F9",
-  border: "rgba(0, 0, 0, 0.15)", // Significantly darkened for clear distinction
+  border: "rgba(0, 0, 0, 0.15)",
   borderMuted: "rgba(0, 0, 0, 0.08)",
   text: "#0F172A",
   textPrimary: "#0F172A",
@@ -45,15 +51,21 @@ const lightColors: ThemeColors = {
   textOnHero: "#0F172A",
   accent: "#00A3A3",
   accentAlt: "#A300A3",
+  accentSoft: "rgba(0, 163, 163, 0.12)",
   success: "#10B981",
+  successSoft: "rgba(16, 185, 129, 0.12)",
   warning: "#F59E0B",
+  warningSoft: "rgba(245, 158, 11, 0.12)",
   danger: "#EF4444",
+  dangerSoft: "rgba(239, 68, 68, 0.12)",
   glass: "#FFFFFF",
-  glassBorder: "rgba(0, 0, 0, 0.12)", // More visible glass boundary
+  glassBorder: "rgba(0, 0, 0, 0.12)",
+  inputBackground: "#FFFFFF",
+  inputBorder: "rgba(0, 0, 0, 0.15)",
 };
 
 const darkGradients: ThemeGradients = {
-  hero: ["#050505", "#050505"], // Solid deep black for hero background
+  hero: ["#050505", "#050505"],
   heroAlt: ["#101010", "#050505"],
   card: ["#141414", "#050505"],
   cardAlt: ["#1A1A1A", "#050505"],
@@ -61,6 +73,8 @@ const darkGradients: ThemeGradients = {
   dexInfo: ["#001515", "#050505"],
   profileHero: ["#050505", "#050505"],
   tabBar: ["rgba(5, 5, 5, 0.95)", "rgba(5, 5, 5, 0.85)"],
+  brand: ["#7955a0", "#6d52d6", "#0088ff"],
+  brandSoft: ["rgba(121, 85, 160, 0.18)", "rgba(0, 136, 255, 0.18)"],
 };
 
 const lightGradients: ThemeGradients = {
@@ -72,6 +86,8 @@ const lightGradients: ThemeGradients = {
   dexInfo: ["#F1F5F9", "#FFFFFF"],
   profileHero: ["#FFFFFF", "#FFFFFF"],
   tabBar: ["rgba(255, 255, 255, 0.95)", "rgba(249, 250, 251, 0.9)"],
+  brand: ["#7955a0", "#6d52d6", "#0088ff"],
+  brandSoft: ["rgba(121, 85, 160, 0.10)", "rgba(0, 136, 255, 0.10)"],
 };
 
 const createNavigationTheme = (

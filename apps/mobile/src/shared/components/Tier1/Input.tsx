@@ -1,21 +1,15 @@
-/**
- * Input Component
- * Text input with optional lock icon (for blockchain-writing inputs)
- * States: Default, Focused, Error, Disabled
- */
-
 import React, { useState } from "react";
 import {
-    Text as RNText,
-    TextInput as RNTextInput,
-    TextInputProps as RNTextInputProps,
-    View,
+  Text as RNText,
+  TextInput as RNTextInput,
+  TextInputProps as RNTextInputProps,
+  View,
 } from "react-native";
+import { useAppTheme } from "@theme";
 import { CaptionText } from "./Text";
-import { BorderRadius, Colors } from "../TokenRegistry";
+import { BorderRadius } from "../TokenRegistry";
 
 interface InputProps extends Omit<RNTextInputProps, "style"> {
-  isDark?: boolean;
   isLocked?: boolean;
   errorMessage?: string;
   label?: string;
@@ -23,7 +17,6 @@ interface InputProps extends Omit<RNTextInputProps, "style"> {
 }
 
 export const Input: React.FC<InputProps> = ({
-  isDark = true,
   isLocked = false,
   errorMessage,
   label,
@@ -33,39 +26,28 @@ export const Input: React.FC<InputProps> = ({
   editable = true,
   ...props
 }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const [isFocused, setIsFocused] = useState(false);
 
-  const handleFocus = (e: any) => {
-    setIsFocused(true);
-    onFocus?.(e);
-  };
-
-  const handleBlur = (e: any) => {
-    setIsFocused(false);
-    onBlur?.(e);
-  };
+  const handleFocus = (e: any) => { setIsFocused(true); onFocus?.(e); };
+  const handleBlur = (e: any) => { setIsFocused(false); onBlur?.(e); };
 
   const borderColor = errorMessage
-    ? Colors.danger
+    ? colors.danger
     : isFocused
-      ? Colors.primary
-      : isDark
-        ? Colors.surfaceMid
-        : Colors.lightCard;
-
-  const backgroundColor = isDark ? Colors.surface : Colors.lightSurface;
-
-  const textColor = isDark ? Colors.textPrimary : Colors.lightTextPrimary;
+      ? colors.accent
+      : colors.inputBorder;
 
   return (
     <View style={{ gap: 4 }}>
-      {label && <CaptionText isDark={isDark}>{label}</CaptionText>}
+      {label && <CaptionText color={colors.textSecondary}>{label}</CaptionText>}
 
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
-          backgroundColor,
+          backgroundColor: colors.inputBackground,
           borderWidth: 1,
           borderColor,
           borderRadius: BorderRadius.md,
@@ -82,30 +64,16 @@ export const Input: React.FC<InputProps> = ({
           editable={editable}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          style={{
-            flex: 1,
-            fontSize: 16,
-            color: textColor,
-            paddingVertical: 0,
-          }}
-          placeholderTextColor={isDark ? Colors.textTertiary : "#a0aec0"}
+          style={{ flex: 1, fontSize: 16, color: colors.text, paddingVertical: 0 }}
+          placeholderTextColor={colors.textMuted}
         />
 
         {isLocked && (
-          <RNText
-            style={{
-              fontSize: 16,
-              color: Colors.primary,
-            }}
-          >
-            🔒
-          </RNText>
+          <RNText style={{ fontSize: 16, color: colors.accent }}>🔒</RNText>
         )}
       </View>
 
-      {errorMessage && (
-        <CaptionText color={Colors.danger}>{errorMessage}</CaptionText>
-      )}
+      {errorMessage && <CaptionText color={colors.danger}>{errorMessage}</CaptionText>}
     </View>
   );
 };

@@ -1,24 +1,21 @@
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
-import Animated, {
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-} from "react-native-reanimated";
-import { Colors, BorderRadius, OpacityStates } from "../TokenRegistry";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { useAppTheme } from "@theme";
+import { withAlpha } from "@utils/color";
+import { BorderRadius, OpacityStates } from "../TokenRegistry";
 
 interface ButtonProps {
   label: string;
   onPress?: () => void;
-  variant?: "primary" | "secondary" | "outline" | "gradient" | "ghost" | "tertiary";
+  variant?: "primary" | "secondary" | "tertiary" | "outline" | "ghost" | "danger" | "gradient";
   size?: "sm" | "md" | "lg";
   disabled?: boolean;
   isLoading?: boolean;
   icon?: React.ReactNode;
   fullWidth?: boolean;
-  colors?: readonly [string, string, ...string[]];
-  isDark?: boolean;
+  gradientColors?: readonly [string, string, ...string[]];
 }
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -32,9 +29,11 @@ export const Button: React.FC<ButtonProps> = ({
   isLoading = false,
   icon,
   fullWidth = false,
-  colors,
-  isDark = true,
+  gradientColors,
 }) => {
+  const { theme } = useAppTheme();
+  const { colors, gradients } = theme;
+
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
@@ -45,94 +44,68 @@ export const Button: React.FC<ButtonProps> = ({
 
   const handlePressIn = () => {
     scale.value = withSpring(0.98);
-    opacity.value = withSpring(0.9);
+    opacity.value = withSpring(OpacityStates.hover);
   };
 
   const handlePressOut = () => {
     scale.value = withSpring(1);
-    opacity.value = withSpring(1);
+    opacity.value = withSpring(OpacityStates.default);
   };
 
   const getSizeStyles = () => {
     switch (size) {
-      case "sm":
-        return { paddingVertical: 8, paddingHorizontal: 16, minHeight: 32 };
-      case "lg":
-        return { paddingVertical: 16, paddingHorizontal: 32, minHeight: 56 };
-      default:
-        return { paddingVertical: 12, paddingHorizontal: 24, minHeight: 44 };
+      case "sm": return { paddingVertical: 8, paddingHorizontal: 16, minHeight: 32 };
+      case "lg": return { paddingVertical: 16, paddingHorizontal: 32, minHeight: 56 };
+      default:   return { paddingVertical: 12, paddingHorizontal: 24, minHeight: 44 };
     }
   };
 
-  const getTextSizeStyles = () => {
+  const getTextSize = () => {
     switch (size) {
-      case "sm":
-        return { fontSize: 13 };
-      case "lg":
-        return { fontSize: 18 };
-      default:
-        return { fontSize: 15 };
+      case "sm": return 13;
+      case "lg": return 18;
+      default:   return 15;
     }
   };
 
-  const getVariantStyles = () => {
-    if (disabled || isLoading) {
-      return { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' };
-    }
-
+  const getVariantBg = (): string => {
+    if (disabled || isLoading) return colors.surfaceMuted;
     switch (variant) {
-      case "secondary":
-        return { backgroundColor: isDark ? Colors.surface : Colors.lightSurface, borderWidth: 1, borderColor: Colors.primary };
-      case "tertiary":
-        return { backgroundColor: isDark ? Colors.surfaceMid : Colors.lightCard };
-      case "outline":
-        return { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: isDark ? '#ffffff' : Colors.primary };
-      case "ghost":
-        return { backgroundColor: 'transparent' };
-      case "gradient":
-        return {};
-      default:
-        return { backgroundColor: isDark ? Colors.primary : Colors.primary };
+      case "primary":   return colors.accent;
+      case "secondary": return colors.surface;
+      case "tertiary":  return colors.surfaceCard;
+      case "danger":    return colors.danger;
+      default:          return "transparent";
     }
   };
 
-  const getTextColor = () => {
-    if (disabled || isLoading) {
-      return isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)';
-    }
-
+  const getTextColor = (): string => {
+    if (disabled || isLoading) return colors.textMuted;
     switch (variant) {
-      case "primary":
-      case "gradient":
-      case "secondary":
-        return "#ffffff";
-      case "outline":
-        return isDark ? '#ffffff' : Colors.primary;
-      default:
-        return isDark ? Colors.textPrimary : Colors.lightTextPrimary;
+      case "primary":   return colors.textOnAccent;
+      case "secondary": return colors.accent;
+      case "danger":    return "#ffffff";
+      case "gradient":  return "#ffffff";
+      default:          return colors.text;
+    }
+  };
+
+  const getBorderStyle = () => {
+    switch (variant) {
+      case "secondary": return { borderWidth: 1, borderColor: colors.accent };
+      case "outline":   return { borderWidth: 1.5, borderColor: withAlpha(colors.text, 0.35) };
+      default:          return {};
     }
   };
 
   const buttonContent = (
-    <View
-      style={[
-        styles.buttonContent,
-        getSizeStyles(),
-        fullWidth && styles.fullWidth,
-      ]}
-    >
+    <View style={[styles.content, getSizeStyles(), fullWidth && styles.fullWidth]}>
       {isLoading ? (
         <ActivityIndicator color={getTextColor()} size="small" />
       ) : (
         <>
-          {icon && <View style={styles.iconContainer}>{icon}</View>}
-          <Text
-            style={[
-              styles.text,
-              getTextSizeStyles(),
-              { color: getTextColor() },
-            ]}
-          >
+          {icon && <View>{icon}</View>}
+          <Text style={[styles.label, { fontSize: getTextSize(), color: getTextColor() }]}>
             {label}
           </Text>
         </>
@@ -141,26 +114,21 @@ export const Button: React.FC<ButtonProps> = ({
   );
 
   if (variant === "gradient") {
-    const defaultColors: readonly [string, string, string] = [
-      "#1877f2",
-      "#6945ed",
-      "#8b5cf6",
-    ];
-    const gradientColors = colors || defaultColors;
-
+    const gc = gradientColors ?? (gradients.brand as readonly [string, string, ...string[]]);
     return (
       <AnimatedTouchableOpacity
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         disabled={disabled || isLoading}
+        activeOpacity={1}
         style={[animatedStyle, fullWidth && styles.fullWidth]}
       >
         <LinearGradient
-          colors={gradientColors}
+          colors={gc}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.gradient}
+          style={[styles.button, fullWidth && styles.fullWidth]}
         >
           {buttonContent}
         </LinearGradient>
@@ -174,10 +142,12 @@ export const Button: React.FC<ButtonProps> = ({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled || isLoading}
+      activeOpacity={1}
       style={[
         animatedStyle,
         styles.button,
-        getVariantStyles(),
+        { backgroundColor: getVariantBg() },
+        getBorderStyle(),
         fullWidth && styles.fullWidth,
       ]}
     >
@@ -187,28 +157,10 @@ export const Button: React.FC<ButtonProps> = ({
 };
 
 const styles = StyleSheet.create({
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  fullWidth: {
-    width: '100%',
-  },
-  iconContainer: {
-    // marginRight is handled by gap
-  },
-  text: {
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  button: {
-    borderRadius: BorderRadius.lg,
-  },
-  gradient: {
-    borderRadius: BorderRadius.lg,
-  },
+  button:   { borderRadius: BorderRadius.lg },
+  content:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  fullWidth: { width: "100%" },
+  label:    { fontWeight: "700", letterSpacing: 0.3 },
 });
 
 export const PrimaryButton: React.FC<Omit<ButtonProps, "variant">> = (props) => <Button variant="primary" {...props} />;

@@ -4,13 +4,16 @@ import type { StatusBarStyle } from "expo-status-bar";
 export type Mode = "light" | "dark";
 
 export type ThemeColors = {
+  // Backgrounds
   background: string;
   surface: string;
   surfaceCard: string;
   surfaceElevated: string;
   surfaceMuted: string;
+  // Borders
   border: string;
   borderMuted: string;
+  // Text
   text: string;
   textPrimary: string;
   textSecondary: string;
@@ -18,13 +21,23 @@ export type ThemeColors = {
   textMuted: string;
   textOnAccent: string;
   textOnHero: string;
+  // Accents
   accent: string;
   accentAlt: string;
+  accentSoft: string;
+  // Semantic states
   success: string;
+  successSoft: string;
   warning: string;
+  warningSoft: string;
   danger: string;
+  dangerSoft: string;
+  // Glass surfaces
   glass: string;
   glassBorder: string;
+  // Input surfaces (auth bridge)
+  inputBackground: string;
+  inputBorder: string;
 };
 
 export type ThemeGradients = {
@@ -36,6 +49,9 @@ export type ThemeGradients = {
   dexInfo: readonly [string, string];
   profileHero: readonly [string, string];
   tabBar: readonly [string, string];
+  // Brand gradient (auth bridge — available now, consumed when auth screens migrate)
+  brand: readonly [string, string, string];
+  brandSoft: readonly [string, string];
 };
 
 export type ThemeShadows = {

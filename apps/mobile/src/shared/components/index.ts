@@ -10,9 +10,6 @@ export * from "./visuals";
 export { BaseModal, OnboardingPlaceholder, OnboardingSlide, PageIndicator, Skeleton, ThemedAlert } from "./ui";
 export type { BaseModalProps, ThemedAlertButton } from "./ui";
 
-// Design System - Token Registry
-export * from "./TokenRegistry";
-
 // Design System - Component Tiers
 export * from "./Tier1";
 export * from "./Tier2";
