@@ -389,10 +389,12 @@ const resolveSmartAccountNonce = async ({
 
 const ensureBundlerSupportsEntryPoint = async ({
   bundler,
+  bundlerUrl,
   entryPoint,
   operationLabel,
 }: {
   bundler: RpcRequestClient;
+  bundlerUrl: string;
   entryPoint: Hex;
   operationLabel: string;
 }) => {
@@ -403,12 +405,14 @@ const ensureBundlerSupportsEntryPoint = async ({
       params: [],
     });
   } catch (err) {
-    console.error(`[${operationLabel}] Failed eth_supportedEntryPoints`, err);
-    throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `[${operationLabel}] Bundler unreachable at ${bundlerUrl} — is the bundler stack running? (eth_supportedEntryPoints: ${msg})`,
+    );
   }
   if (!supportedEntryPoints.includes(entryPoint)) {
     throw new Error(
-      `Bundler does not support EntryPoint ${entryPoint}. Supported entry points: ${supportedEntryPoints.join(", ")}`,
+      `Bundler at ${bundlerUrl} does not support EntryPoint ${entryPoint}. Supported: ${supportedEntryPoints.join(", ")}`,
     );
   }
 };
@@ -634,7 +638,7 @@ const buildSmartAccountExecuteUserOp = async ({
   };
 
   const bundler = getBundlerClient(bundlerUrl, chainId);
-  await ensureBundlerSupportsEntryPoint({ bundler, entryPoint, operationLabel });
+  await ensureBundlerSupportsEntryPoint({ bundler, bundlerUrl, entryPoint, operationLabel });
 
   const userOpForEstimation = await maybeSponsorUserOp({
     chainId,
@@ -952,6 +956,7 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
 
   await ensureBundlerSupportsEntryPoint({
     bundler,
+    bundlerUrl: params.bundlerUrl,
     entryPoint,
     operationLabel: "buildCreateAccountUserOp",
   });
