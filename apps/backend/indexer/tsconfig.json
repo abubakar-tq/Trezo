@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "ponder:registry": [".ponder/registry.ts"],
+      "ponder:schema": ["ponder.schema.ts"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", ".ponder", "dist"]
+}
