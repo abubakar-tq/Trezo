@@ -57,7 +57,7 @@ const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { theme, resolvedMode, setMode } = useAppTheme();
   const { colors, gradients } = theme;
-  const styles = useMemo(() => createStyles(colors, resolvedMode), [colors, resolvedMode]);
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const contentBottomInset = useTabContentBottomInset();
 
   const user = useUserStore((state) => state.user);
@@ -257,7 +257,7 @@ const ProfileScreen: React.FC = () => {
   );
 };
 
-const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
+const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     screen: {
       flex: 1,
@@ -271,7 +271,7 @@ const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
       marginBottom: 20,
     },
     heroCard: {
-      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF',
+      backgroundColor: colors.surfaceCard,
       padding: 24,
       borderRadius: 28,
       borderWidth: 1,
@@ -317,7 +317,7 @@ const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
       marginBottom: 20,
     },
     settingsCard: {
-      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF',
+      backgroundColor: colors.surfaceCard,
       borderRadius: 24,
       padding: 24,
       borderWidth: 1,
@@ -363,7 +363,7 @@ const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
       borderRadius: 20,
       borderWidth: 1,
       borderColor: withAlpha(colors.danger, 0.3),
-      backgroundColor: mode === 'dark' ? 'rgba(220, 38, 38, 0.08)' : 'rgba(220, 38, 38, 0.04)',
+      backgroundColor: withAlpha(colors.danger, 0.06),
       marginTop: 8,
     },
     signOutIconWrap: {
@@ -393,7 +393,7 @@ const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
       borderRadius: 28,
       borderWidth: 1,
       borderColor: withAlpha(colors.danger, 0.2),
-      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.95)' : '#FFFFFF',
+      backgroundColor: colors.surfaceCard,
       paddingVertical: 28,
       paddingHorizontal: 24,
       alignItems: "center",
