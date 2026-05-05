@@ -5,16 +5,18 @@ import React, { useRef, useState } from "react";
 import { Dimensions, FlatList, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Onboarding1, Onboarding2, Onboarding3 } from "@/assets/components";
 import { AuthStackParamList } from "@/src/types/navigation";
 import { Button } from "@shared/components";
 import OnboardingSlide from "@shared/components/ui/OnboardingSlide";
+import MultiChainScene from "@shared/components/visuals/onboarding/MultiChainScene";
+import PasskeyOrbScene from "@shared/components/visuals/onboarding/PasskeyOrbScene";
+import ShieldScene from "@shared/components/visuals/onboarding/ShieldScene";
 
 const { width } = Dimensions.get("window");
 
 const pages = [
   {
-    image: Onboarding1,
+    image: PasskeyOrbScene,
     title: "Your Keys.\nYour Wallet.",
     subtitle:
       "Passkey-first security means only you control your assets. No seed phrases. No compromises.",
@@ -24,7 +26,7 @@ const pages = [
     glowColor: "rgba(139, 92, 246, 0.38)",
   },
   {
-    image: Onboarding2,
+    image: MultiChainScene,
     title: "Every Chain.\nOne Wallet.",
     subtitle:
       "Ethereum, Polygon, BSC and 10+ EVM networks — all managed from a single beautiful interface.",
@@ -34,7 +36,7 @@ const pages = [
     glowColor: "rgba(6, 182, 212, 0.38)",
   },
   {
-    image: Onboarding3,
+    image: ShieldScene,
     title: "Built to\nProtect You.",
     subtitle:
       "Multi-layer security with social recovery and passkey validation. Recover anything, lose nothing.",

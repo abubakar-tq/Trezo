@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   View,
   Animated as RNAnimated,
-  Platform,
 } from "react-native";
 import {
     Canvas,
@@ -23,7 +22,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import Animated, {
   FadeInDown,
-  FadeInUp,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -35,6 +33,9 @@ import Animated, {
 
 import { AuthStackParamList } from "@/src/types/navigation";
 import { AuthBackground } from "@/assets/components";
+import MultiChainScene from "@shared/components/visuals/onboarding/MultiChainScene";
+import PasskeyOrbScene from "@shared/components/visuals/onboarding/PasskeyOrbScene";
+import ShieldScene from "@shared/components/visuals/onboarding/ShieldScene";
 import { AuthGradientButton } from "@features/auth/components";
 import { useUserStore } from "@store/useUserStore";
 import { useAppLockStore } from "@store/useAppLockStore";
@@ -43,36 +44,31 @@ import { withAlpha } from "@utils/color";
 
 const { width, height } = Dimensions.get("window");
 
-const ASSETS = {
-  logo: require("@/assets/images/icon_nobackground.png"),
-  page1: require("@/assets/images/shield.png"),
-  page2: require("@/assets/images/cube.png"),
-  page3: require("@/assets/images/rings.png"),
-};
+const LOGO = require("@/assets/images/icon_nobackground.png");
 
 const PAGES = [
   {
     id: "1",
     title: "Security, redefined.",
-    image: ASSETS.page1,
-    accent: "#FFFFFF",
-    accentLight: "#FFFFFF",
+    Scene: PasskeyOrbScene,
+    accent: "#8B5CF6",
+    accentLight: "#C4B5FD",
     kicker: "TREZO SAFE",
   },
   {
     id: "2",
     title: "Trade with precision.",
-    image: ASSETS.page2,
-    accent: "#FFFFFF",
-    accentLight: "#FFFFFF",
+    Scene: MultiChainScene,
+    accent: "#06B6D4",
+    accentLight: "#67E8F9",
     kicker: "TREZO CORE",
   },
   {
     id: "3",
     title: "Unified across chains.",
-    image: ASSETS.page3,
-    accent: "#FFFFFF",
-    accentLight: "#FFFFFF",
+    Scene: ShieldScene,
+    accent: "#10B981",
+    accentLight: "#6EE7B7",
     kicker: "TREZO MESH",
   },
 ];
@@ -201,17 +197,7 @@ const OnboardingScreen: React.FC = () => {
     return (
       <View style={styles.page}>
         <View style={styles.illustrationWrapper}>
-          <Animated.View 
-            entering={FadeInUp.delay(300).duration(1200)}
-            style={styles.imageContainer}
-          >
-            <Image
-              source={item.image}
-              contentFit="contain"
-              transition={1200}
-              style={styles.heroImage}
-            />
-          </Animated.View>
+          <item.Scene width={width} height={width * 0.95} />
         </View>
 
         <View style={styles.textContainer}>
@@ -242,7 +228,7 @@ const OnboardingScreen: React.FC = () => {
       <SafeAreaView style={styles.safeArea}>
         {/* MAJESTIC TOP BAR */}
         <Animated.View entering={FadeInDown.duration(800)} style={styles.topBar}>
-          <Image source={ASSETS.logo} style={styles.miniLogo} contentFit="contain" />
+          <Image source={LOGO} style={styles.miniLogo} contentFit="contain" />
           <Text style={styles.brandName}>TREZO</Text>
         </Animated.View>
 
@@ -384,34 +370,7 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: "center",
     alignItems: "center",
-    position: 'relative',
-  },
-  ringsContainer: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-    height: '100%',
-  },
-  imageContainer: {
-    width: width * 0.75,
-    height: width * 0.75,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  heroImage: {
-    width: '100%',
-    height: '100%',
-    // Adding some shadow for 3D depth
-    ...Platform.select({
-      ios: {
-        shadowColor: "#00FFFF",
-        shadowOffset: { width: 0, height: 20 },
-        shadowOpacity: 0.3,
-        shadowRadius: 30,
-      }
-    })
+    overflow: "visible",
   },
   textContainer: {
     paddingHorizontal: 40,
