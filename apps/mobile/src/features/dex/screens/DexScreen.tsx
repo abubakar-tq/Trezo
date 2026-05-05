@@ -23,14 +23,14 @@ const { width } = Dimensions.get('window');
 type DexTab = 'swap' | 'bridge';
 
 export const DexScreen: React.FC = () => {
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const route = useRoute<any>();
   const contentBottomInset = useTabContentBottomInset();
   const { tokens } = useWalletData();
   const { accounts, activeAccountId, setActiveAccount } = useWalletStore();
-  
+
   const [activeTab, setActiveTab] = useState<DexTab>('swap');
   
   // Modal visibility states
@@ -56,9 +56,6 @@ export const DexScreen: React.FC = () => {
       setActiveTab(route.params.initialTab);
     }
   }, [route.params?.initialTab]);
-
-  const isDark = resolvedMode === 'dark';
-  const glassBackground = isDark ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF';
 
   const handleAssetSelect = (asset: Asset) => {
     if (pickingType === 'from') setFromToken(asset);
@@ -132,7 +129,7 @@ export const DexScreen: React.FC = () => {
 
         {/* Main Swap/Bridge Interface Card */}
         {activeTab === 'swap' ? (
-          <View style={[styles.mainCard, { backgroundColor: glassBackground, borderColor: colors.border }]}>
+          <View style={[styles.mainCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             {/* Integrated Network Header */}
             <TouchableOpacity 
               style={[styles.integratedNetworkBar, { borderBottomColor: withAlpha(colors.border, 0.1) }]}
@@ -232,7 +229,7 @@ export const DexScreen: React.FC = () => {
         ) : (
           /* "One Page" Compact Bridge Card */
           <View style={styles.bridgeContainer}>
-            <View style={[styles.unifiedBridgeCard, { backgroundColor: glassBackground, borderColor: colors.border }]}>
+            <View style={[styles.unifiedBridgeCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
                {/* Integrated Network Selection Integrated */}
                <View style={styles.bridgeNetworksIntegrated}>
                   <View style={styles.bridgeNetworkHalf}>

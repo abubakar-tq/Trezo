@@ -338,7 +338,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "600",
     },
     tagChipTextActive: {
-      color: "#ffffff",
+      color: colors.textOnAccent,
     },
     resultsCount: {
       color: colors.textMuted,

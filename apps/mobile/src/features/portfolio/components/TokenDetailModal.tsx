@@ -18,11 +18,8 @@ interface TokenDetailModalProps {
 }
 
 export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onClose, token }) => {
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
-
-  const isDark = resolvedMode === 'dark';
-  const glassBackground = isDark ? 'rgba(25, 25, 25, 0.95)' : '#FFFFFF';
 
   // State for chart filter
   const [selectedPeriod, setSelectedPeriod] = React.useState('1W');
@@ -74,7 +71,7 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
     >
       <View style={styles.overlay}>
         <TouchableOpacity style={styles.dismissOverlay} onPress={onClose} activeOpacity={1} />
-        <View style={[styles.content, { backgroundColor: glassBackground, borderColor: colors.border }]}>
+        <View style={[styles.content, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           {/* Header Compact */}
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
