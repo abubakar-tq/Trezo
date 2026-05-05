@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {console2} from "forge-std/Test.sol";
+import {AccountFactoryTestHelper} from "test/helpers/AccountFactoryTestHelper.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
-import {DeployAccount} from "script/DeployAccount.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {PassKeyDemo} from "src/utils/PasskeyCred.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 
-contract AccountStorageTest is Test {
+contract AccountStorageTest is AccountFactoryTestHelper {
     error AlreadyInitialized();
 
     AccountFactory accountFactory;
@@ -22,21 +22,26 @@ contract AccountStorageTest is Test {
     PasskeyValidator passkeyValidator;
 
     function setUp() public {
-        // Use DeployAccount script to get all required contracts
-        DeployAccount deployScript = new DeployAccount();
         (
             HelperConfig _helperConfig,
             , // Smart Account
             , // proxy Factory
             AccountFactory _accountFactory,
             PasskeyValidator _passkeyValidator
-        ) = deployScript.deployAccount();
+            ,
+        ) = _deployAccountStack();
 
         accountFactory = _accountFactory;
         passkeyValidator = _passkeyValidator;
         passkeyInit = PassKeyDemo.getPasskeyInit(1);
 
-        proxy = accountFactory.createAccount(keccak256("user-storage-setup"), address(passkeyValidator), passkeyInit);
+        proxy = _createAuthorizedAccount(
+            accountFactory,
+            keccak256("user-storage-setup"),
+            0,
+            address(passkeyValidator),
+            passkeyInit
+        );
 
         helperConfig = _helperConfig;
 

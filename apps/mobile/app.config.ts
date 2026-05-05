@@ -2,16 +2,19 @@ import "dotenv/config";
 import type { ExpoConfig } from "expo/config";
 
 const extra = {
-  supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? "",
-  supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
+  eas: {
+    projectId: "95fc18a7-8bfb-45e5-a51d-bc853f9ca1e0"
+  },
+  supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_OVERRIDE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || "",
+  supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_OVERRIDE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
   passkeyRpId: process.env.EXPO_PUBLIC_PASSKEY_RP_ID ?? "trezo.app",
   passkeyRpName: process.env.EXPO_PUBLIC_PASSKEY_RP_NAME ?? "Trezo Wallet",
 };
 
 const config: ExpoConfig = {
-  name: "Trezo_Wallet",
-  slug: "Trezo_Wallet",
-  owner: "adeeljahangir",
+  name: "Trezo",
+  slug: "trezo",
+  owner: "bakar00009",
   version: "1.0.0",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
@@ -28,11 +31,10 @@ const config: ExpoConfig = {
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/images/android-icon-foreground.png",
-      backgroundImage: "./assets/images/android-icon-background.png",
-      monochromeImage: "./assets/images/android-icon-monochrome.png",
+      backgroundColor: "#050505",
+      foregroundImage: "./assets/images/icon.png",
     },
+    icon: "./assets/images/icon.png",
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: "com.trezo.wallet", // set your Android applicationId
@@ -45,12 +47,13 @@ const config: ExpoConfig = {
     [
       "expo-splash-screen",
       {
-        image: "./assets/images/splash-icon.png",
+        image: "./assets/images/icon.png",
         imageWidth: 200,
         resizeMode: "contain",
-        backgroundColor: "#ffffff",
+        backgroundColor: "#050505",
         dark: {
-          backgroundColor: "#000000",
+          image: "./assets/images/icon.png",
+          backgroundColor: "#050505",
         },
       },
     ],
@@ -59,6 +62,13 @@ const config: ExpoConfig = {
       {
         faceIDPermission: "Allow Trezo Wallet to use Face ID for secure authentication."
       }
+    ],
+    [
+      "expo-notifications",
+      {
+        color: "#050505",
+        defaultChannel: "default",
+      },
     ],
     "expo-web-browser",
   ],

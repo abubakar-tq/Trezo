@@ -1,16 +1,32 @@
 [profile.default]
 src = "src"
 out = "out"
-libs = ["lib"]
+libs = ["lib", "node_modules"]
+allow_paths = ["../node_modules"]
 auto_detect_remappings = false
+ignored_error_codes = [
+    "license",
+    "code-size",
+    "init-code-size",
+    "transient-storage",
+    # Third-party dependency noise:
+    # - 2424: deprecated memory-safe assembly comments in forge-std
+    # - 2519: declaration shadowing in solidity-stringutils
+    2424,
+    2519,
+]
+ffi = true
+fs_permissions = [
+    { access = "read-write", path = "./deployments" }
+]
+optimizer = true
+optimizer_runs = 200
+via_ir = true
 [lint]
 lint_on_build = false
 gas_limit = "18446744073709551615"
 memory_limit = 2147483648
 verbosity = 3
-optimizer = true
-optimizer_runs = 200
-via_ir = true
 
 remappings = [
     # # Project-wide defaults (used by your code and any deps that don't override via context)

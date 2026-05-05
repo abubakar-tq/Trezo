@@ -18,12 +18,13 @@ import { useBrowserStore } from "@store/useBrowserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
-const HISTORY_LIMITS = [10, 20, 30, 50, 75, 100];
+import { MeshBackground } from "@shared/components";
 
 export default function BrowserSettingsScreen() {
-  const { theme } = useAppTheme();
+  const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const isDark = resolvedMode === 'dark';
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
   const insets = useSafeAreaInsets();
 
   const settings = useBrowserStore((state) => state.settings);
@@ -124,25 +125,29 @@ export default function BrowserSettingsScreen() {
   }, [settings.searchEngine]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
+      <MeshBackground intensity={isDark ? 0.3 : 0.8} />
+      
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Browser Settings</Text>
-        <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>
-          Customize your browsing experience
-        </Text>
+      <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
+        <View style={styles.headerIndicator} />
+        <Text style={[styles.headerKicker, { color: colors.accent }]}>GALACTIC CONFIGURATION</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>BROWSER CORE</Text>
       </View>
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Tabs Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>TABS</Text>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>TAB QUANTUM STATE</Text>
+          </View>
 
-          <View style={[styles.card, { backgroundColor: colors.surfaceCard }]}>
+          <View style={styles.glassCard}>
             <SettingRow
               icon="layers"
               label="Persist Tabs"
@@ -153,7 +158,7 @@ export default function BrowserSettingsScreen() {
                   value={settings.persistTabs}
                   onValueChange={handleTogglePersistTabs}
                   trackColor={{
-                    false: withAlpha(colors.textMuted, 0.3),
+                    false: withAlpha(colors.textMuted, 0.2),
                     true: colors.accent,
                   }}
                   thumbColor="#ffffff"
@@ -162,48 +167,24 @@ export default function BrowserSettingsScreen() {
             />
 
             {tabCount > 0 && (
-              <View style={[styles.infoBox, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+              <View style={[styles.infoBox, { backgroundColor: withAlpha(colors.accent, 0.08) }]}>
                 <Feather name="info" size={14} color={colors.accent} />
                 <Text style={[styles.infoText, { color: colors.accent }]}>
-                  {tabCount} tab{tabCount === 1 ? "" : "s"} currently open
+                  {tabCount} active tab{tabCount === 1 ? "" : "s"} detected
                 </Text>
               </View>
             )}
           </View>
         </View>
 
-        {/* History Section */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>HISTORY</Text>
-
-          <View style={[styles.card, { backgroundColor: colors.surfaceCard }]}>
-            <SettingRow
-              icon="clock"
-              label="History Limit"
-              description={`Store up to ${settings.historyLimit} recent entries`}
-              colors={colors}
-              onPress={handleOpenHistoryLimitModal}
-              showChevron
-            />
-
-            <View style={styles.divider} />
-
-            <SettingRow
-              icon="trash-2"
-              label="Clear History"
-              description={`${historyCount} ${historyCount === 1 ? "entry" : "entries"} stored`}
-              colors={colors}
-              onPress={handleClearHistory}
-              showChevron
-            />
-          </View>
-        </View>
-
         {/* Search Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>SEARCH</Text>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>NAVIGATION ENGINE</Text>
+          </View>
 
-          <View style={[styles.card, { backgroundColor: colors.surfaceCard }]}>
+          <View style={styles.glassCard}>
             <SettingRow
               icon="search"
               label="Search Engine"
@@ -214,14 +195,64 @@ export default function BrowserSettingsScreen() {
             />
           </View>
 
-          <View style={[styles.helpBox, { backgroundColor: withAlpha(colors.textMuted, 0.05) }]}>
-            <Feather name="info" size={14} color={colors.textMuted} />
-            <Text style={[styles.helpText, { color: colors.textMuted }]}>
-              <Text style={{ fontWeight: "700" }}>Hybrid Mode:</Text> Uses Web3Compass for dApp
-              discovery (swap, NFT, DeFi terms) and DuckDuckGo for general searches.
+          <View style={[styles.helpBox, { backgroundColor: withAlpha(colors.accent, 0.05) }]}>
+            <Feather name="shield" size={14} color={colors.accent} />
+            <Text style={[styles.helpText, { color: colors.textSecondary }]}>
+              <Text style={{ fontWeight: "800", color: colors.accent }}>Hybrid Mode:</Text> Uses Web3Compass for dApp
+              discovery and DuckDuckGo for general privacy searches.
             </Text>
           </View>
         </View>
+
+        {/* Security Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SECURITY PROTOCOLS</Text>
+          </View>
+
+          <View style={styles.glassCard}>
+            <SettingRow
+              icon="clock"
+              label="History Limit"
+              description={`Storing up to ${settings.historyLimit} entries`}
+              colors={colors}
+              onPress={handleOpenHistoryLimitModal}
+              showChevron
+            />
+
+            <View style={[styles.divider, { backgroundColor: colors.borderMuted }]} />
+
+            <SettingRow
+              icon="trash-2"
+              label="Clear History"
+              description={`${historyCount} session entries stored`}
+              colors={colors}
+              onPress={handleClearHistory}
+              showChevron
+            />
+            
+            <View style={[styles.divider, { backgroundColor: colors.borderMuted }]} />
+            
+            <SettingRow
+              icon="database"
+              label="Clear Browser Cache"
+              description="Free up local storage space"
+              colors={colors}
+              onPress={() => {}} 
+              showChevron
+            />
+          </View>
+        </View>
+        
+        {/* Dangerous Actions */}
+        <TouchableOpacity 
+          style={[styles.clearAllButton, { borderColor: withAlpha(colors.danger, 0.3), backgroundColor: withAlpha(colors.danger, 0.05) }]}
+          activeOpacity={0.8}
+        >
+          <Feather name="alert-circle" size={18} color={colors.danger} />
+          <Text style={[styles.clearAllText, { color: colors.danger }]}>CLEAR ALL BROWSING DATA</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* History Limit Modal */}
@@ -235,21 +266,16 @@ export default function BrowserSettingsScreen() {
           style={styles.modalOverlay}
           onPress={() => setShowHistoryLimitModal(false)}
         >
-          <Pressable style={[styles.modalContent, { backgroundColor: colors.surfaceCard }]} onPress={() => {}}>
+          <Pressable style={[styles.modalContent, { backgroundColor: isDark ? '#121212' : '#FFFFFF', borderColor: colors.border }]} onPress={() => {}}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                History Limit
-              </Text>
-              <Pressable
-                onPress={() => setShowHistoryLimitModal(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>History Limit</Text>
+              <Pressable onPress={() => setShowHistoryLimitModal(false)}>
                 <Feather name="x" size={24} color={colors.textMuted} />
               </Pressable>
             </View>
 
-            <Text style={[styles.modalDescription, { color: colors.textMuted }]}>
-              Set the maximum number of history entries to store (10-100)
+            <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
+              Define the maximum storage for your Web3 exploration history.
             </Text>
 
             <View style={styles.sliderContainer}>
@@ -266,48 +292,35 @@ export default function BrowserSettingsScreen() {
                 value={tempHistoryLimit}
                 onValueChange={handleHistoryLimitSliderChange}
                 minimumTrackTintColor={colors.accent}
-                maximumTrackTintColor={withAlpha(colors.textMuted, 0.2)}
+                maximumTrackTintColor={withAlpha(colors.textMuted, 0.1)}
                 thumbTintColor={colors.accent}
               />
 
-              <View style={styles.inputContainer}>
+              <View style={[styles.inputContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : colors.background }]}>
                 <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: withAlpha(colors.textMuted, 0.05),
-                      color: colors.textPrimary,
-                      borderColor: withAlpha(colors.textMuted, 0.1),
-                    },
-                  ]}
+                  style={[styles.input, { color: colors.textPrimary }]}
                   value={historyLimitInput}
                   onChangeText={handleHistoryLimitInputChange}
                   keyboardType="number-pad"
                   maxLength={3}
-                  placeholder="30"
-                  placeholderTextColor={colors.textMuted}
                 />
-                <Text style={[styles.inputLabel, { color: colors.textMuted }]}>entries</Text>
+                <Text style={[styles.inputLabel, { color: colors.textMuted }]}>ENTRIES</Text>
               </View>
             </View>
 
             <View style={styles.modalButtons}>
-              <Pressable
+              <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: withAlpha(colors.textMuted, 0.1) }]}
                 onPress={() => setShowHistoryLimitModal(false)}
               >
-                <Text style={[styles.modalButtonText, { color: colors.textMuted }]}>
-                  Cancel
-                </Text>
-              </Pressable>
-              <Pressable
+                <Text style={[styles.modalButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: colors.accent }]}
                 onPress={handleSaveHistoryLimit}
               >
-                <Text style={[styles.modalButtonText, { color: "#FFFFFF" }]}>
-                  Save
-                </Text>
-              </Pressable>
+                <Text style={[styles.modalButtonText, { color: "#000" }]}>Save Changes</Text>
+              </TouchableOpacity>
             </View>
           </Pressable>
         </Pressable>
@@ -324,409 +337,249 @@ export default function BrowserSettingsScreen() {
           style={styles.modalOverlay}
           onPress={() => setShowSearchEngineModal(false)}
         >
-          <Pressable style={[styles.modalContent, { backgroundColor: colors.surfaceCard }]} onPress={() => {}}>
+          <Pressable style={[styles.modalContent, { backgroundColor: isDark ? '#121212' : '#FFFFFF', borderColor: colors.border }]} onPress={() => {}}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                Search Engine
-              </Text>
-              <Pressable
-                onPress={() => setShowSearchEngineModal(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Search Engine</Text>
+              <Pressable onPress={() => setShowSearchEngineModal(false)}>
                 <Feather name="x" size={24} color={colors.textMuted} />
               </Pressable>
             </View>
-
-            <Text style={[styles.modalDescription, { color: colors.textMuted }]}>
-              Choose your preferred search experience
-            </Text>
 
             <View style={styles.optionsContainer}>
-              <Pressable
-                style={[
-                  styles.optionRow,
-                  {
-                    backgroundColor: withAlpha(colors.textMuted, 0.05),
-                    borderColor:
-                      settings.searchEngine === "web3compass-duckduckgo"
-                        ? colors.accent
-                        : withAlpha(colors.textMuted, 0.1),
-                  },
-                ]}
+              <SearchOption 
+                title="Web3Compass + DuckDuckGo"
+                description="Optimized for dApp discovery and high privacy."
+                selected={settings.searchEngine === "web3compass-duckduckgo"}
                 onPress={() => handleSelectSearchEngine("web3compass-duckduckgo")}
-              >
-                <View style={styles.optionLeft}>
-                  <View
-                    style={[
-                      styles.radioOuter,
-                      {
-                        borderColor:
-                          settings.searchEngine === "web3compass-duckduckgo"
-                            ? colors.accent
-                            : colors.textMuted,
-                      },
-                    ]}
-                  >
-                    {settings.searchEngine === "web3compass-duckduckgo" && (
-                      <View style={[styles.radioInner, { backgroundColor: colors.accent }]} />
-                    )}
-                  </View>
-                  <View style={styles.optionTextContainer}>
-                    <Text style={[styles.optionTitle, { color: colors.textPrimary }]}>
-                      Web3Compass + DuckDuckGo
-                    </Text>
-                    <Text style={[styles.optionDescription, { color: colors.textMuted }]}>
-                      Best for crypto. Web3 for dApps, DuckDuckGo for general searches.
-                    </Text>
-                  </View>
-                </View>
-                {settings.searchEngine === "web3compass-duckduckgo" && (
-                  <Feather name="check" size={20} color={colors.accent} />
-                )}
-              </Pressable>
-
-              <Pressable
-                style={[
-                  styles.optionRow,
-                  {
-                    backgroundColor: withAlpha(colors.textMuted, 0.05),
-                    borderColor:
-                      settings.searchEngine === "duckduckgo"
-                        ? colors.accent
-                        : withAlpha(colors.textMuted, 0.1),
-                  },
-                ]}
+                colors={colors}
+                styles={styles}
+              />
+              <SearchOption 
+                title="DuckDuckGo Only"
+                description="Standard privacy-focused web search."
+                selected={settings.searchEngine === "duckduckgo"}
                 onPress={() => handleSelectSearchEngine("duckduckgo")}
-              >
-                <View style={styles.optionLeft}>
-                  <View
-                    style={[
-                      styles.radioOuter,
-                      {
-                        borderColor:
-                          settings.searchEngine === "duckduckgo"
-                            ? colors.accent
-                            : colors.textMuted,
-                      },
-                    ]}
-                  >
-                    {settings.searchEngine === "duckduckgo" && (
-                      <View style={[styles.radioInner, { backgroundColor: colors.accent }]} />
-                    )}
-                  </View>
-                  <View style={styles.optionTextContainer}>
-                    <Text style={[styles.optionTitle, { color: colors.textPrimary }]}>
-                      DuckDuckGo Only
-                    </Text>
-                    <Text style={[styles.optionDescription, { color: colors.textMuted }]}>
-                      Privacy-focused search for all queries.
-                    </Text>
-                  </View>
-                </View>
-                {settings.searchEngine === "duckduckgo" && (
-                  <Feather name="check" size={20} color={colors.accent} />
-                )}
-              </Pressable>
-
-              <Pressable
-                style={[
-                  styles.optionRow,
-                  {
-                    backgroundColor: withAlpha(colors.textMuted, 0.05),
-                    borderColor:
-                      settings.searchEngine === "google"
-                        ? colors.accent
-                        : withAlpha(colors.textMuted, 0.1),
-                  },
-                ]}
+                colors={colors}
+                styles={styles}
+              />
+              <SearchOption 
+                title="Google"
+                description="Comprehensive results with standard tracking."
+                selected={settings.searchEngine === "google"}
                 onPress={() => handleSelectSearchEngine("google")}
-              >
-                <View style={styles.optionLeft}>
-                  <View
-                    style={[
-                      styles.radioOuter,
-                      {
-                        borderColor:
-                          settings.searchEngine === "google"
-                            ? colors.accent
-                            : colors.textMuted,
-                      },
-                    ]}
-                  >
-                    {settings.searchEngine === "google" && (
-                      <View style={[styles.radioInner, { backgroundColor: colors.accent }]} />
-                    )}
-                  </View>
-                  <View style={styles.optionTextContainer}>
-                    <Text style={[styles.optionTitle, { color: colors.textPrimary }]}>
-                      Google
-                    </Text>
-                    <Text style={[styles.optionDescription, { color: colors.textMuted }]}>
-                      Google search for all queries.
-                    </Text>
-                  </View>
-                </View>
-                {settings.searchEngine === "google" && (
-                  <Feather name="check" size={20} color={colors.accent} />
-                )}
-              </Pressable>
+                colors={colors}
+                styles={styles}
+              />
             </View>
           </Pressable>
         </Pressable>
       </Modal>
 
-      {/* Clear History Confirmation Modal */}
-      <Modal
-        visible={showClearHistoryModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowClearHistoryModal(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowClearHistoryModal(false)}
-        >
-          <Pressable style={[styles.modalContent, { backgroundColor: colors.surfaceCard }]} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                Clear History?
+      {/* Confirmation Modals */}
+      <Modal visible={showClearHistoryModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+           <View style={[styles.modalContent, { backgroundColor: isDark ? '#121212' : '#FFFFFF', borderColor: withAlpha(colors.danger, 0.3) }]}>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Purge History?</Text>
+              <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
+                This will permanently delete {historyCount} journey logs. This action is irreversible.
               </Text>
-              <Pressable
-                onPress={() => setShowClearHistoryModal(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name="x" size={24} color={colors.textMuted} />
-              </Pressable>
-            </View>
-
-            <Text style={[styles.modalDescription, { color: colors.textMuted }]}>
-              This will permanently delete {historyCount} history{" "}
-              {historyCount === 1 ? "entry" : "entries"}.
-            </Text>
-
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={[styles.modalButton, { backgroundColor: withAlpha(colors.textMuted, 0.1) }]}
-                onPress={() => setShowClearHistoryModal(false)}
-              >
-                <Text style={[styles.modalButtonText, { color: colors.textMuted }]}>
-                  Cancel
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalButton, { backgroundColor: "#EF4444" }]}
-                onPress={handleConfirmClearHistory}
-              >
-                <Text style={[styles.modalButtonText, { color: "#FFFFFF" }]}>
-                  Clear
-                </Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* Close All Tabs Confirmation Modal */}
-      <Modal
-        visible={showCloseTabsModal}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelCloseAllTabs}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={handleCancelCloseAllTabs}
-        >
-          <Pressable style={[styles.modalContent, { backgroundColor: colors.surfaceCard }]} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                Tab Persistence Disabled
-              </Text>
-              <Pressable
-                onPress={handleCancelCloseAllTabs}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name="x" size={24} color={colors.textMuted} />
-              </Pressable>
-            </View>
-
-            <Text style={[styles.modalDescription, { color: colors.textMuted }]}>
-              You have {tabCount} open {tabCount === 1 ? "tab" : "tabs"}. They will be closed when
-              you restart the app. Close all tabs now?
-            </Text>
-
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={[styles.modalButton, { backgroundColor: withAlpha(colors.textMuted, 0.1) }]}
-                onPress={handleCancelCloseAllTabs}
-              >
-                <Text style={[styles.modalButtonText, { color: colors.textMuted }]}>
-                  Keep for Now
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalButton, { backgroundColor: "#EF4444" }]}
-                onPress={handleConfirmCloseAllTabs}
-              >
-                <Text style={[styles.modalButtonText, { color: "#FFFFFF" }]}>
-                  Close All
-                </Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={styles.modalButton} onPress={() => setShowClearHistoryModal(false)}>
+                  <Text style={{ color: colors.textMuted }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalButton, { backgroundColor: colors.danger }]} onPress={handleConfirmClearHistory}>
+                  <Text style={{ color: '#FFF', fontWeight: '700' }}>Confirm Purge</Text>
+                </TouchableOpacity>
+              </View>
+           </View>
+        </View>
       </Modal>
     </View>
   );
 }
 
-function SettingRow({
-  icon,
-  label,
-  description,
-  colors,
-  onPress,
-  showChevron,
-  rightElement,
-}: {
-  icon: React.ComponentProps<typeof Feather>["name"];
-  label: string;
-  description: string;
-  colors: ThemeColors;
-  onPress?: () => void;
-  showChevron?: boolean;
-  rightElement?: React.ReactNode;
-}) {
-  const content = (
-    <View style={rowStyles.container}>
-      <View style={[rowStyles.iconBox, { backgroundColor: withAlpha(colors.accent, 0.12) }]}>
+function SearchOption({ title, description, selected, onPress, colors, styles }: any) {
+  return (
+    <TouchableOpacity 
+      onPress={onPress}
+      style={[
+        styles.optionRow, 
+        { 
+          backgroundColor: selected ? withAlpha(colors.accent, 0.08) : 'transparent',
+          borderColor: selected ? colors.accent : withAlpha(colors.border, 0.1)
+        }
+      ]}
+    >
+      <View style={styles.optionLeft}>
+        <View style={[styles.radioOuter, { borderColor: selected ? colors.accent : colors.textMuted }]}>
+          {selected && <View style={[styles.radioInner, { backgroundColor: colors.accent }]} />}
+        </View>
+        <View style={{ flex: 1 }}>
+           <Text style={[styles.optionTitle, { color: selected ? colors.accent : colors.textPrimary }]}>{title}</Text>
+           <Text style={[styles.optionDescription, { color: colors.textSecondary }]}>{description}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function SettingRow({ icon, label, description, colors, onPress, showChevron, rightElement }: any) {
+  return (
+    <TouchableOpacity 
+      onPress={onPress} 
+      disabled={!onPress}
+      activeOpacity={0.7}
+      style={rowStyles.container}
+    >
+      <View style={[rowStyles.iconBox, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
         <Feather name={icon} size={18} color={colors.accent} />
       </View>
 
       <View style={rowStyles.content}>
         <Text style={[rowStyles.label, { color: colors.textPrimary }]}>{label}</Text>
-        <Text style={[rowStyles.description, { color: colors.textMuted }]} numberOfLines={2}>
-          {description}
-        </Text>
+        <Text style={[rowStyles.description, { color: colors.textSecondary }]} numberOfLines={1}>{description}</Text>
       </View>
 
-      {rightElement ? (
-        rightElement
-      ) : showChevron ? (
-        <Feather name="chevron-right" size={20} color={colors.textMuted} />
-      ) : null}
-    </View>
+      {rightElement || (showChevron && <Feather name="chevron-right" size={18} color={colors.textMuted} />)}
+    </TouchableOpacity>
   );
-
-  if (onPress) {
-    return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
-        {content}
-      </TouchableOpacity>
-    );
-  }
-
-  return content;
 }
 
-function createStyles(colors: ThemeColors) {
+function createStyles(colors: ThemeColors, isDark: boolean) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.background,
     },
     header: {
-      paddingHorizontal: 20,
-      paddingTop: 16,
-      paddingBottom: 20,
+      paddingHorizontal: 24,
+      paddingBottom: 24,
+      alignItems: 'center',
+    },
+    headerIndicator: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: withAlpha(colors.accent, 0.3),
+      marginBottom: 16,
+    },
+    headerKicker: {
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 3,
+      marginBottom: 6,
+      opacity: 0.8,
     },
     headerTitle: {
       fontSize: 28,
-      fontWeight: "700",
-      marginBottom: 6,
-    },
-    headerSubtitle: {
-      fontSize: 15,
-      fontWeight: "500",
+      fontWeight: "900",
+      letterSpacing: 1.5,
     },
     scroll: {
       flex: 1,
     },
     content: {
-      paddingHorizontal: 16,
+      paddingHorizontal: 20,
     },
     section: {
-      marginBottom: 24,
+      marginBottom: 28,
     },
-    sectionTitle: {
-      fontSize: 13,
-      fontWeight: "700",
-      letterSpacing: 0.5,
-      marginBottom: 10,
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 12,
       marginLeft: 4,
     },
-    card: {
-      borderRadius: 16,
+    sectionDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      shadowColor: colors.accent,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.8,
+      shadowRadius: 4,
+    },
+    sectionTitle: {
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 2,
+    },
+    glassCard: {
+      backgroundColor: isDark ? 'rgba(20, 20, 20, 0.7)' : 'rgba(255, 255, 255, 0.85)',
+      borderRadius: 32,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
       overflow: "hidden",
     },
     divider: {
       height: 1,
-      backgroundColor: withAlpha("#000000", 0.06),
-      marginLeft: 58,
+      marginLeft: 60,
     },
     infoBox: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
+      gap: 10,
       paddingHorizontal: 16,
-      paddingVertical: 12,
-      marginTop: 1,
+      paddingVertical: 14,
     },
     infoText: {
-      fontSize: 13,
-      fontWeight: "600",
-      flex: 1,
+      fontSize: 12,
+      fontWeight: "700",
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
     },
     helpBox: {
       flexDirection: "row",
-      gap: 10,
-      padding: 12,
-      borderRadius: 12,
-      marginTop: 8,
+      gap: 12,
+      padding: 16,
+      borderRadius: 20,
+      marginTop: 12,
     },
     helpText: {
       fontSize: 13,
       lineHeight: 18,
       flex: 1,
     },
-    // Modal Styles
+    clearAllButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      paddingVertical: 18,
+      borderRadius: 24,
+      borderWidth: 1,
+      marginTop: 10,
+      marginBottom: 20,
+    },
+    clearAllText: {
+      fontSize: 13,
+      fontWeight: '900',
+      letterSpacing: 1,
+    },
+    // Modal
     modalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.6)",
+      backgroundColor: "rgba(0, 0, 0, 0.8)",
       justifyContent: "center",
       alignItems: "center",
-      padding: 20,
+      padding: 24,
     },
     modalContent: {
       width: "100%",
-      maxWidth: 400,
-      borderRadius: 20,
+      borderRadius: 32,
       padding: 24,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.3,
-      shadowRadius: 20,
-      elevation: 10,
+      borderWidth: 1,
     },
     modalHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 12,
+      marginBottom: 16,
     },
     modalTitle: {
-      fontSize: 20,
-      fontWeight: "700",
+      fontSize: 22,
+      fontWeight: "900",
     },
     modalDescription: {
       fontSize: 15,
@@ -740,26 +593,26 @@ function createStyles(colors: ThemeColors) {
     },
     modalButton: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 12,
+      paddingVertical: 16,
+      borderRadius: 18,
       alignItems: "center",
     },
     modalButtonText: {
-      fontSize: 16,
-      fontWeight: "700",
+      fontSize: 14,
+      fontWeight: "900",
+      textTransform: 'uppercase',
     },
-    // History Limit Modal Styles
     sliderContainer: {
       marginVertical: 8,
     },
     sliderLabelRow: {
       flexDirection: "row",
       justifyContent: "space-between",
-      marginBottom: 8,
+      marginBottom: 10,
     },
     sliderLabel: {
-      fontSize: 13,
-      fontWeight: "600",
+      fontSize: 12,
+      fontWeight: "800",
     },
     slider: {
       width: "100%",
@@ -768,67 +621,59 @@ function createStyles(colors: ThemeColors) {
     inputContainer: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
+      gap: 12,
       marginTop: 16,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderRadius: 18,
     },
     input: {
       flex: 1,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderRadius: 12,
-      fontSize: 16,
-      fontWeight: "600",
-      borderWidth: 1,
+      fontSize: 24,
+      fontWeight: "900",
       textAlign: "center",
     },
     inputLabel: {
-      fontSize: 15,
-      fontWeight: "600",
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1,
     },
-    // Search Engine Modal Styles
     optionsContainer: {
       gap: 12,
-      marginTop: 8,
     },
     optionRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      padding: 16,
-      borderRadius: 12,
-      borderWidth: 2,
+      padding: 18,
+      borderRadius: 24,
+      borderWidth: 1.5,
     },
     optionLeft: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 14,
     },
     radioOuter: {
       width: 22,
       height: 22,
       borderRadius: 11,
       borderWidth: 2,
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 2,
     },
     radioInner: {
       width: 12,
       height: 12,
       borderRadius: 6,
     },
-    optionTextContainer: {
-      flex: 1,
-      gap: 4,
-    },
     optionTitle: {
-      fontSize: 15,
-      fontWeight: "700",
+      fontSize: 16,
+      fontWeight: "900",
+      marginBottom: 4,
     },
     optionDescription: {
       fontSize: 13,
       lineHeight: 18,
-    },
+    }
   });
 }
 
@@ -836,27 +681,25 @@ const rowStyles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
+    padding: 18,
   },
   iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 16,
   },
   content: {
     flex: 1,
-    gap: 3,
   },
   label: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "800",
+    marginBottom: 2,
   },
   description: {
     fontSize: 13,
-    fontWeight: "500",
-  },
+  }
 });

@@ -270,10 +270,5 @@ abstract contract ModuleManager {
     }
 
 
-    // ---------------------------------------------------------------------
-    // (Future) Executors & Fallbacks:
-    //  - installExecutor/uninstallExecutor (+ optional delegatecall flag)
-    //  - installFallback/uninstallFallback + setActiveFallback
-    //  - Account's fallback() would delegatecall to active fallback handler
-    // ---------------------------------------------------------------------
+
 }

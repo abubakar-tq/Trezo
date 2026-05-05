@@ -1,32 +1,19 @@
 # Core Architecture
 
-This directory contains the business logic for the Trezo Smart Wallet.
+Business logic shared across the Trezo smart wallet.
 
 ## Modules
 
 ### `auth/`
-Handles user authentication.
-- **Biometrics**: Unlocking the local device key.
-- **Passkeys**: WebAuthn credentials for backend login and account recovery.
-
-### `wallet/`
-Manages the cryptographic keys.
-- **Signer**: The local EOA (Externally Owned Account) stored in SecureStore.
-- **Key Generation**: Creating the initial signer key.
-
-### `aa/` (Account Abstraction)
-Handles ERC-4337 Smart Account logic.
-- **UserOps**: Constructing and signing UserOperations.
-- **Bundler**: Submitting UserOps to the Alto Bundler.
-- **Paymaster**: Handling gas sponsorship.
+- Biometrics: gate access to the local device key via SecureStore
+- Passkeys: WebAuthn helpers for login/recovery with the backend
 
 ### `network/`
-Blockchain configuration.
-- **Chain Config**: RPC URLs, Contract Addresses.
+- Chain metadata and RPC selection
+- Contract addresses for the AA stack
 
 ## Security Model
-
-1. **Device Key**: A unique private key is generated on the device and stored in `Expo SecureStore`.
-2. **Smart Account**: This Device Key is the `owner` of the on-chain Smart Account.
-3. **Protection**: Access to the Device Key is guarded by Biometrics (FaceID/Fingerprint).
-4. **Recovery**: Passkeys (synced via iCloud/Google Password Manager) authenticate the user to the backend to restore access or trigger a recovery procedure (Social Recovery).
+1. **Passkeys (WebAuthn)** are the sole credential for owning the smart account. The private key lives in the device secure enclave; only public metadata (credentialIdRaw, publicKeyX/Y) is stored in AsyncStorage.
+2. **Biometrics** (FaceID/TouchID/Android biometrics) gate passkey creation/use via the platform auth prompt.
+3. **No local EOA/seed** is generated or stored; all account ownership flows are passkey-based.
+4. Contract addresses are injected per-network (Anvil via deployment JSON; testnet/mainnet via env) and validated at startup.

@@ -1,0 +1,20 @@
+{
+  "accountFactory": "0xBc20fACed405c4806f4B1bEf9B8C6704ae0afC9F",
+  "chainId": 31337,
+  "emailRecovery": "0xB3c8b2BEa5b525eeA43E6af8Df7B8d0a15686084",
+  "emailRecoveryCommandHandler": "0x0Ed7D4eB79BbF807B2dED47c69cd4009e57616fF",
+  "emailRecoveryHarness": "0xB3c8b2BEa5b525eeA43E6af8Df7B8d0a15686084",
+  "entryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+  "infraVersion": "TREZO_INFRA_V2",
+  "isHarnessDeployment": true,
+  "passkeyValidator": "0x165aA35Ad6A1d71CfDF60160074912A9429F6659",
+  "portable": false,
+  "proxyFactory": "0x3854e7f61907675a43FFd8152DEfff5cB06e85c3",
+  "rootFactory": "0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7",
+  "smartAccountImpl": "0x3c8175Fcc8308d0372D6cc25EFed36FeBE06B14f",
+  "socialRecovery": "0xa6472a303C76fe7c8D2AF46F006839ab3Dc36785",
+  "success": true,
+  "zkEmailAuthImpl": "0x408450Ce2E089cDCEB73516f09D7F4dCb0abCE41",
+  "zkEmailDkimRegistry": "0xD054c910f048155c4a8ff5C491419dA23C007117",
+  "zkEmailVerifier": "0xD784D4388136FaB968332B8a9B232751AaDE7768"
+}

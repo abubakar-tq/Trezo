@@ -17,24 +17,37 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
     event PasskeyAdded(address indexed account, bytes32 indexed passkeyId);
     event PasskeyRemoved(address indexed account, bytes32 indexed passkeyId);
+    event PasskeyRemovalScheduled(address indexed account, bytes32 indexed passkeyId, uint48 executeAfter);
+    event PasskeyRemovalCancelled(address indexed account, bytes32 indexed passkeyId);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
+    error InvalidInstallDataLength();
+    error PasskeyValidator_CannotRemoveLastPasskey();
+    error PasskeyValidator_PasskeyDoesNotExist();
+    error PasskeyValidator_RemovalAlreadyScheduled();
+    error PasskeyValidator_RemovalNotScheduled();
+    error PasskeyValidator_RemovalNotReady();
 
     /*//////////////////////////////////////////////////////////////
                                 STRUCTS
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * Minimal-but-safe: rpIdHash (phishing resistance) + signCounter (clone detection)
+     * Passkey public key + WebAuthn sign counter state.
+     *
+     * Some authenticators always report a zero signature counter. In that case replay
+     * protection is unavailable and the validator keeps the passkey in "zero-counter mode".
+     * Authenticators that emit a positive counter are still required to increase it
+     * strictly on each successful assertion.
      * Note: bytes32 for px/py is cheaper to store than uint256; cast when calling libs.
      */
     struct PasskeyRecord {
         uint256 px; // P-256 pubkey X
         uint256 py; // P-256 pubkey Y
-        bytes32 rpIdHash; // SHA-256(RP ID)
-        uint32 signCounter; 
+        uint32 signCounter;
+        bool counterInitialized;
     }
 
     // Encoded WebAuthn signature payload carried in signatures
@@ -57,6 +70,15 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     mapping(address => mapping(PasskeyId => PasskeyRecord)) internal passkeys;
     mapping(address => EnumerableSet.Bytes32Set) internal passkeyIds; // stores PasskeyId.unwrap(id)
 
+    struct PendingPasskeyRemoval {
+        uint48 executeAfter;
+        uint48 requestedAt;
+        bool cancelled;
+    }
+
+    uint48 public constant PASSKEY_REMOVAL_DELAY = 1 days;
+    mapping(address => mapping(bytes32 => PendingPasskeyRemoval)) public pendingRemovals;
+
     /*//////////////////////////////////////////////////////////////////////////
                                      CONFIG
     //////////////////////////////////////////////////////////////////////////*/
@@ -66,7 +88,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      *
      * Data encoding options:
      *  - Empty: installs the module without registering a passkey.
-     *  - abi.encode(bytes32 passkeyId, uint256 px, uint256 py, bytes32 rpIdHash):
+     *  - abi.encode(bytes32 passkeyId, uint256 px, uint256 py):
      *      installs and registers a single passkey for the caller.
      *
      * Reverts if the module is considered initialized (i.e. the caller already
@@ -83,13 +105,18 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
         if (data.length == 0) return;
 
-        // decode one passkey and register
-        (bytes32 idRaw, uint256 px, uint256 py, bytes32 rpIdHash) =
-            abi.decode(data, (bytes32, uint256, uint256, bytes32));
+        // exact payload for (bytes32, uint256, uint256)
+        if (data.length != 96) {
+            revert InvalidInstallDataLength();
+        }
+        (bytes32 idRaw, uint256 px, uint256 py) = abi.decode(data, (bytes32, uint256, uint256));
 
         PasskeyId id = PasskeyId.wrap(idRaw);
         require(!passkeyIds[account].contains(idRaw), "exists");
-        passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0);
+        // Some authenticators legitimately start at counter 0, so the first
+        // successful assertion initializes the stored counter rather than
+        // requiring it to be strictly greater than zero.
+        passkeys[account][id] = PasskeyRecord(px, py, 0, false);
         passkeyIds[account].add(idRaw);
         emit PasskeyAdded(account, idRaw);
     }
@@ -100,7 +127,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      * Removes all registered passkeys for the caller. If no passkeys are
      * registered, it is treated as a no-op.
      */
-    function onUninstall(bytes calldata /*data*/) external override {
+    function onUninstall(bytes calldata /*data*/ ) external override {
         address account = msg.sender;
         uint256 len = passkeyIds[account].length();
         if (len == 0) return; // nothing to cleanup
@@ -130,21 +157,69 @@ contract PasskeyValidator is ERC7579ValidatorBase {
                                      MODULE LOGIC
     //////////////////////////////////////////////////////////////////////////*/
 
-    function addPasskey(bytes32 passkeyId, uint256 px, uint256 py, bytes32 rpIdHash) external {
+    function addPasskey(bytes32 passkeyId, uint256 px, uint256 py) external {
         address account = msg.sender;
         PasskeyId id = PasskeyId.wrap(passkeyId);
         require(!passkeyIds[account].contains(passkeyId), "exists");
-        passkeys[account][id] = PasskeyRecord(px, py, rpIdHash, 0);
+        passkeys[account][id] = PasskeyRecord(px, py, 0, false);
         passkeyIds[account].add(passkeyId); // O(1)
         emit PasskeyAdded(account, passkeyId);
     }
 
     function removePasskey(bytes32 passkeyId) external {
+        executeRemovePasskey(passkeyId);
+    }
+
+    function scheduleRemovePasskey(bytes32 passkeyId) external {
         address account = msg.sender;
-        PasskeyId id = PasskeyId.wrap(passkeyId);
         require(passkeyIds[account].contains(passkeyId), "no such key");
+        if (passkeyIds[account].length() == 1) {
+            revert PasskeyValidator_CannotRemoveLastPasskey();
+        }
+
+        PendingPasskeyRemoval storage pending = pendingRemovals[account][passkeyId];
+        if (pending.executeAfter != 0 && !pending.cancelled) {
+            revert PasskeyValidator_RemovalAlreadyScheduled();
+        }
+
+        pending.executeAfter = uint48(block.timestamp) + PASSKEY_REMOVAL_DELAY;
+        pending.requestedAt = uint48(block.timestamp);
+        pending.cancelled = false;
+        emit PasskeyRemovalScheduled(account, passkeyId, pending.executeAfter);
+    }
+
+    function cancelRemovePasskey(bytes32 passkeyId) external {
+        address account = msg.sender;
+        PendingPasskeyRemoval storage pending = pendingRemovals[account][passkeyId];
+        if (pending.executeAfter == 0 || pending.cancelled) {
+            revert PasskeyValidator_RemovalNotScheduled();
+        }
+
+        pending.cancelled = true;
+        emit PasskeyRemovalCancelled(account, passkeyId);
+    }
+
+    function executeRemovePasskey(bytes32 passkeyId) public {
+        address account = msg.sender;
+        if (!passkeyIds[account].contains(passkeyId)) {
+            revert PasskeyValidator_PasskeyDoesNotExist();
+        }
+        if (passkeyIds[account].length() == 1) {
+            revert PasskeyValidator_CannotRemoveLastPasskey();
+        }
+
+        PendingPasskeyRemoval storage pending = pendingRemovals[account][passkeyId];
+        if (pending.executeAfter == 0 || pending.cancelled) {
+            revert PasskeyValidator_RemovalNotScheduled();
+        }
+        if (block.timestamp < pending.executeAfter) {
+            revert PasskeyValidator_RemovalNotReady();
+        }
+
+        PasskeyId id = PasskeyId.wrap(passkeyId);
         delete passkeys[account][id];
         passkeyIds[account].remove(passkeyId); // O(1), internally swap-and-pop
+        delete pendingRemovals[account][passkeyId];
         emit PasskeyRemoved(account, passkeyId);
     }
 
@@ -162,9 +237,10 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      *
      * Validation performed:
      *  - The passkeyId must be registered for `userOp.sender`.
-     *  - `authenticatorData.rpIdHash` must match the stored rpIdHash for this passkey.
      *  - The signature must verify per WebAuthn over challenge = `userOpHash` (RIP-7212/FCL).
-     *  - The WebAuthn sign counter in `authenticatorData` must strictly increase.
+     *  - The first successful assertion initializes the stored WebAuthn sign counter.
+     *  - Authenticators that always report zero remain usable in zero-counter mode.
+     *  - Once a positive counter is observed, subsequent assertions must strictly increase it.
      *  - User Verification (UV) is required.
      *
      * Returns packed ValidationData per ERC-4337 conventions. Does not revert on signature
@@ -185,14 +261,12 @@ contract PasskeyValidator is ERC7579ValidatorBase {
             return _packValidationData({sigFailed: true, validUntil: 0, validAfter: 0});
         }
 
-        // 3) Enforce strictly increasing signature counter (clone detection)
         PasskeyRecord storage rec = passkeys[userOp.sender][PasskeyId.wrap(idRaw)];
-        if (newCounter <= rec.signCounter) {
+        if (!_isFreshCounter(rec, newCounter)) {
             return _packValidationData({sigFailed: true, validUntil: 0, validAfter: 0});
         }
 
-        // Update stored counter
-        rec.signCounter = newCounter;
+        _recordCounter(rec, newCounter);
 
         // Success: valid for all time (caller may add policy as desired)
         return _packValidationData({sigFailed: false, validUntil: type(uint48).max, validAfter: 0});
@@ -212,8 +286,8 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     /**
      * ERC-1271 style signature validation bound to a sender.
      * Leverages the same WebAuthn verification as validateUserOp, without state updates.
-     * Requires the passkey to be registered and rpIdHash to match. Also enforces the
-     * sign counter to be strictly greater than the stored counter, but does not update it.
+     * Requires the passkey to be registered. Also enforces the
+     * sign counter rules used by validateUserOp, but does not update state.
      *
      * Signature encoding is the same as in validateUserOp.
      *
@@ -233,7 +307,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
         if (!ok) return EIP1271_FAILED;
 
         PasskeyRecord storage rec = passkeys[sender][PasskeyId.wrap(idRaw)];
-        if (newCounter <= rec.signCounter) return EIP1271_FAILED;
+        if (!_isFreshCounter(rec, newCounter)) return EIP1271_FAILED;
         return EIP1271_SUCCESS;
     }
 
@@ -257,7 +331,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      * @param hash The message hash used as the WebAuthn challenge.
      * @param signature ABI-encoded WebAuthn signature payload.
      * @param data Encoded context. Currently expects abi.encode(address sender).
-     * @return validSig True if signature is valid and counter is strictly increasing.
+     * @return validSig True if signature is valid and the counter is fresh for this passkey.
      */
     function validateSignatureWithData(bytes32 hash, bytes calldata signature, bytes calldata data)
         external
@@ -269,7 +343,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
         (bool ok, uint32 newCounter, bytes32 idRaw) = _verifySignature(sender, signature, abi.encodePacked(hash));
         if (!ok) return false;
         PasskeyRecord storage rec = passkeys[sender][PasskeyId.wrap(idRaw)];
-        return newCounter > rec.signCounter;
+        return _isFreshCounter(rec, newCounter);
     }
 
     /*//////////////////////////////////////////////////////////////////////////
@@ -282,7 +356,7 @@ contract PasskeyValidator is ERC7579ValidatorBase {
      * @param account The account that owns the passkey.
      * @param signature ABI-encoded WebAuthn signature payload as in validateUserOp.
      * @param challenge The challenge bytes to verify (e.g., userOpHash or message hash).
-     * @return ok True if passkey exists, rpIdHash matches and signature verifies.
+     * @return ok True if passkey exists and signature verifies.
      * @return newCounter The parsed WebAuthn sign counter from authenticatorData.
      * @return idRaw The raw passkeyId used for this verification.
      */
@@ -301,18 +375,8 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
         PasskeyRecord storage rec = passkeys[account][PasskeyId.wrap(p.idRaw)];
 
-        // Minimum length: 32 (rpIdHash) + 1 (flags) + 4 (counter)
+        // Minimum length: 32 (rp hash field) + 1 (flags) + 4 (counter)
         if (p.authenticatorData.length < 37) {
-            return (false, 0, idRaw);
-        }
-
-        // Enforce rpIdHash binding to this passkey
-        bytes32 adRpIdHash;
-        bytes memory ad = p.authenticatorData;
-        assembly {
-            adRpIdHash := mload(add(ad, 32))
-        }
-        if (adRpIdHash != rec.rpIdHash) {
             return (false, 0, idRaw);
         }
 
@@ -337,26 +401,29 @@ contract PasskeyValidator is ERC7579ValidatorBase {
     }
 
     function _decodeSig(bytes calldata signature) internal pure returns (SigPayload memory p) {
-        (
-            p.idRaw,
-            p.authenticatorData,
-            p.clientDataJSON,
-            p.challengeIndex,
-            p.typeIndex,
-            p.r,
-            p.s
-        ) = abi.decode(signature, (bytes32, bytes, string, uint256, uint256, uint256, uint256));
+        (p.idRaw, p.authenticatorData, p.clientDataJSON, p.challengeIndex, p.typeIndex, p.r, p.s) =
+            abi.decode(signature, (bytes32, bytes, string, uint256, uint256, uint256, uint256));
     }
 
     /// @dev Parse the 4-byte big-endian signature counter at bytes 33..36 of authenticatorData.
     function _parseSignCounter(bytes memory authenticatorData) internal pure returns (uint32 ctr) {
         // bytes[32] is flags, bytes[33..36] is counter (big-endian)
         unchecked {
-            ctr = (uint32(uint8(authenticatorData[33])) << 24)
-                | (uint32(uint8(authenticatorData[34])) << 16)
-                | (uint32(uint8(authenticatorData[35])) << 8)
-                | uint32(uint8(authenticatorData[36]));
+            ctr = (uint32(uint8(authenticatorData[33])) << 24) | (uint32(uint8(authenticatorData[34])) << 16)
+                | (uint32(uint8(authenticatorData[35])) << 8) | uint32(uint8(authenticatorData[36]));
         }
+    }
+
+    function _isFreshCounter(PasskeyRecord storage rec, uint32 newCounter) internal view returns (bool) {
+        if (!rec.counterInitialized) return true;
+        if (rec.signCounter == 0 && newCounter == 0) return true;
+        if (newCounter == 0) return false;
+        return newCounter > rec.signCounter;
+    }
+
+    function _recordCounter(PasskeyRecord storage rec, uint32 newCounter) internal {
+        rec.signCounter = newCounter;
+        rec.counterInitialized = true;
     }
 
     /*//////////////////////////////////////////////////////////////////////////
@@ -406,5 +473,14 @@ contract PasskeyValidator is ERC7579ValidatorBase {
 
     function hasPasskey(address account, PasskeyId id) external view returns (bool) {
         return passkeyIds[account].contains(PasskeyId.unwrap(id));
+    }
+
+    function getPasskeyRecord(address account, PasskeyId id)
+        external
+        view
+        returns (uint256 px, uint256 py, uint32 signCounter, bool counterInitialized)
+    {
+        PasskeyRecord storage rec = passkeys[account][id];
+        return (rec.px, rec.py, rec.signCounter, rec.counterInitialized);
     }
 }

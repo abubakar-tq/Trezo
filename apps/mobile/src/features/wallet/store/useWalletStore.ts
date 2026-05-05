@@ -1,8 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { Hex } from "viem";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import { DEFAULT_CHAIN_ID } from "@/src/integration/chains";
+
 export type WalletAccount = {
+  id: string;
   address: string;
   name: string;
   isActive: boolean;
@@ -37,6 +41,9 @@ export type Transaction = {
 export type AAAccount = {
   id: string; // Database ID
   userId: string;
+  walletId: string;
+  walletIndex: number;
+  deploymentMode: "portable" | "chain-specific";
   predictedAddress: string; // Counterfactual address
   ownerAddress: string; // EOA that controls this AA
   isDeployed: boolean;
@@ -53,8 +60,12 @@ export type DeploymentStatus = 'idle' | 'predicting' | 'deploying' | 'deployed' 
 export type PasskeyInfo = {
   id: string;
   credentialId: string;
+  idRaw?: Hex; // Raw credential ID as Hex
   deviceName: string;
   deviceType: string;
+  isOnChain?: boolean; // Whether this passkey is registered on-chain
+  px?: Hex; // Public key X coordinate
+  py?: Hex; // Public key Y coordinate
   lastUsedAt?: string;
   createdAt: string;
 };
@@ -74,7 +85,11 @@ type WalletStore = {
   // Wallet state (EOA)
   accounts: WalletAccount[];
   activeAccount: WalletAccount | null;
+  activeAccountId: string | null;
   isWalletInitialized: boolean;
+  
+  // Computed properties
+  primaryAccount: WalletAccount | null; // Alias for activeAccount
   
   // Account Abstraction state
   aaAccount: AAAccount | null;
@@ -99,6 +114,7 @@ type WalletStore = {
   // Actions
   setAccounts: (accounts: WalletAccount[]) => void;
   setActiveAccount: (account: WalletAccount) => void;
+  setActiveAccountId: (accountId: string | null) => void;
   addAccount: (account: WalletAccount) => void;
   setWalletInitialized: (value: boolean) => void;
   
@@ -130,6 +146,7 @@ type WalletStore = {
 const initialState = {
   accounts: [],
   activeAccount: null,
+  activeAccountId: null,
   isWalletInitialized: false,
   aaAccount: null,
   accountDeploymentStatus: 'idle' as DeploymentStatus,
@@ -141,27 +158,35 @@ const initialState = {
   balancesLoading: false,
   transactions: [],
   transactionsLoading: false,
-  activeChainId: 31337, // Anvil default
+  activeChainId: DEFAULT_CHAIN_ID,
   rpcUrl: "http://10.0.2.2:8545", // Android emulator localhost
 } satisfies Partial<WalletStore>;
 
 export const useWalletStore = create<WalletStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...initialState,
+      
+      // Computed property
+      get primaryAccount() {
+        return get().activeAccount;
+      },
       
       setAccounts: (accounts) => set({ accounts }),
       
       setActiveAccount: (account) => {
         set((state) => ({
           activeAccount: account,
+          activeAccountId: account.id,
           accounts: state.accounts.map((acc) =>
-            acc.address === account.address
+            acc.id === account.id
               ? { ...acc, isActive: true }
               : { ...acc, isActive: false }
           ),
         }));
       },
+      
+      setActiveAccountId: (accountId) => set({ activeAccountId: accountId }),
       
       addAccount: (account) =>
         set((state) => ({
@@ -240,26 +265,45 @@ export const useWalletStore = create<WalletStore>()(
     {
       name: "trezo-wallet-store",
       storage: createJSONStorage(() => AsyncStorage),
+      version: 2,
+      migrate: (persisted: any, fromVersion) => {
+        // v2: force activeChainId back to the env-driven DEFAULT_CHAIN_ID and drop
+        // any aaAccount whose chainId no longer matches. Earlier migrations could have
+        // baked in 31337 when DEFAULT_CHAIN_ID resolved before the env was loaded.
+        if (fromVersion < 2) {
+          const staleAccount =
+            persisted?.aaAccount && persisted.aaAccount.chainId !== DEFAULT_CHAIN_ID
+              ? null
+              : persisted?.aaAccount;
+          return {
+            ...persisted,
+            activeChainId: DEFAULT_CHAIN_ID,
+            aaAccount: staleAccount,
+            accountDeploymentStatus: staleAccount ? persisted?.accountDeploymentStatus : "idle",
+          };
+        }
+        return persisted;
+      },
       partialize: ({
         accounts,
         activeAccount,
+        activeAccountId,
         isWalletInitialized,
         aaAccount,
         accountDeploymentStatus,
         passkeys,
         guardians,
-        activeChainId,
-        rpcUrl,
+        // intentionally NOT persisting activeChainId / rpcUrl — these are env-driven
+        // and should always come from initialState on launch.
       }) => ({
         accounts,
         activeAccount,
+        activeAccountId,
         isWalletInitialized,
         aaAccount,
         accountDeploymentStatus,
         passkeys,
         guardians,
-        activeChainId,
-        rpcUrl,
       }),
     }
   )
