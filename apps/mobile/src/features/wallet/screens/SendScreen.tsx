@@ -1,4 +1,4 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
@@ -26,9 +26,9 @@ import type { TokenMetadata } from "@/src/features/assets/types/token";
 import { ContactService, type Contact } from "@/src/features/contacts";
 import { SendExecutionService } from "@/src/features/send/services/SendExecutionService";
 import { SendValidationService } from "@/src/features/send/services/SendValidationService";
-import { TransactionHistoryService } from "@/src/features/send/services/TransactionHistoryService";
-import { TransactionReceiptTracker } from "@/src/features/send/services/TransactionReceiptTracker";
 import type { SendIntent } from "@/src/features/send/types/send";
+import { TransactionHistoryService } from "@/src/features/transactions/services/TransactionHistoryService";
+import { TransactionReceiptTracker } from "@/src/features/transactions/services/TransactionReceiptTracker";
 import WalletPersistenceService from "@/src/features/wallet/services/SupabaseWalletService";
 import { devFundSmartAccount } from "@/src/features/wallet/services/devFunding";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
@@ -150,7 +150,6 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
   const [networkPickerOpen, setNetworkPickerOpen] = useState(false);
 
   // ── Tx data ───────────────────────────────────────────────────────────────
-  const [txId, setTxId] = useState<string | null>(null);
   const [userOpHash, setUserOpHash] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
 
@@ -414,7 +413,6 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
       waitForReceipt: false,
       validation: { feeMode: "sponsored" },
     });
-    setTxId(result.transactionId);
     setUserOpHash(result.userOpHash ?? null);
     setTxHash(result.transactionHash ?? null);
 
@@ -422,12 +420,14 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
       setFinalState("cancelled");
       setErrorMessage("Signing was cancelled.");
       setStep("result");
+      navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
       return;
     }
     if (result.status === "failed") {
       setFinalState("failed");
       setErrorMessage(result.error ?? "Transaction failed.");
       setStep("result");
+      navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
       return;
     }
 
@@ -435,34 +435,33 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
     if (!row) {
       setFinalState("pending");
       setStep("result");
+      navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
       return;
     }
-    const tracked = await TransactionReceiptTracker.trackById(row, {
+    const tracked = await TransactionReceiptTracker.trackUserOperation({
+      transactionId: row.id,
       timeoutMs: 45_000,
       pollIntervalMs: 2_000,
     });
-    if (tracked === "confirmed") {
-      const latest = await TransactionHistoryService.getById(
-        result.transactionId,
-      );
-      setTxHash(latest?.transactionHash ?? null);
+    if (tracked.status === "confirmed") {
+      setTxHash(tracked.transactionHash ?? null);
       setFinalState("confirmed");
       setStep("result");
+      navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
       return;
     }
-    if (tracked === "failed") {
-      const latest = await TransactionHistoryService.getById(
-        result.transactionId,
-      );
+    if (tracked.status === "failed") {
       setFinalState("failed");
       setErrorMessage(
-        latest?.errorMessage ?? "Transaction failed after submission.",
+        tracked.errorMessage ?? "Transaction failed after submission.",
       );
       setStep("result");
+      navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
       return;
     }
     setFinalState("pending");
     setStep("result");
+    navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
   };
 
   const resetFlow = () => {
@@ -472,7 +471,6 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
     setRecipient("");
     setRecipientSearch("");
     setTxHash(null);
-    setTxId(null);
     setUserOpHash(null);
     setErrorMessage(null);
   };
@@ -1543,4 +1541,3 @@ const s = StyleSheet.create({
 });
 
 export default SendScreen;
-

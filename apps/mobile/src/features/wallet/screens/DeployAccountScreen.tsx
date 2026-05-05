@@ -33,14 +33,14 @@ import {
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import WalletSyncService from "@/src/features/wallet/services/WalletSyncService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
-import { isPortableChain, type SupportedChainId } from "@/src/integration/chains";
+import { getChainConfig, isPortableChain, type SupportedChainId } from "@/src/integration/chains";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
 
 type DeployStep = "intro" | "passkey" | "deploying" | "success" | "error";
-
+  
 export default function DeployAccountScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const { theme } = useAppTheme();
@@ -51,6 +51,7 @@ export default function DeployAccountScreen() {
   const setSmartAccountAddress = useUserStore((state) => state.setSmartAccountAddress);
   const setSmartAccountDeployed = useUserStore((state) => state.setSmartAccountDeployed);
   const aaAccount = useWalletStore((state) => state.aaAccount);
+  const activeChainId = useWalletStore((state) => state.activeChainId);
   const setAAAccount = useWalletStore((state) => state.setAAAccount);
   const setDeploymentStatus = useWalletStore(
     (state) => state.setDeploymentStatus,
@@ -60,6 +61,10 @@ export default function DeployAccountScreen() {
   const [currentStep, setCurrentStep] = useState<DeployStep>("intro");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [deployedAddress, setDeployedAddress] = useState<string>("");
+  const deploymentChainId = useMemo(
+    () => (aaAccount?.chainId ?? activeChainId ?? CHAIN_CONFIG.chainId) as SupportedChainId,
+    [aaAccount?.chainId, activeChainId],
+  );
 
   // Check if already deployed
   useEffect(() => {
@@ -89,7 +94,7 @@ export default function DeployAccountScreen() {
       const passkey = await PasskeyService.createPasskey(user.id);
 
       // Predict AA address from stable wallet identity; passkey state stays outside the address formula.
-      const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
+      const chainId = deploymentChainId;
       const walletIndex = aaAccount?.walletIndex ?? 0;
       const walletId = (aaAccount?.walletId ?? deriveDefaultWalletId(user.id)) as `0x${string}`;
       const deploymentMode = aaAccount?.deploymentMode ?? (isPortableChain(chainId) ? "portable" : "chain-specific");
@@ -137,10 +142,12 @@ export default function DeployAccountScreen() {
     setDeploymentStatus("deploying");
 
     try {
-      const chainId = CHAIN_CONFIG.chainId as SupportedChainId;
+      const chainId = deploymentChainId;
       if (!user?.id) {
         throw new Error("User not authenticated");
       }
+      const chain = getChainConfig(chainId);
+      const usePaymaster = Boolean(chain.paymasterUrl);
 
       const result = await AccountDeploymentService.deployWithPasskeyAuth(
         user.id,
@@ -150,6 +157,8 @@ export default function DeployAccountScreen() {
           walletId: walletId as `0x${string}`,
           walletIndex,
           mode: deploymentMode,
+          usePaymaster,
+          paymasterUrl: chain.paymasterUrl,
         },
       );
 
