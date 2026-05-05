@@ -45,8 +45,9 @@ export const BuyAmountForm: React.FC<Props> = ({
   onAccountPress,
   onProviderChange,
 }) => {
-  const { theme } = useAppTheme();
+  const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
+  const isDark = resolvedMode === 'dark';
 
   const hasAddress = Boolean(targetAddress);
 
@@ -57,7 +58,7 @@ export const BuyAmountForm: React.FC<Props> = ({
         onPress={onAccountPress}
         style={[
           styles.accountCard,
-          { backgroundColor: colors.surfaceCard },
+          { backgroundColor: isDark ? '#1C1C1E' : colors.surfaceCard },
           !hasAddress && { borderColor: colors.danger, borderWidth: 1 },
         ]}
       >
@@ -125,7 +126,7 @@ export const BuyAmountForm: React.FC<Props> = ({
       {/* Provider Mode Selector (DEV) */}
       <View style={styles.providerSection}>
         <Text style={[styles.providerLabel, { color: colors.textMuted }]}>MODE</Text>
-        <View style={[styles.providerToggle, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+        <View style={[styles.providerToggle, { backgroundColor: isDark ? '#1C1C1E' : colors.surfaceCard, borderColor: colors.border }]}>
           {(["mock", "transak"] as RampProvider[]).map((p) => (
             <TouchableOpacity
               key={p}

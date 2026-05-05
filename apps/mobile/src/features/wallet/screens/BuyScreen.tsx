@@ -22,7 +22,6 @@ import { useNavigation } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -40,6 +39,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal";
 import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
+import { MeshBackground } from "@shared/components/MeshBackground";
 import { useWalletData } from "@hooks/useWalletData";
 import { useUserStore } from "@/src/store/useUserStore";
 import { useWalletStore } from "../store/useWalletStore";
@@ -49,6 +49,7 @@ import { CHAIN_CONFIG } from "@/src/core/network/chain";
 
 import { BuyAmountForm } from "../components/ramp/BuyAmountForm";
 import { OrderStatusCard } from "../components/ramp/OrderStatusCard";
+import { TransakWebViewModal } from "../components/ramp/TransakWebViewModal";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,7 @@ export const BuyScreen: React.FC = () => {
   const [activeOrder, setActiveOrder] = useState<RampOrder | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [transakUrl, setTransakUrl] = useState<string | null>(null);
 
   // Derived
   const chainId = CHAIN_CONFIG.chainId; // 31337 for local Anvil; update chain.ts for testnet
@@ -201,7 +203,7 @@ export const BuyScreen: React.FC = () => {
 
       // Open widget for Transak, mock shows the status card directly
       if (session.provider === "transak" && session.widgetUrl) {
-        await WebBrowser.openBrowserAsync(session.widgetUrl);
+        setTransakUrl(session.widgetUrl);
       }
     } catch (err: any) {
       console.error("[BuyScreen] handleBuy error:", err);
@@ -210,6 +212,19 @@ export const BuyScreen: React.FC = () => {
       setIsProcessing(false);
     }
   };
+
+  const handleTransakEvent = useCallback(async (eventId: string, data: any) => {
+    if (eventId === "TRANSAK_ORDER_SUCCESSFUL") {
+      setTransakUrl(null);
+      try {
+        if (activeOrder?.id) await RampService.notifyWebhook(activeOrder.id, data);
+      } catch (err) {
+        console.error("[BuyScreen] notifyWebhook error:", err);
+      }
+    } else if (eventId === "TRANSAK_ORDER_FAILED") {
+      setTransakUrl(null);
+    }
+  }, [activeOrder?.id]);
 
   const handleCompleteMock = async () => {
     if (!activeOrder) return;
@@ -238,6 +253,7 @@ export const BuyScreen: React.FC = () => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <MeshBackground intensity={0.6} />
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       <KeyboardAvoidingView
@@ -257,7 +273,7 @@ export const BuyScreen: React.FC = () => {
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Buy Crypto</Text>
           {/* Network badge */}
-          <View style={[styles.networkBadge, { backgroundColor: colors.surfaceCard }]}>
+          <View style={[styles.networkBadge, { backgroundColor: isDark ? '#1C1C1E' : colors.surfaceCard }]}>
             <View
               style={[
                 styles.networkDot,
@@ -352,6 +368,15 @@ export const BuyScreen: React.FC = () => {
         }}
         assets={tokens}
       />
+
+      {transakUrl && (
+        <TransakWebViewModal
+          visible
+          url={transakUrl}
+          onClose={() => setTransakUrl(null)}
+          onOrderEvent={handleTransakEvent}
+        />
+      )}
     </View>
   );
 };

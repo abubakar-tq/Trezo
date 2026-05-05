@@ -38,6 +38,7 @@ export interface CreateOnRampSessionParams {
   fiatCurrency: string;
   cryptoCurrency: string;
   fiatAmount: number;
+  provider?: RampProvider;
 }
 
 export interface OnRampSession {
