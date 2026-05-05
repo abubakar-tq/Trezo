@@ -2,6 +2,7 @@
  * Navigation Type Definitions
  * Centralized type definitions for all navigation stacks
  */
+import type { Address } from "viem";
 
 // Auth Stack Navigation Types
 export type AuthVerificationFlow = "register" | "reset";
@@ -64,6 +65,7 @@ export type RootStackParamList = {
   SecurityPrivacy: undefined;
   ConnectedDevices: undefined;
   Notifications: undefined;
+  NotificationSettings: undefined;
   Settings: undefined;
   AddGuardian: undefined;
   GuardianManagement: undefined;
@@ -72,7 +74,9 @@ export type RootStackParamList = {
   Buy: undefined;
   Receive: undefined;
   Send: undefined;
-  TransactionHistory: undefined;
+  TransactionHistory: { walletAddress?: Address; chainId?: number } | undefined;
+  TransactionStatus: { transactionId: string };
+  TransactionDetail: { transactionId: string };
   WalletDashboard: undefined;
 };
 

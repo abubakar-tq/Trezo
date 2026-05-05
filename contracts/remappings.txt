@@ -30,6 +30,7 @@ lib/webauthn-sol/:FreshCryptoLib/=lib/webauthn-sol/lib/FreshCryptoLib/solidity/s
 @ERC4337/=lib/modulekit/node_modules/@ERC4337/
 forge-std/=lib/forge-std/src/
 solady/=lib/webauthn-sol/lib/solady/src/
+solidity-stringutils/=node_modules/solidity-stringutils/
 @webauthn-sol/=lib/webauthn-sol/
 @ERC7579=lib/erc7579-implementation/
 email-recovery/=lib/email-recovery/src/

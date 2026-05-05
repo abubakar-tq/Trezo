@@ -144,6 +144,11 @@ contract DeployInfra is Script {
     }
 
     function _flatManifestPath() internal view virtual returns (string memory) {
+        try vm.envString("DEPLOYMENT_PROFILE") returns (string memory profile) {
+            if (bytes(profile).length > 0) {
+                return string.concat("deployments/", profile, ".json");
+            }
+        } catch {}
         return string.concat("deployments/", vm.toString(block.chainid), ".json");
     }
 }

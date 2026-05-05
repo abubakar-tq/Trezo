@@ -1,5 +1,7 @@
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { Feather, Ionicons } from "@expo/vector-icons";
+import { useNotificationsBootstrap } from "@features/notifications/hooks/useNotificationsBootstrap";
+import { useNotificationStore } from "@features/notifications/store/useNotificationStore";
 import { useWalletData } from "@hooks/useWalletData";
 import { useNavigation } from "@react-navigation/native";
 import { MeshBackground } from "@shared/components/MeshBackground";
@@ -48,6 +50,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   const { accounts, activeAccount, setActiveAccount } = useWalletStore();
+
+  useNotificationsBootstrap();
+  const unreadCount = useNotificationStore((state) => state.unreadCount);
   
   const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress ?? undefined);
 
@@ -144,7 +149,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
               activeOpacity={0.7}
             >
               <Feather name="bell" size={18} color={colors.textPrimary} strokeWidth={1.5} />
-              <View style={[styles.notiDot, { backgroundColor: colors.accentAlt }]} />
+              {unreadCount > 0 ? (
+                <View style={[styles.notiDot, { backgroundColor: colors.accentAlt }]} />
+              ) : null}
             </TouchableOpacity>
           </View>
         </View>

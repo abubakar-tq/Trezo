@@ -63,6 +63,13 @@ const config: ExpoConfig = {
         faceIDPermission: "Allow Trezo Wallet to use Face ID for secure authentication."
       }
     ],
+    [
+      "expo-notifications",
+      {
+        color: "#050505",
+        defaultChannel: "default",
+      },
+    ],
     "expo-web-browser",
   ],
   experiments: {

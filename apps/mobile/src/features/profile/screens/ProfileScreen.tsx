@@ -35,7 +35,7 @@ const baseSettingsItems: SettingsItem[] = [
   { label: "Contacts", icon: "book", route: "ContactList" },
   { label: "Browser settings", icon: "globe", route: "BrowserSettings" },
   { label: "Devices & passkeys", icon: "smartphone", route: "DevicesPasskeys" },
-  { label: "Notifications", icon: "bell", route: "Notifications" },
+  { label: "Notifications", icon: "bell", route: "NotificationSettings" },
   { label: "Backup & recovery", icon: "cloud", route: "BackupRecovery" },
 ];
 

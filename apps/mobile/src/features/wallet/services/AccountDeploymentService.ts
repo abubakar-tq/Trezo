@@ -108,9 +108,10 @@ export class AccountDeploymentService {
     params: CreateAccountBuildRequest,
   ): Promise<CreateAccountBuildResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const usePaymaster = params.usePaymaster ?? Boolean(params.paymasterUrl);
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const paymasterUrl = params.usePaymaster
-      ? params.paymasterUrl ?? getPaymasterUrl()
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
       : params.paymasterUrl;
     const deployment = getDeployment(chainId);
 
@@ -144,7 +145,7 @@ export class AccountDeploymentService {
     }
 
     let fundingTxHash: Hex | undefined;
-    if ((params.autoFundEntryPointDeposit ?? !params.usePaymaster) && !params.usePaymaster) {
+    if ((params.autoFundEntryPointDeposit ?? !usePaymaster) && !usePaymaster) {
       const { hash } = await fundEntryPointDeposit({
         chainId,
         account: sender,
@@ -162,7 +163,7 @@ export class AccountDeploymentService {
       passkeyInit,
       bundlerUrl,
       paymasterUrl,
-      usePaymaster: params.usePaymaster,
+      usePaymaster,
       maxFeePerGas: params.maxFeePerGas,
       maxPriorityFeePerGas: params.maxPriorityFeePerGas,
       nonce: params.nonce,
@@ -189,7 +190,7 @@ export class AccountDeploymentService {
     params: CreateAccountBuildRequest,
   ): Promise<CreateAccountSubmitResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const built = await this.buildCreateAccountUserOp(params);
 
     if (built.alreadyDeployed) {

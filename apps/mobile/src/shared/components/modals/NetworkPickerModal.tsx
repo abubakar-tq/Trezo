@@ -32,7 +32,7 @@ const NETWORKS: Network[] = [
   { id: 'base', name: 'Base', chainId: 8453, color: '#0052FF', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png' },
   { id: 'scroll', name: 'Scroll', chainId: 534352, color: '#FFDBB0', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/scroll/info/logo.png' },
   { id: 'zksync', name: 'zkSync Era', chainId: 324, color: '#8C8DFC', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/zksync/info/logo.png' },
-  { id: 'anvil', name: 'Anvil Local', chainId: 31337, color: '#4f46e5', isMainnet: false },
+  { id: 'anvil', name: 'Anvil', chainId: 31337, color: '#4f46e5', isMainnet: false },
 ];
 
 interface NetworkPickerModalProps {
