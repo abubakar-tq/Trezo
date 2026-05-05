@@ -45,15 +45,16 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
   assets = [],
   title = 'Select Asset',
 }) => {
-  const { theme } = useAppTheme();
+  const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
+  const isDark = resolvedMode === 'dark';
   const displayAssets = assets.length > 0 ? assets : DEFAULT_ASSETS;
 
   if (!isVisible) return null;
 
   const renderItem = ({ item }: { item: Asset }) => (
     <TouchableOpacity
-      style={[styles.assetItem, { backgroundColor: withAlpha(colors.surfaceCard, 0.5), borderColor: colors.border }]}
+      style={[styles.assetItem, { backgroundColor: isDark ? '#2C2C2E' : colors.surfaceMuted, borderColor: colors.border }]}
       onPress={() => {
         Haptics.selectionAsync();
         onSelect(item);
@@ -86,7 +87,7 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
         activeOpacity={1} 
         onPress={onClose} 
       />
-      <View style={[styles.content, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+      <View style={[styles.content, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderTopColor: colors.border }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
         
         <View style={styles.header}>

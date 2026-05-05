@@ -100,7 +100,7 @@ export const AccountPickerModal: React.FC<AccountPickerModalProps> = ({
     >
       <Pressable style={[styles.overlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.3)' }]} onPress={onClose} />
       
-      <View style={[styles.content, { backgroundColor: colors.surfaceCard }]}>
+      <View style={[styles.content, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
         
         <View style={styles.header}>

@@ -28,7 +28,7 @@ const TAB_ICON_MAP: Record<
 };
 
 // Thin top-pill indicator width — fixed, centers on each tab
-const INDICATOR_WIDTH = 28;
+const INDICATOR_WIDTH = 30;
 
 const TabBar: React.FC<BottomTabBarProps> = ({
   state,
@@ -224,7 +224,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({
               >
                 <Feather
                   name={iconName}
-                  size={20}
+                  size={22}
                   color={isFocused ? colors.accent : colors.textSecondary}
                 />
               </Animated.View>
@@ -280,16 +280,16 @@ function createStyles(_colors: ThemeColors) {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      paddingVertical: 8,
+      paddingVertical: 10,
       zIndex: 1,
     },
     iconWrap: {
       alignItems: "center",
       justifyContent: "center",
-      marginBottom: 2,
+      marginBottom: 3,
     },
     label: {
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: "600",
       letterSpacing: 0.15,
     },

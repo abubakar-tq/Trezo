@@ -9,7 +9,6 @@ import {
   Dimensions,
 } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '@theme';
 import { withAlpha } from '@utils/color';
@@ -25,7 +24,6 @@ type DexTab = 'swap' | 'bridge';
 export const DexScreen: React.FC = () => {
   const { theme } = useAppTheme();
   const { colors } = theme;
-  const insets = useSafeAreaInsets();
   const route = useRoute<any>();
   const contentBottomInset = useTabContentBottomInset();
   const { tokens } = useWalletData();
@@ -83,13 +81,12 @@ export const DexScreen: React.FC = () => {
     <TabScreenContainer includeBottomInset>
       <MeshBackground intensity={0.8} />
       
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
-          styles.scrollContent, 
-          { 
-            paddingTop: Math.max(insets.top, 16),
-            paddingBottom: contentBottomInset + 40 
+          styles.scrollContent,
+          {
+            paddingBottom: contentBottomInset + 40
           }
         ]}
         showsVerticalScrollIndicator={false}
@@ -412,7 +409,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
-    marginTop: 10,
   },
   title: {
     fontSize: 28,

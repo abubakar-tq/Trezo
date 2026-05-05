@@ -2,6 +2,7 @@ export { default as Avatar } from "./Avatar";
 export { default as TabScreenContainer } from "./TabScreenContainer";
 export { MeshBackground } from "./MeshBackground";
 export { Sparkline } from "./Sparkline";
+export { InteractiveChart } from "./InteractiveChart";
 export type { TabScreenContainerProps } from "./TabScreenContainer";
 export { TokenIcon } from "./visuals/TokenIcon";
 export * from "./visuals";

@@ -16,6 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useTabContentBottomInset } from "@hooks";
 import { useUserStore } from "../../../store/useUserStore";
 import { TokenDetailModal } from "../../portfolio/components/TokenDetailModal";
 import type { TokenBalance } from "../../portfolio/services/PortfolioService";
@@ -52,6 +53,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress ?? undefined);
 
   const { isHydrating, hasLocalPasskey } = useAccountManagement();
+  const contentBottomInset = useTabContentBottomInset();
 
   const [selectedToken, setSelectedToken] = React.useState<TokenBalance | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -114,9 +116,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     <TabScreenContainer includeBottomInset>
       <MeshBackground />
       
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomInset }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
@@ -184,7 +186,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
         <View style={styles.sectionWrapper}>
           <View style={[styles.glassSection, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginBottom: 12 }]}>Market Trends</Text>
-            <MarketExplorer />
+            <MarketExplorer onTokenPress={handleAssetPress} />
           </View>
         </View>
 
@@ -242,7 +244,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 12,
-    paddingBottom: 40,
   },
   header: {
     flexDirection: "row",
