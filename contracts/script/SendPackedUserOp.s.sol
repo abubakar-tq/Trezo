@@ -123,8 +123,9 @@ contract SendPackedUserOp is Script {
         data.userOp = _generateUnsignedUserOperation(callData, smartAccount, nonce);
         data.userOpHash = IEntryPoint(config.entryPoint).getUserOpHash(data.userOp);
         data.passkey = PassKeyDemo.getPasskeyInit(passkeyIndex);
+        bytes32 rpHash = PassKeyDemo.getPasskeyRpHash(passkeyIndex);
         data.authenticatorData = WebAuthnHelper.buildAuthenticatorData(
-            data.passkey.rpIdHash,
+            rpHash,
             requireUserVerification,
             signCounter
         );

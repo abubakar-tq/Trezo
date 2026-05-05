@@ -19,11 +19,11 @@ import Animated, {
     withTiming,
 } from "react-native-reanimated";
 
-import { useAppLockStore } from "@store/useAppLockStore";
-import { useAuthFlowStore } from "@store/useAuthFlowStore";
-import { useUserStore } from "@store/useUserStore";
+import { useAppLockStore } from "../../../store/useAppLockStore";
+import { useAuthFlowStore } from "../../../store/useAuthFlowStore";
+import { useUserStore } from "../../../store/useUserStore";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+import { withAlpha } from "../../../utils/color";
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -41,6 +41,8 @@ const LockScreen: React.FC = () => {
   const guardNavigation = useAuthFlowStore((state) => state.guardNavigation);
 
   const autoAttemptedRef = useRef(false);
+  const lastAuthAttemptRef = useRef<number>(0);
+  const AUTH_COOLDOWN_MS = 1000; // 1 second cooldown between attempts
 
   const pulse = useSharedValue(0);
 
@@ -76,17 +78,30 @@ const LockScreen: React.FC = () => {
       return;
     }
 
+    // Check cooldown to prevent rapid successive auth attempts
+    const now = Date.now();
+    if (now - lastAuthAttemptRef.current < AUTH_COOLDOWN_MS) {
+      return;
+    }
+
     autoAttemptedRef.current = true;
-    authenticate();
+    lastAuthAttemptRef.current = now;
+    
+    // Add small delay to ensure app is fully ready
+    setTimeout(() => {
+      authenticate();
+    }, 300);
   }, [authenticate, hasInitialized, isAuthenticating, isLocked]);
 
   const handleRetry = useCallback(() => {
     autoAttemptedRef.current = true;
+    lastAuthAttemptRef.current = Date.now();
     authenticate();
   }, [authenticate]);
 
   const handleFallback = useCallback(() => {
     autoAttemptedRef.current = true;
+    lastAuthAttemptRef.current = Date.now();
     authenticate({ disableDeviceFallback: false, fallbackLabel: "Use PIN or Password" });
   }, [authenticate]);
 

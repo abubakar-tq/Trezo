@@ -11,7 +11,7 @@ const getRpcUrl = (chainId: number = 31337): string => {
     // Local Anvil
     return Platform.OS === "android" 
       ? "http://10.0.2.2:8545" 
-      : "http://localhost:8545";
+      : "http://192.168.100.68:8545";
   }
   // Add other chains later
   return "http://10.0.2.2:8545";
@@ -192,24 +192,27 @@ export class WalletService {
       
       for (let i = currentBlock; i > startBlock && transactions.length < limit; i--) {
         try {
-          const block = await this.provider.getBlock(i, true);
+          const block = await this.provider.getBlock(i);
           if (block && block.transactions) {
-            for (const tx of block.transactions) {
-              if (typeof tx !== 'string') {
-                if (tx.from.toLowerCase() === address.toLowerCase() || 
-                    tx.to?.toLowerCase() === address.toLowerCase()) {
-                  transactions.push({
-                    hash: tx.hash,
-                    from: tx.from,
-                    to: tx.to || '',
-                    value: formatEther(tx.value),
-                    blockNumber: tx.blockNumber,
-                    timestamp: block.timestamp,
-                    gasPrice: tx.gasPrice ? formatEther(tx.gasPrice) : '0',
-                  });
-                  
-                  if (transactions.length >= limit) break;
-                }
+            for (const txHash of block.transactions) {
+              const tx = await this.provider.getTransaction(txHash);
+              if (!tx) continue;
+
+              if (
+                tx.from.toLowerCase() === address.toLowerCase() ||
+                tx.to?.toLowerCase() === address.toLowerCase()
+              ) {
+                transactions.push({
+                  hash: txHash,
+                  from: tx.from,
+                  to: tx.to || '',
+                  value: formatEther(tx.value),
+                  blockNumber: tx.blockNumber ?? i,
+                  timestamp: block.timestamp,
+                  gasPrice: tx.gasPrice ? formatEther(tx.gasPrice) : '0',
+                });
+
+                if (transactions.length >= limit) break;
               }
             }
           }

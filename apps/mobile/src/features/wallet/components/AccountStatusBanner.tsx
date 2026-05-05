@@ -16,7 +16,11 @@ import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
 
-export const AccountStatusBanner: React.FC = () => {
+type AccountStatusBannerProps = {
+  onDeployPress?: () => void;
+};
+
+export const AccountStatusBanner: React.FC<AccountStatusBannerProps> = ({ onDeployPress }) => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const { theme } = useAppTheme();
   const { colors } = theme;
@@ -60,7 +64,11 @@ export const AccountStatusBanner: React.FC = () => {
   }
   
   const handleDeploy = () => {
-    navigation.navigate('DeployAccount');
+    if (onDeployPress) {
+      onDeployPress();
+    } else {
+      navigation.navigate("DeployAccount");
+    }
   };
   
   return (

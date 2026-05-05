@@ -1,71 +1,52 @@
-import * as React from "react";
-import type { SvgProps } from "react-native-svg";
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import React from "react";
+import { StyleSheet, View } from "react-native";
+import { Image, ImageProps } from "expo-image";
 
 /**
- * Signinicon — Gradient circular icon with 4 rotated bars
- * Optimized for scaling and alignment in React Native
+ * SigninIcon — Renders the official Trezo app logo (icon1.png).
+ * This replaces the previous SVG-based diamond to match the actual brand identity.
  */
-const SvgSigninicon = (props: SvgProps) => (
-  <Svg
-    width={48}
-    height={48}
-    viewBox="0 0 48 48" // 👈 Ensures proper scaling and centering
-    fill="none"
-    {...props}
-  >
-    {/* Background gradient circle */}
-    <Rect width={48} height={48} rx={24} fill="url(#gradient)" />
+interface SigninIconProps extends Partial<ImageProps> {
+  size?: number;
+  width?: number;
+  height?: number;
+}
 
-    {/* Rotated bars (like a loading or cross icon) */}
-    <Rect
-      width={3}
-      height={16}
-      x={24.574}
-      y={12}
-      rx={1.5}
-      fill="#fff"
-      transform="rotate(-45 24.574 12)"
-    />
-    <Rect
-      width={3}
-      height={16}
-      rx={1.5}
-      fill="#fff"
-      transform="scale(1 -1) rotate(-45 -31.25 -47.467)"
-    />
-    <Rect
-      width={3}
-      height={16}
-      x={21.307}
-      y={10}
-      rx={1.5}
-      fill="#fff"
-      transform="rotate(45 21.307 10)"
-    />
-    <Rect
-      width={3}
-      height={16}
-      rx={1.5}
-      fill="#fff"
-      transform="scale(1 -1) rotate(45 56.522 6.716)"
-    />
+const SigninIcon: React.FC<SigninIconProps> = ({ size = 64, width, height, style, ...props }) => {
+  const finalWidth = width ?? size;
+  const finalHeight = height ?? size;
 
-    {/* Gradient Definition */}
-    <Defs>
-      <LinearGradient
-        id="gradient"
-        x1={24}
-        y1={0}
-        x2={24}
-        y2={48}
-        gradientUnits="userSpaceOnUse"
-      >
-        <Stop stopColor="#1877F2" />
-        <Stop offset={1} stopColor="#6945ED" />
-      </LinearGradient>
-    </Defs>
-  </Svg>
-);
+  return (
+    <View
+      style={[
+        {
+          width: finalWidth,
+          height: finalHeight,
+          borderRadius: finalWidth / 2,
+          overflow: "hidden",
+          backgroundColor: "#000",
+          borderWidth: 1,
+          borderColor: "rgba(255,255,255,0.1)",
+          justifyContent: "center",
+          alignItems: "center",
+        },
+        style,
+      ]}
+    >
+      <Image
+        source={require("@/assets/images/icon_nobackground.png")}
+        style={{
+          width: finalWidth,
+          height: finalHeight,
+        }}
+        contentFit="cover"
+        transition={1000}
+        {...props}
+      />
+    </View>
+  );
+};
 
-export default SvgSigninicon;
+const styles = StyleSheet.create({});
+
+export default SigninIcon;
