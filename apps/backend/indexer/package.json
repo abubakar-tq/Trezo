@@ -1,0 +1,21 @@
+{
+  "name": "trezo-indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "ponder dev",
+    "start": "ponder start",
+    "codegen": "ponder codegen",
+    "worker:sync": "tsx sync-worker/src/index.ts"
+  },
+  "dependencies": {
+    "ponder": "^0.11.44",
+    "viem": "^2.41.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "tsx": "^4.19.0"
+  }
+}
