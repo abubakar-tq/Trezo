@@ -121,7 +121,7 @@ cast code <SMART_ACCOUNT_ADDRESS> --rpc-url "$FORK_RPC_URL"
 
 Find a USDC whale on Base (e.g., from BaseScan's USDC token holders):
 ```bash
-export SMART_ACCOUNT_ADDRESS="0x0xfe1b43e7791157e04655c8b28287c48949b1320e"
+export SMART_ACCOUNT_ADDRESS="0xd3ab5fc84faa0396aff38cfea419e0f9cb338714"
 export BASE_FORK_USDC_WHALE="0x8da91A6298eA5d1A8Bc985e99798fd0A0f05701a"  # e.g., 0xB9005f2ab2da0f408a4E4c3Af4A8d2e3AA2d4dEB
 
 make seed-fork-swap-wallet
