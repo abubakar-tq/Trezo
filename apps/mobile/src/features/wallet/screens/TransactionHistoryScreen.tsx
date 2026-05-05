@@ -22,6 +22,7 @@ import {
     TitleText,
 } from "../../../shared/components/Tier1/Text";
 import { Colors, Spacing } from "../../../shared/components/TokenRegistry";
+import { useAppTheme } from "@theme";
 
 interface Transaction {
   id: string;
@@ -36,9 +37,7 @@ interface Transaction {
   gasUsed?: number;
 }
 
-interface TransactionHistoryScreenProps {
-  isDark?: boolean;
-}
+interface TransactionHistoryScreenProps {}
 
 const MOCK_TRANSACTIONS: Transaction[] = [
   {
@@ -90,7 +89,9 @@ const MOCK_TRANSACTIONS: Transaction[] = [
 
 export const TransactionHistoryScreen: React.FC<
   TransactionHistoryScreenProps
-> = ({ isDark = true }) => {
+> = () => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const [selectedTransaction, setSelectedTransaction] =
     useState<Transaction | null>(null);
 
@@ -102,7 +103,7 @@ export const TransactionHistoryScreen: React.FC<
   ).length;
 
   const renderTransactionCard = (tx: Transaction) => (
-    <CardLevel1 isDark={isDark} key={tx.id}>
+    <CardLevel1 key={tx.id}>
       <View
         style={{
           flexDirection: "row",
@@ -119,7 +120,7 @@ export const TransactionHistoryScreen: React.FC<
             alignItems: "center",
           }}
         >
-          <BodyText isDark={isDark} style={{ fontSize: 28 }}>
+          <BodyText style={{ fontSize: 28 }}>
             {tx.type === "send" ? "📤" : "📥"}
           </BodyText>
 
@@ -131,11 +132,10 @@ export const TransactionHistoryScreen: React.FC<
                 alignItems: "center",
               }}
             >
-              <BodyText isDark={isDark} style={{ fontWeight: "600", flex: 1 }}>
+              <BodyText style={{ fontWeight: "600", flex: 1 }}>
                 {tx.type === "send" ? "Sent" : "Received"} {tx.asset}
               </BodyText>
               <Badge
-                isDark={isDark}
                 status={
                   tx.status === "confirmed"
                     ? "success"
@@ -154,16 +154,14 @@ export const TransactionHistoryScreen: React.FC<
             </View>
 
             <BodyText
-              isDark={isDark}
-              color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
+              color={Colors.textTertiary}
               style={{ fontSize: 12 }}
             >
               {tx.type === "send" ? `To: ${tx.to}` : `From: ${tx.from}`}
             </BodyText>
 
             <BodyText
-              isDark={isDark}
-              color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
+              color={Colors.textTertiary}
               style={{ fontSize: 11 }}
             >
               {tx.timestamp}
@@ -171,7 +169,7 @@ export const TransactionHistoryScreen: React.FC<
           </View>
         </View>
 
-        <BodyText isDark={isDark} style={{ fontWeight: "600", fontSize: 14 }}>
+        <BodyText style={{ fontWeight: "600", fontSize: 14 }}>
           {tx.type === "send" ? "-" : "+"}
           {tx.amount} {tx.asset}
         </BodyText>
@@ -183,7 +181,7 @@ export const TransactionHistoryScreen: React.FC<
     <SafeAreaView
       style={{
         flex: 1,
-        backgroundColor: isDark ? Colors.background : "#ffffff",
+        backgroundColor: colors.background,
       }}
     >
       <ScrollView
@@ -196,10 +194,9 @@ export const TransactionHistoryScreen: React.FC<
       >
         {/* HEADER */}
         <View style={{ gap: Spacing.sp2 }}>
-          <HeadlineText isDark={isDark}>Transaction History</HeadlineText>
+          <HeadlineText>Transaction History</HeadlineText>
           <BodyText
-            isDark={isDark}
-            color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
+            color={Colors.textSecondary}
           >
             Your complete transaction log.
           </BodyText>
@@ -207,10 +204,9 @@ export const TransactionHistoryScreen: React.FC<
 
         {/* SUMMARY STATS */}
         <View style={{ flexDirection: "row", gap: Spacing.sp2 }}>
-          <Surface isDark={isDark} elevation={1} style={{ flex: 1 }}>
+          <Surface elevation={1} style={{ flex: 1 }}>
             <View style={{ alignItems: "center", gap: Spacing.sp1 }}>
               <BodyText
-                isDark={isDark}
                 style={{ fontSize: 28, fontWeight: "bold" }}
               >
                 {MOCK_TRANSACTIONS.length}
@@ -219,10 +215,9 @@ export const TransactionHistoryScreen: React.FC<
             </View>
           </Surface>
 
-          <Surface isDark={isDark} elevation={1} style={{ flex: 1 }}>
+          <Surface elevation={1} style={{ flex: 1 }}>
             <View style={{ alignItems: "center", gap: Spacing.sp1 }}>
               <BodyText
-                isDark={isDark}
                 style={{
                   fontSize: 28,
                   fontWeight: "bold",
@@ -235,10 +230,9 @@ export const TransactionHistoryScreen: React.FC<
             </View>
           </Surface>
 
-          <Surface isDark={isDark} elevation={1} style={{ flex: 1 }}>
+          <Surface elevation={1} style={{ flex: 1 }}>
             <View style={{ alignItems: "center", gap: Spacing.sp1 }}>
               <BodyText
-                isDark={isDark}
                 style={{
                   fontSize: 28,
                   fontWeight: "bold",
@@ -259,7 +253,7 @@ export const TransactionHistoryScreen: React.FC<
             {MOCK_TRANSACTIONS.map((tx) => renderTransactionCard(tx))}
           </View>
         ) : (
-          <Surface isDark={isDark} elevation={1}>
+          <Surface elevation={1}>
             <View
               style={{
                 alignItems: "center",
@@ -267,16 +261,13 @@ export const TransactionHistoryScreen: React.FC<
                 paddingVertical: Spacing.sp6,
               }}
             >
-              <BodyText isDark={isDark} style={{ fontSize: 48 }}>
+              <BodyText style={{ fontSize: 48 }}>
                 📭
               </BodyText>
               <View style={{ alignItems: "center", gap: Spacing.sp2 }}>
-                <TitleText isDark={isDark}>No transactions yet</TitleText>
+                <TitleText>No transactions yet</TitleText>
                 <BodyText
-                  isDark={isDark}
-                  color={
-                    isDark ? Colors.textSecondary : Colors.lightTextSecondary
-                  }
+                  color={Colors.textSecondary}
                   style={{ fontSize: 13, textAlign: "center" }}
                 >
                   Your transactions will appear here once you send or receive
@@ -288,12 +279,11 @@ export const TransactionHistoryScreen: React.FC<
         )}
 
         {/* INFO SECTION */}
-        <CardLevel1 isDark={isDark}>
+        <CardLevel1>
           <View style={{ gap: Spacing.sp2 }}>
-            <TitleText isDark={isDark}>Transaction Details</TitleText>
+            <TitleText>Transaction Details</TitleText>
             <BodyText
-              isDark={isDark}
-              color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
+              color={Colors.textSecondary}
               style={{ fontSize: 13, lineHeight: 20 }}
             >
               • ✓ Confirmed transactions are final{"\n"}• ⟳ Pending transactions

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
+import { useAppTheme } from "@theme";
 import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import { DEFAULT_CHAIN_ID, isPortableChain } from "@/src/integration/chains";
 import {
@@ -36,6 +37,8 @@ const debugLog = (...args: unknown[]) => {
 };
 
 export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_ID }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const [walletId, setWalletId] = useState<Hex>(() => randomHex(32));
   const [status, setStatus] = useState<"idle" | "building" | "ready" | "sending" | "error" | "sent">(
     "idle",
@@ -228,7 +231,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
   };
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: colors.surfaceCard }]}>
       <Text style={styles.title}>CreateAccount Dev Tester</Text>
       <Text style={styles.subtitle}>Chain: {chainId}</Text>
       <Text style={styles.label}>User</Text>
@@ -264,7 +267,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
         />
         <TouchableOpacity
           onPress={() => setUsePaymaster((v) => !v)}
-          style={[styles.secondaryButton, usePaymaster && { borderColor: "#22c55e", borderWidth: 1 }]}
+          style={[styles.secondaryButton, usePaymaster && { borderColor: colors.success, borderWidth: 1 }]}
         >
           <Text style={styles.buttonText}>
             {usePaymaster ? "✅ Using paymaster" : "Use paymaster"}
@@ -273,7 +276,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
         {!usePaymaster && (
           <TouchableOpacity
             onPress={() => setAutoFund((v) => !v)}
-            style={[styles.secondaryButton, autoFund && { borderColor: "#38bdf8", borderWidth: 1 }]}
+            style={[styles.secondaryButton, autoFund && { borderColor: colors.accentSoft, borderWidth: 1 }]}
           >
             <Text style={styles.buttonText}>
               {autoFund ? "✅ Auto-fund 0.05 ETH deposit" : "Auto-fund disabled"}
@@ -282,7 +285,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
         )}
       </View>
 
-      <TouchableOpacity onPress={handleBuild} style={styles.primaryButton} disabled={status === "building"}>
+      <TouchableOpacity onPress={handleBuild} style={[styles.primaryButton, { backgroundColor: colors.success }]} disabled={status === "building"}>
         <Text style={styles.buttonText}>
           {status === "building" ? "Building..." : "Build UserOp & Predict Address"}
         </Text>
@@ -290,7 +293,7 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
 
       {sender && (
         <>
-          <Text style={styles.sectionTitle}>Predicted Account</Text>
+          <Text style={[styles.sectionTitle, { color: colors.accentSoft }]}>Predicted Account</Text>
           <Text style={styles.value}>{sender}</Text>
           <TouchableOpacity
             onPress={handleFund}
@@ -312,11 +315,11 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
 
       {userOpHash && (
         <>
-          <Text style={styles.sectionTitle}>UserOp Hash to Sign</Text>
+          <Text style={[styles.sectionTitle, { color: colors.accentSoft }]}>UserOp Hash to Sign</Text>
           <Text style={styles.value}>{userOpHash}</Text>
           {signature !== "0x" && (
             <>
-              <Text style={styles.sectionTitle}>Passkey Signature</Text>
+              <Text style={[styles.sectionTitle, { color: colors.accentSoft }]}>Passkey Signature</Text>
               <Text style={styles.value}>{shortHex(signature, 22, 10)}</Text>
             </>
           )}
@@ -324,14 +327,14 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
       )}
 
       {userOp && (
-        <TouchableOpacity onPress={handleSend} style={styles.primaryButton} disabled={status === "sending"}>
+        <TouchableOpacity onPress={handleSend} style={[styles.primaryButton, { backgroundColor: colors.success }]} disabled={status === "sending"}>
           <Text style={styles.buttonText}>{status === "sending" ? "Sending..." : "Send to Bundler"}</Text>
         </TouchableOpacity>
       )}
 
       {opHash && (
         <>
-          <Text style={styles.sectionTitle}>Bundler Operation Hash</Text>
+          <Text style={[styles.sectionTitle, { color: colors.accentSoft }]}>Bundler Operation Hash</Text>
           <Text style={styles.value}>{opHash}</Text>
         </>
       )}
@@ -347,7 +350,6 @@ export const CreateAccountDevCard: React.FC<Props> = ({ chainId = DEFAULT_CHAIN_
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#0f172a",
     borderRadius: 12,
     padding: 16,
     marginVertical: 12,
@@ -363,7 +365,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionTitle: {
-    color: "#38bdf8",
     fontWeight: "700",
     marginTop: 10,
   },
@@ -377,7 +378,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   primaryButton: {
-    backgroundColor: "#22c55e",
     borderRadius: 8,
     padding: 10,
     alignItems: "center",
