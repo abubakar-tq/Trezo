@@ -2,6 +2,7 @@
 src = "src"
 out = "out"
 libs = ["lib", "node_modules"]
+allow_paths = ["../node_modules"]
 auto_detect_remappings = false
 ignored_error_codes = [
     "license",

@@ -20,6 +20,7 @@ type PersistWalletMetadataParams = {
   ownerAddress: string;
   walletName: string;
   chainId: number;
+  networkKey?: string;
   walletId?: string;
   walletIndex?: number;
   deploymentMode?: "portable" | "chain-specific";
@@ -81,6 +82,7 @@ export class WalletSyncService {
       ownerAddress: params.ownerAddress,
       walletName: params.walletName,
       chainId: params.chainId,
+      networkKey: params.networkKey,
       walletId: params.walletId,
       walletIndex: params.walletIndex,
       deploymentMode: params.deploymentMode,
