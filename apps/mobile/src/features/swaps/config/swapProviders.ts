@@ -16,6 +16,7 @@
 import type { SwapRouteProvider } from "@/src/features/swaps/providers/SwapRouteProvider";
 import { LocalMockSwapProvider } from "@/src/features/swaps/providers/LocalMockSwapProvider";
 import { DirectUniswapV3ForkProvider } from "@/src/features/swaps/providers/DirectUniswapV3ForkProvider";
+import { UniswapV2BaseProvider } from "@/src/features/swaps/providers/UniswapV2BaseProvider";
 import type { SupportedChainId } from "@/src/integration/chains";
 import type { NetworkKey } from "@/src/integration/networks";
 import { getDeployment } from "@/src/integration/viem/deployments";
@@ -32,6 +33,9 @@ const legacyProviders: readonly SwapRouteProvider[] = [
 ];
 
 const forkProviders: readonly SwapRouteProvider[] = [
+  // V2 first: getAmountsOut is a pure view call — faster and more reliable on remote RPCs
+  new UniswapV2BaseProvider(),
+  // V3 fallback: higher precision quotes via QuoterV2 simulation
   new DirectUniswapV3ForkProvider(),
 ];
 

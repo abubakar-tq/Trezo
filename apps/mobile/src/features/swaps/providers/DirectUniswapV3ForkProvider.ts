@@ -113,14 +113,22 @@ export class DirectUniswapV3ForkProvider implements SwapRouteProvider {
 
   async supportsPair(request: SwapQuoteRequest): Promise<boolean> {
     if (!this.supportsNetwork(request.networkKey)) return false;
+    // ERC20→ETH not yet supported (requires WETH unwrap multicall)
+    if (request.buyToken.type !== "erc20") return false;
 
-    // Both tokens must be ERC20 for this provider
-    if (request.sellToken.type !== "erc20" || request.buyToken.type !== "erc20") return false;
+    const dexConfig = getDexConfig(request.networkKey);
+    if (!dexConfig) return false;
+
+    // Native ETH sell is routed through wrapped native (WETH) — router handles wrap
+    const effectiveSellAddress: Address =
+      request.sellToken.type === "native"
+        ? dexConfig.wrappedNativeAddress
+        : (request.sellToken.address as Address);
 
     const pool = getPoolConfig(
       request.networkKey,
-      request.sellToken.address as Address,
-      request.buyToken.address as Address
+      effectiveSellAddress,
+      request.buyToken.address as Address,
     );
 
     return pool !== undefined;
@@ -136,17 +144,23 @@ export class DirectUniswapV3ForkProvider implements SwapRouteProvider {
     }
 
     // ── 2. Validate pair ──────────────────────────────────────────────────────
-    if (sellToken.type !== "erc20" || buyToken.type !== "erc20") {
-      throw new Error("DirectUniswapV3ForkProvider only supports ERC20 to ERC20 swaps.");
+    if (buyToken.type !== "erc20") {
+      throw new Error("DirectUniswapV3ForkProvider does not support ERC20 → native ETH swaps yet.");
     }
     if (sellAmountRaw <= 0n) {
       throw new Error("Sell amount must be greater than zero.");
     }
 
+    // Native ETH sell: router accepts ETH as msg.value and wraps to WETH internally
+    const isNativeETHSell = sellToken.type === "native";
+    const effectiveSellAddress: Address = isNativeETHSell
+      ? dexConfig.wrappedNativeAddress
+      : (sellToken.address as Address);
+
     const poolConfig = getPoolConfig(
       networkKey,
-      sellToken.address as Address,
-      buyToken.address as Address
+      effectiveSellAddress,
+      buyToken.address as Address,
     );
     if (!poolConfig) {
       throw new Error(
@@ -157,18 +171,19 @@ export class DirectUniswapV3ForkProvider implements SwapRouteProvider {
     const client = getPublicClientForNetwork(networkKey);
     const feeTier = poolConfig.feeTier;
 
-    // ── 3. Verify pool exists and has bytecode ────────────────────────────────
+    // ── 3. Resolve pool address — use hardcoded address when available to avoid RPC round-trips ─
     let poolAddress: Address;
 
     if (poolConfig.poolAddress) {
+      // Hardcoded in dexRegistry — skip factory lookup entirely
       poolAddress = poolConfig.poolAddress;
     } else {
-      // Call factory.getPool
+      // Dynamic lookup via factory (slower — avoid for remote infra RPCs)
       const factoryPool = await client.readContract({
         address: dexConfig.factoryAddress,
         abi: FACTORY_ABI,
         functionName: "getPool",
-        args: [sellToken.address as Address, buyToken.address as Address, feeTier],
+        args: [effectiveSellAddress, buyToken.address as Address, feeTier],
       }) as Address;
 
       if (
@@ -178,14 +193,6 @@ export class DirectUniswapV3ForkProvider implements SwapRouteProvider {
         throw new Error(
           `No Uniswap V3 pool found for ${sellToken.symbol}/${buyToken.symbol} fee tier ${feeTier} on ${networkKey}. ` +
           `Try fee tier 3000 or check that the fork block has liquidity.`
-        );
-      }
-
-      // Verify pool bytecode exists
-      const code = await client.getCode({ address: factoryPool });
-      if (!code || code === "0x") {
-        throw new Error(
-          `Pool at ${factoryPool} has no bytecode. Fork may be at wrong block or pool was not deployed at that height.`
         );
       }
 
@@ -203,7 +210,7 @@ export class DirectUniswapV3ForkProvider implements SwapRouteProvider {
         functionName: "quoteExactInputSingle",
         args: [
           {
-            tokenIn: sellToken.address as Address,
+            tokenIn: effectiveSellAddress,
             tokenOut: buyToken.address as Address,
             amountIn: sellAmountRaw,
             fee: feeTier,
@@ -231,12 +238,13 @@ export class DirectUniswapV3ForkProvider implements SwapRouteProvider {
     }
 
     // ── 6. Encode SwapRouter02 exactInputSingle calldata ─────────────────────
+    // For native ETH: tokenIn = WETH, msg.value = sellAmountRaw — router wraps automatically
     const calldata = encodeFunctionData({
       abi: SWAP_ROUTER02_ABI,
       functionName: "exactInputSingle",
       args: [
         {
-          tokenIn: sellToken.address as Address,
+          tokenIn: effectiveSellAddress,
           tokenOut: buyToken.address as Address,
           fee: feeTier,
           recipient: account,
@@ -261,7 +269,8 @@ export class DirectUniswapV3ForkProvider implements SwapRouteProvider {
       slippageBps,
       spender: dexConfig.routerAddress,
       target: dexConfig.routerAddress,
-      value: 0n,
+      // Native ETH sell: pass ETH as value so the router can wrap it to WETH
+      value: isNativeETHSell ? sellAmountRaw : 0n,
       calldata,
       provider: this.id,
       providerId: this.id,
@@ -273,7 +282,7 @@ export class DirectUniswapV3ForkProvider implements SwapRouteProvider {
         poolAddress,
         quoterAddress: dexConfig.quoterAddress,
         routerAddress: dexConfig.routerAddress,
-        routeKind: "v3_exact_input_single",
+        routeKind: isNativeETHSell ? "v3_eth_exact_input_single" : "v3_exact_input_single",
         forkSourceChainId: 8453,
       },
     };
