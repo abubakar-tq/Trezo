@@ -8,7 +8,6 @@ import {
   decodeAbiParameters,
   type Address,
   type Hex,
-  type Transport,
   createClient,
 } from "viem";
 import {
@@ -274,6 +273,26 @@ export type RemovePasskeyUserOpParams = {
   preVerificationGas?: bigint;
 };
 
+export type BuildSmartAccountExecutionUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  target: Address;
+  value: bigint | number;
+  data: Hex;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+  operationLabel?: string;
+};
+
 type RpcRequestClient = {
   request(args: { method: string; params?: readonly unknown[] }): Promise<any>;
 };
@@ -370,10 +389,12 @@ const resolveSmartAccountNonce = async ({
 
 const ensureBundlerSupportsEntryPoint = async ({
   bundler,
+  bundlerUrl,
   entryPoint,
   operationLabel,
 }: {
   bundler: RpcRequestClient;
+  bundlerUrl: string;
   entryPoint: Hex;
   operationLabel: string;
 }) => {
@@ -384,12 +405,14 @@ const ensureBundlerSupportsEntryPoint = async ({
       params: [],
     });
   } catch (err) {
-    console.error(`[${operationLabel}] Failed eth_supportedEntryPoints`, err);
-    throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `[${operationLabel}] Bundler unreachable at ${bundlerUrl} — is the bundler stack running? (eth_supportedEntryPoints: ${msg})`,
+    );
   }
   if (!supportedEntryPoints.includes(entryPoint)) {
     throw new Error(
-      `Bundler does not support EntryPoint ${entryPoint}. Supported entry points: ${supportedEntryPoints.join(", ")}`,
+      `Bundler at ${bundlerUrl} does not support EntryPoint ${entryPoint}. Supported: ${supportedEntryPoints.join(", ")}`,
     );
   }
 };
@@ -615,7 +638,7 @@ const buildSmartAccountExecuteUserOp = async ({
   };
 
   const bundler = getBundlerClient(bundlerUrl, chainId);
-  await ensureBundlerSupportsEntryPoint({ bundler, entryPoint, operationLabel });
+  await ensureBundlerSupportsEntryPoint({ bundler, bundlerUrl, entryPoint, operationLabel });
 
   const userOpForEstimation = await maybeSponsorUserOp({
     chainId,
@@ -658,6 +681,34 @@ const buildSmartAccountExecuteUserOp = async ({
 
   return { userOp: refreshedUserOp, userOpHash };
 };
+
+export async function buildSmartAccountExecutionUserOp(
+  params: BuildSmartAccountExecutionUserOpParams,
+) {
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.target, toBigInt(params.value), params.data],
+  });
+
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 1_000_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 1_000_000n,
+    preVerificationGas: params.preVerificationGas ?? 100_000n,
+    operationLabel: params.operationLabel ?? "buildSmartAccountExecutionUserOp",
+  });
+}
 
 export const encodeSocialRecoveryInitData = (
   guardians: readonly Address[],
@@ -905,6 +956,7 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
 
   await ensureBundlerSupportsEntryPoint({
     bundler,
+    bundlerUrl: params.bundlerUrl,
     entryPoint,
     operationLabel: "buildCreateAccountUserOp",
   });

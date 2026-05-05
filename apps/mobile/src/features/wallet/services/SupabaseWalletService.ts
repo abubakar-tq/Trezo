@@ -16,6 +16,7 @@ const supabase = getSupabaseClient();
 export interface AAWallet {
   id: string;
   user_id: string;
+  network_key?: string;
   wallet_identity?: string | null;
   wallet_index: number;
   deployment_mode: 'portable' | 'chain-specific';
@@ -30,6 +31,28 @@ export interface AAWallet {
   deployed_at?: string | null;
   updated_at: string;
 }
+
+const inferWalletNetworkKey = (chainId: number, networkKey?: string): string => {
+  if (networkKey) return networkKey;
+  switch (chainId) {
+    case 31337:
+      return 'anvil-local';
+    case 11155111:
+      return 'ethereum-sepolia';
+    case 8453:
+      return 'base-mainnet-fork';
+    default:
+      return `chain-${chainId}`;
+  }
+};
+
+const formatServiceError = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message);
+  }
+  return 'Unknown error';
+};
 
 export interface Passkey {
   id: string;
@@ -90,6 +113,7 @@ export class SupabaseWalletService {
     walletId?: string;
     walletIndex?: number;
     deploymentMode?: 'portable' | 'chain-specific';
+    networkKey?: string;
     isDeployed?: boolean;
     deploymentTxHash?: string | null;
     deploymentBlockNumber?: number | null;
@@ -108,6 +132,7 @@ export class SupabaseWalletService {
         owner_address: data.ownerAddress.toLowerCase(),
         wallet_name: data.walletName,
         chain_id: data.chainId,
+        network_key: inferWalletNetworkKey(data.chainId, data.networkKey),
         updated_at: now,
       };
 
@@ -126,11 +151,27 @@ export class SupabaseWalletService {
         payload.deployment_block_number = data.deploymentBlockNumber ?? null;
       }
 
-      const { data: wallet, error } = await supabase
+      let { data: wallet, error } = await supabase
         .from('aa_wallets')
-        .upsert(payload, { onConflict: 'user_id,chain_id' })
+        .upsert(payload, { onConflict: 'user_id,network_key' })
         .select()
         .single();
+
+      if (
+        error?.code === '42P10'
+        || error?.code === 'PGRST204'
+        || String(error?.message ?? '').includes("network_key")
+      ) {
+        const legacyPayload = { ...payload };
+        delete legacyPayload.network_key;
+        const legacyResult = await supabase
+          .from('aa_wallets')
+          .upsert(legacyPayload, { onConflict: 'user_id,chain_id' })
+          .select()
+          .single();
+        wallet = legacyResult.data;
+        error = legacyResult.error;
+      }
       
       if (error) {
         throw error;
@@ -141,7 +182,7 @@ export class SupabaseWalletService {
       return wallet;
     } catch (error) {
       console.error('❌ [SupabaseWalletService] Error saving wallet:', error);
-      throw new Error(`Failed to save wallet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to save wallet: ${formatServiceError(error)}`);
     }
   }
   
@@ -174,17 +215,30 @@ export class SupabaseWalletService {
       return data;
     } catch (error) {
       console.error('❌ [SupabaseWalletService] Error getting wallet:', error);
-      throw new Error(`Failed to get wallet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to get wallet: ${formatServiceError(error)}`);
     }
   }
 
   async getAAWalletForChain(
     userId: string,
     chainId: number,
+    networkKey?: string,
   ): Promise<AAWallet | null> {
     console.log(`🔍 [SupabaseWalletService] Getting AA wallet for user ${userId} on chain ${chainId}`);
 
     try {
+      const resolvedNetworkKey = inferWalletNetworkKey(chainId, networkKey);
+      const networkResult = await supabase
+        .from('aa_wallets')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('network_key', resolvedNetworkKey)
+        .maybeSingle();
+
+      if (!networkResult.error && networkResult.data) {
+        return networkResult.data as AAWallet;
+      }
+
       const { data, error } = await supabase
         .from('aa_wallets')
         .select('*')
@@ -199,7 +253,32 @@ export class SupabaseWalletService {
       return data as AAWallet | null;
     } catch (error) {
       console.error('❌ [SupabaseWalletService] Error getting wallet by chain:', error);
-      throw new Error(`Failed to get wallet by chain: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to get wallet by chain: ${formatServiceError(error)}`);
+    }
+  }
+
+  async getAAWalletForNetwork(
+    userId: string,
+    networkKey: string,
+  ): Promise<AAWallet | null> {
+    console.log(`🔍 [SupabaseWalletService] Getting AA wallet for user ${userId} on network ${networkKey}`);
+
+    try {
+      const { data, error } = await supabase
+        .from('aa_wallets')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('network_key', networkKey)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      return data as AAWallet | null;
+    } catch (error) {
+      console.error('❌ [SupabaseWalletService] Error getting wallet by network:', error);
+      throw new Error(`Failed to get wallet by network: ${formatServiceError(error)}`);
     }
   }
   
