@@ -1,0 +1,54 @@
+# apps/backend/bundler/docker-compose.fork.yml
+#
+# Bundler stack for the Base mainnet fork.
+# The fork RPC must be running externally (e.g., on the infra laptop at 192.168.100.68:8545).
+# This compose file starts contract-deployer + mock-paymaster + Alto bundler.
+#
+# Usage:
+#   FORK_RPC_URL=http://192.168.100.68:8545 docker compose -f docker-compose.fork.yml up
+#
+# Or simply:
+#   make bundler-fork-base  (from repo root)
+
+services:
+  # NOTE: We do NOT run pimlicolabs/mock-contract-deployer on the Base mainnet fork.
+  # The deployer is meant for fresh Anvil; on a Base fork, EntryPoint v0.7 already
+  # exists at 0x0000000071727De22E5E9d8BAf0edAc6f37da032 (deployed to Base long ago)
+  # and re-deploying it (along with Safe/Biconomy/SimpleAccount factories) just
+  # spams 18+ parallel sendRawTransaction calls at the upstream Base RPC, which
+  # times out and blocks alto/mock-paymaster from ever starting.
+
+  # Mock verifying paymaster (optional — disable if Base fork rejects simulation)
+  mock-paymaster:
+    image: ghcr.io/pimlicolabs/mock-verifying-paymaster:main
+    ports:
+      - "3000:3000"
+    environment:
+      - ALTO_RPC=http://alto:4337
+      - ANVIL_RPC=${FORK_RPC_URL:-http://192.168.100.68:8545}
+
+  # Alto ERC-4337 bundler
+  alto:
+    image: ghcr.io/pimlicolabs/alto:latest
+    ports:
+      - "4337:4337"
+    entrypoint:
+      - "node"
+      - "src/lib/cli/alto.js"
+      - "run"
+      - "--rpc-url"
+      - "${FORK_RPC_URL:-http://192.168.100.68:8545}"
+      - "--public-rpc-url"
+      - "${FORK_PUBLIC_RPC_URL:-http://192.168.100.68:8545}"
+      - "--entrypoints"
+      - "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+      - "--executor-private-keys"
+      - "${ALTO_EXECUTOR_PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
+      - "--utility-private-key"
+      - "${ALTO_UTILITY_PRIVATE_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
+      - "--port"
+      - "4337"
+      - "--safe-mode"
+      - "false"
+      - "--min-balance"
+      - "1000000000000000000"
