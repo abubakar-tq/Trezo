@@ -105,9 +105,12 @@ export const getViemChainForNetwork = (networkKey: NetworkKey): Chain => {
 export const getPublicClientForNetwork = (networkKey: NetworkKey) => {
   const rpcUrl = getRpcUrlForNetwork(networkKey);
   const chain = getViemChainForNetwork(networkKey);
+  const config = getNetworkConfig(networkKey);
+  // Remote infra machines (forks) need a longer timeout than the viem default (~10 s)
+  const timeoutMs = config.environment === "mainnet" ? 15_000 : 60_000;
   return createPublicClient({
     chain,
-    transport: http(rpcUrl),
+    transport: http(rpcUrl, { timeout: timeoutMs }),
   });
 };
 
