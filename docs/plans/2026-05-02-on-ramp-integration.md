@@ -13,22 +13,25 @@
 ## Phase 1: Foundation (Types, DB, Config)
 
 ### Task 1: Define Shared Ramp Types
+
 **Files:**
+
 - Create: `apps/mobile/src/types/ramp.ts`
 
 **Step 1: Write types**
+
 ```typescript
-export type RampProvider = 'transak' | 'mock';
-export type RampStatus = 
-  | 'created' 
-  | 'widget_opened' 
-  | 'payment_pending' 
-  | 'processing' 
-  | 'completed' 
-  | 'failed' 
-  | 'refunded' 
-  | 'expired' 
-  | 'local_mock_completed';
+export type RampProvider = "transak" | "mock";
+export type RampStatus =
+  | "created"
+  | "widget_opened"
+  | "payment_pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "refunded"
+  | "expired"
+  | "local_mock_completed";
 
 export interface RampOrder {
   id: string;
@@ -50,10 +53,13 @@ export interface RampOrder {
 ```
 
 ### Task 2: Supabase Migration
+
 **Files:**
+
 - Create: `apps/backend/supabase/migrations/20240502000000_create_ramp_orders.sql`
 
 **Step 1: Write SQL migration**
+
 ```sql
 create table if not exists public.ramp_orders (
   id uuid primary key default gen_random_uuid(),
@@ -86,20 +92,26 @@ create policy "Users can view their own ramp orders" on public.ramp_orders
 ## Phase 2: Backend Infrastructure
 
 ### Task 3: Create Shared Provider Logic
+
 **Files:**
+
 - Create: `apps/backend/supabase/functions/_shared/ramp/types.ts`
 - Create: `apps/backend/supabase/functions/_shared/ramp/providers/TransakProvider.ts`
 - Create: `apps/backend/supabase/functions/_shared/ramp/providers/MockProvider.ts`
 
 **Step 1: Implement Transak Staging logic**
+
 - Map Transak statuses to `RampStatus`.
 - Implement `createSession` using Transak API.
 
 ### Task 4: Local Anvil Fulfillment Service
+
 **Files:**
+
 - Create: `apps/backend/supabase/functions/_shared/ramp/LocalFulfillmentService.ts`
 
 **Step 1: Implement funding logic**
+
 - Use `viem` to connect to `ANVIL_RPC_URL`.
 - Guard: Only run if `LOCAL_DEV_FULFILLMENT=true` and `chainId=31337`.
 
@@ -108,20 +120,26 @@ create policy "Users can view their own ramp orders" on public.ramp_orders
 ## Phase 3: API Layer (Edge Functions)
 
 ### Task 5: Session Creation Endpoint
+
 **Files:**
+
 - Create: `apps/backend/supabase/functions/onramp-session/index.ts`
 
 **Step 1: Implement POST handler**
+
 - Authenticate user.
 - Create DB record.
 - Call active provider.
 - Return `widgetUrl` and `orderId`.
 
 ### Task 6: Transak Webhook Handler
+
 **Files:**
+
 - Create: `apps/backend/supabase/functions/onramp-webhook/index.ts`
 
 **Step 1: Implement Webhook verification**
+
 - Verify signature from Transak.
 - Update DB status.
 - Trigger `LocalFulfillmentService` if in hybrid mode.
@@ -131,20 +149,26 @@ create policy "Users can view their own ramp orders" on public.ramp_orders
 ## Phase 4: Frontend Implementation
 
 ### Task 7: Mobile Ramp Service
+
 **Files:**
+
 - Create: `apps/mobile/src/services/RampService.ts`
 
 **Step 1: Implement API calls**
+
 - `createSession(params)`
 - `getOrder(id)`
 - `completeMockOrder(id)` (Dev only)
 
 ### Task 8: Buy Crypto Screen
+
 **Files:**
+
 - Create: `apps/mobile/src/features/wallet/screens/BuyCryptoScreen.tsx`
 - Modify: `apps/mobile/src/app/(tabs)/wallet/index.tsx` (Add navigation link)
 
 **Step 1: Implement UI**
+
 - Amount input, Currency selectors.
 - "Buy Crypto" button.
 - Progress/Status card during polling.
@@ -154,13 +178,33 @@ create policy "Users can view their own ramp orders" on public.ramp_orders
 ## Phase 5: Polish & Docs
 
 ### Task 9: Documentation
+
 **Files:**
+
 - Create: `docs/on-ramp-fyp.md`
 
 **Step 1: Write demo steps and architecture overview.**
 
 ### Task 10: Tests
+
 **Files:**
+
 - Create: `apps/backend/supabase/functions/_shared/ramp/status.test.ts`
 
 **Step 1: Verify Transak status mapping.**
+
+Phase 1 — Foundation
+
+1. Add shared ramp types
+2. Add ramp_orders migration
+3. Add provider/fulfillment config
+
+Phase 2 — Local Mock First 4. Add MockProvider 5. Add LocalFulfillmentService 6. Add completeMockOrder Edge Function 7. Fund Anvil smart account with mock ERC-20 8. Show local balance refresh in app
+
+Phase 3 — Transak Staging 9. Add TransakProvider that builds widget URL 10. Add onramp-session Edge Function 11. Add Transak webhook verification 12. Update DB on provider completion
+
+Phase 4 — Hybrid Demo 13. Add fulfillment_mode = hybrid_dev 14. On Transak completion, trigger local dev fulfillment 15. Store both provider tx/order and local tx hash
+
+Phase 5 — UI 16. BuyCryptoScreen 17. WebView widget screen 18. Ramp order status card 19. Refresh balances after completion
+
+Phase 6 — Docs and Tests 20. Status mapping tests 21. Local fulfillment guard tests 22. FYP demo docs

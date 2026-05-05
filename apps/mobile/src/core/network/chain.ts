@@ -1,55 +1,64 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-/**
- * Chain Configuration for Local Anvil Testnet
- * 
- * IMPORTANT: Update LAPTOP_IP with your actual WiFi IP address
- * Find it with: ipconfig (Windows) or ifconfig (Mac/Linux)
- * Current value should match your network IP
- */
-export const CHAIN_CONFIG = {
-  chainId: 31337, // Anvil default
-  name: 'Anvil Local Testnet',
-  // Try to get IP from environment, fallback to a default
-  LAPTOP_IP: process.env.EXPO_PUBLIC_LAPTOP_IP || '10.45.194.26', 
+// ─── Read from .env ───────────────────────────────────────────────────────────
+// EXPO_PUBLIC_CHAIN_ID  → 31337 (Anvil local) | 11155111 (Sepolia)
+// EXPO_PUBLIC_LAPTOP_IP → your WiFi IP, used only when chainId=31337
+// EXPO_PUBLIC_SEPOLIA_RPC_URL → optional override; defaults to public Sepolia RPC
+
+const CHAIN_ID = parseInt(process.env.EXPO_PUBLIC_CHAIN_ID ?? '31337', 10);
+const LAPTOP_IP = process.env.EXPO_PUBLIC_LAPTOP_IP ?? '10.45.194.26';
+const SEPOLIA_RPC = process.env.EXPO_PUBLIC_SEPOLIA_RPC_URL ?? 'https://rpc.sepolia.org';
+
+const CHAIN_NAMES: Record<number, string> = {
+  31337: 'Anvil Local',
+  11155111: 'Sepolia',
+  1: 'Ethereum',
+  137: 'Polygon',
 };
 
-// Detect device/simulator
+export const CHAIN_CONFIG = {
+  chainId: CHAIN_ID,
+  name: CHAIN_NAMES[CHAIN_ID] ?? `Chain ${CHAIN_ID}`,
+  LAPTOP_IP,
+};
+
+// Detect device/simulator (only relevant for local Anvil routing)
 const isExpoGo = Constants.appOwnership === 'expo';
 const isPhysicalDevice = Constants.isDevice ?? true;
 const isIOSSimulator = Platform.OS === 'ios' && !isPhysicalDevice;
 const isAndroidEmulator = Platform.OS === 'android' && !isPhysicalDevice;
 
 /**
- * Get RPC URL based on platform and environment
- *
- * Physical devices (dev clients/installed APK/IPA) must hit your laptop IP.
- * Emulator/simulator use their loopback helpers.
+ * Get RPC URL.
+ * - Testnet/mainnet (chainId != 31337): uses EXPO_PUBLIC_SEPOLIA_RPC_URL or public fallback.
+ * - Local Anvil (chainId 31337): routes by platform so emulator/physical device both work.
  */
 export const getRpcUrl = (): string => {
-  // Android emulator
+  if (CHAIN_ID !== 31337) return SEPOLIA_RPC;
   if (isAndroidEmulator) return 'http://10.0.2.2:8545';
   if (isIOSSimulator) return 'http://localhost:8545';
-  return `http://${CHAIN_CONFIG.LAPTOP_IP}:8545`;
+  return `http://${LAPTOP_IP}:8545`;
 };
 
 /**
- * Get Bundler URL (ERC-4337)
+ * Get Bundler URL (ERC-4337).
+ * Only meaningful on local Anvil — no bundler for testnet in this setup.
  */
 export const getBundlerUrl = (): string => {
   if (isAndroidEmulator) return 'http://10.0.2.2:4337';
   if (isIOSSimulator) return 'http://localhost:4337';
-  return `http://${CHAIN_CONFIG.LAPTOP_IP}:4337`;
+  return `http://${LAPTOP_IP}:4337`;
 };
 
 /**
- * Get Paymaster URL (Gasless transactions)
+ * Get Paymaster URL.
+ * Only meaningful on local Anvil.
  */
 export const getPaymasterUrl = (): string => {
   if (isAndroidEmulator) return 'http://10.0.2.2:3000';
   if (isIOSSimulator) return 'http://localhost:3000';
-  return `http://${CHAIN_CONFIG.LAPTOP_IP}:3000`;
+  return `http://${LAPTOP_IP}:3000`;
 };
 
 /**

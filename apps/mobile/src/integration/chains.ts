@@ -1,3 +1,4 @@
+import { getRpcUrl } from '../core/network/chain';
 
 export type SupportedChainId =
   | 31337     // local Anvil
@@ -18,11 +19,8 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
   31337: {
     id: 31337,
     name: "Local Anvil",
-    // Prefer explicit Anvil RPC from env (for physical devices), fall back to emulator loopback.
-    rpcUrl:
-      process.env.EXPO_PUBLIC_ANVIL_RPC_URL
-      ?? process.env.EXPO_PUBLIC_LOCAL_RPC_URL
-      ?? "http://10.0.2.2:8545",
+    // Use unified IP detection logic
+    get rpcUrl() { return getRpcUrl(); },
   },
   11155111: {
     id: 11155111,

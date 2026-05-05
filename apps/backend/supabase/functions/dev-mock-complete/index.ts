@@ -53,7 +53,7 @@ serve(async (req) => {
     const fulfillmentService = new LocalFulfillmentService();
     const localTxHash = await fulfillmentService.fulfill({
       walletAddress: order.wallet_address,
-      amount: order.fiat_amount / 2500,
+      fiatAmount: Number(order.fiat_amount),
       cryptoCurrency: order.crypto_currency,
       chainId: order.chain_id,
     });

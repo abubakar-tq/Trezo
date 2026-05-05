@@ -35,13 +35,13 @@ serve(async (req) => {
       return json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { walletAddress, chainId, fiatCurrency, fiatAmount, cryptoCurrency } = await req.json();
+    const { walletAddress, chainId, fiatCurrency, fiatAmount, cryptoCurrency, provider: requestedProvider } = await req.json();
 
     if (!walletAddress || !chainId || !fiatCurrency || !fiatAmount || !cryptoCurrency) {
       return json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const provider = getRampProvider();
+    const provider = getRampProvider(requestedProvider);
     const session = await provider.createSession({
       userId: user.id,
       walletAddress,
