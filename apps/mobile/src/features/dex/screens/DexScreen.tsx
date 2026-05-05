@@ -1,402 +1,775 @@
-import React, { useState, useEffect } from 'react';
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { useAppTheme } from "@theme";
+import { withAlpha } from "@utils/color";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
+  ActivityIndicator,
   ScrollView,
+  StyleSheet,
+  Text,
   TextInput,
-  Dimensions,
-} from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRoute, useNavigation } from '@react-navigation/native';
-import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
-import * as Haptics from 'expo-haptics';
-import { TabScreenContainer, MeshBackground, TokenIcon, AssetPickerModal, NetworkPickerModal, AccountPickerModal, type Asset, type Network, type Account } from '@shared/components';
-import { useTabContentBottomInset, useWalletData } from '@hooks';
-import { useWalletStore } from '../../wallet/store/useWalletStore';
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { formatUnits, parseUnits, type Address } from "viem";
 
-const { width } = Dimensions.get('window');
+import { BalanceService } from "@/src/features/assets/services/BalanceService";
+import { TokenRegistryService } from "@/src/features/assets/services/TokenRegistryService";
+import type { TokenMetadata } from "@/src/features/assets/types/token";
+import { AllowanceService } from "@/src/features/swaps/services/AllowanceService";
+import { SwapExecutionService } from "@/src/features/swaps/services/SwapExecutionService";
+import { SwapPreparationService } from "@/src/features/swaps/services/SwapPreparationService";
+import { SwapQuoteService } from "@/src/features/swaps/services/SwapQuoteService";
+import type { SwapPlan, SwapQuote } from "@/src/features/swaps/types/swap";
+import WalletPersistenceService from "@/src/features/wallet/services/SupabaseWalletService";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import { getEnabledChains, type SupportedChainId } from "@/src/integration/chains";
+import { resolveNetworkKey, getNetworkConfig } from "@/src/integration/networks";
+import { useUserStore } from "@/src/store/useUserStore";
+import { TabScreenContainer, MeshBackground, TokenIcon, AssetPickerModal, type Asset } from "@shared/components";
+import { useTabContentBottomInset } from "@hooks";
 
-type DexTab = 'swap' | 'bridge';
+type DexTab = "swap" | "bridge";
+
+type UiState =
+  | "idle"
+  | "validating"
+  | "quoting"
+  | "quote_ready"
+  | "approval_required"
+  | "signing_approval"
+  | "approval_pending"
+  | "signing_swap"
+  | "swap_pending"
+  | "confirmed"
+  | "failed"
+  | "cancelled";
+
+const SLIPPAGE_PRESETS = ["0.3", "0.5", "1.0"] as const;
+const DEFAULT_QUOTE_DEBOUNCE_MS = 500;
+
+const shorten = (value?: string | null): string => {
+  if (!value) return "-";
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+};
+
+const toTokenKey = (token: TokenMetadata | null): string | null => {
+  if (!token) return null;
+  return token.type === "native" ? "native" : token.address.toLowerCase();
+};
+
+const toAsset = (token: TokenMetadata, balanceRaw: bigint): Asset => ({
+  symbol: token.symbol,
+  name: token.name,
+  balance: formatUnits(balanceRaw, token.decimals),
+  usd_value: 0,
+});
+
+const parseSlippageBps = (pct: string): number => {
+  const parsed = parseFloat(pct.trim());
+  if (isNaN(parsed) || parsed <= 0 || parsed > 50) {
+    throw new Error("Slippage must be between 0.01% and 50%.");
+  }
+  return Math.round(parsed * 100);
+};
 
 export const DexScreen: React.FC = () => {
   const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const route = useRoute<any>();
+  const navigation = useNavigation<any>();
   const contentBottomInset = useTabContentBottomInset();
-  const { tokens } = useWalletData();
-  const { accounts, activeAccountId, setActiveAccount } = useWalletStore();
-  
-  const [activeTab, setActiveTab] = useState<DexTab>('swap');
-  
-  // Modal visibility states
-  const [isAssetPickerVisible, setIsAssetPickerVisible] = useState(false);
-  const [isNetworkPickerVisible, setIsNetworkPickerVisible] = useState(false);
-  const [isAccountPickerVisible, setIsAccountPickerVisible] = useState(false);
-  const [pickingType, setPickingType] = useState<'from' | 'to'>('from');
-  
-  const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts[0];
 
-  // Selection states
-  const [fromNetwork, setFromNetwork] = useState<Network>({ id: 'ethereum', name: 'Ethereum', chainId: 1, color: '#627EEA' });
-  const [toNetwork, setToNetwork] = useState<Network>({ id: 'arbitrum', name: 'Arbitrum', chainId: 42161, color: '#28A0F0' });
-  
-  const [fromToken, setFromToken] = useState<Asset>({ symbol: 'USDC', name: 'USD Coin' });
-  const [toToken, setToToken] = useState<Asset>({ symbol: 'ETH', name: 'Ethereum' });
-  
-  const [recipientAddress, setRecipientAddress] = useState('0x4b0c...3796');
-  
-  // Handle deep linking from Home "Swap" button
+  const isDark = resolvedMode === "dark";
+  const glassBackground = isDark ? "rgba(22, 22, 22, 0.7)" : "#FFFFFF";
+
+  const user = useUserStore((state) => state.user);
+  const activeChainId = useWalletStore((state) => state.activeChainId);
+  const aaAccount = useWalletStore((state) => state.aaAccount);
+
+  const enabledChains = useMemo(() => getEnabledChains(), []);
+
+  const [activeTab, setActiveTab] = useState<DexTab>("swap");
+  const [selectedChainId, setSelectedChainId] = useState<SupportedChainId>(
+    (aaAccount?.chainId as SupportedChainId | undefined)
+      ?? (activeChainId as SupportedChainId | undefined)
+      ?? (enabledChains[0]?.id as SupportedChainId | undefined)
+      ?? 31337,
+  );
+
+  const [sellToken, setSellToken] = useState<TokenMetadata | null>(null);
+  const [buyToken, setBuyToken] = useState<TokenMetadata | null>(null);
+  const [sellAmountDecimal, setSellAmountDecimal] = useState<string>("");
+  const [slippagePct, setSlippagePct] = useState<string>("0.5");
+  const [customSlippageActive, setCustomSlippageActive] = useState<boolean>(false);
+
+  const [walletId, setWalletId] = useState<string | null>(aaAccount?.id ?? null);
+  const [walletAddress, setWalletAddress] = useState<Address | null>(
+    (aaAccount?.predictedAddress as Address | undefined) ?? null,
+  );
+
+  const [tokenBalances, setTokenBalances] = useState<Record<string, bigint>>({});
+  const [balancesLoading, setBalancesLoading] = useState<boolean>(false);
+
+  const [quote, setQuote] = useState<SwapQuote | null>(null);
+  const [approvalRequired, setApprovalRequired] = useState<boolean>(false);
+  const [preparedPlan, setPreparedPlan] = useState<SwapPlan | null>(null);
+  const [uiState, setUiState] = useState<UiState>("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const [isAssetPickerVisible, setIsAssetPickerVisible] = useState(false);
+  const [assetPickerSide, setAssetPickerSide] = useState<"sell" | "buy">("sell");
+
+  const networkKey = useMemo(() => resolveNetworkKey(selectedChainId), [selectedChainId]);
+
+  const networkConfig = useMemo(() => {
+    try { return getNetworkConfig(networkKey); } catch { return null; }
+  }, [networkKey]);
+
+  const swapTokens = useMemo(
+    () => TokenRegistryService.listSwapTokensForNetwork(networkKey),
+    [networkKey],
+  );
+
+  const sellTokenBalanceRaw = useMemo(() => {
+    const key = toTokenKey(sellToken);
+    return key ? (tokenBalances[key] ?? 0n) : 0n;
+  }, [sellToken, tokenBalances]);
+
+  const sellTokenBalanceDisplay = useMemo(() => {
+    if (!sellToken) return "0";
+    return BalanceService.formatBalance(sellToken, sellTokenBalanceRaw);
+  }, [sellToken, sellTokenBalanceRaw]);
+
+  const providerCount = useMemo(
+    () => SwapQuoteService.getProvidersForChain(selectedChainId).length,
+    [selectedChainId],
+  );
+
+  const assetPickerList = useMemo(
+    () => swapTokens.map((token) => toAsset(token, tokenBalances[toTokenKey(token) ?? "native"] ?? 0n)),
+    [swapTokens, tokenBalances],
+  );
+
   useEffect(() => {
     if (route.params?.initialTab) {
       setActiveTab(route.params.initialTab);
     }
   }, [route.params?.initialTab]);
 
-  const isDark = resolvedMode === 'dark';
-  const glassBackground = isDark ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF';
+  useEffect(() => {
+    if (!swapTokens.length) {
+      setSellToken(null);
+      setBuyToken(null);
+      return;
+    }
 
-  const handleAssetSelect = (asset: Asset) => {
-    if (pickingType === 'from') setFromToken(asset);
-    else setToToken(asset);
-  };
+    if (!sellToken || !swapTokens.some((token) => toTokenKey(token) === toTokenKey(sellToken))) {
+      setSellToken(swapTokens[0]);
+    }
 
-  const handleNetworkSelect = (network: Network) => {
-    if (pickingType === 'from') setFromNetwork(network);
-    else setToNetwork(network);
-  };
+    if (!buyToken || !swapTokens.some((token) => toTokenKey(token) === toTokenKey(buyToken))) {
+      setBuyToken(swapTokens.length > 1 ? swapTokens[1] : swapTokens[0]);
+    }
+  }, [buyToken, sellToken, swapTokens]);
 
-  const handleAccountSelect = (account: any) => {
-    const walletAccount: any = {
-      address: account.address,
-      name: account.name,
-      isActive: true,
-      createdAt: account.createdAt || new Date().toISOString()
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadWallet = async () => {
+      if (!user?.id) {
+        setWalletId(null);
+        setWalletAddress(null);
+        return;
+      }
+
+      const walletService = new WalletPersistenceService();
+      const wallet = await walletService.getAAWalletForChain(user.id, selectedChainId);
+      if (cancelled) return;
+
+      setWalletId(wallet?.id ?? null);
+      setWalletAddress((wallet?.predicted_address as Address | undefined) ?? null);
     };
-    setActiveAccount(walletAccount);
-    setIsAccountPickerVisible(false);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    loadWallet().catch((error) => {
+      if (cancelled) return;
+      setErrorMessage(error instanceof Error ? error.message : "Failed to load wallet for chain.");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedChainId, user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadBalances = async () => {
+      if (!walletAddress || !swapTokens.length) {
+        setTokenBalances({});
+        return;
+      }
+
+      setBalancesLoading(true);
+      try {
+        const entries = await Promise.all(
+          swapTokens.map(async (token) => {
+            const key = toTokenKey(token) ?? "native";
+            const balance = await BalanceService.getBalance({
+              chainId: selectedChainId,
+              walletAddress,
+              token,
+            });
+            return [key, balance] as const;
+          }),
+        );
+
+        if (!cancelled) {
+          setTokenBalances(Object.fromEntries(entries));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(error instanceof Error ? error.message : "Failed to fetch token balances.");
+          setTokenBalances({});
+        }
+      } finally {
+        if (!cancelled) {
+          setBalancesLoading(false);
+        }
+      }
+    };
+
+    loadBalances();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedChainId, swapTokens, walletAddress]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreparedPlan(null);
+
+    if (!walletAddress || !sellToken || !buyToken) {
+      setQuote(null);
+      setApprovalRequired(false);
+      setUiState("idle");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!sellAmountDecimal.trim()) {
+      setQuote(null);
+      setApprovalRequired(false);
+      setUiState("idle");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (toTokenKey(sellToken) === toTokenKey(buyToken)) {
+      setQuote(null);
+      setApprovalRequired(false);
+      setErrorMessage("Sell and buy tokens must be different.");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const debounce = setTimeout(async () => {
+      if (cancelled) return;
+      setErrorMessage(null);
+      setUiState("quoting");
+
+      try {
+        const slippageBps = parseSlippageBps(slippagePct);
+        const sellAmountRaw = parseUnits(sellAmountDecimal, sellToken.decimals);
+        if (sellAmountRaw <= 0n) {
+          throw new Error("Sell amount must be greater than zero.");
+        }
+
+        const nextQuote = await SwapQuoteService.getQuote({
+          chainId: selectedChainId,
+          account: walletAddress,
+          sellToken,
+          buyToken,
+          sellAmountRaw,
+          slippageBps,
+        });
+
+        const allowance = await AllowanceService.isApprovalRequired({
+          chainId: selectedChainId,
+          token: sellToken,
+          sellAmountRaw,
+          owner: walletAddress,
+          spender: nextQuote.spender,
+        });
+
+        if (cancelled) return;
+
+        setQuote(nextQuote);
+        setApprovalRequired(allowance.required);
+        setUiState(allowance.required ? "approval_required" : "quote_ready");
+      } catch (error) {
+        if (cancelled) return;
+        setQuote(null);
+        setApprovalRequired(false);
+        setUiState("idle");
+        setErrorMessage(error instanceof Error ? error.message : "Failed to fetch swap quote.");
+      }
+    }, DEFAULT_QUOTE_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(debounce);
+    };
+  }, [buyToken, selectedChainId, sellAmountDecimal, sellToken, slippagePct, walletAddress]);
+
+  const buildIntent = (): {
+    userId: string;
+    aaWalletId: string;
+    walletAddress: Address;
+    chainId: SupportedChainId;
+    sellToken: TokenMetadata;
+    buyToken: TokenMetadata;
+    sellAmountDecimal: string;
+    slippageBps: number;
+  } | null => {
+    if (!user?.id || !walletId || !walletAddress || !sellToken || !buyToken) {
+      return null;
+    }
+
+    return {
+      userId: user.id,
+      aaWalletId: walletId,
+      walletAddress,
+      chainId: selectedChainId,
+      sellToken,
+      buyToken,
+      sellAmountDecimal: sellAmountDecimal.trim(),
+      slippageBps: parseSlippageBps(slippagePct),
+    };
   };
+
+  const handleTokenSelect = (asset: Asset) => {
+    const next = swapTokens.find((token) => token.symbol === asset.symbol);
+    if (!next) return;
+
+    if (assetPickerSide === "sell") {
+      if (buyToken && toTokenKey(next) === toTokenKey(buyToken)) {
+        setBuyToken(sellToken);
+      }
+      setSellToken(next);
+    } else {
+      if (sellToken && toTokenKey(next) === toTokenKey(sellToken)) {
+        setSellToken(buyToken);
+      }
+      setBuyToken(next);
+    }
+  };
+
+  const handleSwapDirection = () => {
+    if (!sellToken || !buyToken) return;
+    setSellToken(buyToken);
+    setBuyToken(sellToken);
+    setPreparedPlan(null);
+  };
+
+  const handleReviewSwap = async () => {
+    const intent = buildIntent();
+    if (!intent) {
+      setErrorMessage("Missing user or wallet context for swap.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setUiState("validating");
+
+    try {
+      const plan = await SwapPreparationService.prepareSwap(intent);
+      setPreparedPlan(plan);
+      setUiState(plan.approvalRequired ? "approval_required" : "quote_ready");
+    } catch (error) {
+      setPreparedPlan(null);
+      setUiState("failed");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to prepare swap.");
+    }
+  };
+
+  const handleExecuteSwap = async () => {
+    const intent = buildIntent();
+    if (!intent) {
+      setErrorMessage("Missing user or wallet context for swap.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setUiState(preparedPlan?.approvalRequired ? "signing_approval" : "signing_swap");
+
+    try {
+      const result = await SwapExecutionService.executeSwap(intent, {
+        waitForReceipt: true,
+        receiptTimeoutMs: 60_000,
+        receiptPollIntervalMs: 2_000,
+      });
+
+      if (result.status === "confirmed") {
+        setUiState("confirmed");
+      } else if (result.status === "pending") {
+        setUiState(result.swapTransactionId ? "swap_pending" : "approval_pending");
+      } else if (result.status === "cancelled") {
+        setUiState("cancelled");
+      } else {
+        setUiState("failed");
+      }
+
+      const transactionId = result.swapTransactionId ?? result.approvalTransactionId;
+      if (transactionId) {
+        navigation.navigate("TransactionStatus", { transactionId });
+      }
+
+      if (result.error) {
+        setErrorMessage(result.error);
+      }
+    } catch (error) {
+      setUiState("failed");
+      setErrorMessage(error instanceof Error ? error.message : "Swap execution failed.");
+    }
+  };
+
+  const isQuoteLoading = uiState === "quoting";
+  const isValidating = uiState === "validating";
+  const quoteReady = Boolean(quote);
+  const canReview = Boolean(
+    user?.id
+      && walletId
+      && walletAddress
+      && sellToken
+      && buyToken
+      && sellAmountDecimal.trim().length > 0
+      && quoteReady,
+  );
+  const canExecute = Boolean(preparedPlan);
 
   return (
     <TabScreenContainer includeBottomInset>
       <MeshBackground intensity={0.8} />
-      
-      <ScrollView 
+
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
-          styles.scrollContent, 
-          { 
+          styles.scrollContent,
+          {
             paddingTop: Math.max(insets.top, 16),
-            paddingBottom: contentBottomInset + 40 
-          }
+            paddingBottom: contentBottomInset + 40,
+          },
         ]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Header - Minimalist & Focused */}
+        {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Exchange</Text>
+          <View style={styles.headerMeta}>
+            {(() => {
+              const env = networkConfig?.environment ?? "local";
+              const dotColor =
+                env === "mainnet" ? colors.accent
+                : env === "local_fork" ? "#F59E0B"
+                : env === "testnet" ? "#A78BFA"
+                : colors.success;
+              const displayName = networkConfig?.displayName ?? `Chain ${selectedChainId}`;
+              return (
+                <View style={[styles.networkBadge, { backgroundColor: withAlpha(dotColor, 0.1), borderColor: withAlpha(dotColor, 0.28) }]}>
+                  <View style={[styles.networkDot, { backgroundColor: dotColor }]} />
+                  <Text style={[styles.networkBadgeText, { color: dotColor }]}>{displayName}</Text>
+                </View>
+              );
+            })()}
+            {walletAddress && (
+              <Text style={[styles.walletAddressText, { color: colors.textSecondary }]}>
+                {shorten(walletAddress)}
+              </Text>
+            )}
+          </View>
         </View>
 
-        {/* Tab Switcher - Centered Segmented Control */}
-        <View style={[styles.tabContainer, { backgroundColor: colors.surfaceCard }]}>
-          <TouchableOpacity 
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setActiveTab('swap');
-            }}
-            style={[styles.tab, activeTab === 'swap' && { backgroundColor: colors.accent }]}
+        {/* Swap / Bridge tabs */}
+        <View style={[styles.tabContainer, { backgroundColor: withAlpha(colors.surfaceCard, 0.9) }]}>
+          <TouchableOpacity
+            onPress={() => setActiveTab("swap")}
+            style={[styles.tab, activeTab === "swap" && { backgroundColor: colors.accent }]}
           >
-            <Text style={[
-              styles.tabText, 
-              { color: activeTab === 'swap' ? colors.textOnAccent : colors.textSecondary }
-            ]}>Swap</Text>
+            <Text style={[styles.tabText, { color: activeTab === "swap" ? colors.textOnAccent : colors.textSecondary }]}>
+              Swap
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setActiveTab('bridge');
-            }}
-            style={[styles.tab, activeTab === 'bridge' && { backgroundColor: colors.accent }]}
-          >
-            <Text style={[
-              styles.tabText, 
-              { color: activeTab === 'bridge' ? colors.textOnAccent : colors.textSecondary }
-            ]}>Bridge</Text>
+          <TouchableOpacity disabled style={[styles.tab, { opacity: 0.4 }]}>
+            <Text style={[styles.tabText, { color: colors.textSecondary }]}>Bridge (soon)</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Main Swap/Bridge Interface Card */}
-        {activeTab === 'swap' ? (
-          <View style={[styles.mainCard, { backgroundColor: glassBackground, borderColor: colors.border }]}>
-            {/* Integrated Network Header */}
-            <TouchableOpacity 
-              style={[styles.integratedNetworkBar, { borderBottomColor: withAlpha(colors.border, 0.1) }]}
-              onPress={() => {
-                setPickingType('from');
-                setIsNetworkPickerVisible(true);
-              }}
-            >
-              <View style={styles.networkInfo}>
-                 <View style={[styles.networkIcon, { backgroundColor: fromNetwork.color }]}>
-                   <Text style={styles.networkIconText}>{fromNetwork.name[0]}</Text>
-                 </View>
-                 <Text style={[styles.networkName, { color: colors.textPrimary }]}>{fromNetwork.name}</Text>
-              </View>
-              <View style={styles.networkAction}>
-                <Text style={[styles.networkActionText, { color: colors.textSecondary }]}>Switch Network</Text>
-                <Feather name="chevron-right" size={14} color={colors.textMuted} />
-              </View>
-            </TouchableOpacity>
-
-            {/* Pay Section */}
-            <View style={styles.inputContainer}>
-              <View style={styles.inputHeader}>
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Pay with</Text>
-                <TouchableOpacity onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
-                  <Text style={[styles.maxButton, { color: colors.accent }]}>Max</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.inputRow}>
-                <TouchableOpacity 
-                  style={[styles.tokenSelect, { backgroundColor: withAlpha(colors.textSecondary, 0.05) }]}
-                  onPress={() => {
-                    setPickingType('from');
-                    setIsAssetPickerVisible(true);
-                  }}
-                >
-                  <TokenIcon symbol={fromToken.symbol} size={32} />
-                  <Text style={[styles.tokenSymbol, { color: colors.textPrimary }]}>{fromToken.symbol}</Text>
-                  <Feather name="chevron-down" size={16} color={colors.textSecondary} />
-                </TouchableOpacity>
-                <TextInput 
-                  style={[styles.amountInput, { color: colors.textPrimary }]}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="decimal-pad"
-                  defaultValue="85"
-                />
-              </View>
-              <View style={styles.inputFooter}>
-                <Text style={[styles.balanceText, { color: colors.textSecondary }]}>Balance: 124.50 {fromToken.symbol}</Text>
-                <Text style={[styles.fiatValue, { color: colors.textMuted }]}>$84.99</Text>
-              </View>
-            </View>
-
-            {/* Swap Middle Divider */}
-            <View style={styles.dividerContainer}>
-              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-              <TouchableOpacity 
-                style={[styles.swapIconButton, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}
+        {/* Network selection */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chainRow}
+        >
+          {enabledChains.map((chain) => {
+            const isActive = chain.id === selectedChainId;
+            return (
+              <TouchableOpacity
+                key={chain.id}
+                style={[
+                  styles.chainChip,
+                  {
+                    backgroundColor: isActive ? withAlpha(colors.accent, 0.18) : withAlpha(colors.surfaceCard, 0.85),
+                    borderColor: isActive ? withAlpha(colors.accent, 0.5) : withAlpha(colors.border, 0.35),
+                  },
+                ]}
                 onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  const tempToken = fromToken;
-                  setFromToken(toToken);
-                  setToToken(tempToken);
+                  setSelectedChainId(chain.id as SupportedChainId);
+                  setPreparedPlan(null);
+                  setErrorMessage(null);
                 }}
               >
-                <Ionicons name="swap-vertical" size={20} color={colors.accent} />
+                <Text style={[styles.chainChipText, { color: isActive ? colors.accent : colors.textSecondary }]}>
+                  {chain.name}
+                </Text>
               </TouchableOpacity>
-              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-            </View>
+            );
+          })}
+        </ScrollView>
 
-            {/* Receive Section */}
-            <View style={styles.inputContainer}>
-              <View style={styles.inputHeader}>
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Receive</Text>
-              </View>
-              <View style={styles.inputRow}>
-                <TouchableOpacity 
-                  style={[styles.tokenSelect, { backgroundColor: withAlpha(colors.textSecondary, 0.05) }]}
-                  onPress={() => {
-                    setPickingType('to');
-                    setIsAssetPickerVisible(true);
-                  }}
-                >
-                  <TokenIcon symbol={toToken.symbol} size={32} />
-                  <Text style={[styles.tokenSymbol, { color: colors.textPrimary }]}>{toToken.symbol}</Text>
-                  <Feather name="chevron-down" size={16} color={colors.textSecondary} />
-                </TouchableOpacity>
-                <Text style={[styles.amountResult, { color: colors.textPrimary }]}>0.02451</Text>
-              </View>
-              <View style={styles.inputFooter}>
-                <Text style={[styles.balanceText, { color: colors.textMuted }]}>No balance</Text>
-                <Text style={[styles.fiatValue, { color: colors.textMuted }]}>≈$83.56 (-0.69%)</Text>
+        {/* Swap card */}
+        <View style={[styles.mainCard, { backgroundColor: glassBackground, borderColor: withAlpha(colors.border, 0.5) }]}>
+          {/* Sell side */}
+          <View style={styles.swapSide}>
+            <View style={styles.swapSideHeader}>
+              <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You pay</Text>
+              <Text style={[styles.balanceHint, { color: colors.textSecondary }]}>
+                Bal:{" "}
+                <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+                  {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
+                </Text>
+              </Text>
+            </View>
+            <View style={styles.swapSideRow}>
+              <TouchableOpacity
+                style={[styles.tokenButton, { backgroundColor: withAlpha(colors.textPrimary, 0.06), borderColor: withAlpha(colors.border, 0.25) }]}
+                onPress={() => { setAssetPickerSide("sell"); setIsAssetPickerVisible(true); }}
+              >
+                <TokenIcon symbol={sellToken?.symbol ?? "?"} size={26} />
+                <Text style={[styles.tokenButtonSymbol, { color: colors.textPrimary }]}>
+                  {sellToken?.symbol ?? "Select"}
+                </Text>
+                <Feather name="chevron-down" size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <TextInput
+                style={[styles.amountInput, { color: colors.textPrimary }]}
+                placeholder="0.00"
+                placeholderTextColor={withAlpha(colors.textPrimary, 0.18)}
+                keyboardType="decimal-pad"
+                value={sellAmountDecimal}
+                onChangeText={setSellAmountDecimal}
+              />
+            </View>
+          </View>
+
+          {/* Swap direction divider */}
+          <View style={styles.dividerRow}>
+            <View style={[styles.dividerLine, { backgroundColor: withAlpha(colors.border, 0.5) }]} />
+            <TouchableOpacity
+              style={[styles.swapDirectionBtn, { backgroundColor: colors.surfaceCard, borderColor: withAlpha(colors.border, 0.5) }]}
+              onPress={handleSwapDirection}
+            >
+              <Ionicons name="swap-vertical" size={17} color={colors.accent} />
+            </TouchableOpacity>
+            <View style={[styles.dividerLine, { backgroundColor: withAlpha(colors.border, 0.5) }]} />
+          </View>
+
+          {/* Buy side */}
+          <View style={styles.swapSide}>
+            <View style={styles.swapSideHeader}>
+              <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You receive</Text>
+              <Text style={[styles.balanceHint, { color: colors.textSecondary }]}>
+                {providerCount > 0 ? `${providerCount} provider${providerCount !== 1 ? "s" : ""}` : "No providers configured"}
+              </Text>
+            </View>
+            <View style={styles.swapSideRow}>
+              <TouchableOpacity
+                style={[styles.tokenButton, { backgroundColor: withAlpha(colors.textPrimary, 0.06), borderColor: withAlpha(colors.border, 0.25) }]}
+                onPress={() => { setAssetPickerSide("buy"); setIsAssetPickerVisible(true); }}
+              >
+                <TokenIcon symbol={buyToken?.symbol ?? "?"} size={26} />
+                <Text style={[styles.tokenButtonSymbol, { color: colors.textPrimary }]}>
+                  {buyToken?.symbol ?? "Select"}
+                </Text>
+                <Feather name="chevron-down" size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <View style={styles.receiveAmountBox}>
+                {isQuoteLoading ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                  <Text style={[styles.receiveAmount, { color: quote ? colors.textPrimary : withAlpha(colors.textPrimary, 0.2) }]}>
+                    {quote ? formatUnits(quote.estimatedBuyAmountRaw, quote.buyToken.decimals) : "0.00"}
+                  </Text>
+                )}
               </View>
             </View>
           </View>
-        ) : (
-          /* "One Page" Compact Bridge Card */
-          <View style={styles.bridgeContainer}>
-            <View style={[styles.unifiedBridgeCard, { backgroundColor: glassBackground, borderColor: colors.border }]}>
-               {/* Integrated Network Selection Integrated */}
-               <View style={styles.bridgeNetworksIntegrated}>
-                  <View style={styles.bridgeNetworkHalf}>
-                    <Text style={[styles.bridgeMiniLabel, { color: colors.textMuted }]}>FROM</Text>
-                    <TouchableOpacity 
-                      style={[styles.bridgeNetworkPillIntegrated, { backgroundColor: withAlpha(colors.textSecondary, 0.03) }]}
-                      onPress={() => {
-                        setPickingType('from');
-                        setIsNetworkPickerVisible(true);
-                      }}
-                    >
-                      <View style={[styles.miniIcon, { backgroundColor: fromNetwork.color }]}>
-                        <Text style={styles.miniIconText}>{fromNetwork.name[0]}</Text>
-                      </View>
-                      <Text style={[styles.bridgeNetworkNameText, { color: colors.textPrimary }]} numberOfLines={1}>{fromNetwork.name}</Text>
-                      <Feather name="chevron-down" size={10} color={colors.textMuted} />
-                    </TouchableOpacity>
-                  </View>
+        </View>
 
-                  <View style={styles.bridgeArrowBox}>
-                    <Ionicons name="arrow-forward" size={14} color={colors.accent} />
-                  </View>
+        {/* Details / slippage card */}
+        <View style={[styles.detailsCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.5), borderColor: withAlpha(colors.border, 0.4) }]}>
 
-                  <View style={styles.bridgeNetworkHalf}>
-                    <Text style={[styles.bridgeMiniLabel, { color: colors.textMuted, textAlign: 'right' }]}>TO</Text>
-                    <TouchableOpacity 
-                      style={[styles.bridgeNetworkPillIntegrated, { backgroundColor: withAlpha(colors.textSecondary, 0.03) }]}
-                      onPress={() => {
-                        setPickingType('to');
-                        setIsNetworkPickerVisible(true);
-                      }}
-                    >
-                      <View style={[styles.miniIcon, { backgroundColor: toNetwork.color }]}>
-                        <Text style={styles.miniIconText}>{toNetwork.name[0]}</Text>
-                      </View>
-                      <Text style={[styles.bridgeNetworkNameText, { color: colors.textPrimary }]} numberOfLines={1}>{toNetwork.name}</Text>
-                      <Feather name="chevron-down" size={10} color={colors.textMuted} />
-                    </TouchableOpacity>
-                  </View>
-               </View>
-
-               <View style={styles.bridgeInputIntegrated}>
-                  <View style={styles.inputHeader}>
-                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Bridge Amount</Text>
-                    <TouchableOpacity onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
-                      <Text style={[styles.maxButton, { color: colors.accent }]}>Use Max</Text>
-                    </TouchableOpacity>
-                  </View>
-                  
-                  <View style={styles.bridgeInputRowIntegrated}>
-                    <TouchableOpacity 
-                      style={[styles.tokenSelectCompactIntegrated, { backgroundColor: withAlpha(colors.textSecondary, 0.05) }]}
-                      onPress={() => {
-                        setPickingType('from');
-                        setIsAssetPickerVisible(true);
-                      }}
-                    >
-                       <TokenIcon symbol={fromToken.symbol} size={28} />
-                       <Text style={[styles.tokenSymbolText, { color: colors.textPrimary }]}>{fromToken.symbol}</Text>
-                       <Feather name="chevron-down" size={12} color={colors.textMuted} />
-                    </TouchableOpacity>
-                    
-                    <TextInput 
-                      style={[styles.bridgeAmountInputIntegrated, { color: colors.textPrimary }]}
-                      placeholder="0.00"
-                      placeholderTextColor={colors.textMuted}
-                      keyboardType="decimal-pad"
-                      defaultValue="85.00"
-                    />
-                  </View>
-               </View>
-               
-               <View style={[styles.outputBannerIntegrated, { backgroundColor: withAlpha(colors.accent, 0.04), borderColor: withAlpha(colors.accent, 0.1) }]}>
-                  <View style={styles.outputHeaderRow}>
-                    <Text style={[styles.outputLabelText, { color: colors.textSecondary }]}>YOU RECEIVE</Text>
-                    <View style={[styles.routeBadgeCompact, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
-                      <Ionicons name="flash" size={8} color={colors.accent} />
-                      <Text style={[styles.routeLabelTextTiny, { color: colors.accent }]}>STARGATE</Text>
-                    </View>
-                  </View>
-                  <View style={styles.outputValueRow}>
-                    <Text style={[styles.outputValueLarge, { color: colors.textPrimary }]}>84.75 {fromToken.symbol}</Text>
-                    <Text style={[styles.outputFiatText, { color: colors.textMuted }]}>≈ $84.72</Text>
-                  </View>
-               </View>
+          {/* Slippage */}
+          <View style={styles.slippageSection}>
+            <View style={styles.slippageTitleRow}>
+              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Max Slippage</Text>
+              <Text style={[styles.slippageCurrentPct, { color: colors.textPrimary }]}>{slippagePct}%</Text>
             </View>
-
-            {/* Bridge Meta Info - Cleanly aligned */}
-            <View style={styles.bridgeMetaContainer}>
-              <View style={styles.metaBadgeGroup}>
-                <View style={[styles.metaBadge, { backgroundColor: colors.surfaceCard }]}>
-                  <Feather name="clock" size={10} color={colors.textSecondary} />
-                  <Text style={[styles.metaBadgeText, { color: colors.textSecondary }]}>3m</Text>
-                </View>
-                <View style={[styles.metaBadge, { backgroundColor: colors.surfaceCard }]}>
-                  <Feather name="activity" size={10} color={colors.textSecondary} />
-                  <Text style={[styles.metaBadgeText, { color: colors.textSecondary }]}>0.5%</Text>
-                </View>
-              </View>
-              
-              <TouchableOpacity style={[styles.recipientPill, { backgroundColor: withAlpha(colors.accentAlt, 0.08) }]}>
-                <Ionicons name="wallet-outline" size={12} color={colors.accentAlt} />
-                <Text style={[styles.recipientTextSmall, { color: colors.accentAlt }]} numberOfLines={1}>
-                  {recipientAddress.slice(0, 6)}...{recipientAddress.slice(-4)}
+            <View style={styles.slippagePresets}>
+              {SLIPPAGE_PRESETS.map((preset) => {
+                const isSelected = !customSlippageActive && slippagePct === preset;
+                return (
+                  <TouchableOpacity
+                    key={preset}
+                    onPress={() => { setSlippagePct(preset); setCustomSlippageActive(false); }}
+                    style={[
+                      styles.slippagePresetBtn,
+                      {
+                        backgroundColor: isSelected ? withAlpha(colors.accent, 0.14) : withAlpha(colors.surfaceCard, 0.7),
+                        borderColor: isSelected ? colors.accent : withAlpha(colors.border, 0.4),
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.slippagePresetText, { color: isSelected ? colors.accent : colors.textSecondary }]}>
+                      {preset}%
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                onPress={() => setCustomSlippageActive(true)}
+                style={[
+                  styles.slippagePresetBtn,
+                  {
+                    backgroundColor: customSlippageActive ? withAlpha(colors.accent, 0.14) : withAlpha(colors.surfaceCard, 0.7),
+                    borderColor: customSlippageActive ? colors.accent : withAlpha(colors.border, 0.4),
+                  },
+                ]}
+              >
+                <Text style={[styles.slippagePresetText, { color: customSlippageActive ? colors.accent : colors.textSecondary }]}>
+                  Custom
                 </Text>
               </TouchableOpacity>
             </View>
+            {customSlippageActive && (
+              <View style={[styles.customSlippageRow, { backgroundColor: withAlpha(colors.surfaceCard, 0.7), borderColor: withAlpha(colors.border, 0.4) }]}>
+                <TextInput
+                  style={[styles.customSlippageInput, { color: colors.textPrimary }]}
+                  value={slippagePct}
+                  onChangeText={setSlippagePct}
+                  keyboardType="decimal-pad"
+                  placeholder="0.5"
+                  placeholderTextColor={colors.textMuted}
+                  autoFocus
+                />
+                <Text style={[styles.customSlippageSuffix, { color: colors.textSecondary }]}>%</Text>
+              </View>
+            )}
           </View>
-        )}
 
-        
+          {/* Quote details — only shown when quote is available */}
+          {quote && (
+            <>
+              <View style={[styles.sectionDivider, { backgroundColor: withAlpha(colors.border, 0.4) }]} />
+              <View style={styles.detailRow}>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Estimated receive</Text>
+                <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
+                  {formatUnits(quote.estimatedBuyAmountRaw, quote.buyToken.decimals)} {quote.buyToken.symbol}
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Minimum receive</Text>
+                <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
+                  {formatUnits(quote.minimumBuyAmountRaw, quote.buyToken.decimals)} {quote.buyToken.symbol}
+                </Text>
+              </View>
+              {approvalRequired && (
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Token approval</Text>
+                  <View style={[styles.badge, { backgroundColor: withAlpha(colors.warning, 0.14), borderColor: withAlpha(colors.warning, 0.35) }]}>
+                    <Text style={[styles.badgeText, { color: colors.warning }]}>Required</Text>
+                  </View>
+                </View>
+              )}
+            </>
+          )}
 
-        {/* Detailed Transaction Stats */}
-        <View style={[styles.detailsCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.5), borderColor: colors.border, marginTop: activeTab === 'bridge' ? 12 : 12 }]}>
-          <View style={styles.detailRow}>
-            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Rate</Text>
-            <Text style={[styles.detailValue, { color: colors.textPrimary }]}>1 ETH = 3,450.20 USDC</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Slippage</Text>
-            <Text style={[styles.detailValue, { color: colors.textPrimary }]}>1%</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <View style={styles.labelWithIcon}>
-              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Trezo fee</Text>
-              <Feather name="info" size={12} color={colors.textMuted} style={{ marginLeft: 4 }} />
+          {/* Loading state */}
+          {(isQuoteLoading || balancesLoading) && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                {balancesLoading ? "Loading balances…" : "Getting best quote…"}
+              </Text>
             </View>
-            <Text style={[styles.detailValue, { color: colors.accent, fontWeight: '900' }]}>FREE</Text>
-          </View>
+          )}
+
+          {/* Error */}
+          {errorMessage && (
+            <View style={[styles.errorBanner, { backgroundColor: withAlpha(colors.danger, 0.1), borderColor: withAlpha(colors.danger, 0.25) }]}>
+              <Feather name="alert-circle" size={14} color={colors.danger} style={{ marginTop: 1 }} />
+              <Text style={[styles.errorText, { color: colors.danger }]}>{errorMessage}</Text>
+            </View>
+          )}
         </View>
 
-        {/* Ultimate Action Button */}
-        <TouchableOpacity 
-          style={[styles.mainActionButton, { backgroundColor: colors.accent }]}
-          activeOpacity={0.8}
+        {/* CTA buttons */}
+        <TouchableOpacity
+          style={[styles.primaryBtn, { backgroundColor: colors.accent, opacity: canReview ? 1 : 0.38 }]}
+          onPress={handleReviewSwap}
+          disabled={!canReview || isValidating}
         >
-          <Text style={[styles.mainActionButtonText, { color: colors.textOnAccent }]}>
-            {activeTab === 'swap' ? 'Review Swap' : 'Review Bridge'}
-          </Text>
+          {isValidating ? (
+            <ActivityIndicator size="small" color={colors.textOnAccent} />
+          ) : (
+            <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>Review Swap</Text>
+          )}
         </TouchableOpacity>
 
-
+        {canExecute && (
+          <TouchableOpacity
+            style={[
+              styles.secondaryBtn,
+              {
+                backgroundColor: withAlpha(colors.surfaceCard, 0.8),
+                borderColor: withAlpha(colors.border, 0.3),
+              },
+            ]}
+            onPress={handleExecuteSwap}
+          >
+            <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Confirm & Execute</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
-
-      <AccountPickerModal
-        isVisible={isAccountPickerVisible}
-        onClose={() => setIsAccountPickerVisible(false)}
-        onSelect={handleAccountSelect}
-        accounts={accounts}
-        selectedAddress={activeAccount?.address}
-      />
 
       <AssetPickerModal
         isVisible={isAssetPickerVisible}
         onClose={() => setIsAssetPickerVisible(false)}
-        onSelect={handleAssetSelect}
-        assets={tokens}
-      />
-
-      <NetworkPickerModal
-        isVisible={isNetworkPickerVisible}
-        onClose={() => setIsNetworkPickerVisible(false)}
-        onSelect={handleNetworkSelect}
-        selectedNetworkId={pickingType === 'from' ? fromNetwork.id : toNetwork.id}
+        onSelect={(asset) => {
+          handleTokenSelect(asset);
+          setIsAssetPickerVisible(false);
+        }}
+        assets={assetPickerList}
+        title={assetPickerSide === "sell" ? "Select Sell Token" : "Select Buy Token"}
       />
     </TabScreenContainer>
   );
@@ -410,393 +783,308 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 40,
   },
+
+  // Header
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: 10,
     marginBottom: 20,
-    marginTop: 10,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: -0.8,
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: -1,
   },
-  headerRightGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  headerMeta: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
-  accountSelectorMini: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
+  networkBadge: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
-  },
-  miniAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  miniAvatarText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#FFF',
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     borderWidth: 1,
   },
+  networkDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  networkBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  walletAddressText: {
+    fontSize: 12,
+    fontWeight: "500",
+    letterSpacing: 0.3,
+  },
+
+  // Tabs
   tabContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 4,
-    borderRadius: 16,
-    marginBottom: 20,
+    borderRadius: 14,
+    marginBottom: 12,
   },
   tab: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   tabText: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "700",
   },
-  mainCard: {
-    borderRadius: 32,
-    padding: 0,
+
+  // Chain chips
+  chainRow: {
+    gap: 8,
+    marginBottom: 14,
+    paddingRight: 8,
+  },
+  chainChip: {
+    borderRadius: 8,
     borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: 16,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
   },
-  integratedNetworkBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
+  chainChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.1,
   },
-  networkInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+
+  // Main swap card
+  mainCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  swapSide: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     gap: 10,
   },
-  networkIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
+  swapSideHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  networkIconText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  networkName: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  networkAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  networkActionText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  inputContainer: {
-    padding: 20,
-    gap: 10,
-  },
-  inputHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  maxButton: {
+  swapSideLabel: {
     fontSize: 13,
-    fontWeight: '900',
+    fontWeight: "600",
   },
-  inputRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 16,
+  balanceHint: {
+    fontSize: 12,
+    fontWeight: "500",
   },
-  tokenSelect: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 16,
-    gap: 10,
-    minWidth: 110,
+  swapSideRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
-  tokenSymbol: {
-    fontSize: 16,
+  tokenButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 7,
+  },
+  tokenButtonSymbol: {
+    fontSize: 15,
+    fontWeight: "800",
   },
   amountInput: {
-    fontSize: 36,
-    fontWeight: '900',
-    textAlign: 'right',
     flex: 1,
-    letterSpacing: -1,
+    textAlign: "right",
+    fontSize: 30,
+    fontWeight: "700",
+    letterSpacing: -0.5,
     padding: 0,
   },
-  amountResult: {
-    fontSize: 36,
-    fontWeight: '900',
-    textAlign: 'right',
-    letterSpacing: -1,
+  receiveAmountBox: {
+    flex: 1,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minHeight: 36,
   },
-  inputFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  receiveAmount: {
+    fontSize: 26,
+    fontWeight: "700",
+    letterSpacing: -0.5,
+    textAlign: "right",
   },
-  balanceText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  fiatValue: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 24,
+
+  // Swap direction divider
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 28,
   },
   dividerLine: {
     flex: 1,
     height: 1,
   },
-  swapIconButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+  swapDirectionBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 1,
-    position: 'absolute',
-    left: '50%',
-    marginLeft: -24,
+    position: "absolute",
+    left: "50%",
+    marginLeft: -19,
     zIndex: 10,
   },
-  bridgeContainer: {
-    gap: 16,
-  },
-  unifiedBridgeCard: {
-    borderRadius: 32,
-    padding: 20,
-    borderWidth: 1,
-    gap: 20,
-  },
-  bridgeNetworksIntegrated: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  bridgeNetworkHalf: {
-    flex: 1,
-    gap: 8,
-  },
-  bridgeMiniLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  bridgeNetworkPillIntegrated: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 12,
-    gap: 8,
-  },
-  miniIcon: {
-    width: 18,
-    height: 18,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  miniIconText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  bridgeNetworkNameText: {
-    fontSize: 13,
-    fontWeight: '800',
-    flex: 1,
-  },
-  bridgeArrowBox: {
-    marginTop: 20,
-  },
-  bridgeInputIntegrated: {
-    gap: 10,
-  },
-  bridgeInputRowIntegrated: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  tokenSelectCompactIntegrated: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 14,
-    gap: 8,
-  },
-  tokenSymbolText: {
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  bridgeAmountInputIntegrated: {
-    fontSize: 32,
-    fontWeight: '900',
-    flex: 1,
-    textAlign: 'right',
-    letterSpacing: -1,
-    padding: 0,
-  },
-  outputBannerIntegrated: {
-    borderRadius: 24,
+
+  // Details card
+  detailsCard: {
+    borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    gap: 8,
+    gap: 12,
+    marginBottom: 16,
   },
-  outputHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  slippageSection: {
+    gap: 10,
   },
-  outputLabelText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+  slippageTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  routeBadgeCompact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
-  },
-  routeLabelTextTiny: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  outputValueRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-  },
-  outputValueLarge: {
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  outputFiatText: {
+  slippageCurrentPct: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "800",
   },
-  bridgeMetaContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  metaBadgeGroup: {
-    flexDirection: 'row',
+  slippagePresets: {
+    flexDirection: "row",
     gap: 8,
   },
-  metaBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  slippagePresetBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  slippagePresetText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  customSlippageRow: {
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 10,
-    gap: 4,
-  },
-  metaBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  recipientPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 100,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     gap: 6,
   },
-  recipientTextSmall: {
-    fontSize: 11,
-    fontWeight: '800',
-    maxWidth: 120,
+  customSlippageInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700",
+    padding: 0,
   },
-  detailsCard: {
-    borderRadius: 24,
-    padding: 16,
-    borderWidth: 1,
-    gap: 12,
+  customSlippageSuffix: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  sectionDivider: {
+    height: 1,
+    marginVertical: 2,
   },
   detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  labelWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
   },
   detailLabel: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "600",
   },
   detailValue: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: "700",
+    textAlign: "right",
+    flex: 1,
+    flexShrink: 1,
   },
-  mainActionButton: {
+  badge: {
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  errorBanner: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    flex: 1,
+    lineHeight: 18,
+  },
+
+  // Buttons
+  primaryBtn: {
     height: 56,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  mainActionButtonText: {
+  primaryBtnText: {
     fontSize: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  secondaryBtn: {
+    marginTop: 10,
+    height: 52,
+    borderRadius: 16,
+    borderWidth: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  secondaryBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
 });
 
