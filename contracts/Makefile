@@ -20,12 +20,19 @@ RPC_URL ?= $(ANVIL_RPC_URL)
 CHAIN_ID ?= $(CHAIN_ID_LOCAL)
 SCRIPT_VERBOSITY ?= -vvvv
 
+# ── Base Fork ────────────────────────────────────────────────────────────────
+BASE_FORK_RPC_URL   ?= http://192.168.100.68:8545
+BASE_FORK_CHAIN_ID  ?= 8453
+BASE_FORK_PROFILE   ?= base-mainnet-fork
+ENTRYPOINT         ?= 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+
 ANVIL_NETWORK_ARGS := --rpc-url $(ANVIL_RPC_URL) --private-key $(LOCAL_PRIVATE_KEY) --broadcast $(SCRIPT_VERBOSITY)
 
 DEPLOY_SCRIPT_ENV := \
 	$(if $(PRIVATE_KEY),PRIVATE_KEY=$(PRIVATE_KEY)) \
 	$(if $(ENTRYPOINT),ENTRYPOINT=$(ENTRYPOINT)) \
-	$(if $(DEPLOYMENT_NAMESPACE),DEPLOYMENT_NAMESPACE=$(DEPLOYMENT_NAMESPACE))
+	$(if $(DEPLOYMENT_NAMESPACE),DEPLOYMENT_NAMESPACE=$(DEPLOYMENT_NAMESPACE)) \
+	$(if $(DEPLOYMENT_PROFILE),DEPLOYMENT_PROFILE=$(DEPLOYMENT_PROFILE))
 
 OPTIONAL_ENTRYPOINT_MAKE := $(if $(ENTRYPOINT),ENTRYPOINT=$(ENTRYPOINT))
 
@@ -188,13 +195,17 @@ check-chain-support-sepolia:
 # Needs: jq installed
 .PHONY: sync-mobile
 sync-mobile:
-	@echo "Syncing artifacts for chain $(CHAIN_ID) to $(MOBILE_DIR)"
+	@echo "Syncing artifacts to $(MOBILE_DIR)"
 	mkdir -p $(MOBILE_DIR)/contracts
-
-	# copy the derived compatibility manifest used by local/mobile flows
-	# canonical release truth lives in deployments/releases/* and deployments/chains/*
+ifeq ($(DEPLOYMENT_PROFILE),)
+	# Default: copy by chain-id
 	cp deployments/$(CHAIN_ID).json \
 		$(MOBILE_DIR)/contracts/deployment.$(CHAIN_ID).json
+else
+	# Profile-aware: copy by deployment profile
+	cp deployments/$(DEPLOYMENT_PROFILE).json \
+		$(MOBILE_DIR)/contracts/deployment.$(DEPLOYMENT_PROFILE).json
+endif
 
 .PHONY: sync-abi
 sync-abi:
@@ -218,6 +229,24 @@ sync-abi:
 	jq '{abi: .abi}' out/EmailRecovery.sol/EmailRecovery.json \
 		> $(MOBILE_DIR)/abi/EmailRecovery.json
 
+# ── Base Fork Deploy ─────────────────────────────────────────────────────────
+
+.PHONY: deploy-fork-base
+deploy-fork-base:
+	@echo "Deploying Trezo infra to Base mainnet fork at $(BASE_FORK_RPC_URL)"
+	$(MAKE) check-root-factory RPC_URL=$(BASE_FORK_RPC_URL)
+	$(MAKE) predict-infra RPC_URL=$(BASE_FORK_RPC_URL) ENTRYPOINT=$(ENTRYPOINT)
+	$(MAKE) deploy-infra \
+		RPC_URL=$(BASE_FORK_RPC_URL) \
+		PRIVATE_KEY=$(LOCAL_PRIVATE_KEY) \
+		DEPLOYMENT_NAMESPACE=$(BASE_FORK_PROFILE) \
+		DEPLOYMENT_PROFILE=$(BASE_FORK_PROFILE) \
+		ENTRYPOINT=$(ENTRYPOINT)
+	$(MAKE) verify-infra RPC_URL=$(BASE_FORK_RPC_URL) ENTRYPOINT=$(ENTRYPOINT)
+	$(MAKE) sync-mobile CHAIN_ID=$(BASE_FORK_CHAIN_ID) DEPLOYMENT_PROFILE=$(BASE_FORK_PROFILE)
+	$(MAKE) sync-abi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ---------- Local dev harness targets ----------
 # These targets deploy or test the EmailRecoveryHarness, which is a dev-only
 # contract that exposes internal functions for local testing. The harness is
