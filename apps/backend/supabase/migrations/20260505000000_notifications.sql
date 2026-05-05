@@ -29,6 +29,26 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   read_at TIMESTAMPTZ
 );
 
+-- Idempotent column guards: original table (init_schema_consolidated) only had
+-- id, user_id, title, body, read, created_at — add everything new here.
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS
+  aa_wallet_id UUID REFERENCES public.aa_wallets(id) ON DELETE SET NULL;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS
+  category TEXT NOT NULL DEFAULT 'system' CHECK (category IN (
+    'incoming_transfer','outgoing_tx','swap','security','recovery','system'
+  ));
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS
+  status TEXT NOT NULL DEFAULT 'unread' CHECK (status IN ('unread','read'));
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS icon TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS accent TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS
+  related_tx_id UUID REFERENCES public.wallet_transactions(id) ON DELETE SET NULL;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS notifications_user_created_idx
   ON public.notifications(user_id, created_at DESC);
 
