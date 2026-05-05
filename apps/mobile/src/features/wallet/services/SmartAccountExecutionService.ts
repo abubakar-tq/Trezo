@@ -1,6 +1,9 @@
 import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import type { SupportedChainId } from "@/src/integration/chains";
+import { getNetworkConfig, getBundlerUrlForNetwork } from "@/src/integration/networks";
+import type { NetworkKey } from "@/src/integration/networks";
 import { getDeployment, buildSmartAccountExecutionUserOp, submitConfiguredUserOp, waitForUserOperationReceipt } from "@/src/integration/viem";
+import { getDeploymentForNetwork } from "@/src/integration/viem/deployments";
 import LocalPasskeyService from "@/src/features/wallet/services/PasskeyService";
 import type { PreparedSmartAccountExecution, PreparedUserOperation, SignedUserOperation } from "@/src/features/wallet/types/execution";
 import type { Hex } from "viem";
@@ -32,8 +35,20 @@ export type UserOperationReceiptResult = {
   success: boolean;
 };
 
-const resolveBundlerUrl = (chainId: SupportedChainId, override?: string): string => {
+const resolveBundlerUrl = (
+  chainId: SupportedChainId,
+  override?: string,
+  networkKey?: NetworkKey,
+): string => {
   if (override) return override;
+  // Prefer network-key resolution (fork-aware)
+  if (networkKey) {
+    try {
+      return getBundlerUrlForNetwork(networkKey);
+    } catch {
+      // Fallback to chain-id
+    }
+  }
   return getBundlerUrl(chainId);
 };
 
@@ -41,14 +56,33 @@ const resolvePaymasterUrl = (
   chainId: SupportedChainId,
   usePaymaster?: boolean,
   override?: string,
+  networkKey?: NetworkKey,
 ): string | undefined => {
   if (!usePaymaster) return undefined;
   if (override) return override;
-  return getPaymasterUrl(chainId);
+  // For fork networks, paymaster is optional (defaultUsePaymaster)
+  if (networkKey) {
+    try {
+      const config = getNetworkConfig(networkKey);
+      return config.paymasterUrl;
+    } catch {
+      // Fallback to chain-id
+    }
+  }
+  try {
+    return getPaymasterUrl(chainId);
+  } catch {
+    return undefined;
+  }
 };
 
-const getEntryPointAddress = (chainId: SupportedChainId) => {
-  const deployment = getDeployment(chainId);
+const getEntryPointAddress = (chainId: SupportedChainId, networkKey?: NetworkKey) => {
+  // Try network-key-aware deployment first
+  if (networkKey) {
+    const dep = getDeploymentForNetwork(networkKey);
+    if (dep?.entryPoint) return dep.entryPoint;
+  }
+  const deployment = getDeployment(chainId as never);
   if (!deployment?.entryPoint) {
     throw new Error(`Deployment is missing entry point for chain ${chainId}`);
   }
@@ -85,8 +119,8 @@ export class SmartAccountExecutionService {
       throw new Error("No local passkey found for this user. Create a passkey before sending.");
     }
 
-    const bundlerUrl = resolveBundlerUrl(execution.chainId, options.bundlerUrl);
-    const paymasterUrl = resolvePaymasterUrl(execution.chainId, options.usePaymaster, options.paymasterUrl);
+    const bundlerUrl = resolveBundlerUrl(execution.chainId, options.bundlerUrl, execution.networkKey);
+    const paymasterUrl = resolvePaymasterUrl(execution.chainId, options.usePaymaster, options.paymasterUrl, execution.networkKey);
 
     const { userOp, userOpHash } = await buildSmartAccountExecutionUserOp({
       chainId: execution.chainId,
@@ -111,7 +145,7 @@ export class SmartAccountExecutionService {
     return {
       chainId: execution.chainId,
       account: execution.account,
-      entryPoint: getEntryPointAddress(execution.chainId),
+      entryPoint: getEntryPointAddress(execution.chainId, execution.networkKey),
       bundlerUrl,
       paymasterUrl,
       userOp,

@@ -3,6 +3,8 @@ import type { Hex } from "viem";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import { DEFAULT_CHAIN_ID } from "@/src/integration/chains";
+
 export type WalletAccount = {
   id: string;
   address: string;
@@ -156,7 +158,7 @@ const initialState = {
   balancesLoading: false,
   transactions: [],
   transactionsLoading: false,
-  activeChainId: 31337, // Anvil default
+  activeChainId: DEFAULT_CHAIN_ID,
   rpcUrl: "http://10.0.2.2:8545", // Android emulator localhost
 } satisfies Partial<WalletStore>;
 
@@ -263,6 +265,25 @@ export const useWalletStore = create<WalletStore>()(
     {
       name: "trezo-wallet-store",
       storage: createJSONStorage(() => AsyncStorage),
+      version: 2,
+      migrate: (persisted: any, fromVersion) => {
+        // v2: force activeChainId back to the env-driven DEFAULT_CHAIN_ID and drop
+        // any aaAccount whose chainId no longer matches. Earlier migrations could have
+        // baked in 31337 when DEFAULT_CHAIN_ID resolved before the env was loaded.
+        if (fromVersion < 2) {
+          const staleAccount =
+            persisted?.aaAccount && persisted.aaAccount.chainId !== DEFAULT_CHAIN_ID
+              ? null
+              : persisted?.aaAccount;
+          return {
+            ...persisted,
+            activeChainId: DEFAULT_CHAIN_ID,
+            aaAccount: staleAccount,
+            accountDeploymentStatus: staleAccount ? persisted?.accountDeploymentStatus : "idle",
+          };
+        }
+        return persisted;
+      },
       partialize: ({
         accounts,
         activeAccount,
@@ -272,8 +293,8 @@ export const useWalletStore = create<WalletStore>()(
         accountDeploymentStatus,
         passkeys,
         guardians,
-        activeChainId,
-        rpcUrl,
+        // intentionally NOT persisting activeChainId / rpcUrl — these are env-driven
+        // and should always come from initialState on launch.
       }) => ({
         accounts,
         activeAccount,
@@ -283,8 +304,6 @@ export const useWalletStore = create<WalletStore>()(
         accountDeploymentStatus,
         passkeys,
         guardians,
-        activeChainId,
-        rpcUrl,
       }),
     }
   )

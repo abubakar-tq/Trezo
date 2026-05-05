@@ -1,9 +1,12 @@
 import type { SupportedChainId } from "@/src/integration/chains";
+import type { NetworkKey } from "@/src/integration/networks";
 import type { Address, Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
 
 export type PreparedSmartAccountExecution = {
   chainId: SupportedChainId;
+  /** Optional: use for fork-vs-mainnet bundler/paymaster resolution. */
+  networkKey?: NetworkKey;
   account: Address;
   target: Address;
   value: bigint;
