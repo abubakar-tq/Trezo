@@ -36,6 +36,8 @@ export type DexConfig = {
   factoryAddress: Address;
   quoterAddress: Address;
   routerAddress: Address;
+  /** Wrapped native token address (e.g. WETH). Used to route native ETH → ERC20 swaps via the router. */
+  wrappedNativeAddress: Address;
   /** Addresses that are allowed to receive ERC20 approvals. */
   trustedSpenders: Address[];
   supportedPools: DexPoolConfig[];
@@ -50,6 +52,8 @@ const BASE_WETH = "0x4200000000000000000000000000000000000006" as Address;
 const UNISWAP_V3_FACTORY_BASE = "0x33128a8fC17869897dcE68Ed026d694621f6FDfD" as Address;
 const UNISWAP_QUOTER_V2_BASE = "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a" as Address;
 const UNISWAP_SWAP_ROUTER02_BASE = "0x2626664c2603336E57B271c5C0b26F421741e481" as Address;
+// Uniswap V2 on Base — verify: cast code 0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24 --rpc-url $FORK_RPC_URL
+const UNISWAP_V2_ROUTER_BASE = "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24" as Address;
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
@@ -61,19 +65,22 @@ const DEX_CONFIGS: Partial<Record<NetworkKey, DexConfig>> = {
     factoryAddress: UNISWAP_V3_FACTORY_BASE,
     quoterAddress: UNISWAP_QUOTER_V2_BASE,
     routerAddress: UNISWAP_SWAP_ROUTER02_BASE,
-    trustedSpenders: [UNISWAP_SWAP_ROUTER02_BASE],
+    wrappedNativeAddress: BASE_WETH,
+    trustedSpenders: [UNISWAP_SWAP_ROUTER02_BASE, UNISWAP_V2_ROUTER_BASE],
     supportedPools: [
       {
         sellToken: BASE_USDC,
         buyToken: BASE_WETH,
-        // 0.05% pool — most liquid USDC/WETH pool on Base
         feeTier: 500,
+        // Hardcoded to skip the factory.getPool() round-trip to the remote RPC
+        poolAddress: "0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59" as Address,
         enabled: true,
       },
       {
         sellToken: BASE_WETH,
         buyToken: BASE_USDC,
         feeTier: 500,
+        poolAddress: "0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59" as Address,
         enabled: true,
       },
     ],
@@ -85,18 +92,21 @@ const DEX_CONFIGS: Partial<Record<NetworkKey, DexConfig>> = {
     factoryAddress: UNISWAP_V3_FACTORY_BASE,
     quoterAddress: UNISWAP_QUOTER_V2_BASE,
     routerAddress: UNISWAP_SWAP_ROUTER02_BASE,
-    trustedSpenders: [UNISWAP_SWAP_ROUTER02_BASE],
+    wrappedNativeAddress: BASE_WETH,
+    trustedSpenders: [UNISWAP_SWAP_ROUTER02_BASE, UNISWAP_V2_ROUTER_BASE],
     supportedPools: [
       {
         sellToken: BASE_USDC,
         buyToken: BASE_WETH,
         feeTier: 500,
+        poolAddress: "0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59" as Address,
         enabled: true,
       },
       {
         sellToken: BASE_WETH,
         buyToken: BASE_USDC,
         feeTier: 500,
+        poolAddress: "0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59" as Address,
         enabled: true,
       },
     ],
