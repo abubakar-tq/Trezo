@@ -65,7 +65,11 @@ apps/guardian-approval/.env
 apps/backend/zk-email-recovery-api/src/future-only/
 scripts/graphify-solidity-parser-scripts
 
-#Agent Settings 
+# Claude Code local config (machine-specific paths / private instructions)
+.mcp.json
+CLAUDE.md
+
+#Agent Settings
 agent-artifacts/
 .kilo/
 kilo.jsonc
