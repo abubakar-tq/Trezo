@@ -1,6 +1,6 @@
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { RootStackParamList } from "@/src/types/navigation";
 import { navigationRef } from "@app/navigation/navigationRef";
@@ -17,7 +17,8 @@ import EmailRecoveryScreen from "@features/profile/screens/EmailRecoveryScreen";
 import EmailRecoveryGroupStatusScreen from "@features/profile/screens/EmailRecoveryGroupStatusScreen";
 import EmailRecoveryStartScreen from "@features/profile/screens/EmailRecoveryStartScreen";
 import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
-import NotificationsScreen from "@features/profile/screens/NotificationsScreen";
+import NotificationCenterScreen from "@features/notifications/screens/NotificationCenterScreen";
+import NotificationSettingsScreen from "@features/profile/screens/NotificationSettingsScreen";
 import PairDeviceScreen from "@features/profile/screens/PairDeviceScreen";
 import ProfileEditScreen from "@features/profile/screens/ProfileEditScreen";
 import RecoveryKitExportScreen from "@features/profile/screens/RecoveryKitExportScreen";
@@ -32,6 +33,9 @@ import SecurityCenterScreen from "@features/recovery/screens/SecurityCenterScree
 import ShareRecoveryScreen from "@features/recovery/screens/ShareRecoveryScreen";
 import ThresholdConfigurationScreen from "@features/recovery/screens/ThresholdConfigurationScreen";
 import SettingsScreen from "@features/settings/screens/SettingsScreen";
+import TransactionDetailScreen from "@features/transactions/screens/TransactionDetailScreen";
+import TransactionHistoryScreen from "@features/transactions/screens/TransactionHistoryScreen";
+import TransactionStatusScreen from "@features/transactions/screens/TransactionStatusScreen";
 import AATestScreen from "@features/wallet/screens/AATestScreen";
 import AAWalletDebugScreen from "@features/wallet/screens/AAWalletDebugScreen";
 import BuyScreen from "@features/wallet/screens/BuyScreen";
@@ -39,7 +43,6 @@ import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
 import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScreen";
 import ReceiveScreen from "@features/wallet/screens/ReceiveScreen";
 import SendScreen from "@features/wallet/screens/SendScreen";
-import TransactionHistoryScreen from "@features/wallet/screens/TransactionHistoryScreen";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
@@ -56,6 +59,12 @@ const RootNavigation = () => {
   const { theme } = useAppTheme();
   const [showingSplash, setShowingSplash] = useState(true);
   const splashTarget = isLoggedIn ? "DeviceVerification" : "AuthNavigation";
+  // Keep a ref so the timer callback always reads the latest value without
+  // being a dependency (which would cancel + restart the timer on every auth event).
+  const splashTargetRef = useRef(splashTarget);
+  useEffect(() => {
+    splashTargetRef.current = splashTarget;
+  }, [splashTarget]);
 
   console.log(
     "🔄 [RootNavigation] Rendering, isLoggedIn:",
@@ -69,10 +78,8 @@ const RootNavigation = () => {
   }, [isLoggedIn, setGuardNavigation]);
 
   useEffect(() => {
-    if (!showingSplash) {
-      return;
-    }
-
+    // Fire once on mount. splashTargetRef is read at fire time so it always
+    // reflects the settled auth state, even if isLoggedIn changed mid-timer.
     console.log("⏱️ [RootNavigation] Starting splash timer");
     const timer = setTimeout(() => {
       console.log("✅ [RootNavigation] Splash complete, hiding splash");
@@ -80,13 +87,14 @@ const RootNavigation = () => {
       if (navigationRef.isReady()) {
         navigationRef.resetRoot({
           index: 0,
-          routes: [{ name: splashTarget }],
+          routes: [{ name: splashTargetRef.current }],
         });
       }
     }, 2500);
 
     return () => clearTimeout(timer);
-  }, [showingSplash, splashTarget]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <NavigationContainer
@@ -313,7 +321,15 @@ const RootNavigation = () => {
         />
         <Stack.Screen
           name="Notifications"
-          component={NotificationsScreen}
+          component={NotificationCenterScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="NotificationSettings"
+          component={NotificationSettingsScreen}
           options={{
             headerShown: false,
             animation: "slide_from_right",
@@ -398,6 +414,16 @@ const RootNavigation = () => {
         <Stack.Screen
           name="TransactionHistory"
           component={TransactionHistoryScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="TransactionStatus"
+          component={TransactionStatusScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="TransactionDetail"
+          component={TransactionDetailScreen}
           options={{ headerShown: false, animation: "slide_from_right" }}
         />
       </Stack.Navigator>
