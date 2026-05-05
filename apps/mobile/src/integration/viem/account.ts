@@ -186,6 +186,19 @@ export async function getPasskeyOnchainState({
 const DEV_FUNDER_PRIVATE_KEY =
   '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
 
+const assertRpcChainMatchesSigner = async (
+  publicClient: ReturnType<typeof getPublicClient>,
+  chainId: SupportedChainId,
+) => {
+  const rpcChainId = await publicClient.getChainId();
+  if (rpcChainId !== chainId) {
+    throw new Error(
+      `RPC chain id mismatch: configured signer chain is ${chainId}, but the RPC reports ${rpcChainId}. `
+      + "Set EXPO_PUBLIC_DEFAULT_CHAIN_ID/EXPO_PUBLIC_DEFAULT_NETWORK_KEY or the RPC URL so they point at the same network.",
+    );
+  }
+};
+
 export async function fundAccount({
   chainId,
   to,
@@ -197,6 +210,7 @@ export async function fundAccount({
 }) {
   const walletClient = getWalletClientFromPrivateKey(DEV_FUNDER_PRIVATE_KEY, chainId);
   const publicClient = getPublicClient(chainId);
+  await assertRpcChainMatchesSigner(publicClient, chainId);
 
   const hash = await walletClient.sendTransaction({
     to,
@@ -232,9 +246,14 @@ export async function fundEntryPointDeposit({
 }) {
   const walletClient = getWalletClientFromPrivateKey(DEV_FUNDER_PRIVATE_KEY, chainId);
   const publicClient = getPublicClient(chainId);
+  await assertRpcChainMatchesSigner(publicClient, chainId);
+  const entryPoint = getDeployment(chainId)?.entryPoint as Address | undefined;
+  if (!entryPoint || entryPoint === '0x0000000000000000000000000000000000000000') {
+    throw new Error(`EntryPoint address missing for chain ${chainId}. Deploy and sync mobile contract artifacts first.`);
+  }
 
   const hash = await walletClient.writeContract({
-    address: getDeployment(chainId)?.entryPoint as Address,
+    address: entryPoint,
     abi: entryPointAbi,
     functionName: 'depositTo',
     args: [account],

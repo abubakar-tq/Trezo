@@ -9,9 +9,13 @@ export type SupportedChainId =
   | 11155111
   | 1
   | 324
-  | 300;
+  | 300
+  | 8453;
 
-export type ChainEnvironment = "local" | "testnet" | "mainnet";
+/** @deprecated Use ChainEnvironmentExtended from networks.ts which includes 'local_fork'. */
+export type ChainEnvironment = "local" | "local_fork" | "testnet" | "mainnet";
+// Re-export extended type for callers that import from chains.ts
+export type { ChainEnvironmentExtended } from "./networks";
 
 export type NativeCurrency = {
   name: string;
@@ -38,6 +42,18 @@ const DEFAULT_NATIVE_CURRENCY: NativeCurrency = {
   symbol: "ETH",
   decimals: 18,
 };
+
+const parseSupportedChainId = (value?: string): SupportedChainId | undefined => {
+  const parsed = Number(value);
+  if ([31337, 11155111, 1, 324, 300, 8453].includes(parsed)) {
+    return parsed as SupportedChainId;
+  }
+  return undefined;
+};
+
+const resolveDefaultChainId = (): SupportedChainId =>
+  parseSupportedChainId(process.env.EXPO_PUBLIC_DEFAULT_CHAIN_ID)
+  ?? (process.env.EXPO_PUBLIC_DEFAULT_NETWORK_KEY === "base-mainnet-fork" ? 8453 : 31337);
 
 const DEFAULT_LOCAL_LAPTOP_IP = process.env.EXPO_PUBLIC_LAPTOP_IP || "10.70.81.26";
 
@@ -154,9 +170,31 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
     environment: "testnet",
     isEnabled: false,
   },
+  8453: {
+    id: 8453,
+    name: "Base Mainnet Fork",
+    nativeCurrency: DEFAULT_NATIVE_CURRENCY,
+    rpcUrl:
+      process.env.EXPO_PUBLIC_BASE_FORK_RPC_URL ??
+      `http://${process.env.EXPO_PUBLIC_INFRA_IP ?? "192.168.100.68"}:8545`,
+    bundlerUrl:
+      process.env.EXPO_PUBLIC_BASE_FORK_BUNDLER_URL ??
+      `http://${process.env.EXPO_PUBLIC_INFRA_IP ?? "192.168.100.68"}:4337`,
+    paymasterUrl: process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL,
+    ...withDeployment(8453 as never), // 8453 resolves via profile in deployments.ts
+    blockExplorerUrl: "https://basescan.org",
+    environment: "local_fork" as ChainEnvironment,
+    isEnabled: (() => {
+      // Enabled when the fork deployment manifest is present.
+      // (Use getDeployment so the manifest-resolution logic stays in one place;
+      // the previous inline require used the wrong relative path and always failed.)
+      const d = getDeployment("base-mainnet-fork");
+      return Boolean(d?.entryPoint && d?.accountFactory);
+    })(),
+  },
 };
 
-export const DEFAULT_CHAIN_ID: SupportedChainId = 31337;
+export const DEFAULT_CHAIN_ID: SupportedChainId = resolveDefaultChainId();
 export const SUPPORTED_CHAIN_IDS = Object.keys(CHAINS).map(Number) as SupportedChainId[];
 
 export const PORTABLE_CHAIN_IDS = [1, 11155111, 10, 8453, 42161, 137] as const;
