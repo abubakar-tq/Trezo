@@ -25,7 +25,7 @@ import {
     HeadlineText,
     TitleText,
 } from "../../../shared/components/Tier1/Text";
-import { Colors, Spacing } from "../../../shared/components/TokenRegistry";
+import { Spacing } from "../../../shared/components/TokenRegistry";
 import { useAppTheme } from "@theme";
 
 interface Notification {
@@ -103,9 +103,8 @@ const MOCK_NOTIFICATIONS: Notification[] = [
 export const NotificationCenterScreen: React.FC<
   NotificationCenterScreenProps
 > = ({ onSettingsPress }) => {
-  const { resolvedMode, theme } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
-  const isDark = resolvedMode === 'dark';
   const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -125,9 +124,7 @@ export const NotificationCenterScreen: React.FC<
       <View
         style={{
           backgroundColor: !notification.read
-            ? isDark
-              ? Colors.surface
-              : "#f3f4f6"
+            ? colors.surface
             : "transparent",
           opacity: !notification.read ? 1 : 0.7,
         }}
@@ -172,16 +169,14 @@ export const NotificationCenterScreen: React.FC<
                         width: 8,
                         height: 8,
                         borderRadius: 4,
-                        backgroundColor: Colors.primary,
+                        backgroundColor: colors.accent,
                       }}
                     />
                   )}
                 </View>
 
                 <BodyText
-                  color={
-                    isDark ? Colors.textSecondary : Colors.lightTextSecondary
-                  }
+                  color={colors.textSecondary}
                   style={{ fontSize: 12, lineHeight: 16 }}
                 >
                   {notification.message}
@@ -215,11 +210,11 @@ export const NotificationCenterScreen: React.FC<
               gap: Spacing.sp2,
               paddingTop: Spacing.sp2,
               borderTopWidth: 1,
-              borderTopColor: isDark ? Colors.surfaceMid : "#e5e7eb",
+              borderTopColor: colors.surfaceCard,
             }}
           >
             <CaptionText
-              color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
+              color={colors.textMuted}
             >
               {notification.timestamp}
             </CaptionText>
@@ -278,7 +273,7 @@ export const NotificationCenterScreen: React.FC<
             )}
           </View>
           <BodyText
-            color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
+            color={colors.textSecondary}
           >
             Stay updated on transactions and security.
           </BodyText>
@@ -295,7 +290,7 @@ export const NotificationCenterScreen: React.FC<
         {/* NOTIFICATIONS LIST */}
         {notifications.length > 0 ? (
           <View style={{ gap: Spacing.sp3 }}>
-            <CaptionText color={Colors.primary}>
+            <CaptionText color={colors.accent}>
               {unreadCount > 0 ? `${unreadCount} Unread` : "All caught up"}
             </CaptionText>
 
@@ -318,9 +313,7 @@ export const NotificationCenterScreen: React.FC<
               <View style={{ alignItems: "center", gap: Spacing.sp2 }}>
                 <TitleText>No notifications</TitleText>
                 <BodyText
-                  color={
-                    isDark ? Colors.textSecondary : Colors.lightTextSecondary
-                  }
+                  color={colors.textSecondary}
                   style={{ fontSize: 13, textAlign: "center" }}
                 >
                   You're all caught up. New alerts will appear here.
@@ -335,7 +328,7 @@ export const NotificationCenterScreen: React.FC<
           <View style={{ gap: Spacing.sp2 }}>
             <TitleText>Customize Notifications</TitleText>
             <BodyText
-              color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
+              color={colors.textSecondary}
               style={{ fontSize: 13 }}
             >
               Manage which notifications you receive in your device settings.

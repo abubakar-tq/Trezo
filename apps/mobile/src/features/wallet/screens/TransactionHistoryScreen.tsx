@@ -21,7 +21,7 @@ import {
     HeadlineText,
     TitleText,
 } from "../../../shared/components/Tier1/Text";
-import { Colors, Spacing } from "../../../shared/components/TokenRegistry";
+import { Spacing } from "../../../shared/components/TokenRegistry";
 import { useAppTheme } from "@theme";
 
 interface Transaction {
@@ -154,14 +154,14 @@ export const TransactionHistoryScreen: React.FC<
             </View>
 
             <BodyText
-              color={Colors.textTertiary}
+              color={colors.textMuted}
               style={{ fontSize: 12 }}
             >
               {tx.type === "send" ? `To: ${tx.to}` : `From: ${tx.from}`}
             </BodyText>
 
             <BodyText
-              color={Colors.textTertiary}
+              color={colors.textMuted}
               style={{ fontSize: 11 }}
             >
               {tx.timestamp}
@@ -196,7 +196,7 @@ export const TransactionHistoryScreen: React.FC<
         <View style={{ gap: Spacing.sp2 }}>
           <HeadlineText>Transaction History</HeadlineText>
           <BodyText
-            color={Colors.textSecondary}
+            color={colors.textSecondary}
           >
             Your complete transaction log.
           </BodyText>
@@ -211,7 +211,7 @@ export const TransactionHistoryScreen: React.FC<
               >
                 {MOCK_TRANSACTIONS.length}
               </BodyText>
-              <CaptionText color={Colors.primary}>Total</CaptionText>
+              <CaptionText color={colors.accent}>Total</CaptionText>
             </View>
           </Surface>
 
@@ -221,12 +221,12 @@ export const TransactionHistoryScreen: React.FC<
                 style={{
                   fontSize: 28,
                   fontWeight: "bold",
-                  color: Colors.success,
+                  color: colors.success,
                 }}
               >
                 {confirmedCount}
               </BodyText>
-              <CaptionText color={Colors.success}>Confirmed</CaptionText>
+              <CaptionText color={colors.success}>Confirmed</CaptionText>
             </View>
           </Surface>
 
@@ -236,12 +236,12 @@ export const TransactionHistoryScreen: React.FC<
                 style={{
                   fontSize: 28,
                   fontWeight: "bold",
-                  color: Colors.warning,
+                  color: colors.warning,
                 }}
               >
                 {pendingCount}
               </BodyText>
-              <CaptionText color={Colors.warning}>Pending</CaptionText>
+              <CaptionText color={colors.warning}>Pending</CaptionText>
             </View>
           </Surface>
         </View>
@@ -249,7 +249,7 @@ export const TransactionHistoryScreen: React.FC<
         {/* TRANSACTIONS LIST */}
         {MOCK_TRANSACTIONS.length > 0 ? (
           <View style={{ gap: Spacing.sp3 }}>
-            <CaptionText color={Colors.primary}>RECENT ACTIVITY</CaptionText>
+            <CaptionText color={colors.accent}>RECENT ACTIVITY</CaptionText>
             {MOCK_TRANSACTIONS.map((tx) => renderTransactionCard(tx))}
           </View>
         ) : (
@@ -267,7 +267,7 @@ export const TransactionHistoryScreen: React.FC<
               <View style={{ alignItems: "center", gap: Spacing.sp2 }}>
                 <TitleText>No transactions yet</TitleText>
                 <BodyText
-                  color={Colors.textSecondary}
+                  color={colors.textSecondary}
                   style={{ fontSize: 13, textAlign: "center" }}
                 >
                   Your transactions will appear here once you send or receive
@@ -283,7 +283,7 @@ export const TransactionHistoryScreen: React.FC<
           <View style={{ gap: Spacing.sp2 }}>
             <TitleText>Transaction Details</TitleText>
             <BodyText
-              color={Colors.textSecondary}
+              color={colors.textSecondary}
               style={{ fontSize: 13, lineHeight: 20 }}
             >
               • ✓ Confirmed transactions are final{"\n"}• ⟳ Pending transactions

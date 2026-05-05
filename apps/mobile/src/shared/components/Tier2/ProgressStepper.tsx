@@ -7,7 +7,6 @@ import React from "react";
 import { View, ViewProps } from "react-native";
 import { useAppTheme } from "@theme";
 import { CaptionText, OverlineText } from "../Tier1/Text";
-import { Colors } from "../TokenRegistry";
 
 interface Step {
   label: string;
@@ -17,21 +16,20 @@ interface Step {
 interface ProgressStepperProps extends Omit<ViewProps, "style"> {
   steps: Step[];
   currentStep: number; // 0-indexed
-  isDark?: boolean;
 }
 
 export const ProgressStepper: React.FC<ProgressStepperProps> = ({
   steps,
   currentStep,
-  isDark = true,
   ...props
 }) => {
+  const { theme: { colors } } = useAppTheme();
+
   return (
     <View {...props}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         {steps.map((step, idx) => (
           <React.Fragment key={idx}>
-            {/* Step Circle */}
             <View
               style={{
                 width: 32,
@@ -39,43 +37,30 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
                 borderRadius: 16,
                 backgroundColor:
                   idx < currentStep
-                    ? Colors.success
+                    ? colors.success
                     : idx === currentStep
-                      ? Colors.primary
-                      : isDark
-                        ? Colors.surface
-                        : Colors.lightCard,
+                      ? colors.accent
+                      : colors.surfaceMuted,
                 justifyContent: "center",
                 alignItems: "center",
                 borderWidth: idx === currentStep ? 2 : 0,
-                borderColor: Colors.primary,
+                borderColor: colors.accent,
               }}
             >
               <OverlineText
-                color={
-                  idx <= currentStep
-                    ? "#ffffff"
-                    : isDark
-                      ? Colors.textSecondary
-                      : Colors.lightTextSecondary
-                }
+                color={idx <= currentStep ? "#ffffff" : colors.textSecondary}
               >
                 {idx < currentStep ? "✓" : idx + 1}
               </OverlineText>
             </View>
 
-            {/* Connector Line */}
             {idx < steps.length - 1 && (
               <View
                 style={{
                   flex: 1,
                   height: 2,
                   backgroundColor:
-                    idx < currentStep
-                      ? Colors.success
-                      : isDark
-                        ? Colors.surface
-                        : Colors.lightCard,
+                    idx < currentStep ? colors.success : colors.surfaceCard,
                   minWidth: 24,
                 }}
               />
@@ -84,9 +69,8 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
         ))}
       </View>
 
-      {/* Labels */}
       <View style={{ marginTop: 12, gap: 8 }}>
-        <CaptionText color={Colors.textSecondary}>
+        <CaptionText color={colors.textSecondary}>
           Step {currentStep + 1} of {steps.length}
         </CaptionText>
         <OverlineText>{steps[currentStep]?.label}</OverlineText>

@@ -216,7 +216,7 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
         {/* CONTACTS LIST */}
         {filteredContacts.length > 0 ? (
           <View style={{ gap: Spacing.sp3 }}>
-            <CaptionText color={Colors.primary}>
+            <CaptionText color={colors.accent}>
               {filter === "all"
                 ? `${filteredContacts.length} Contact${filteredContacts.length === 1 ? "" : "s"}`
                 : `${filteredContacts.length} ${filter === "verified" ? "Verified" : "Pending"} Contact${filteredContacts.length === 1 ? "" : "s"}`}

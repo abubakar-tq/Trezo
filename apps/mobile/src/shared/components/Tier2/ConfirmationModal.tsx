@@ -8,7 +8,7 @@ import React from "react";
 import { Modal, TouchableOpacity, View, ViewProps } from "react-native";
 import { GhostButton, PrimaryButton } from "../Tier1/Button";
 import { BodyText, HeadlineText } from "../Tier1/Text";
-import { BorderRadius, Colors } from "../TokenRegistry";
+import { BorderRadius } from "../TokenRegistry";
 import { useAppTheme } from "@theme";
 
 interface ConfirmationModalProps extends Omit<ViewProps, "style"> {
@@ -19,7 +19,6 @@ interface ConfirmationModalProps extends Omit<ViewProps, "style"> {
   secondaryLabel?: string;
   onPrimaryPress: () => void;
   onSecondaryPress?: () => void;
-  isDark?: boolean;
   isLoading?: boolean;
 }
 
@@ -31,7 +30,6 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   secondaryLabel,
   onPrimaryPress,
   onSecondaryPress,
-  isDark = true,
   isLoading = false,
   ...props
 }) => {
@@ -39,7 +37,6 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
   return (
     <Modal visible={isVisible} transparent={true} animationType="fade">
-      {/* Backdrop */}
       <TouchableOpacity
         activeOpacity={1}
         style={{
@@ -51,10 +48,9 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
         }}
         onPress={onSecondaryPress}
       >
-        {/* Modal Content */}
         <View
           style={{
-            backgroundColor: isDark ? Colors.card : Colors.lightCard,
+            backgroundColor: colors.surfaceCard,
             borderRadius: BorderRadius.lg,
             padding: 24,
             width: "100%",
@@ -68,17 +64,10 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           }}
           {...props}
         >
-          {/* Title */}
           <HeadlineText>{title}</HeadlineText>
 
-          {/* Message */}
-          <BodyText
-            color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
-          >
-            {message}
-          </BodyText>
+          <BodyText color={colors.textSecondary}>{message}</BodyText>
 
-          {/* Actions - Rule of One: PRIMARY button only gets filled styling */}
           <View style={{ gap: 8, marginTop: 8 }}>
             <PrimaryButton
               label={primaryLabel}
@@ -87,10 +76,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
               disabled={isLoading}
             />
             {secondaryLabel && (
-              <GhostButton
-                label={secondaryLabel}
-                onPress={onSecondaryPress}
-              />
+              <GhostButton label={secondaryLabel} onPress={onSecondaryPress} />
             )}
           </View>
         </View>

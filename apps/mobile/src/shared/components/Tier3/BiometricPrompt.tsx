@@ -5,15 +5,15 @@
 
 import React from "react";
 import { Text, View, ViewProps } from "react-native";
+import { useAppTheme } from "@theme";
 import { GhostButton, PrimaryButton } from "../Tier1/Button";
 import { BodyText, CaptionText, HeadlineText } from "../Tier1/Text";
-import { BorderRadius, Colors } from "../TokenRegistry";
+import { BorderRadius } from "../TokenRegistry";
 
 type BiometricType = "face" | "touch" | "none";
 
 interface BiometricPromptProps extends Omit<ViewProps, "style"> {
   type: BiometricType;
-  isDark?: boolean;
   onAuthenticate?: () => void;
   onCancel?: () => void;
   isAnimating?: boolean;
@@ -21,12 +21,13 @@ interface BiometricPromptProps extends Omit<ViewProps, "style"> {
 
 export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
   type,
-  isDark = true,
   onAuthenticate,
   onCancel,
   isAnimating = false,
   ...props
 }) => {
+  const { theme: { colors } } = useAppTheme();
+
   const isSupported = type !== "none";
   const icon = type === "face" ? "👤" : type === "touch" ? "👆" : "❌";
   const label =
@@ -45,7 +46,7 @@ export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
   return (
     <View
       style={{
-        backgroundColor: isDark ? Colors.card : Colors.lightCard,
+        backgroundColor: colors.surfaceCard,
         borderRadius: BorderRadius.lg,
         padding: 24,
         gap: 20,
@@ -54,13 +55,12 @@ export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
       }}
       {...props}
     >
-      {/* Icon */}
       <View
         style={{
           width: 80,
           height: 80,
           borderRadius: 40,
-          backgroundColor: isSupported ? Colors.primary : Colors.danger,
+          backgroundColor: isSupported ? colors.accent : colors.danger,
           justifyContent: "center",
           alignItems: "center",
           opacity: isAnimating ? 0.7 : 1,
@@ -69,38 +69,30 @@ export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
         <Text style={{ fontSize: 40 }}>{icon}</Text>
       </View>
 
-      {/* Label */}
       <HeadlineText>{label}</HeadlineText>
 
-      {/* Message */}
-      <BodyText
-        color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
-      >
-        {message}
-      </BodyText>
+      <BodyText color={colors.textSecondary}>{message}</BodyText>
 
-      {/* Biometric Scanner Mockup */}
       {isSupported && (
         <View
           style={{
             width: 120,
             height: 120,
             borderWidth: 2,
-            borderColor: isAnimating ? Colors.primary : Colors.warning,
+            borderColor: isAnimating ? colors.accent : colors.warning,
             borderRadius: 20,
-            backgroundColor: isDark ? Colors.surface : Colors.lightSurface,
+            backgroundColor: colors.surface,
             justifyContent: "center",
             alignItems: "center",
             opacity: isAnimating ? 0.8 : 0.5,
           }}
         >
-          <CaptionText color={isAnimating ? Colors.primary : Colors.warning}>
+          <CaptionText color={isAnimating ? colors.accent : colors.warning}>
             {isAnimating ? "Scanning..." : "Ready"}
           </CaptionText>
         </View>
       )}
 
-      {/* Actions */}
       <View style={{ width: "100%", gap: 8, marginTop: 8 }}>
         <PrimaryButton
           label={isAnimating ? "Scanning..." : `Authenticate with ${label}`}
@@ -108,10 +100,7 @@ export const BiometricPrompt: React.FC<BiometricPromptProps> = ({
           isLoading={isAnimating}
           disabled={!isSupported || isAnimating}
         />
-        <GhostButton
-          label="Use Passcode Instead"
-          onPress={onCancel}
-        />
+        <GhostButton label="Use Passcode Instead" onPress={onCancel} />
       </View>
     </View>
   );

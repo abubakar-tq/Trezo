@@ -23,7 +23,7 @@ import {
     CaptionText,
     HeadlineText
 } from "../../../shared/components/Tier1/Text";
-import { Colors, Spacing } from "../../../shared/components/TokenRegistry";
+import { Spacing } from "../../../shared/components/TokenRegistry";
 import { useAppTheme } from "@theme";
 
 interface SettingsScreenProps {
@@ -67,7 +67,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <View style={{ gap: Spacing.sp2 }}>
           <HeadlineText>Settings</HeadlineText>
           <BodyText
-            color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
+            color={colors.textSecondary}
           >
             Customize your app experience and security preferences.
           </BodyText>
@@ -75,7 +75,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
         {/* SECURITY SECTION */}
         <View style={{ gap: Spacing.sp2 }}>
-          <CaptionText color={Colors.primary}>SECURITY</CaptionText>
+          <CaptionText color={colors.accent}>SECURITY</CaptionText>
 
           <CardLevel1>
             <View
@@ -91,9 +91,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   Biometric Login
                 </BodyText>
                 <BodyText
-                  color={
-                    isDark ? Colors.textTertiary : Colors.lightTextTertiary
-                  }
+                  color={colors.textMuted}
                   style={{ fontSize: 12 }}
                 >
                   Face ID or Touch ID to unlock
@@ -102,7 +100,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <Switch
                 value={biometricsEnabled}
                 onValueChange={setBiometricsEnabled}
-                trackColor={{ false: Colors.surfaceMid, true: Colors.primary }}
+                trackColor={{ false: colors.surfaceCard, true: colors.accent }}
                 thumbColor={colors.background}
               />
             </View>
@@ -114,7 +112,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 Change Passkey
               </BodyText>
               <BodyText
-                color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
+                color={colors.textMuted}
                 style={{ fontSize: 12 }}
               >
                 Update your device passkey for account access
@@ -143,7 +141,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 <Badge status="warning" label="⚠️ Advanced" />
               </View>
               <BodyText
-                color={Colors.warning}
+                color={colors.warning}
                 style={{ fontSize: 12 }}
               >
                 Only for backup purposes. Never share this data.
@@ -158,7 +156,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
         {/* NOTIFICATIONS SECTION */}
         <View style={{ gap: Spacing.sp2 }}>
-          <CaptionText color={Colors.primary}>NOTIFICATIONS</CaptionText>
+          <CaptionText color={colors.accent}>NOTIFICATIONS</CaptionText>
 
           <CardLevel1>
             <View
@@ -174,9 +172,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   Transaction Alerts
                 </BodyText>
                 <BodyText
-                  color={
-                    isDark ? Colors.textTertiary : Colors.lightTextTertiary
-                  }
+                  color={colors.textMuted}
                   style={{ fontSize: 12 }}
                 >
                   Notifications for sends and receives
@@ -185,7 +181,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <Switch
                 value={transactionNotifications}
                 onValueChange={setTransactionNotifications}
-                trackColor={{ false: Colors.surfaceMid, true: Colors.primary }}
+                trackColor={{ false: colors.surfaceCard, true: colors.accent }}
                 thumbColor={colors.background}
               />
             </View>
@@ -205,9 +201,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   Network Alerts
                 </BodyText>
                 <BodyText
-                  color={
-                    isDark ? Colors.textTertiary : Colors.lightTextTertiary
-                  }
+                  color={colors.textMuted}
                   style={{ fontSize: 12 }}
                 >
                   Warnings for network issues
@@ -216,7 +210,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <Switch
                 value={networkAlerts}
                 onValueChange={setNetworkAlerts}
-                trackColor={{ false: Colors.surfaceMid, true: Colors.primary }}
+                trackColor={{ false: colors.surfaceCard, true: colors.accent }}
                 thumbColor={colors.background}
               />
             </View>
@@ -225,7 +219,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
         {/* APPEARANCE SECTION */}
         <View style={{ gap: Spacing.sp2 }}>
-          <CaptionText color={Colors.primary}>APPEARANCE</CaptionText>
+          <CaptionText color={colors.accent}>APPEARANCE</CaptionText>
 
           <CardLevel1>
             <View
@@ -241,9 +235,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   Dark Mode
                 </BodyText>
                 <BodyText
-                  color={
-                    isDark ? Colors.textTertiary : Colors.lightTextTertiary
-                  }
+                  color={colors.textMuted}
                   style={{ fontSize: 12 }}
                 >
                   Current theme: {isDark ? "Dark" : "Light"}
@@ -252,7 +244,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <Switch
                 value={isDark}
                 onValueChange={onToggleDarkMode}
-                trackColor={{ false: Colors.surfaceMid, true: Colors.primary }}
+                trackColor={{ false: colors.surfaceCard, true: colors.accent }}
                 thumbColor={colors.background}
               />
             </View>
@@ -261,7 +253,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
         {/* SUPPORT SECTION */}
         <View style={{ gap: Spacing.sp2 }}>
-          <CaptionText color={Colors.primary}>SUPPORT</CaptionText>
+          <CaptionText color={colors.accent}>SUPPORT</CaptionText>
 
           <CardLevel1>
             <View style={{ gap: Spacing.sp2 }}>
@@ -269,7 +261,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 Help & FAQ
               </BodyText>
               <BodyText
-                color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
+                color={colors.textMuted}
                 style={{ fontSize: 12 }}
               >
                 Common questions and troubleshooting
@@ -287,7 +279,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 Report Issue
               </BodyText>
               <BodyText
-                color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
+                color={colors.textMuted}
                 style={{ fontSize: 12 }}
               >
                 Send feedback or report a bug
@@ -303,7 +295,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         {/* APP INFO */}
         <Surface elevation={1}>
           <View style={{ gap: Spacing.sp2 }}>
-            <CaptionText color={Colors.primary}>APP INFORMATION</CaptionText>
+            <CaptionText color={colors.accent}>APP INFORMATION</CaptionText>
 
             <View
               style={{
@@ -313,9 +305,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <BodyText
-                color={
-                  isDark ? Colors.textSecondary : Colors.lightTextSecondary
-                }
+                color={colors.textSecondary}
               >
                 Version
               </BodyText>
@@ -332,9 +322,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }}
             >
               <BodyText
-                color={
-                  isDark ? Colors.textSecondary : Colors.lightTextSecondary
-                }
+                color={colors.textSecondary}
               >
                 Build
               </BodyText>
@@ -350,7 +338,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           <GhostButton label="Logout" onPress={onLogout} />
 
           <BodyText
-            color={Colors.danger}
+            color={colors.danger}
             style={{ fontSize: 12, textAlign: "center" }}
           >
             ⚠️ Make sure you have backed up your recovery information
