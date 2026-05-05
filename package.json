@@ -3,11 +3,18 @@
   "private": true,
   "scripts": {
     "android": "npm --workspace apps/mobile run android",
-    "start": "npm --workspace apps/mobile run start"
+    "start": "npm --workspace apps/mobile run start",
+    "ios": "expo run:ios"
   },
   "workspaces": [
     "apps/mobile",
     "apps/guardian-approval",
     "apps/backend"
-  ]
+  ],
+  "version": "1.0.0",
+  "dependencies": {
+    "expo": "~54.0.33",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
+  }
 }
