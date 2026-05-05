@@ -1,24 +1,28 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Modal,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Animated, {
-    Easing,
-    interpolate,
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withTiming,
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
 } from "react-native-reanimated";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
+import type { RootStackParamList } from "@/src/types/navigation";
+import { getSupabaseClient } from "@lib/supabase";
 import { useAppLockStore } from "../../../store/useAppLockStore";
 import { useAuthFlowStore } from "../../../store/useAuthFlowStore";
 import { useUserStore } from "../../../store/useUserStore";
@@ -38,59 +42,50 @@ const LockScreen: React.FC = () => {
   const authenticate = useAppLockStore((state) => state.authenticate);
   const lastError = useAppLockStore((state) => state.lastError);
   const isLoggedIn = useUserStore((state) => state.isLoggedIn);
+  const logout = useUserStore((state) => state.logout);
   const guardNavigation = useAuthFlowStore((state) => state.guardNavigation);
+  const setGuardNavigation = useAuthFlowStore((state) => state.setGuardNavigation);
+
+  const [showReLoginModal, setShowReLoginModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const autoAttemptedRef = useRef(false);
   const lastAuthAttemptRef = useRef<number>(0);
-  const AUTH_COOLDOWN_MS = 1000; // 1 second cooldown between attempts
+  const AUTH_COOLDOWN_MS = 1000;
 
   const pulse = useSharedValue(0);
+  let navigation: NativeStackNavigationProp<RootStackParamList> | null = null;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  } catch {
+    // rendered outside navigator context — navigation.reset not available
+  }
 
   useEffect(() => {
     pulse.value = withRepeat(
-      withTiming(1, {
-        duration: 1800,
-        easing: Easing.out(Easing.quad),
-      }),
+      withTiming(1, { duration: 1800, easing: Easing.out(Easing.quad) }),
       -1,
       false,
     );
   }, [pulse]);
 
   const haloStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        scale: interpolate(pulse.value, [0, 1], [1, 1.45]),
-      },
-    ],
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.45]) }],
     opacity: interpolate(pulse.value, [0, 1], [0.6, 0]),
   }));
 
   useEffect(() => {
     if (!hasInitialized) return;
+    if (!isLocked) { autoAttemptedRef.current = false; return; }
+    if (isAuthenticating || autoAttemptedRef.current) return;
 
-    if (!isLocked) {
-      autoAttemptedRef.current = false;
-      return;
-    }
-
-    if (isAuthenticating || autoAttemptedRef.current) {
-      return;
-    }
-
-    // Check cooldown to prevent rapid successive auth attempts
     const now = Date.now();
-    if (now - lastAuthAttemptRef.current < AUTH_COOLDOWN_MS) {
-      return;
-    }
+    if (now - lastAuthAttemptRef.current < AUTH_COOLDOWN_MS) return;
 
     autoAttemptedRef.current = true;
     lastAuthAttemptRef.current = now;
-    
-    // Add small delay to ensure app is fully ready
-    setTimeout(() => {
-      authenticate();
-    }, 300);
+    setTimeout(() => { authenticate(); }, 300);
   }, [authenticate, hasInitialized, isAuthenticating, isLocked]);
 
   const handleRetry = useCallback(() => {
@@ -105,16 +100,38 @@ const LockScreen: React.FC = () => {
     authenticate({ disableDeviceFallback: false, fallbackLabel: "Use PIN or Password" });
   }, [authenticate]);
 
-  // Don't show LockScreen if:
-  // 1. Not initialized yet
-  // 2. User is not logged in
-  // 3. User is logged in but guardNavigation is true (Device Verification screen will handle auth)
-  if (!hasInitialized || !isLoggedIn || guardNavigation) {
-    return null;
-  }
+  const handleReLogin = useCallback(() => {
+    setShowReLoginModal(true);
+  }, []);
 
-  const iconName = isBiometricAvailable ? (Platform.OS === 'ios' ? "face-recognition" : "fingerprint") : "lock";
-  const biometricType = Platform.OS === 'ios' ? 'Face ID' : 'Fingerprint';
+  const handleCancelReLogin = useCallback(() => {
+    setShowReLoginModal(false);
+  }, []);
+
+  const handleConfirmReLogin = useCallback(async () => {
+    try {
+      setIsLoggingOut(true);
+      setShowReLoginModal(false);
+
+      const supabase = getSupabaseClient();
+      await supabase.auth.signOut();
+      await logout();
+      setGuardNavigation(false);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      navigation?.reset({ index: 0, routes: [{ name: "AuthNavigation" }] });
+    } catch {
+      setIsLoggingOut(false);
+    }
+  }, [logout, navigation, setGuardNavigation]);
+
+  if (!hasInitialized || !isLoggedIn || guardNavigation) return null;
+
+  const iconName = isBiometricAvailable
+    ? Platform.OS === "ios" ? "face-recognition" : "fingerprint"
+    : "lock";
+  const biometricType = Platform.OS === "ios" ? "Face ID" : "Fingerprint";
   const supportingText = isBiometricAvailable
     ? `Use ${biometricType} or your device credentials to unlock.`
     : "Use your device passcode to unlock Trezo.";
@@ -125,54 +142,168 @@ const LockScreen: React.FC = () => {
   const secondaryBackground = withAlpha(colors.surfaceMuted, mode === "dark" ? 0.55 : 0.82);
 
   return (
-    <Modal visible={isLocked} animationType="fade" statusBarTranslucent>
-      <LinearGradient
-        colors={gradients.hero}
-        style={[styles.root, { backgroundColor: colors.background }]}
-      >
-        <View style={styles.centerContent}>
-          <View style={[styles.haloContainer, { shadowColor: colors.accent }]}>
-            <AnimatedView style={[styles.halo, haloStyle, { backgroundColor: colors.accent }]} />
-            <View
-              style={[styles.iconBadge, { backgroundColor: badgeBackground, borderColor: badgeBorder }]}
+    <>
+      <Modal visible={isLocked} animationType="fade" statusBarTranslucent>
+        <LinearGradient
+          colors={gradients.hero}
+          style={[styles.root, { backgroundColor: colors.background }]}
+        >
+          <View style={styles.centerContent}>
+            {/* Animated biometric icon */}
+            <View style={[styles.haloContainer, { shadowColor: colors.accent }]}>
+              <AnimatedView
+                style={[styles.halo, haloStyle, { backgroundColor: colors.accent }]}
+              />
+              <View
+                style={[
+                  styles.iconBadge,
+                  { backgroundColor: badgeBackground, borderColor: badgeBorder },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={iconName}
+                  size={42}
+                  color={colors.accent}
+                />
+              </View>
+            </View>
+
+            <Text style={[styles.title, { color: colors.textPrimary }]}>
+              Unlock Trezo Wallet
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              {supportingText}
+            </Text>
+
+            {lastError ? (
+              <Text style={[styles.errorText, { color: colors.danger }]}>
+                {lastError}
+              </Text>
+            ) : null}
+
+            {/* Primary + secondary auth buttons */}
+            <View style={styles.actions}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[styles.primaryButton, { backgroundColor: colors.accent }]}
+                onPress={handleRetry}
+                disabled={isAuthenticating}
+              >
+                {isAuthenticating ? (
+                  <ActivityIndicator size="small" color={colors.textOnAccent} />
+                ) : (
+                  <Text style={[styles.primaryLabel, { color: colors.textOnAccent }]}>
+                    Try again
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[
+                  styles.secondaryButton,
+                  { borderColor: secondaryBorder, backgroundColor: secondaryBackground },
+                ]}
+                onPress={handleFallback}
+                disabled={isAuthenticating}
+              >
+                <Text style={[styles.secondaryLabel, { color: colors.textPrimary }]}>
+                  Use PIN or Password
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Tertiary re-login link */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={styles.reLoginButton}
+              onPress={handleReLogin}
+              disabled={isAuthenticating || isLoggingOut}
             >
-              <MaterialCommunityIcons name={iconName} size={42} color={colors.accent} />
+              <Text style={[styles.reLoginText, { color: colors.textMuted }]}>
+                Re-login to a different account
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+      </Modal>
+
+      {/* Re-login confirmation — rendered outside the main Modal to avoid nesting */}
+      <Modal
+        visible={showReLoginModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelReLogin}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContainer,
+              {
+                backgroundColor: colors.surfaceCard,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.modalIcon,
+                { backgroundColor: withAlpha(colors.warning, 0.15) },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="logout"
+                size={32}
+                color={colors.warning}
+              />
+            </View>
+
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+              Re-login Required
+            </Text>
+            <Text style={[styles.modalMessage, { color: colors.textSecondary }]}>
+              Your current session will be closed and all local data cleared. You'll
+              need to log in again with your credentials.
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  {
+                    backgroundColor: colors.surfaceMuted,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                  },
+                ]}
+                onPress={handleCancelReLogin}
+                disabled={isLoggingOut}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.textPrimary }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: colors.danger }]}
+                onPress={handleConfirmReLogin}
+                disabled={isLoggingOut}
+                activeOpacity={0.7}
+              >
+                {isLoggingOut ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                    Continue
+                  </Text>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
-
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Unlock Trezo Wallet</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{supportingText}</Text>
-
-          {lastError ? (
-            <Text style={[styles.errorText, { color: colors.danger }]}>{lastError}</Text>
-          ) : null}
-
-          <View style={styles.actions}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={[styles.primaryButton, { backgroundColor: colors.accent }]}
-              onPress={handleRetry}
-              disabled={isAuthenticating}
-            >
-              {isAuthenticating ? (
-                <ActivityIndicator size="small" color={colors.textOnAccent} />
-              ) : (
-                <Text style={[styles.primaryLabel, { color: colors.textOnAccent }]}>Try again</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={[styles.secondaryButton, { borderColor: secondaryBorder, backgroundColor: secondaryBackground }]}
-              onPress={handleFallback}
-              disabled={isAuthenticating}
-            >
-              <Text style={[styles.secondaryLabel, { color: colors.textPrimary }]}>Use PIN or Password</Text>
-            </TouchableOpacity>
-          </View>
         </View>
-      </LinearGradient>
-    </Modal>
+      </Modal>
+    </>
   );
 };
 
@@ -187,7 +318,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 32,
-    gap: 24,
+    gap: 20,
   },
   haloContainer: {
     width: 140,
@@ -230,10 +361,10 @@ const styles = StyleSheet.create({
   },
   actions: {
     width: "100%",
-    gap: 12,
+    gap: 10,
   },
   primaryButton: {
-    borderRadius: 18,
+    borderRadius: 16,
     paddingVertical: 15,
     alignItems: "center",
   },
@@ -242,13 +373,73 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   secondaryButton: {
-    borderRadius: 18,
+    borderRadius: 16,
     paddingVertical: 15,
     alignItems: "center",
     borderWidth: 1,
   },
   secondaryLabel: {
     fontSize: 14,
+    fontWeight: "600",
+  },
+  reLoginButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  reLoginText: {
+    fontSize: 12,
+    fontWeight: "500",
+    textDecorationLine: "underline",
+  },
+  // Confirm modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  modalContainer: {
+    borderRadius: 24,
+    padding: 24,
+    width: "100%",
+    maxWidth: 380,
+    borderWidth: 1,
+    alignItems: "center",
+    gap: 12,
+  },
+  modalIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 21,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+    marginTop: 4,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalButtonText: {
+    fontSize: 15,
     fontWeight: "600",
   },
 });
