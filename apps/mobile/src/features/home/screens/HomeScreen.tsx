@@ -145,7 +145,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
               activeOpacity={0.7}
             >
               <Feather name="bell" size={18} color={colors.textPrimary} strokeWidth={1.5} />
-              <View style={[styles.notiDot, { backgroundColor: colors.accentAlt }]} />
+              <View style={[styles.notiDot, { backgroundColor: colors.accentAlt, borderColor: colors.background }]} />
             </TouchableOpacity>
           </View>
         </View>
@@ -166,7 +166,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
         </View>
 
         <View style={styles.sectionWrapper}>
-          <View style={[styles.glassSection, styles.glassSectionAction, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
+          <View style={[styles.glassSection, styles.glassSectionAction, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginBottom: 12 }]}>Quick Actions</Text>
             <ActionGrid onActionPress={(action) => {
               if (action.key === 'swap' || action.key === 'bridge') {
@@ -182,7 +182,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
 
         {/* Market Trends - Unified Header */}
         <View style={styles.sectionWrapper}>
-          <View style={[styles.glassSection, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
+          <View style={[styles.glassSection, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginBottom: 12 }]}>Market Trends</Text>
             <MarketExplorer />
           </View>
@@ -190,7 +190,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
 
 
         <View style={styles.sectionWrapper}>
-          <View style={[styles.glassSection, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
+          <View style={[styles.glassSection, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Recent Activity</Text>
             <ActivityFeed limit={3} />
           </View>
@@ -299,7 +299,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#050505',
   },
   searchWrapper: {
     marginHorizontal: 20,
