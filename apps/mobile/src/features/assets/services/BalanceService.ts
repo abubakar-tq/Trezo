@@ -1,8 +1,7 @@
 import { getPublicClient } from "@/src/integration/viem/clients";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
-import type { SendFeeMode } from "@/src/features/send/types/send";
 import type { SupportedChainId } from "@/src/integration/chains";
-import type { Address } from "viem";
+import { formatUnits, type Address } from "viem";
 
 const DEFAULT_NATIVE_GAS_RESERVE = 3_000_000_000_000_000n;
 
@@ -16,11 +15,13 @@ const ERC20_MIN_ABI = [
   },
 ] as const;
 
+export type BalanceFeeMode = "sponsored" | "wallet_paid";
+
 export type SpendableBalanceParams = {
   chainId: SupportedChainId;
   walletAddress: Address;
   token: TokenMetadata;
-  feeMode: SendFeeMode;
+  feeMode: BalanceFeeMode;
   nativeGasReserveRaw?: bigint;
 };
 
@@ -46,12 +47,30 @@ export class BalanceService {
     return raw as bigint;
   }
 
+  static async getBalance(params: {
+    chainId: SupportedChainId;
+    walletAddress: Address;
+    token: TokenMetadata;
+  }): Promise<bigint> {
+    if (params.token.type === "native") {
+      return this.getNativeBalance(params.chainId, params.walletAddress);
+    }
+
+    return this.getErc20Balance(params.chainId, params.token.address as Address, params.walletAddress);
+  }
+
+  static formatBalance(token: TokenMetadata, raw: bigint): string {
+    return formatUnits(raw, token.decimals);
+  }
+
   static async getSpendableBalance(
     params: SpendableBalanceParams,
-  ): Promise<{ balanceRaw: bigint; spendableRaw: bigint; feeMode: SendFeeMode }> {
-    const balanceRaw = params.token.type === "native"
-      ? await this.getNativeBalance(params.chainId, params.walletAddress)
-      : await this.getErc20Balance(params.chainId, params.token.address as Address, params.walletAddress);
+  ): Promise<{ balanceRaw: bigint; spendableRaw: bigint; feeMode: BalanceFeeMode }> {
+    const balanceRaw = await this.getBalance({
+      chainId: params.chainId,
+      walletAddress: params.walletAddress,
+      token: params.token,
+    });
 
     if (params.feeMode === "sponsored") {
       return {
@@ -77,5 +96,33 @@ export class BalanceService {
       spendableRaw,
       feeMode: params.feeMode,
     };
+  }
+
+  static async refreshBalancesAfterTransaction(params: {
+    chainId: SupportedChainId;
+    walletAddress: Address;
+    tokens: TokenMetadata[];
+  }): Promise<Record<string, bigint>> {
+    const uniqueTokens = new Map<string, TokenMetadata>();
+
+    for (const token of params.tokens) {
+      const key = token.type === "native" ? "native" : token.address.toLowerCase();
+      if (!uniqueTokens.has(key)) {
+        uniqueTokens.set(key, token);
+      }
+    }
+
+    const refreshed = await Promise.all(
+      Array.from(uniqueTokens.entries()).map(async ([key, token]) => {
+        const balance = await this.getBalance({
+          chainId: params.chainId,
+          walletAddress: params.walletAddress,
+          token,
+        });
+        return [key, balance] as const;
+      }),
+    );
+
+    return Object.fromEntries(refreshed);
   }
 }
