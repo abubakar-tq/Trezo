@@ -1,0 +1,10 @@
+{
+  "release": "TREZO_INFRA_V2",
+  "rootFactory": "0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7",
+  "entryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+  "smartAccountImplSalt": "0x1a43bf793d62e1cf3602b382e71b67772d7f2488f256a61bbd44b7975e50c6c5",
+  "accountFactorySalt": "0xd98e80d898f9b7d7fedb3229d7640b67931a48a910338c333b4c294cbe08b371",
+  "minimalProxyFactorySalt": "0xddbcc37ceb54a4d95f4bf297a72b8e8b4b9e563517c5d1e095081d755103fe77",
+  "passkeyValidatorSalt": "0xc37eeed33c6be225caaa262e9f8682dc8099d0ae64e9a403372e4bab9aacd9e3",
+  "socialRecoverySalt": "0x908965c3b4a9d60bd10204152beca34991898f123e21d9d25ad2b50296d1b203"
+}

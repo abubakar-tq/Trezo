@@ -1,0 +1,82 @@
+node_modules/
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.expo/
+apps/*/node_modules/
+apps/backend/*/node_modules/
+
+# Build/runtime artifacts
+dist/
+build/
+out/
+coverage/
+.cache/
+.turbo/
+.next/
+metro-cache/
+web-build/
+
+# Mobile build artifacts
+apps/mobile/android/
+apps/mobile/dist/
+
+# Guardian approval build
+apps/guardian-approval/dist/
+
+# Foundry generated/vendor
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/node_modules/
+
+# App environment files
+apps/mobile/.env
+apps/mobile/.env.*
+!apps/mobile/.env.example
+!apps/mobile/.env*.example
+!apps/guardian-approval/.env.example
+graphify-out/
+plan.md
+agent-plans/
+.github/skills/
+AGENTS.md
+RTK.md
+Context_Capsule.md
+LEVEL2_IMPLEMENTATION_NOTES.md
+*.tsbuildinfo
+*.map
+
+
+# Local testing scripts
+apps/backend/query_db.js
+apps/guardian-approval/test_*.js
+patch.diff
+temp_guardian.txt
+contracts/errors.txt
+decode_calldata.js
+find_error.js
+apps/backend/supabase/.temp/
+apps/guardian-approval/.env
+apps/backend/zk-email-recovery-api/src/future-only/
+scripts/graphify-solidity-parser-scripts
+
+# Claude Code local config (machine-specific paths / private instructions)
+.mcp.json
+CLAUDE.md
+
+#Agent Settings
+agent-artifacts/
+.kilo/
+kilo.jsonc
+.context/
+*.context.md
+.agents/
+.roo/.env
+.roo/.env.*
+.roo/
+.rooignore

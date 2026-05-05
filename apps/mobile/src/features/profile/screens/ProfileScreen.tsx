@@ -1,11 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { Avatar, TabScreenContainer } from "@shared/components";
+import { MeshBackground } from "@shared/components/MeshBackground";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     ScrollView,
     StyleSheet,
@@ -15,7 +15,7 @@ import {
 } from "react-native";
 
 import { RootStackParamList } from "@/src/types/navigation";
-import { useTabContentBottomInset } from "@app/hooks";
+import { useTabContentBottomInset } from "@hooks";
 import { getSupabaseClient } from "@lib/supabase";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
@@ -31,25 +31,41 @@ type SettingsItem = {
   route?: keyof RootStackParamList;
 };
 
-const settingsItems: SettingsItem[] = [
+const baseSettingsItems: SettingsItem[] = [
+  { label: "Contacts", icon: "book", route: "ContactList" },
   { label: "Browser settings", icon: "globe", route: "BrowserSettings" },
-  { label: "Security & privacy", icon: "shield" },
-  { label: "Connected devices", icon: "smartphone" },
-  { label: "Notifications", icon: "bell" },
-  { label: "Backup & recovery", icon: "cloud" },
+  { label: "Devices & passkeys", icon: "smartphone", route: "DevicesPasskeys" },
+  { label: "Notifications", icon: "bell", route: "NotificationSettings" },
+  { label: "Backup & recovery", icon: "cloud", route: "BackupRecovery" },
+];
+
+const settingsItems: SettingsItem[] = [
+  ...baseSettingsItems,
+  // Dev-only quick link into the AA createAccount tester
+  ...(__DEV__
+    ? ([
+        {
+          label: "Dev Controls",
+          icon: "cpu",
+          route: "DevCreateAccount",
+        },
+      ] satisfies SettingsItem[])
+    : []),
 ];
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { theme, resolvedMode, setMode } = useAppTheme();
   const { colors, gradients } = theme;
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const styles = useMemo(() => createStyles(colors, resolvedMode), [colors, resolvedMode]);
   const contentBottomInset = useTabContentBottomInset();
 
   const user = useUserStore((state) => state.user);
   const profile = useUserStore((state) => state.profile);
   const resetUser = useUserStore((state) => state.reset);
-  const setGuardNavigation = useAuthFlowStore((state) => state.setGuardNavigation);
+  const setGuardNavigation = useAuthFlowStore(
+    (state) => state.setGuardNavigation,
+  );
 
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
@@ -59,6 +75,8 @@ const ProfileScreen: React.FC = () => {
     user?.email?.split("@")[0]?.replace(/[^a-zA-Z0-9]/g, " ") ??
     "Explorer";
 
+  const avatarUri = profile?.avatarUrl ?? null;
+
   const handleToggleTheme = useCallback(() => {
     setMode(resolvedMode === "dark" ? "light" : "dark");
   }, [resolvedMode, setMode]);
@@ -67,50 +85,54 @@ const ProfileScreen: React.FC = () => {
     if (isSigningOut) return;
     setIsSigningOut(true);
 
-    let didError = false;
     try {
       const client = getSupabaseClient();
       await client.auth.signOut();
     } catch (error) {
-      didError = true;
-      console.error("Failed to sign out", error);
-      Alert.alert("Sign out failed", "Please check your connection and try again.");
+      // Log but don't block — if Supabase is unreachable (local dev), still clear local state
+      console.warn("Supabase signOut failed (continuing locally):", error);
     }
 
-    if (!didError) {
-      resetUser();
-      setGuardNavigation(false);
-      setConfirmVisible(false);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "AuthNavigation" }],
-      });
-    }
+    // Always clear local state and navigate away
+    resetUser();
+    setGuardNavigation(false);
+    setConfirmVisible(false);
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "AuthNavigation" }],
+    });
 
     setIsSigningOut(false);
   }, [isSigningOut, navigation, resetUser, setGuardNavigation]);
 
   return (
-  <TabScreenContainer style={styles.screen}>
+    <TabScreenContainer includeBottomInset>
+      <MeshBackground intensity={resolvedMode === "dark" ? 0.25 : 0.8} />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomInset }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: contentBottomInset },
+        ]}
       >
         <View style={styles.heroWrapper}>
-          <LinearGradient colors={gradients.profileHero} style={styles.heroGradient}>
+          <View style={styles.heroCard}>
             <View style={styles.heroHeader}>
-              <Avatar
-                size={72}
-                uri={
-                  profile?.avatarUrl ??
-                  (user?.user_metadata?.avatar_url as string | undefined) ??
-                  null
-                }
-                label={displayName}
-              />
+              <TouchableOpacity
+                onPress={() => navigation.navigate("ProfileEdit")}
+                activeOpacity={0.85}
+              >
+                <Avatar size={72} uri={avatarUri} label={displayName} />
+              </TouchableOpacity>
               <View style={styles.heroInfo}>
-                <Text style={styles.name}>{displayName}</Text>
-                <Text style={styles.email}>{user?.email ?? "wallet@trezo.app"}</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("ProfileEdit")}
+                >
+                  <Text style={styles.name}>{displayName}</Text>
+                </TouchableOpacity>
+                <Text style={styles.email}>
+                  {user?.email ?? "wallet@trezo.app"}
+                </Text>
                 <Text style={styles.modeHint}>
                   Theme: {resolvedMode === "dark" ? "Dark" : "Light"} mode
                 </Text>
@@ -129,30 +151,39 @@ const ProfileScreen: React.FC = () => {
                 />
               </TouchableOpacity>
             </View>
-          </LinearGradient>
+          </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Settings</Text>
+          <View style={styles.settingsCard}>
+            <Text style={styles.sectionTitle}>TECHNICAL PROFILE</Text>
           {settingsItems.map((item, index) => (
             <TouchableOpacity
               key={item.label}
               activeOpacity={0.85}
-              style={[styles.settingRow, index < settingsItems.length - 1 && styles.rowBorder]}
+              style={[
+                styles.settingRow,
+                index < settingsItems.length - 1 && styles.rowBorder,
+              ]}
               onPress={() => {
                 if (item.route) {
-                  navigation.navigate(item.route);
+                  navigation.navigate(item.route as never);
                 }
               }}
             >
               <View style={styles.settingInfo}>
-                <Feather name={item.icon} size={18} color={colors.accentAlt} />
+                <Feather name={item.icon as any} size={18} color={colors.accent} />
                 <Text style={styles.settingLabel}>{item.label}</Text>
               </View>
-              <Feather name="chevron-right" size={18} color={colors.textMuted} />
+              <Feather
+                name="chevron-right"
+                size={18}
+                color={colors.textMuted}
+              />
             </TouchableOpacity>
           ))}
         </View>
+      </View>
 
         <TouchableOpacity
           activeOpacity={0.85}
@@ -182,7 +213,11 @@ const ProfileScreen: React.FC = () => {
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
               <View style={styles.modalIconBadge}>
-                <Feather name="alert-triangle" size={22} color={colors.danger} />
+                <Feather
+                  name="alert-triangle"
+                  size={22}
+                  color={colors.danger}
+                />
               </View>
               <Text style={styles.modalTitle}>Sign out of Trezo Wallet?</Text>
               <Text style={styles.modalBody}>
@@ -198,7 +233,11 @@ const ProfileScreen: React.FC = () => {
                   <Text style={styles.modalCancelLabel}>Stay signed in</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalDanger, isSigningOut && styles.modalButtonDisabled]}
+                  style={[
+                    styles.modalButton,
+                    styles.modalDanger,
+                    isSigningOut && styles.modalButtonDisabled,
+                  ]}
                   onPress={executeSignOut}
                   activeOpacity={0.85}
                   disabled={isSigningOut}
@@ -218,7 +257,7 @@ const ProfileScreen: React.FC = () => {
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
+const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
   StyleSheet.create({
     screen: {
       flex: 1,
@@ -229,14 +268,17 @@ const createStyles = (colors: ThemeColors) =>
       paddingTop: 12,
     },
     heroWrapper: {
-      borderRadius: 28,
-      borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.6),
-      overflow: "hidden",
       marginBottom: 20,
     },
-    heroGradient: {
+    heroCard: {
+      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF',
       padding: 24,
+      borderRadius: 28,
+      borderWidth: 1,
+      borderColor: colors.border,
+      // Zero Depth
+      shadowOpacity: 0,
+      elevation: 0,
     },
     heroHeader: {
       flexDirection: "row",
@@ -272,17 +314,24 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: withAlpha(colors.textPrimary, 0.08),
     },
     card: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 24,
-      padding: 20,
-      borderWidth: 1,
-      borderColor: colors.borderMuted,
       marginBottom: 20,
+    },
+    settingsCard: {
+      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF',
+      borderRadius: 24,
+      padding: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+      // Zero Depth
+      shadowOpacity: 0,
+      elevation: 0,
     },
     sectionTitle: {
       color: colors.textPrimary,
       fontSize: 18,
-      fontWeight: "700",
+      fontWeight: "800",
+      textTransform: 'uppercase',
+      letterSpacing: 2,
       marginBottom: 16,
     },
     settingRow: {
@@ -313,8 +362,8 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 16,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.24),
-      backgroundColor: withAlpha(colors.danger, 0.12),
+      borderColor: withAlpha(colors.danger, 0.3),
+      backgroundColor: mode === 'dark' ? 'rgba(220, 38, 38, 0.08)' : 'rgba(220, 38, 38, 0.04)',
       marginTop: 8,
     },
     signOutIconWrap: {
@@ -343,12 +392,15 @@ const createStyles = (colors: ThemeColors) =>
       width: "100%",
       borderRadius: 28,
       borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.35),
-      backgroundColor: colors.surfaceCard,
+      borderColor: withAlpha(colors.danger, 0.2),
+      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.95)' : '#FFFFFF',
       paddingVertical: 28,
       paddingHorizontal: 24,
       alignItems: "center",
       gap: 16,
+      // Zero Depth
+      shadowOpacity: 0,
+      elevation: 0,
     },
     modalIconBadge: {
       width: 64,

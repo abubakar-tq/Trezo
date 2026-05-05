@@ -37,7 +37,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
     Account owner2;
 
     bytes32 internal dummyId;
-    bytes32 internal rpIdHash;
+    bytes32 internal rpHash;
 
     uint256 internal px;
     uint256 internal py;
@@ -62,17 +62,17 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
 
         // Install PasskeyValidator with a passkey
         // Data encoding expected by onInstall:
-        // abi.encode(bytes32 idRaw, uint256 px, uint256 py, bytes32 rpIdHash)
+        // abi.encode(bytes32 idRaw, uint256 px, uint256 py)
         PassKeyDemo.PasskeyCredential memory passkey = PassKeyDemo.getPasskey(1);
         dummyId = passkey.init.idRaw;
         px = passkey.init.px;
         py = passkey.init.py;
-        rpIdHash = passkey.init.rpIdHash;
+        rpHash = PassKeyDemo.getPasskeyRpHash(1);
         passkeyPrivateKey = uint256(passkey.privateKey);
         instance.installModule({
             moduleTypeId: MODULE_TYPE_VALIDATOR,
             module: address(validator),
-            data: abi.encode(dummyId, px, py, rpIdHash)
+            data: abi.encode(dummyId, px, py)
         });
 
         helperConfig = new HelperConfig();
@@ -91,7 +91,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         UserOpData memory userOpData =
             instance.getExecOps({target: target, value: value, callData: "", txValidator: address(validator)});
 
-        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, 1);
+        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpHash, true, 1);
         (string memory cjson, uint256 cIdx, uint256 tIdx) =
             WebAuthnHelper.buildClientDataJSONAndIndices(userOpData.userOpHash);
         bytes32 msgHash = WebAuthnHelper.webAuthnMessageHash(ad, cjson);
@@ -120,7 +120,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         UserOpData memory userOpData =
             instance.getExecOps({target: target, value: value, callData: "", txValidator: address(validator)});
 
-        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, 1);
+        bytes memory ad = WebAuthnHelper.buildAuthenticatorData(rpHash, true, 1);
         (string memory cjson, uint256 cIdx, uint256 tIdx) =
             WebAuthnHelper.buildClientDataJSONAndIndices(userOpData.userOpHash);
         bytes32 msgHash = WebAuthnHelper.webAuthnMessageHash(ad, cjson);
@@ -166,7 +166,7 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         vm.expectEmit(true, true, false, false);
         emit PasskeyValidator.PasskeyAdded(instance.account, additional.init.idRaw);
         vm.prank(instance.account);
-        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py, additional.init.rpIdHash);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
 
         uint256 count = validator.passkeyCount(instance.account);
 
@@ -181,25 +181,113 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         // Act
         vm.expectRevert("exists");
         vm.prank(instance.account);
-        validator.addPasskey(existing.init.idRaw, existing.init.px, existing.init.py, existing.init.rpIdHash);
+        validator.addPasskey(existing.init.idRaw, existing.init.px, existing.init.py);
     }
 
-    function test_remove_passkey_emits_event_and_decrements_count() public {
+    function test_schedule_remove_passkey_emits_event_and_keeps_count() public {
         // Arrange
         PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
         vm.prank(instance.account);
-        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py, additional.init.rpIdHash);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
 
         // Act
         vm.expectEmit(true, true, false, false);
-        emit PasskeyValidator.PasskeyRemoved(instance.account, additional.init.idRaw);
+        emit PasskeyValidator.PasskeyRemovalScheduled(
+            instance.account,
+            additional.init.idRaw,
+            uint48(block.timestamp + validator.PASSKEY_REMOVAL_DELAY())
+        );
         vm.prank(instance.account);
-        validator.removePasskey(additional.init.idRaw);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
 
         uint256 count = validator.passkeyCount(instance.account);
 
         // Assert
-        assertEq(count, 1, "removing extra passkey should restore count");
+        assertEq(count, 2, "scheduling removal should not change active passkey count");
+    }
+
+    function test_cancel_remove_passkey_clears_pending_state() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+
+        vm.expectEmit(true, true, false, false);
+        emit PasskeyValidator.PasskeyRemovalCancelled(instance.account, additional.init.idRaw);
+        vm.prank(instance.account);
+        validator.cancelRemovePasskey(additional.init.idRaw);
+
+            (uint48 executeAfter,, bool cancelled) = validator.pendingRemovals(instance.account, additional.init.idRaw);
+            assertTrue(executeAfter > 0, "cancelled removal should preserve the original execution time for auditability");
+        assertTrue(cancelled, "pending removal should be marked cancelled");
+    }
+
+    function test_execute_remove_passkey_reverts_before_delay() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_RemovalNotReady.selector);
+        vm.prank(instance.account);
+        validator.executeRemovePasskey(additional.init.idRaw);
+    }
+
+    function test_execute_remove_passkey_reverts_when_cancelled() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+        vm.prank(instance.account);
+        validator.cancelRemovePasskey(additional.init.idRaw);
+
+        vm.warp(block.timestamp + validator.PASSKEY_REMOVAL_DELAY() + 1);
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_RemovalNotScheduled.selector);
+        vm.prank(instance.account);
+        validator.executeRemovePasskey(additional.init.idRaw);
+    }
+
+    function test_execute_remove_passkey_succeeds_after_delay() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+
+        vm.warp(block.timestamp + validator.PASSKEY_REMOVAL_DELAY() + 1);
+        vm.expectEmit(true, true, false, false);
+        emit PasskeyValidator.PasskeyRemoved(instance.account, additional.init.idRaw);
+        vm.prank(instance.account);
+        validator.executeRemovePasskey(additional.init.idRaw);
+
+        uint256 count = validator.passkeyCount(instance.account);
+        assertEq(count, 1, "removal should decrement active passkey count");
+    }
+
+    function test_remove_passkey_alias_respects_delay() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_RemovalNotReady.selector);
+        vm.prank(instance.account);
+        validator.removePasskey(additional.init.idRaw);
+    }
+
+    function test_remove_passkey_reverts_when_removing_only_passkey() public {
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_CannotRemoveLastPasskey.selector);
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(dummyId);
     }
 
     function test_remove_passkey_reverts_when_missing() public {
@@ -207,9 +295,22 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         bytes32 missingId = keccak256("missing-passkey");
 
         // Act
-        vm.expectRevert("no such key");
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_PasskeyDoesNotExist.selector);
         vm.prank(instance.account);
-        validator.removePasskey(missingId);
+        validator.executeRemovePasskey(missingId);
+    }
+
+    function test_schedule_remove_passkey_reverts_on_duplicate_pending_removal() public {
+        PassKeyDemo.PasskeyCredential memory additional = PassKeyDemo.getPasskey(0);
+        vm.prank(instance.account);
+        validator.addPasskey(additional.init.idRaw, additional.init.px, additional.init.py);
+
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
+
+        vm.expectRevert(PasskeyValidator.PasskeyValidator_RemovalAlreadyScheduled.selector);
+        vm.prank(instance.account);
+        validator.scheduleRemovePasskey(additional.init.idRaw);
     }
 
     function test_validate_user_op_succeeds_and_blocks_replay() public {
@@ -239,6 +340,38 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         );
     }
 
+    function test_validate_user_op_accepts_zero_counter_on_repeated_use_for_zero_counter_authenticators() public {
+        // Arrange
+        (UserOpData memory userOpData, bytes memory signature,) = _prepareUserOpSignature(0);
+        userOpData.userOp.signature = signature;
+
+        // Act
+        uint256 firstResult = _callValidateUserOp(userOpData);
+        uint256 secondResult = _callValidateUserOp(userOpData);
+
+        // Assert
+        uint256 expected = uint256(type(uint48).max) << 160;
+        assertEq(firstResult, expected, "zero-start authenticators should validate on first use");
+        assertEq(secondResult, expected, "zero-counter authenticators should remain usable");
+    }
+
+    function test_validate_user_op_rejects_zero_counter_after_positive_counter_initialization() public {
+        // Arrange
+        (UserOpData memory freshUserOp, bytes memory freshSignature,) = _prepareUserOpSignature(1);
+        freshUserOp.userOp.signature = freshSignature;
+        uint256 expected = uint256(type(uint48).max) << 160;
+
+        // Act
+        uint256 firstResult = _callValidateUserOp(freshUserOp);
+        (UserOpData memory zeroCounterUserOp, bytes memory zeroCounterSignature,) = _prepareUserOpSignature(0);
+        zeroCounterUserOp.userOp.signature = zeroCounterSignature;
+        uint256 zeroCounterResult = _callValidateUserOp(zeroCounterUserOp);
+
+        // Assert
+        assertEq(firstResult, expected, "positive counter should validate");
+        assertEq(zeroCounterResult, 1, "falling back to zero after positive initialization must fail");
+    }
+
     function test_validate_user_op_fails_for_unknown_passkey() public {
         // Arrange
         (UserOpData memory userOpData,, SignatureComponents memory components) = _prepareUserOpSignature(1);
@@ -264,20 +397,25 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         );
     }
 
-    function test_validate_user_op_rejects_wrong_rp_id_hash() public {
+    function test_validate_user_op_accepts_non_stored_rp_id_hash_when_signature_is_valid() public {
         // Arrange
-        (UserOpData memory userOpData,, SignatureComponents memory components) = _prepareUserOpSignature(1);
-        bytes memory wrongAd = abi.encodePacked(
-            bytes32(uint256(999)),
-            components.authenticatorData[32],
-            components.authenticatorData[33],
-            components.authenticatorData[34],
-            components.authenticatorData[35],
-            components.authenticatorData[36]
+        address target = makeAddr("userOpTargetAltRp");
+        UserOpData memory userOpData = instance.getExecOps({
+            target: target,
+            value: 0,
+            callData: "",
+            txValidator: address(validator)
+        });
+
+        bytes32 alternateRpIdHash = bytes32(uint256(999));
+        SignatureComponents memory components = _buildSignatureComponentsWithRpId(
+            userOpData.userOpHash,
+            1,
+            alternateRpIdHash
         );
         bytes memory signature = WebAuthnHelper.encodePasskeySignature(
             dummyId,
-            wrongAd,
+            components.authenticatorData,
             components.clientDataJSON,
             components.challengeIndex,
             components.typeIndex,
@@ -290,10 +428,11 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         uint256 result = _callValidateUserOp(userOpData);
 
         // Assert
+        uint256 expected = uint256(type(uint48).max) << 160;
         assertEq(
             result,
-            1,
-            "rpId mismatch should result in sig failure"
+            expected,
+            "rp hash is not enforced by the validator"
         );
     }
 
@@ -402,6 +541,54 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         assertFalse(stale, "stale counter should fail after stateful validation");
     }
 
+    function test_is_valid_signature_with_sender_accepts_zero_counter_before_first_stateful_use() public {
+        // Arrange
+        bytes32 messageHash = keccak256("1271-zero-first");
+        SignatureComponents memory components = _buildSignatureComponents(messageHash, 0);
+        bytes memory signature = WebAuthnHelper.encodePasskeySignature(
+            dummyId,
+            components.authenticatorData,
+            components.clientDataJSON,
+            components.challengeIndex,
+            components.typeIndex,
+            components.r,
+            components.s
+        );
+
+        // Act
+        bytes4 result = validator.isValidSignatureWithSender(instance.account, messageHash, signature);
+
+        // Assert
+        assertEq(uint32(result), uint32(0x1626ba7e), "first zero counter should be accepted");
+    }
+
+    function test_is_valid_signature_with_sender_accepts_repeated_zero_counter_for_zero_counter_authenticators()
+        public
+    {
+        // Arrange
+        (UserOpData memory userOpData, bytes memory opSignature,) = _prepareUserOpSignature(0);
+        userOpData.userOp.signature = opSignature;
+        _callValidateUserOp(userOpData);
+
+        bytes32 messageHash = keccak256("1271-zero-repeat");
+        SignatureComponents memory components = _buildSignatureComponents(messageHash, 0);
+        bytes memory signature = WebAuthnHelper.encodePasskeySignature(
+            dummyId,
+            components.authenticatorData,
+            components.clientDataJSON,
+            components.challengeIndex,
+            components.typeIndex,
+            components.r,
+            components.s
+        );
+
+        // Act
+        bytes4 result = validator.isValidSignatureWithSender(instance.account, messageHash, signature);
+
+        // Assert
+        assertEq(uint32(result), uint32(0x1626ba7e), "zero-counter authenticators should remain usable");
+    }
+
     function _prepareUserOpSignature(uint32 counter)
         internal
         returns (UserOpData memory, bytes memory, SignatureComponents memory)
@@ -433,7 +620,15 @@ contract PasskeyValidatorTest is RhinestoneModuleKit, Test {
         view
         returns (SignatureComponents memory components)
     {
-        components.authenticatorData = WebAuthnHelper.buildAuthenticatorData(rpIdHash, true, counter);
+        return _buildSignatureComponentsWithRpId(challenge, counter, rpHash);
+    }
+
+    function _buildSignatureComponentsWithRpId(bytes32 challenge, uint32 counter, bytes32 adRpIdHash)
+        internal
+        view
+        returns (SignatureComponents memory components)
+    {
+        components.authenticatorData = WebAuthnHelper.buildAuthenticatorData(adRpIdHash, true, counter);
         (components.clientDataJSON, components.challengeIndex, components.typeIndex) =
             WebAuthnHelper.buildClientDataJSONAndIndices(challenge);
 

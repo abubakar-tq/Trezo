@@ -1,0 +1,55 @@
+# Graphify ignore — exclude dependency libraries, build artifacts, and worktrees
+# This prevents graphify from indexing noise and keeps the graph focused on Trezo source code.
+
+# Foundry dependency libraries (OpenZeppelin, FreshCryptoLib, account-abstraction, etc.)
+contracts/lib/
+
+# Foundry build artifacts
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# Node modules
+node_modules/
+apps/*/node_modules/
+
+# Kilo worktrees (duplicate of main source)
+.kilo/worktrees/
+
+# Build artifacts
+dist/
+build/
+out/
+.cache/
+.turbo/
+.next/
+metro-cache/
+web-build/
+
+# Mobile build artifacts
+apps/mobile/android/
+apps/mobile/dist/
+apps/mobile/assets/
+
+# Guardian approval build
+apps/guardian-approval/dist/
+
+# Agent artifacts (summaries, not source)
+agent-artifacts/
+
+# Graph output itself
+graphify-out/
+
+# Temp/root-level scripts
+find_error.js
+decode_calldata.js
+index.js
+
+# Supabase temp
+apps/backend/supabase/.temp/
+apps/backend/query_db.js
+
+# Test scripts
+apps/guardian-approval/test_fetch.js
+apps/guardian-approval/test_rpc.js
+apps/guardian-approval/test_fetch_rpc.js
