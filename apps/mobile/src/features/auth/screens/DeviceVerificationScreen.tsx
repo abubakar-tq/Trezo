@@ -142,6 +142,14 @@ export const DeviceVerificationScreen = () => {
     setShowReLoginModal(true);
   }, []);
 
+  const handleRecover = useCallback(() => {
+    setGuardNavigation(false);
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "RecoveryEntry", params: { reason: "user_initiated" } }],
+    });
+  }, [navigation, setGuardNavigation]);
+
   const handleCancelReLogin = useCallback(() => {
     setShowReLoginModal(false);
   }, []);
@@ -269,6 +277,18 @@ export const DeviceVerificationScreen = () => {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Recovery link */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.recoverButton}
+            onPress={handleRecover}
+            disabled={isAuthenticating || isLoggingOut}
+          >
+            <Text style={[styles.recoverText, { color: colors.accent }]}>
+              Don{"’"}t have a passkey on this device? Recover account
+            </Text>
+          </TouchableOpacity>
 
           {/* Tertiary re-login link */}
           <TouchableOpacity
@@ -452,6 +472,18 @@ const styles = StyleSheet.create({
   secondaryLabel: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  recoverButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+  },
+  recoverText: {
+    fontSize: 13,
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
   reLoginButton: {
     paddingVertical: 6,
