@@ -19,6 +19,7 @@ import { BalanceService } from "@/src/features/assets/services/BalanceService";
 import { TokenRegistryService } from "@/src/features/assets/services/TokenRegistryService";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 import { AllowanceService } from "@/src/features/swaps/services/AllowanceService";
+import { classify, type ClassifiedError } from "@/src/features/swaps/services/SwapErrorClassifier";
 import { SwapExecutionService } from "@/src/features/swaps/services/SwapExecutionService";
 import { SwapPreparationService } from "@/src/features/swaps/services/SwapPreparationService";
 import { SwapQuoteService } from "@/src/features/swaps/services/SwapQuoteService";
@@ -29,6 +30,7 @@ import { getEnabledChains, type SupportedChainId } from "@/src/integration/chain
 import { resolveNetworkKey, getNetworkConfig } from "@/src/integration/networks";
 import { useUserStore } from "@/src/store/useUserStore";
 import { TabScreenContainer, MeshBackground, TokenIcon, AssetPickerModal, type Asset } from "@shared/components";
+import Toast from "@/src/shared/components/feedback/Toast";
 import { useTabContentBottomInset } from "@hooks";
 
 type DexTab = "swap" | "bridge";
@@ -119,7 +121,9 @@ export const DexScreen: React.FC = () => {
   const [approvalRequired, setApprovalRequired] = useState<boolean>(false);
   const [preparedPlan, setPreparedPlan] = useState<SwapPlan | null>(null);
   const [uiState, setUiState] = useState<UiState>("idle");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorState, setErrorState] = useState<ClassifiedError | null>(null);
+  const [toast, setToast] = useState<{ message: string; severity: "info" | "warning" | "error" } | null>(null);
+  const [retryNonce, setRetryNonce] = useState<number>(0);
 
   const [isAssetPickerVisible, setIsAssetPickerVisible] = useState(false);
   const [assetPickerSide, setAssetPickerSide] = useState<"sell" | "buy">("sell");
@@ -197,7 +201,12 @@ export const DexScreen: React.FC = () => {
 
     loadWallet().catch((error) => {
       if (cancelled) return;
-      setErrorMessage(error instanceof Error ? error.message : "Failed to load wallet for chain.");
+      const c = classify(error);
+      if (c.kind === "network") {
+        setToast({ message: c.userMessage, severity: c.severity });
+      } else {
+        setErrorState(c);
+      }
     });
 
     return () => {
@@ -233,7 +242,12 @@ export const DexScreen: React.FC = () => {
         }
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(error instanceof Error ? error.message : "Failed to fetch token balances.");
+          const c = classify(error);
+          if (c.kind === "network") {
+            setToast({ message: c.userMessage, severity: c.severity });
+          } else {
+            setErrorState(c);
+          }
           setTokenBalances({});
         }
       } finally {
@@ -275,7 +289,7 @@ export const DexScreen: React.FC = () => {
     if (toTokenKey(sellToken) === toTokenKey(buyToken)) {
       setQuote(null);
       setApprovalRequired(false);
-      setErrorMessage("Sell and buy tokens must be different.");
+      setErrorState(classify(new Error("Sell and buy tokens must be different.")));
       return () => {
         cancelled = true;
       };
@@ -283,7 +297,7 @@ export const DexScreen: React.FC = () => {
 
     const debounce = setTimeout(async () => {
       if (cancelled) return;
-      setErrorMessage(null);
+      setErrorState(null);
       setUiState("quoting");
 
       try {
@@ -322,7 +336,12 @@ export const DexScreen: React.FC = () => {
         setQuote(null);
         setApprovalRequired(false);
         setUiState("idle");
-        setErrorMessage(error instanceof Error ? error.message : "Failed to fetch swap quote.");
+        const c = classify(error);
+        if (c.kind === "network") {
+          setToast({ message: c.userMessage, severity: c.severity });
+        } else {
+          setErrorState(c);
+        }
       }
     }, DEFAULT_QUOTE_DEBOUNCE_MS);
 
@@ -330,7 +349,7 @@ export const DexScreen: React.FC = () => {
       cancelled = true;
       clearTimeout(debounce);
     };
-  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, slippagePct, walletAddress]);
+  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, slippagePct, walletAddress, retryNonce]);
 
   const buildIntent = (): SwapIntent | null => {
     if (!user?.id || !walletId || !walletAddress || !sellToken || !buyToken) {
@@ -377,11 +396,11 @@ export const DexScreen: React.FC = () => {
   const handleReviewSwap = async () => {
     const intent = buildIntent();
     if (!intent) {
-      setErrorMessage("Missing user or wallet context for swap.");
+      setErrorState(classify(new Error("Missing user or wallet context for swap.")));
       return;
     }
 
-    setErrorMessage(null);
+    setErrorState(null);
     setUiState("validating");
 
     try {
@@ -391,18 +410,23 @@ export const DexScreen: React.FC = () => {
     } catch (error) {
       setPreparedPlan(null);
       setUiState("failed");
-      setErrorMessage(error instanceof Error ? error.message : "Failed to prepare swap.");
+      const c = classify(error);
+      if (c.kind === "network") {
+        setToast({ message: c.userMessage, severity: c.severity });
+      } else {
+        setErrorState(c);
+      }
     }
   };
 
   const handleExecuteSwap = async () => {
     const intent = buildIntent();
     if (!intent) {
-      setErrorMessage("Missing user or wallet context for swap.");
+      setErrorState(classify(new Error("Missing user or wallet context for swap.")));
       return;
     }
 
-    setErrorMessage(null);
+    setErrorState(null);
     setUiState(preparedPlan?.approvalRequired ? "signing_approval" : "signing_swap");
 
     try {
@@ -412,27 +436,30 @@ export const DexScreen: React.FC = () => {
         receiptPollIntervalMs: 2_000,
       });
 
-      if (result.status === "confirmed") {
-        setUiState("confirmed");
-      } else if (result.status === "pending") {
-        setUiState(result.swapTransactionId ? "swap_pending" : "approval_pending");
-      } else if (result.status === "cancelled") {
-        setUiState("cancelled");
+      if (result.status === "cancelled") {
+        setErrorState(classify(new Error("User cancelled passkey prompt")));
+      } else if (result.status === "failed" && result.error) {
+        setErrorState(classify(new Error(result.error)));
       } else {
-        setUiState("failed");
-      }
-
-      const transactionId = result.swapTransactionId ?? result.approvalTransactionId;
-      if (transactionId) {
-        navigation.navigate("TransactionStatus", { transactionId });
-      }
-
-      if (result.error) {
-        setErrorMessage(result.error);
+        setErrorState(null);
+        const transactionId = result.swapTransactionId ?? result.approvalTransactionId ?? "";
+        if (transactionId) {
+          navigation.navigate("TransactionStatus", { transactionId });
+        }
+        if (result.status === "confirmed") {
+          setUiState("confirmed");
+        } else if (result.status === "pending") {
+          setUiState(result.swapTransactionId ? "swap_pending" : "approval_pending");
+        }
       }
     } catch (error) {
       setUiState("failed");
-      setErrorMessage(error instanceof Error ? error.message : "Swap execution failed.");
+      const c = classify(error);
+      if (c.kind === "network") {
+        setToast({ message: c.userMessage, severity: c.severity });
+      } else {
+        setErrorState(c);
+      }
     }
   };
 
@@ -453,6 +480,13 @@ export const DexScreen: React.FC = () => {
   return (
     <TabScreenContainer includeBottomInset>
       <MeshBackground intensity={0.8} />
+
+      <Toast
+        visible={Boolean(toast)}
+        message={toast?.message ?? ""}
+        severity={toast?.severity}
+        onHide={() => setToast(null)}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -529,7 +563,7 @@ export const DexScreen: React.FC = () => {
                 onPress={() => {
                   setSelectedChainId(chain.id as SupportedChainId);
                   setPreparedPlan(null);
-                  setErrorMessage(null);
+                  setErrorState(null);
                 }}
               >
                 <Text style={[styles.chainChipText, { color: isActive ? colors.accent : colors.textSecondary }]}>
@@ -718,12 +752,49 @@ export const DexScreen: React.FC = () => {
           )}
 
           {/* Error */}
-          {errorMessage && (
-            <View style={[styles.errorBanner, { backgroundColor: withAlpha(colors.danger, 0.1), borderColor: withAlpha(colors.danger, 0.25) }]}>
-              <Feather name="alert-circle" size={14} color={colors.danger} style={{ marginTop: 1 }} />
-              <Text style={[styles.errorText, { color: colors.danger }]}>{errorMessage}</Text>
-            </View>
-          )}
+          {errorState ? (
+            errorState.kind === "user_rejected" ? (
+              <View style={[styles.infoPill, { backgroundColor: withAlpha(colors.accent, 0.12), borderColor: withAlpha(colors.accent, 0.4) }]}>
+                <Text style={[styles.infoPillText, { color: colors.accent }]}>{errorState.userMessage}</Text>
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.errorBanner,
+                  {
+                    backgroundColor: withAlpha(
+                      errorState.severity === "warning" ? colors.warning : colors.danger,
+                      0.12,
+                    ),
+                    borderColor: withAlpha(
+                      errorState.severity === "warning" ? colors.warning : colors.danger,
+                      0.4,
+                    ),
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.errorBannerText,
+                    { color: errorState.severity === "warning" ? colors.warning : colors.danger },
+                  ]}
+                >
+                  {errorState.userMessage}
+                </Text>
+                {errorState.retryable ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setErrorState(null);
+                      setRetryNonce((n) => n + 1);
+                    }}
+                    style={styles.retryButton}
+                  >
+                    <Text style={[styles.retryButtonText, { color: colors.accent }]}>Try again</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )
+          ) : null}
         </View>
 
         {/* CTA buttons */}
@@ -1041,18 +1112,39 @@ const styles = StyleSheet.create({
   },
   errorBanner: {
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
-  errorText: {
-    fontSize: 13,
-    fontWeight: "600",
+  errorBannerText: {
     flex: 1,
-    lineHeight: 18,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  retryButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  retryButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  infoPill: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  infoPillText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   // Buttons
