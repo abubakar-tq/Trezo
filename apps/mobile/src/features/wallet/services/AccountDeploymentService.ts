@@ -209,6 +209,27 @@ export class AccountDeploymentService {
     const userOpHash = await submitConfiguredUserOp(signedUserOp, chainId, bundlerUrl);
     const receipt = await waitForUserOperationReceipt(userOpHash, chainId, bundlerUrl);
 
+    // Auto-sync the local onboarding passkey to Supabase now that we have a confirmed
+    // on-chain wallet. Non-fatal: a Supabase failure here must not block deployment.
+    try {
+      const localPasskey = await PasskeyService.getPasskey(userId);
+      const walletId = (params as { walletId?: string }).walletId;
+      if (localPasskey?.credentialId && walletId) {
+        await PasskeyService.syncPasskeyToCloud(userId, walletId, {
+          credentialId: localPasskey.credentialId,
+          credentialIdRaw: localPasskey.credentialIdRaw ?? "0x",
+          publicKeyX: localPasskey.publicKeyX ?? "0x",
+          publicKeyY: localPasskey.publicKeyY ?? "0x",
+          deviceName: localPasskey.deviceName,
+          deviceType: localPasskey.deviceType,
+          createdAt: localPasskey.createdAt ?? new Date().toISOString(),
+          rpId: localPasskey.rpId ?? "",
+        });
+      }
+    } catch (err) {
+      console.warn("[AccountDeploymentService] passkey cloud sync failed (non-fatal):", err);
+    }
+
     return {
       accountAddress: built.sender,
       userOpHash,
