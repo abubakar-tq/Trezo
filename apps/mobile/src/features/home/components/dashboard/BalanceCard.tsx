@@ -11,6 +11,7 @@ interface BalanceCardProps {
   isDeployed?: boolean;
   isHydrating?: boolean;
   hasLocalPasskey?: boolean | null;
+  missingPrices?: string[];
   onDeploy?: () => void;
   onEnablePasskey?: () => void;
 }
@@ -22,6 +23,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   isDeployed = true,
   isHydrating = false,
   hasLocalPasskey = null,
+  missingPrices,
   onDeploy,
   onEnablePasskey,
 }) => {
@@ -68,19 +70,25 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
 
         <View style={styles.balanceRow}>
           <Text style={[styles.currency, { color: colors.textSecondary }]}>$</Text>
-          <Text 
-            style={[styles.balance, { color: colors.textPrimary }]} 
-            numberOfLines={1} 
+          <Text
+            style={[styles.balance, { color: colors.textPrimary }]}
+            numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.8}
           >
-            {loading ? "---" : (balance >= 1000000000 
+            {loading ? "---" : (balance >= 1000000000
               ? `${(balance / 1000000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}B`
-              : balance >= 1000000 
+              : balance >= 1000000
                 ? `${(balance / 1000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`
                 : balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
           </Text>
         </View>
+
+        {missingPrices && missingPrices.length > 0 ? (
+          <Text style={[styles.missingPriceHint, { color: colors.textMuted }]}>
+            USD unavailable for {missingPrices.length} token{missingPrices.length === 1 ? "" : "s"}
+          </Text>
+        ) : null}
 
 
         <View style={[styles.footer, { borderTopColor: colors.glassBorder }]}>
@@ -156,6 +164,11 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '900',
     letterSpacing: -1,
+  },
+  missingPriceHint: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: "500",
   },
   pulseContainer: {
     marginTop: 16,

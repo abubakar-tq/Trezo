@@ -55,7 +55,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   useNotificationsBootstrap();
   const unreadCount = useNotificationStore((state) => state.unreadCount);
   
-  const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress ?? undefined);
+  const { totalBalanceUSD, tokens, isLoading: walletLoading, missingPrices } = useWalletData(smartAccountAddress ?? undefined);
 
   const { isHydrating, hasLocalPasskey } = useAccountManagement();
   const contentBottomInset = useTabContentBottomInset();
@@ -169,6 +169,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
             isDeployed={smartAccountDeployed}
             isHydrating={isHydrating}
             hasLocalPasskey={hasLocalPasskey}
+            missingPrices={missingPrices}
             onDeploy={() => navigation.navigate("DeployAccount")}
             onEnablePasskey={() => navigation.navigate("RecoveryEntry")}
           />
