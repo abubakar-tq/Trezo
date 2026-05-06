@@ -213,8 +213,28 @@ export class SwapExecutionService {
     intent: SwapIntent,
     options?: ExecuteSwapOptions,
   ): Promise<SwapExecutionResult> {
-    const plan = await SwapPreparationService.prepareSwap(intent);
+    let plan = await SwapPreparationService.prepareSwap(intent);
     const intentId = createIntentId();
+
+    // ── Staleness/drift detection ────────────────────────────────────────────
+    const MAX_QUOTE_AGE_MS = 30_000;
+
+    if (Date.now() - plan.quotedAt > MAX_QUOTE_AGE_MS) {
+      // Re-prepare with fresh quote.
+      const fresh = await SwapPreparationService.prepareSwap(intent);
+      const oldOut = plan.quote.estimatedBuyAmountRaw;
+      const newOut = fresh.quote.estimatedBuyAmountRaw;
+      // Slippage tolerance is in BPS on the intent
+      const allowedDriftBps = BigInt(intent.slippageBps);
+      // If new estimate is materially worse beyond slippage tolerance, throw.
+      if (newOut < oldOut) {
+        const driftBps = ((oldOut - newOut) * 10_000n) / oldOut;
+        if (driftBps > allowedDriftBps) {
+          throw new Error("Quote is stale: price moved beyond slippage tolerance");
+        }
+      }
+      plan = fresh;
+    }
 
     let approvalDraftId: string | undefined;
     let approvalRow: WalletTransaction | undefined;

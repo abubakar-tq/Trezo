@@ -331,6 +331,7 @@ export class SwapPreparationService {
       approvalTransactionInput,
       swapTransactionInput,
       warnings,
+      quotedAt: Date.now(),
     };
   }
 }

@@ -65,6 +65,8 @@ export type SwapPlan = {
   approvalTransactionInput?: CreateWalletTransactionInput;
   swapTransactionInput: CreateWalletTransactionInput;
   warnings: SwapWarning[];
+  /** Epoch ms when the underlying quote was obtained. Used for staleness checks. */
+  quotedAt: number;
 };
 
 export type SwapExecutionResult = {
