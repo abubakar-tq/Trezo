@@ -1,6 +1,9 @@
-import { ethers } from "ethers";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getRpcUrl } from "../../core/network/chain";
+import type { Address } from "viem";
+
+import { PortfolioService, type TokenBalance } from "@/src/features/portfolio/services/PortfolioService";
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 
 export interface MoralisToken {
   symbol: string;
@@ -8,8 +11,8 @@ export interface MoralisToken {
   balance: string;
   balance_formatted?: string;
   decimals: number;
-  usd_price: number;
-  usd_value: number;
+  usd_price: number | null;
+  usd_value: number | null;
   native_token?: boolean;
   logo?: string;
   token_address?: string;
@@ -23,72 +26,86 @@ export interface WalletDataState {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
+  missingPrices: string[];
   refetch: () => void;
 }
 
-const BALANCE_POLL_MS = 10_000;
+const POLL_MS = 10_000;
+
+const toMoralisToken = (t: TokenBalance): MoralisToken => ({
+  symbol: t.symbol,
+  name: t.name,
+  balance: t.amount.toString(),
+  balance_formatted: t.amount.toFixed(6),
+  decimals: t.decimals,
+  usd_price: t.price,
+  usd_value: t.value,
+  native_token: t.address === "native",
+  token_address: t.address === "native" ? undefined : (t.address as string),
+});
 
 export const useWalletData = (address?: string, _chain: string = "0x1"): WalletDataState => {
-  const [realEthBalance, setRealEthBalance] = useState<number>(0);
-  const [isRealLoading, setIsRealLoading] = useState<boolean>(false);
-  const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const aaAccount = useWalletStore((s) => s.aaAccount);
+  const activeChainId = useWalletStore((s) => s.activeChainId);
+  const chainId: SupportedChainId =
+    (aaAccount?.chainId as SupportedChainId | undefined) ??
+    (activeChainId as SupportedChainId | undefined) ??
+    DEFAULT_CHAIN_ID;
 
-  const fetchRealBalance = useCallback(async () => {
+  const [tokens, setTokens] = useState<MoralisToken[]>([]);
+  const [totalUsd, setTotalUsd] = useState<number>(0);
+  const [missingPrices, setMissingPrices] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<Error | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchPortfolio = useCallback(async () => {
     if (!address) {
-      setRealEthBalance(0);
+      setTokens([]);
+      setTotalUsd(0);
+      setMissingPrices([]);
       return;
     }
     try {
-      setIsRealLoading(true);
-      const rpcUrl = getRpcUrl();
-      const provider = new ethers.JsonRpcProvider(rpcUrl);
-      const raw = await provider.getBalance(address);
-      const formatted = parseFloat(ethers.formatEther(raw));
-      setRealEthBalance(formatted);
+      setIsLoading(true);
+      setError(null);
+      const portfolio = await PortfolioService.getPortfolio(address as Address, chainId);
+      setTokens(portfolio.tokens.map(toMoralisToken));
+      setTotalUsd(portfolio.totalValue);
+      setMissingPrices(portfolio.missingPrices);
     } catch (e) {
-      console.warn("❌ [useWalletData] Failed to fetch balance:", e);
+      console.warn("[useWalletData] fetch failed:", e);
+      setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
-      setIsRealLoading(false);
+      setIsLoading(false);
     }
-  }, [address]);
+  }, [address, chainId]);
 
   useEffect(() => {
-    fetchRealBalance();
-    pollRef.current = setInterval(fetchRealBalance, BALANCE_POLL_MS);
+    fetchPortfolio();
+    pollRef.current = setInterval(fetchPortfolio, POLL_MS);
     return () => {
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
     };
-  }, [fetchRealBalance]);
+  }, [fetchPortfolio]);
 
-  const { tokens, totalBalanceUSD } = useMemo(() => {
-    const ethToken: MoralisToken = {
-      symbol: "ETH",
-      name: "Ethereum",
-      balance: realEthBalance.toString(),
-      balance_formatted: realEthBalance.toFixed(6),
-      decimals: 18,
-      usd_price: 2500,
-      usd_value: realEthBalance * 2500,
-      native_token: true,
-      logo: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
-    };
-
-    const list = [ethToken];
-    const total = list.reduce((sum, t) => sum + t.usd_value, 0);
-    return { tokens: list, totalBalanceUSD: total };
-  }, [realEthBalance]);
+  const ethBalance = useMemo(() => {
+    const native = tokens.find((t) => t.native_token);
+    return native ? parseFloat(native.balance) : 0;
+  }, [tokens]);
 
   return {
-    ethBalance: realEthBalance,
+    ethBalance,
     tokens,
-    totalBalanceUSD,
+    totalBalanceUSD: totalUsd,
     totalChange24h: 0,
-    isLoading: isRealLoading,
-    isError: false,
-    error: null,
-    refetch: fetchRealBalance,
+    isLoading,
+    isError: Boolean(error),
+    error,
+    missingPrices,
+    refetch: fetchPortfolio,
   };
 };
