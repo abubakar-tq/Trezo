@@ -51,8 +51,20 @@ const getStatusColor = (status: WalletTransaction["status"], success: string, wa
   return muted;
 };
 
+const FAILED_STATUSES: readonly WalletTransaction["status"][] = [
+  "failed",
+  "cancelled",
+  "dropped",
+];
+
+const isFailedStatus = (status: WalletTransaction["status"]): boolean =>
+  FAILED_STATUSES.includes(status);
+
 const getAmount = (tx: WalletTransaction): string => {
   if (!tx.amountDisplay || !tx.tokenSymbol) return "-";
+  if (isFailedStatus(tx.status)) {
+    return tx.amountDisplay;
+  }
   const sign = tx.direction === "outgoing" ? "-" : tx.direction === "incoming" ? "+" : "";
   return `${sign}${tx.amountDisplay}`;
 };
@@ -159,8 +171,18 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 3 }) => {
             </View>
 
             <View style={styles.itemRight}>
+              {isFailedStatus(tx.status) ? (
+                <View style={[styles.failedBadge, { backgroundColor: withAlpha(colors.danger, 0.15) }]}>
+                  <Text style={[styles.failedBadgeText, { color: colors.danger }]}>Failed</Text>
+                </View>
+              ) : null}
               <Text
-                style={[styles.amountText, { color: colors.textPrimary }]}
+                style={[
+                  styles.amountText,
+                  {
+                    color: isFailedStatus(tx.status) ? colors.textMuted : colors.textPrimary,
+                  },
+                ]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
               >
@@ -256,5 +278,16 @@ const styles = StyleSheet.create({
     width: 6,
     height: 14,
     borderRadius: 3,
+  },
+  failedBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  failedBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 });
