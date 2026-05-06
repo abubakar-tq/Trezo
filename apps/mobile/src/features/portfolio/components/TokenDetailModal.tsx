@@ -1,16 +1,15 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
 import { withAlpha } from '@utils/color';
-import { TokenIcon, Sparkline } from '@shared/components';
+import { TokenIcon, InteractiveChart } from '@shared/components';
 import type { TokenBalance } from '@features/portfolio/services/PortfolioService';
 import { marketService } from '@services/MarketService';
 import { useAssetHistory } from '@hooks/useMarketData';
 import { ActivityIndicator } from 'react-native';
 
-const { width, height } = Dimensions.get('window');
-
+const { width } = Dimensions.get('window');
 interface TokenDetailModalProps {
   visible: boolean;
   onClose: () => void;
@@ -20,15 +19,11 @@ interface TokenDetailModalProps {
 export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onClose, token }) => {
   const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
-
   const isDark = resolvedMode === 'dark';
-  const glassBackground = isDark ? 'rgba(25, 25, 25, 0.95)' : '#FFFFFF';
 
-  // State for chart filter
   const [selectedPeriod, setSelectedPeriod] = React.useState('1W');
   const [marketDetails, setMarketDetails] = React.useState<any>(null);
 
-  // Map symbol to CoinCap ID (simplified for top assets)
   const coinId = React.useMemo(() => {
     if (!token) return '';
     const map: Record<string, string> = {
@@ -55,8 +50,23 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
 
   const { history: chartData, loading: chartLoading } = useAssetHistory(coinId, selectedPeriod);
 
+  // Period % change — computed from first/last chart data points
+  const periodChange = React.useMemo(() => {
+    if (chartData.length < 2) return null;
+    const first = chartData[0];
+    const last = chartData[chartData.length - 1];
+    if (!first) return null;
+    return ((last - first) / first) * 100;
+  }, [chartData]);
+
+  // Fallback: use 24h from API or token prop until chartData loads
+  const displayChange = periodChange ?? parseFloat(marketDetails?.changePercent24Hr ?? String(token?.change24h ?? 0));
+  const isPositive = displayChange >= 0;
+  const chartColor = isPositive ? colors.accent : colors.danger;
+
   React.useEffect(() => {
     if (visible && coinId) {
+      setMarketDetails(null);
       marketService.getAssetDetails(coinId).then((details: any) => {
         if (details) setMarketDetails(details);
       });
@@ -74,11 +84,11 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
     >
       <View style={styles.overlay}>
         <TouchableOpacity style={styles.dismissOverlay} onPress={onClose} activeOpacity={1} />
-        <View style={[styles.content, { backgroundColor: glassBackground, borderColor: colors.border }]}>
-          {/* Header Compact */}
+        <View style={[styles.content, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderColor: colors.border }]}>
+          {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
-              <TokenIcon symbol={token.symbol} address={token.address} size={28} />
+              <TokenIcon symbol={token.symbol} size={28} />
               <View>
                 <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{token.name}</Text>
                 <Text style={[styles.headerSymbol, { color: colors.textSecondary }]}>{token.symbol}</Text>
@@ -88,39 +98,54 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
               <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
- 
+
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
-            {/* Price Hero Compact */}
+            {/* Price + change badge */}
             <View style={styles.priceHero}>
               <Text style={[styles.currentPrice, { color: colors.textPrimary }]}>
                 ${(token.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </Text>
-              <View style={[styles.priceChange, { backgroundColor: withAlpha(parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? colors.success : colors.danger, 0.1) }]}>
-                <Text style={[styles.priceChangeText, { color: parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? colors.success : colors.danger }]}>
-                  {parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? '+' : ''}{parseFloat(marketDetails?.changePercent24Hr || '0').toFixed(2)}%
+              <View style={[styles.priceChange, { backgroundColor: withAlpha(isPositive ? colors.success : colors.danger, 0.1) }]}>
+                <Text style={[styles.priceChangeText, { color: isPositive ? colors.success : colors.danger }]}>
+                  {isPositive ? '+' : ''}{displayChange.toFixed(2)}%
                 </Text>
               </View>
             </View>
- 
-            {/* Minimal Chart */}
+
+            {/* Holdings row (portfolio tokens only) */}
+            {token.value > 0 && (
+              <View style={[styles.holdingRow, { backgroundColor: isDark ? '#2C2C2E' : colors.surfaceMuted }]}>
+                <Text style={[styles.holdingLabel, { color: colors.textMuted }]}>MY HOLDING</Text>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={[styles.holdingValue, { color: colors.textPrimary }]}>
+                    ${token.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Text>
+                  <Text style={[styles.holdingAmount, { color: colors.textSecondary }]}>
+                    {token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} {token.symbol}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Interactive chart */}
             <View style={styles.chartContainer}>
               {chartLoading ? (
-                <View style={{ height: 100, justifyContent: 'center' }}>
+                <View style={{ height: 140, justifyContent: 'center' }}>
                   <ActivityIndicator color={colors.accent} size="small" />
                 </View>
               ) : (
-                <Sparkline 
-                  data={chartData.length > 0 ? chartData : [0,0]} 
-                  width={width - 80} 
-                  height={100} 
-                  color={parseFloat(marketDetails?.changePercent24Hr || '0') >= 0 ? colors.accent : colors.danger} 
-                  strokeWidth={2.5} 
+                <InteractiveChart
+                  data={chartData.length > 0 ? chartData : [0, 0]}
+                  chartWidth={width - 80}
+                  chartHeight={140}
+                  color={chartColor}
                 />
               )}
+              {/* Period selector */}
               <View style={styles.chartFilters}>
                 {['1D', '1W', '1M', '1Y'].map(p => (
-                  <TouchableOpacity 
-                    key={p} 
+                  <TouchableOpacity
+                    key={p}
                     onPress={() => setSelectedPeriod(p)}
                     style={[styles.filterPill, selectedPeriod === p && { backgroundColor: withAlpha(colors.accent, 0.1) }]}
                   >
@@ -130,23 +155,31 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
               </View>
             </View>
 
-            {/* Pinpoint Stats Grid */}
+            {/* Stats grid */}
             <View style={styles.statsGrid}>
               <View style={styles.statItem}>
                 <Text style={[styles.statLabel, { color: colors.textMuted }]}>MARKET CAP</Text>
                 <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  ${marketDetails ? (parseFloat(marketDetails.marketCapUsd) / 1000000000).toFixed(2) + 'B' : '---'}
+                  {(() => {
+                    const cap = marketDetails ? parseFloat(marketDetails.marketCapUsd) : 0;
+                    if (!cap) return '---';
+                    if (cap >= 1e9) return `$${(cap / 1e9).toFixed(2)}B`;
+                    return `$${(cap / 1e6).toFixed(2)}M`;
+                  })()}
                 </Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={[styles.statLabel, { color: colors.textMuted }]}>24H VOLUME</Text>
                 <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                   ${marketDetails ? (parseFloat(marketDetails.volumeUsd24Hr) / 1000000).toFixed(2) + 'M' : '---'}
+                  {(() => {
+                    const vol = marketDetails ? parseFloat(marketDetails.volumeUsd24Hr) : 0;
+                    if (!vol) return '---';
+                    if (vol >= 1e9) return `$${(vol / 1e9).toFixed(2)}B`;
+                    return `$${(vol / 1e6).toFixed(2)}M`;
+                  })()}
                 </Text>
               </View>
             </View>
-
-
           </ScrollView>
         </View>
       </View>
@@ -224,6 +257,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  holdingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  holdingLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  holdingValue: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  holdingAmount: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
   chartContainer: {
     marginVertical: 10,
     alignItems: 'center',
@@ -264,17 +320,5 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 14,
     fontWeight: '700',
-  },
-  tradeButton: {
-    height: 54,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tradeButtonText: {
-    fontSize: 15,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
 });

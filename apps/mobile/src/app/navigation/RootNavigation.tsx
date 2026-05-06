@@ -66,13 +66,6 @@ const RootNavigation = () => {
     splashTargetRef.current = splashTarget;
   }, [splashTarget]);
 
-  console.log(
-    "🔄 [RootNavigation] Rendering, isLoggedIn:",
-    isLoggedIn,
-    "showingSplash:",
-    showingSplash,
-  );
-
   useEffect(() => {
     setGuardNavigation(isLoggedIn);
   }, [isLoggedIn, setGuardNavigation]);
@@ -80,9 +73,7 @@ const RootNavigation = () => {
   useEffect(() => {
     // Fire once on mount. splashTargetRef is read at fire time so it always
     // reflects the settled auth state, even if isLoggedIn changed mid-timer.
-    console.log("⏱️ [RootNavigation] Starting splash timer");
     const timer = setTimeout(() => {
-      console.log("✅ [RootNavigation] Splash complete, hiding splash");
       setShowingSplash(false);
       if (navigationRef.isReady()) {
         navigationRef.resetRoot({
@@ -100,13 +91,6 @@ const RootNavigation = () => {
     <NavigationContainer
       ref={navigationRef}
       theme={theme.navigation}
-      onReady={() => console.log("✅ [Navigation] NavigationContainer ready")}
-      onStateChange={(state) =>
-        console.log(
-          "📍 [Navigation] State changed:",
-          JSON.stringify(state?.routes[state.index], null, 2),
-        )
-      }
     >
       <Stack.Navigator
         initialRouteName="AppSplash"

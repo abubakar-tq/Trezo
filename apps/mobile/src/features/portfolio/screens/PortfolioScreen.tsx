@@ -9,11 +9,13 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
-import { TabScreenContainer, MeshBackground, Sparkline } from "@shared/components";
-import { BalanceCard, AssetList } from "../../home/components/dashboard";
+import { TabScreenContainer, MeshBackground, Sparkline, InteractiveChart } from "@shared/components";
+import { AssetList } from "../../home/components/dashboard";
 import { useWalletData } from "@hooks/useWalletData";
 import { useMarketData } from "@hooks/useMarketData";
+import { usePortfolioHistory } from "@hooks/usePortfolioHistory";
 import { useTabContentBottomInset } from "@hooks";
+import { useUserStore } from "../../../store/useUserStore";
 import { withAlpha } from "@utils/color";
 import { TokenDetailModal } from "../components/TokenDetailModal";
 import type { TokenBalance } from "../services/PortfolioService";
@@ -29,23 +31,15 @@ const PortfolioScreen: React.FC = () => {
   const { colors } = theme;
   const contentBottomInset = useTabContentBottomInset();
   const isDark = resolvedMode === 'dark';
-  
-  const smartAccountAddress = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
+
+  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress) ?? "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
   const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress);
   const { assets: marketAssets, loading: marketLoading, refresh: refreshMarket } = useMarketData(5);
 
   const [selectedPeriod, setSelectedPeriod] = useState('1W');
   const [selectedToken, setSelectedToken] = useState<TokenBalance | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-
-  // High-fidelity performance graph data mapping
-  const graphDataMap: Record<string, number[]> = {
-    '1D': [7800, 7850, 7900, 7820, 7880, 7950, 8020, 8100, 8050, 8150, 8200, 8100],
-    '1W': [6200, 6400, 6300, 6800, 7200, 7100, 7500, 7400, 7800, 8200, 8100, 8500],
-    '1M': [5000, 5200, 5800, 5500, 6000, 6500, 6200, 6800, 7200, 7500, 8000, 8500],
-    '1Y': [1200, 2500, 3800, 4200, 4500, 5000, 5800, 6200, 7000, 7500, 8200, 8500],
-    'ALL': [500, 800, 1500, 2200, 3000, 4500, 5500, 6200, 7000, 7800, 8200, 8500],
-  };
+  const [touchedValue, setTouchedValue] = useState<number | null>(null);
 
   const handleAssetPress = (token: TokenBalance) => {
     setSelectedToken(token);
@@ -55,7 +49,6 @@ const PortfolioScreen: React.FC = () => {
   // Format tokens for AssetList
   const displayTokens = useMemo(() => {
     return tokens.map((t: any) => {
-      // Ensure we have a valid balance and symbol
       const balance = t.balance_formatted || (t.balance ? formatUnits(t.balance, t.decimals || 18) : "0");
       return {
         symbol: t.symbol || "UNKNOWN",
@@ -68,6 +61,19 @@ const PortfolioScreen: React.FC = () => {
       };
     });
   }, [tokens]);
+
+  const { history: portfolioHistory, loading: historyLoading, periodChange, periodDelta } =
+    usePortfolioHistory(displayTokens, selectedPeriod);
+
+  const isPositive = (periodChange ?? 0) >= 0;
+  const chartColor = isPositive ? colors.accent : colors.danger;
+
+  const periodLabel: Record<string, string> = {
+    '1D': 'today', '1W': 'this week', '1M': 'this month', '1Y': 'this year', 'ALL': 'all time',
+  };
+
+  // While dragging the chart, show historical value; otherwise show live total
+  const displayedBalance = touchedValue ?? totalBalanceUSD;
 
   return (
     <TabScreenContainer includeBottomInset>
@@ -93,39 +99,62 @@ const PortfolioScreen: React.FC = () => {
             {/* Top Row: Balance & Growth */}
             <View style={styles.omniHeader}>
               <View>
-                <Text style={[styles.omniLabel, { color: colors.textSecondary }]}>Total Portfolio</Text>
+                <Text style={[styles.omniLabel, { color: colors.textSecondary }]}>
+                  {touchedValue ? 'Portfolio at point' : 'Total Portfolio'}
+                </Text>
                 <View style={styles.omniBalanceRow}>
                   <Text style={[styles.omniCurrency, { color: colors.textSecondary }]}>$</Text>
                   <Text style={[styles.omniBalance, { color: colors.textPrimary }]} numberOfLines={1} adjustsFontSizeToFit>
-                    {walletLoading ? "---" : (totalBalanceUSD >= 1000000000 
-                      ? `${(totalBalanceUSD / 1000000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}B`
-                      : totalBalanceUSD >= 1000000 
-                        ? `${(totalBalanceUSD / 1000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`
-                        : totalBalanceUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
+                    {walletLoading ? "---" : (displayedBalance >= 1e9
+                      ? `${(displayedBalance / 1e9).toLocaleString(undefined, { maximumFractionDigits: 2 })}B`
+                      : displayedBalance >= 1e6
+                        ? `${(displayedBalance / 1e6).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`
+                        : displayedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
                   </Text>
                 </View>
               </View>
-              <View style={[styles.omniGrowthBadge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
-                <Feather name="trending-up" size={12} color={colors.accent} style={{ marginRight: 4 }} />
-                <Text style={[styles.omniGrowthText, { color: colors.accent }]}>+4.2%</Text>
-              </View>
+              {periodChange !== null ? (
+                <View style={[styles.omniGrowthBadge, { backgroundColor: withAlpha(isPositive ? colors.accent : colors.danger, 0.1) }]}>
+                  <Feather name={isPositive ? "trending-up" : "trending-down"} size={12} color={isPositive ? colors.accent : colors.danger} style={{ marginRight: 4 }} />
+                  <Text style={[styles.omniGrowthText, { color: isPositive ? colors.accent : colors.danger }]}>
+                    {isPositive ? '+' : ''}{periodChange.toFixed(2)}%
+                  </Text>
+                </View>
+              ) : historyLoading ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : null}
             </View>
 
-            {/* Performance Value */}
-            <Text style={[styles.omniPerformance, { color: colors.textSecondary }]}>
-              +${(totalBalanceUSD * 0.042).toLocaleString(undefined, { maximumFractionDigits: 2 })} this week
-            </Text>
-            
-            {/* Graph */}
+            {/* Performance delta */}
+            {periodDelta !== null && (
+              <Text style={[styles.omniPerformance, { color: periodDelta >= 0 ? colors.success : colors.danger }]}>
+                {periodDelta >= 0 ? '+' : ''}${Math.abs(periodDelta).toLocaleString(undefined, { maximumFractionDigits: 2 })} {periodLabel[selectedPeriod] ?? ''}
+              </Text>
+            )}
+            {periodDelta === null && !historyLoading && (
+              <Text style={[styles.omniPerformance, { color: colors.textSecondary }]}>
+                Drag chart to explore history
+              </Text>
+            )}
+
+            {/* Interactive portfolio chart */}
             <View style={styles.omniGraphWrapper}>
-              <Sparkline 
-                data={graphDataMap[selectedPeriod] || graphDataMap['1W']} 
-                width={width - 80} 
-                height={120} 
-                color={colors.accent}
-                strokeWidth={3}
-                fillOpacity={0.15}
-              />
+              {historyLoading ? (
+                <ActivityIndicator color={colors.accent} />
+              ) : portfolioHistory.length >= 2 ? (
+                <InteractiveChart
+                  data={portfolioHistory}
+                  chartWidth={width - 80}
+                  chartHeight={120}
+                  color={chartColor}
+                  onTouchValue={setTouchedValue}
+                  formatTooltip={v => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                />
+              ) : (
+                <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600' }}>
+                  {walletLoading ? 'Loading wallet…' : 'No historical data available'}
+                </Text>
+              )}
             </View>
             
             {/* Period Picker */}
@@ -235,7 +264,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 16,
+    paddingTop: 10,
   },
   header: {
     flexDirection: "row",

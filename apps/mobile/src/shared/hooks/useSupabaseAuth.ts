@@ -254,6 +254,23 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 			const queryParams = new URLSearchParams(queryString);
 			const hashParams = new URLSearchParams(hashFragment);
 
+			const client = getSupabaseClient();
+
+			// PKCE flow (Supabase JS v2 default): code arrives as ?code=XXX query param.
+			// On Android the Linking event can fire at the same time as openAuthSessionAsync
+			// resolves, so catch the "code already used" error from a double-exchange.
+			const pkceCode = queryParams.get("code");
+			if (pkceCode) {
+				try {
+					await client.auth.exchangeCodeForSession(pkceCode);
+					setError(null);
+				} catch {
+					// Code may already have been exchanged in startSupabaseOAuth — safe to ignore.
+				}
+				return;
+			}
+
+			// Implicit flow: tokens arrive in the URL hash (email magic-link / recovery).
 			const accessToken = hashParams.get("access_token");
 			const refreshToken = hashParams.get("refresh_token");
 			const typeParam = hashParams.get("type");
@@ -264,7 +281,6 @@ export const useSupabaseAuth = (): UseSupabaseAuthResult => {
 				return;
 			}
 
-			const client = getSupabaseClient();
 			await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
 			setError(null);
 

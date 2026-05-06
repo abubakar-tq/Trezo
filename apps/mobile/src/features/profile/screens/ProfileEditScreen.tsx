@@ -87,15 +87,6 @@ const ProfileEditScreen: React.FC = () => {
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
 
-      // LOGGING: Check what image-picker is actually returning
-      console.log("📸 [ImagePicker] Asset Properties:", {
-        uri: asset.uri,
-        mimeType: asset.mimeType,
-        type: (asset as any).type,
-        fileName: asset.fileName,
-        fileSize: asset.fileSize,
-      });
-
       // Basic client-side validation - allow anything that starts with image/
       const mimeType = asset.mimeType;
       const type = asset.type;
@@ -181,12 +172,6 @@ const ProfileEditScreen: React.FC = () => {
   }, []);
 
   const removeAvatar = useCallback(() => {
-    console.log("🔘 [ProfileEditScreen] Remove avatar button pressed");
-    console.log(
-      `📸 [ProfileEditScreen] baselineAvatarUrl: ${baselineAvatarUrl}`,
-    );
-    console.log(`👤 [ProfileEditScreen] user.id: ${user?.id}`);
-
     // Dismiss the image options alert first
     dismissAlert();
 
@@ -200,10 +185,8 @@ const ProfileEditScreen: React.FC = () => {
           text: "Remove",
           style: "destructive",
           onPress: async () => {
-            console.log("🗑️ [ProfileEditScreen] Confirm remove pressed");
-
             if (!user?.id) {
-              console.error("❌ [ProfileEditScreen] User ID not available");
+              console.error("[ProfileEditScreen] User ID not available");
               dismissAlert();
               showAlert("Error", "User not authenticated");
               return;
@@ -211,9 +194,6 @@ const ProfileEditScreen: React.FC = () => {
 
             // If no persisted avatar exists, only clear local preview state.
             if (!baselineAvatarUrl) {
-              console.log(
-                "⚠️ [ProfileEditScreen] No baseline avatar, clearing local state only",
-              );
               dismissAlert();
               setAvatarUri(null);
               setHasChanges(username.trim() !== (profile?.username || ""));
@@ -221,24 +201,14 @@ const ProfileEditScreen: React.FC = () => {
             }
 
             try {
-              console.log(
-                "🔄 [ProfileEditScreen] Calling ProfileSyncService.removeAvatar",
-              );
               setIsSaving(true);
               setIsUploading(true);
 
               const success = await ProfileSyncService.removeAvatar(user.id);
-              console.log(
-                `📊 [ProfileEditScreen] removeAvatar result: ${success}`,
-              );
 
-              // Dismiss the confirmation alert
               dismissAlert();
 
               if (!success) {
-                console.error(
-                  "❌ [ProfileEditScreen] removeAvatar returned false",
-                );
                 showAlert(
                   "Error",
                   "Failed to remove avatar from database. Please try again.",
@@ -256,10 +226,7 @@ const ProfileEditScreen: React.FC = () => {
 
               // No need to go back, the UI will reflect the removed avatar
             } catch (error) {
-              console.error(
-                "❌ [ProfileEditScreen] Exception in removeAvatar:",
-                error,
-              );
+              console.error("[ProfileEditScreen] Exception in removeAvatar:", error);
               dismissAlert();
               showAlert(
                 "Error",
@@ -283,12 +250,6 @@ const ProfileEditScreen: React.FC = () => {
   ]);
 
   const showImageOptions = useCallback(() => {
-    console.log("📸 [ProfileEditScreen] showImageOptions called");
-    console.log(`🖼️ [ProfileEditScreen] avatarUri: ${avatarUri}`);
-    console.log(
-      `📷 [ProfileEditScreen] baselineAvatarUrl: ${baselineAvatarUrl}`,
-    );
-
     const options: ThemedAlertButton[] = [
       { text: "Take Photo", onPress: takePhoto, style: "default" },
       { text: "Choose from Library", onPress: pickImage, style: "default" },
@@ -343,11 +304,7 @@ const ProfileEditScreen: React.FC = () => {
       const isRemovedAvatar = !avatarUri && currentAvatarUrl;
 
       if (isNewAvatar) {
-        // Test storage access first
-        console.log("🧪 Testing storage access before upload...");
         const storageTest = await StorageTest.testStorageAccess();
-        console.log("📊 Storage test result:", storageTest);
-
         if (!storageTest.canList) {
           showAlert(
             "Storage Error",

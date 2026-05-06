@@ -6,20 +6,19 @@
 
 import React from "react";
 import { View, ViewProps } from "react-native";
+import { useAppTheme } from "@theme";
 import { BodyText, CaptionText, DisplayText, HeadlineText } from "../Tier1/Text";
-import { Colors } from "../TokenRegistry";
 
 interface RecoveryScoreWidgetProps extends Omit<ViewProps, "style"> {
   score: number; // 0-100
-  isDark?: boolean;
   compact?: boolean;
 }
 
-const getScoreColor = (score: number) => {
-  if (score === 100) return Colors.success; // Emerald
-  if (score >= 75) return "#06b6d4"; // Teal/Cyan
-  if (score >= 41) return Colors.warning; // Amber
-  return "#6b7280"; // Gray (neutral)
+const getScoreColor = (score: number, colors: any) => {
+  if (score === 100) return colors.success;
+  if (score >= 75) return colors.accent;
+  if (score >= 41) return colors.warning;
+  return colors.textMuted;
 };
 
 const getScoreLabel = (score: number) => {
@@ -31,21 +30,16 @@ const getScoreLabel = (score: number) => {
 
 export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
   score,
-  isDark = true,
   compact = false,
   ...props
 }) => {
-  const color = getScoreColor(score);
+  const { theme: { colors } } = useAppTheme();
+  const color = getScoreColor(score, colors);
   const label = getScoreLabel(score);
 
   if (compact) {
     return (
-      <View
-        style={{
-          gap: 8,
-        }}
-        {...props}
-      >
+      <View style={{ gap: 8 }} {...props}>
         <View
           style={{
             flexDirection: "row",
@@ -53,16 +47,13 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
             alignItems: "center",
           }}
         >
-          <CaptionText isDark={isDark}>Security Score</CaptionText>
-          <HeadlineText isDark={isDark} color={color}>
-            {score}%
-          </HeadlineText>
+          <CaptionText>Security Score</CaptionText>
+          <HeadlineText color={color}>{score}%</HeadlineText>
         </View>
-        {/* Progress Bar */}
         <View
           style={{
             height: 8,
-            backgroundColor: isDark ? Colors.surface : Colors.lightCard,
+            backgroundColor: colors.surfaceMuted,
             borderRadius: 4,
             overflow: "hidden",
           }}
@@ -75,9 +66,7 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
             }}
           />
         </View>
-        <CaptionText isDark={isDark} color={color}>
-          {label}
-        </CaptionText>
+        <CaptionText color={color}>{label}</CaptionText>
       </View>
     );
   }
@@ -85,7 +74,7 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
   return (
     <View
       style={{
-        backgroundColor: isDark ? Colors.card : Colors.lightCard,
+        backgroundColor: colors.surfaceCard,
         borderRadius: 16,
         padding: 24,
         gap: 16,
@@ -94,22 +83,19 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
       }}
       {...props}
     >
-      {/* Title */}
-      <HeadlineText isDark={isDark}>Recovery Score</HeadlineText>
+      <HeadlineText>Recovery Score</HeadlineText>
 
-      {/* Large Score */}
       <View style={{ justifyContent: "center", alignItems: "center" }}>
         <DisplayText color={color}>{score}%</DisplayText>
-        <BodyText isDark={isDark} color={color} style={{ marginTop: 4 }}>
+        <BodyText color={color} style={{ marginTop: 4 }}>
           {label}
         </BodyText>
       </View>
 
-      {/* Progress Bar */}
       <View
         style={{
           height: 12,
-          backgroundColor: isDark ? Colors.surface : Colors.lightSurface,
+          backgroundColor: colors.surface,
           borderRadius: 6,
           overflow: "hidden",
         }}
@@ -123,70 +109,38 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
         />
       </View>
 
-      {/* Breakdown */}
       <View style={{ gap: 6, marginTop: 8 }}>
-        <BreakdownRow
-          isDark={isDark}
-          label="Passkey"
-          points={20}
-          active={score >= 20}
-        />
-        <BreakdownRow
-          isDark={isDark}
-          label="Email Recovery"
-          points={25}
-          active={score >= 45}
-        />
-        <BreakdownRow
-          isDark={isDark}
-          label="Phone Recovery"
-          points={20}
-          active={score >= 65}
-        />
-        <BreakdownRow
-          isDark={isDark}
-          label="Active Guardians"
-          points={25}
-          active={score >= 90}
-        />
-        <BreakdownRow
-          isDark={isDark}
-          label="Threshold Configured"
-          points={10}
-          active={score >= 100}
-        />
+        <BreakdownRow label="Passkey" points={20} active={score >= 20} />
+        <BreakdownRow label="Email Recovery" points={25} active={score >= 45} />
+        <BreakdownRow label="Phone Recovery" points={20} active={score >= 65} />
+        <BreakdownRow label="Active Guardians" points={25} active={score >= 90} />
+        <BreakdownRow label="Threshold Configured" points={10} active={score >= 100} />
       </View>
     </View>
   );
 };
 
 interface BreakdownRowProps {
-  isDark: boolean;
   label: string;
   points: number;
   active: boolean;
 }
 
-const BreakdownRow: React.FC<BreakdownRowProps> = ({
-  isDark,
-  label,
-  points,
-  active,
-}) => (
-  <View
-    style={{
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      opacity: active ? 1 : 0.4,
-    }}
-  >
-    <CaptionText isDark={isDark}>{label}</CaptionText>
-    <CaptionText
-      isDark={isDark}
-      color={active ? Colors.success : Colors.textTertiary}
+const BreakdownRow: React.FC<BreakdownRowProps> = ({ label, points, active }) => {
+  const { theme: { colors } } = useAppTheme();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        opacity: active ? 1 : 0.4,
+      }}
     >
-      +{points}%
-    </CaptionText>
-  </View>
-);
+      <CaptionText>{label}</CaptionText>
+      <CaptionText color={active ? colors.success : colors.textMuted}>
+        +{points}%
+      </CaptionText>
+    </View>
+  );
+};

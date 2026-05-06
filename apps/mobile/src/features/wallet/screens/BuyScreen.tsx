@@ -1,456 +1,453 @@
 /**
  * BuyScreen.tsx
- * 
- * Minimalistic Buy Crypto Screen
- * Single-screen layout, no scrolling
- * Clean, sophisticated design matching home tab aesthetic
+ *
+ * On-Ramp Buy Screen — provider-agnostic, multi-network
+ *
+ * Modes (set via EXPO_PUBLIC_RAMP_MODE in .env):
+ *   "auto"    → chainId 31337 = mock (Anvil), else = transak
+ *   "mock"    → always local Anvil (for FYP demo)
+ *   "transak" → always Transak widget (testnet or mainnet)
+ *
+ * Flow:
+ *   1. User enters USD amount + selects asset
+ *   2. BuyScreen calls onramp-session edge function
+ *   3a. Mock:    status card appears, "Complete Mock Order" triggers Anvil tx
+ *   3b. Transak: Transak widget opens in browser, user does KYC + card
+ *                Transak webhook → onramp-webhook → (hybrid) → Anvil tx
+ *   4. UI polls ramp_orders table every 3s until terminal status
  */
 
-import { Feather, FontAwesome5 } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import * as WebBrowser from "expo-web-browser";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Dimensions,
-  Image,
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useWalletData } from "@hooks/useWalletData";
 import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal";
 import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
+import { MeshBackground } from "@shared/components/MeshBackground";
+import { useWalletData } from "@hooks/useWalletData";
+import { useUserStore } from "@/src/store/useUserStore";
 import { useWalletStore } from "../store/useWalletStore";
+import { RampService } from "@/src/services/RampService";
+import { type RampOrder, type RampProvider } from "@/src/types/ramp";
+import { CHAIN_CONFIG } from "@/src/core/network/chain";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+import { BuyAmountForm } from "../components/ramp/BuyAmountForm";
+import { OrderStatusCard } from "../components/ramp/OrderStatusCard";
+import { TransakWebViewModal } from "../components/ramp/TransakWebViewModal";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const TERMINAL_STATUSES = ["completed", "failed", "local_mock_completed", "expired", "refunded"] as const;
+const POLL_INTERVAL_MS = 3000;
+
+function resolveProvider(rampMode: string, chainId: number): RampProvider {
+  if (rampMode === "mock") return "mock";
+  if (rampMode === "transak") return "transak";
+  // auto mode: local Anvil → mock, everything else → transak
+  return chainId === 31337 ? "mock" : "transak";
+}
+
+function estimateCrypto(fiatUsd: number, symbol: string): string {
+  if (!fiatUsd || fiatUsd <= 0) return "0.0000";
+  const prices: Record<string, number> = {
+    ETH: 2500,
+    BTC: 65000,
+    USDC: 1,
+    USDT: 1,
+    MATIC: 0.85,
+    BNB: 580,
+  };
+  const price = prices[symbol.toUpperCase()] ?? 2500;
+  return (fiatUsd / price).toFixed(4);
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export const BuyScreen: React.FC = () => {
   const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const isDark = resolvedMode === 'dark';
+  const isDark = resolvedMode === "dark";
 
+  // ── Store access ──────────────────────────────────────────────────────────
+  const smartAccountAddress = useUserStore((s) => s.smartAccountAddress);
+  const aaAccount = useWalletStore((s) => s.aaAccount);
+  const accounts = useWalletStore((s) => s.accounts);
+  const activeAccountId = useWalletStore((s) => s.activeAccountId);
+  const setActiveAccount = useWalletStore((s) => s.setActiveAccount);
   const { tokens } = useWalletData();
-  const { accounts, activeAccountId, setActiveAccount } = useWalletStore();
-  
+
+  const activeAccount = accounts.find((a) => a.id === activeAccountId) ?? accounts[0];
+
+  // The actual address we fund (priority: smart account > aaAccount predicted > EOA)
+  const targetAddress = smartAccountAddress || aaAccount?.predictedAddress || activeAccount?.address || "";
+
+  // ── Ramp mode: read from env, default to "auto" ───────────────────────────
+  const rampMode = process.env.EXPO_PUBLIC_RAMP_MODE ?? "auto";
+
+  // ── Local state ───────────────────────────────────────────────────────────
   const [amount, setAmount] = useState("");
-  const [isAssetPickerVisible, setIsAssetPickerVisible] = useState(false);
-  const [isAccountPickerVisible, setIsAccountPickerVisible] = useState(false);
-  
-  const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts[0];
-
   const [selectedAsset, setSelectedAsset] = useState<Asset>({
-    symbol: 'ETH',
-    name: 'Ethereum',
-    logo: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
+    symbol: "ETH",
+    name: "Ethereum",
+    logo: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
   });
+  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
+  const [isAccountPickerOpen, setIsAccountPickerOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [activeOrder, setActiveOrder] = useState<RampOrder | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [transakUrl, setTransakUrl] = useState<string | null>(null);
 
-  // Calculate crypto amount
-  const estimatedCrypto = useMemo(() => {
-    const val = parseFloat(amount || "0");
-    if (isNaN(val) || val <= 0) return "0.0000";
-    
-    const basePrice = selectedAsset.symbol === 'ETH' ? 2500 : 
-                      selectedAsset.symbol === 'BTC' ? 45000 : 
-                      selectedAsset.symbol === 'USDC' ? 1 : 100;
-    
-    return (val / basePrice).toFixed(4);
-  }, [amount, selectedAsset]);
+  // Derived
+  const chainId = CHAIN_CONFIG.chainId; // 31337 for local Anvil; update chain.ts for testnet
+  const provider = resolveProvider(rampMode, chainId);
+  const [selectedProvider, setSelectedProvider] = useState<RampProvider>(provider);
+  const fiatAmount = parseFloat(amount || "0");
+  const estimatedCrypto = useMemo(
+    () => estimateCrypto(fiatAmount, selectedAsset.symbol),
+    [fiatAmount, selectedAsset.symbol]
+  );
+  const displayAddress = targetAddress
+    ? `${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)}`
+    : "No wallet";
+  const isValidAmount = fiatAmount > 0;
 
+  // ── Polling ───────────────────────────────────────────────────────────────
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    setIsPolling(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isPolling || !activeOrder?.id) return;
+
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const updated = await RampService.getOrder(activeOrder.id);
+        setActiveOrder(updated);
+        if (TERMINAL_STATUSES.includes(updated.internalStatus as any)) {
+          stopPolling();
+          if (updated.internalStatus === "local_mock_completed" || updated.internalStatus === "completed") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        }
+      } catch (err) {
+        console.error("[BuyScreen] Polling error:", err);
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, [isPolling, activeOrder?.id, stopPolling]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleAmountChange = (value: string) => {
-    const cleaned = value.replace(/[^0-9.]/g, '');
-    const parts = cleaned.split('.');
+    const cleaned = value.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
     if (parts.length > 2) return;
     if (parts[1]?.length > 2) return;
     setAmount(cleaned);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const handleReviewPurchase = async () => {
-    const val = parseFloat(amount || "0");
-    if (val <= 0) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  const handleBuy = async () => {
+    if (!isValidAmount) return;
+    if (!targetAddress) {
+      Alert.alert(
+        "No Wallet Found",
+        "Please go to the Wallet tab and create or import a wallet first.",
+        [{ text: "OK" }]
+      );
       return;
     }
-    
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    
-    const banxaUrl = `https://checkout.banxa.com/?fiatAmount=${amount}&fiatCode=USD&coinCode=${selectedAsset.symbol}&walletAddress=${activeAccount?.address || ''}`;
-    
-    await WebBrowser.openBrowserAsync(banxaUrl);
-  };
 
-  const handleAccountSelect = (account: any) => {
-    setActiveAccount(account);
-    setIsAccountPickerVisible(false);
+    setIsProcessing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      const session = await RampService.createSession({
+        walletAddress: targetAddress,
+        chainId,
+        fiatCurrency: "USD",
+        fiatAmount,
+        cryptoCurrency: selectedAsset.symbol,
+        provider: selectedProvider,
+      });
+
+      const order = await RampService.getOrder(session.orderId);
+      setActiveOrder(order);
+      setIsPolling(true);
+
+      // Open widget for Transak, mock shows the status card directly
+      if (session.provider === "transak" && session.widgetUrl) {
+        setTransakUrl(session.widgetUrl);
+      }
+    } catch (err: any) {
+      console.error("[BuyScreen] handleBuy error:", err);
+      Alert.alert("Error", err.message ?? "Failed to create on-ramp session");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const displayAddress = activeAccount?.address 
-    ? `${activeAccount.address.slice(0, 6)}...${activeAccount.address.slice(-4)}`
-    : 'No wallet';
+  const handleTransakEvent = useCallback(async (eventId: string, data: any) => {
+    if (eventId === "TRANSAK_ORDER_SUCCESSFUL") {
+      setTransakUrl(null);
+      try {
+        if (activeOrder?.id) await RampService.notifyWebhook(activeOrder.id, data);
+      } catch (err) {
+        console.error("[BuyScreen] notifyWebhook error:", err);
+      }
+    } else if (eventId === "TRANSAK_ORDER_FAILED") {
+      setTransakUrl(null);
+    }
+  }, [activeOrder?.id]);
 
-  const isValidAmount = amount && parseFloat(amount) > 0;
+  const handleCompleteMock = async () => {
+    if (!activeOrder) return;
+    setIsProcessing(true);
+    try {
+      await RampService.completeMockOrder(activeOrder.id);
+      // ── Immediately refresh order state — don't wait for the poll tick ──────
+      const updated = await RampService.getOrder(activeOrder.id);
+      setActiveOrder(updated);
+      stopPolling(); // terminal state reached — stop the interval
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err: any) {
+      Alert.alert("Error", err.message ?? "Failed to complete mock order");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
+
+  const handleReset = () => {
+    setActiveOrder(null);
+    setAmount("");
+    stopPolling();
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <MeshBackground intensity={0.6} />
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* Minimal Header */}
+        {/* Header */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
-          <TouchableOpacity 
+          <TouchableOpacity
+            style={styles.backBtn}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               navigation.goBack();
-            }} 
-            style={styles.backButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            }}
           >
-            <Feather name="x" size={24} color={colors.textPrimary} />
+            <Feather name="chevron-left" size={28} color={colors.textPrimary} />
           </TouchableOpacity>
-          
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-            Buy
-          </Text>
-          
-          <TouchableOpacity 
-            onPress={() => setIsAccountPickerVisible(true)}
-            style={styles.walletChip}
-          >
-            <View style={[styles.walletDot, { backgroundColor: colors.success }]} />
-            <Text style={[styles.walletChipText, { color: colors.textSecondary }]}>
-              {activeAccount?.name || 'Primary Wallet'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Main Content - No Scroll, Single Screen */}
-        <View style={styles.content}>
-          
-          {/* Token Selector Card - Compact */}
-          <TouchableOpacity 
-            style={[styles.tokenCard, { backgroundColor: colors.surfaceCard }]}
-            onPress={() => setIsAssetPickerVisible(true)}
-            activeOpacity={0.9}
-          >
-            <View style={styles.tokenLeft}>
-              {selectedAsset.logo ? (
-                <Image 
-                  source={{ uri: selectedAsset.logo }} 
-                  style={styles.tokenIcon}
-                />
-              ) : (
-                <View style={[styles.tokenAvatar, { backgroundColor: withAlpha(colors.accent, 0.12) }]}>
-                  <Text style={[styles.tokenAvatarText, { color: colors.accent }]}>
-                    {selectedAsset.symbol[0]}
-                  </Text>
-                </View>
-              )}
-              <View style={styles.tokenDetails}>
-                <Text style={[styles.tokenSymbol, { color: colors.textPrimary }]}>
-                  {selectedAsset.symbol}
-                </Text>
-                <Text style={[styles.tokenName, { color: colors.textMuted }]}>
-                  {selectedAsset.name}
-                </Text>
-              </View>
-            </View>
-            <Feather name="chevron-down" size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
-
-          {/* Amount Input Section */}
-          <View style={[styles.amountCard, { backgroundColor: colors.surfaceCard }]}>
-            <Text style={[styles.amountLabel, { color: colors.textMuted }]}>
-              Enter amount in USD
-            </Text>
-            <View style={styles.amountInputRow}>
-              <Text style={[styles.dollarSign, { color: colors.textPrimary }]}>$</Text>
-              <TextInput
-                style={[styles.amountInput, { color: colors.textPrimary }]}
-                value={amount}
-                onChangeText={handleAmountChange}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor={withAlpha(colors.textPrimary, 0.15)}
-                maxLength={7}
-                selectionColor={colors.accent}
-                autoFocus
-              />
-            </View>
-            
-            {/* Conversion Display */}
-            <View style={[styles.conversionRow, { borderTopColor: withAlpha(colors.border, 0.08) }]}>
-              <View style={styles.conversionLeft}>
-                <Feather name="arrow-down" size={14} color={colors.accent} />
-                <Text style={[styles.conversionText, { color: colors.textSecondary }]}>
-                  You get
-                </Text>
-              </View>
-              <Text style={[styles.conversionAmount, { color: colors.textPrimary }]}>
-                {estimatedCrypto} {selectedAsset.symbol}
-              </Text>
-            </View>
-          </View>
-
-          {/* Banxa Info - Subtle text style */}
-          <View style={styles.banxaInfo}>
-            <View style={styles.banxaLeft}>
-              <FontAwesome5 name="bolt" size={12} color={colors.accent} />
-              <Text style={[styles.banxaTitle, { color: colors.textPrimary }]}>
-                Banxa
-              </Text>
-            </View>
-            <Text style={[styles.banxaSubtitle, { color: colors.textMuted }]}>
-              2% fee • 5-10 min
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Buy Crypto</Text>
+          {/* Network badge */}
+          <View style={[styles.networkBadge, { backgroundColor: isDark ? '#1C1C1E' : colors.surfaceCard }]}>
+            <View
+              style={[
+                styles.networkDot,
+                { backgroundColor: chainId === 31337 ? colors.warning : colors.success },
+              ]}
+            />
+            <Text style={[styles.networkText, { color: colors.textMuted }]}>
+              {chainId === 31337 ? "Anvil" : `Chain ${chainId}`}
             </Text>
           </View>
-
-          {/* Spacer to push button down */}
-          <View style={styles.spacer} />
         </View>
 
-        {/* Fixed Bottom Action */}
-        <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <TouchableOpacity 
-            activeOpacity={0.9}
-            onPress={handleReviewPurchase}
-            disabled={!isValidAmount}
-          >
-            <LinearGradient
-              colors={isValidAmount ? [colors.accent, colors.accent] : ['#ccc', '#bbb']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[styles.actionButton, { opacity: isValidAmount ? 1 : 0.5 }]}
+        {/* Body */}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {!activeOrder ? (
+            <BuyAmountForm
+              amount={amount}
+              selectedAsset={selectedAsset}
+              estimatedCrypto={estimatedCrypto}
+              provider={selectedProvider}
+              targetAddress={targetAddress}
+              displayAddress={displayAddress}
+              onAmountChange={handleAmountChange}
+              onAssetPress={() => setIsAssetPickerOpen(true)}
+              onAccountPress={() => setIsAccountPickerOpen(true)}
+              onProviderChange={setSelectedProvider}
+            />
+          ) : (
+            <OrderStatusCard
+              order={activeOrder}
+              displayAddress={displayAddress}
+              isProcessing={isProcessing}
+              onCompleteMock={handleCompleteMock}
+              onDone={handleReset}
+            />
+          )}
+        </ScrollView>
+
+        {/* CTA */}
+        {!activeOrder && (
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={handleBuy}
+              disabled={!isValidAmount || isProcessing}
             >
-              <Text style={styles.actionText}>
-                {isValidAmount ? `Buy ${estimatedCrypto} ${selectedAsset.symbol}` : 'Enter Amount'}
-              </Text>
-              <Feather name="arrow-right" size={18} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
-          
-          <Text style={[styles.termsText, { color: colors.textMuted }]}>
-            Powered by Banxa • Prices include fees
-          </Text>
-        </View>
-
+              <LinearGradient
+                colors={isValidAmount ? [colors.accent, colors.accent] : [colors.border, colors.border]}
+                style={[styles.ctaBtn, { opacity: isValidAmount ? 1 : 0.45 }]}
+              >
+                {isProcessing ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Text style={styles.ctaBtnText}>
+                      Buy {selectedAsset.symbol}
+                    </Text>
+                    <Feather name="arrow-right" size={20} color="#fff" />
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+            <Text style={[styles.poweredBy, { color: colors.textMuted }]}>
+              {selectedProvider === "mock"
+                ? "Powered by Local Anvil (Dev Mode)"
+                : "Powered by Transak — Staging"}
+            </Text>
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* Modals */}
       <AccountPickerModal
-        isVisible={isAccountPickerVisible}
-        onClose={() => setIsAccountPickerVisible(false)}
-        onSelect={handleAccountSelect}
+        isVisible={isAccountPickerOpen}
+        onClose={() => setIsAccountPickerOpen(false)}
+        onSelect={(acc) => {
+          setActiveAccount(acc);
+          setIsAccountPickerOpen(false);
+        }}
         accounts={accounts}
         selectedAddress={activeAccount?.address}
       />
-
       <AssetPickerModal
-        isVisible={isAssetPickerVisible}
-        onClose={() => setIsAssetPickerVisible(false)}
-        onSelect={(asset) => setSelectedAsset(asset)}
+        isVisible={isAssetPickerOpen}
+        onClose={() => setIsAssetPickerOpen(false)}
+        onSelect={(asset) => {
+          setSelectedAsset(asset);
+          setIsAssetPickerOpen(false);
+        }}
         assets={tokens}
       />
+
+      {transakUrl && (
+        <TransakWebViewModal
+          visible
+          url={transakUrl}
+          onClose={() => setTransakUrl(null)}
+          onOrderEvent={handleTransakEvent}
+        />
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
+  root: { flex: 1 },
+  flex: { flex: 1 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingBottom: 20,
-    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 10,
   },
-  backButton: {
+  backBtn: {
     width: 44,
     height: 44,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
   },
-  walletChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'transparent',
+  networkBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
   },
-  walletDot: {
+  networkDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
   },
-  walletChipText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 16,
-  },
-  tokenCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 16,
-  },
-  tokenLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  tokenIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  tokenAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tokenAvatarText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  tokenDetails: {
-    gap: 2,
-  },
-  tokenSymbol: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  tokenName: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  amountCard: {
-    padding: 20,
-    borderRadius: 20,
-  },
-  amountLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  amountInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  dollarSign: {
-    fontSize: 32,
-    fontWeight: '600',
-    marginRight: 4,
-  },
-  amountInput: {
-    fontSize: 40,
-    fontWeight: '700',
-    flex: 1,
-    letterSpacing: -0.5,
-    padding: 0,
-    margin: 0,
-  },
-  conversionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  conversionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  conversionText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  conversionAmount: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  banxaInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
-  banxaLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  banxaTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  banxaSubtitle: {
+  networkText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: "600",
   },
-  spacer: {
-    flex: 1,
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 120,
   },
-  bottomContainer: {
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 24,
     paddingTop: 16,
   },
-  actionButton: {
-    height: 60,
-    borderRadius: 20,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
+  ctaBtn: {
+    height: 64,
+    borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
   },
-  actionText: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#fff',
+  ctaBtnText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#fff",
   },
-  termsText: {
+  poweredBy: {
+    textAlign: "center",
     fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 12,
+    marginTop: 10,
+    fontWeight: "500",
   },
 });
 

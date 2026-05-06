@@ -1,7 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
-import { MoralisService, type MoralisToken } from "../../integration/moralis/MoralisService";
-import { formatUnits } from "ethers";
-import { useMemo } from "react";
+import { ethers } from "ethers";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getRpcUrl } from "../../core/network/chain";
+
+export interface MoralisToken {
+  symbol: string;
+  name: string;
+  balance: string;
+  balance_formatted?: string;
+  decimals: number;
+  usd_price: number;
+  usd_value: number;
+  native_token?: boolean;
+  logo?: string;
+  token_address?: string;
+}
 
 export interface WalletDataState {
   ethBalance: number;
@@ -14,74 +26,69 @@ export interface WalletDataState {
   refetch: () => void;
 }
 
-export const useWalletData = (address?: string, chain: string = "0x1"): WalletDataState => {
-  // UI/UX DEVELOPMENT MODE: Using realistic mock data to ensure layouts look premium
-  // and predictable while iterating on designs.
-  
-  const { ethBalance, tokens, totalBalanceUSD } = useMemo(() => {
-    const mockTokens: any[] = [
-      { 
-        symbol: 'ETH', 
-        name: 'Ethereum', 
-        balance: '1.25', 
-        decimals: 18, 
-        usd_price: 2500,
-        usd_value: 3125.00, 
-        native_token: true,
-        logo: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
-      },
-      { 
-        symbol: 'USDC', 
-        name: 'USD Coin', 
-        balance: '120.5', 
-        decimals: 6, 
-        usd_price: 1,
-        usd_value: 120.50,
-        logo: 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
-      },
-      { 
-        symbol: 'LINK', 
-        name: 'Chainlink', 
-        balance: '14.2', 
-        decimals: 18, 
-        usd_price: 20.34,
-        usd_value: 288.82,
-        logo: 'https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png'
-      },
-      { 
-        symbol: 'USDT', 
-        name: 'Tether', 
-        balance: '45.0', 
-        decimals: 6, 
-        usd_price: 1,
-        usd_value: 45.00,
-        logo: 'https://assets.coingecko.com/coins/images/325/small/tether.png'
-      },
-      { 
-        symbol: 'MATIC', 
-        name: 'Polygon', 
-        balance: '150.00', 
-        decimals: 18, 
-        usd_price: 0.60,
-        usd_value: 90.00,
-        logo: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png'
+const BALANCE_POLL_MS = 10_000;
+
+export const useWalletData = (address?: string, _chain: string = "0x1"): WalletDataState => {
+  const [realEthBalance, setRealEthBalance] = useState<number>(0);
+  const [isRealLoading, setIsRealLoading] = useState<boolean>(false);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchRealBalance = useCallback(async () => {
+    if (!address) {
+      setRealEthBalance(0);
+      return;
+    }
+    try {
+      setIsRealLoading(true);
+      const rpcUrl = getRpcUrl();
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      const raw = await provider.getBalance(address);
+      const formatted = parseFloat(ethers.formatEther(raw));
+      setRealEthBalance(formatted);
+    } catch (e) {
+      console.warn("❌ [useWalletData] Failed to fetch balance:", e);
+    } finally {
+      setIsRealLoading(false);
+    }
+  }, [address]);
+
+  useEffect(() => {
+    fetchRealBalance();
+    pollRef.current = setInterval(fetchRealBalance, BALANCE_POLL_MS);
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
       }
-    ];
+    };
+  }, [fetchRealBalance]);
 
-    const totalBalanceUSD = mockTokens.reduce((sum, t) => sum + t.usd_value, 0);
-    const ethBalance = 1.25;
+  const { tokens, totalBalanceUSD } = useMemo(() => {
+    const ethToken: MoralisToken = {
+      symbol: "ETH",
+      name: "Ethereum",
+      balance: realEthBalance.toString(),
+      balance_formatted: realEthBalance.toFixed(6),
+      decimals: 18,
+      usd_price: 2500,
+      usd_value: realEthBalance * 2500,
+      native_token: true,
+      logo: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
+    };
 
-    return { ethBalance, tokens: mockTokens, totalBalanceUSD };
-  }, []);
+    const list = [ethToken];
+    const total = list.reduce((sum, t) => sum + t.usd_value, 0);
+    return { tokens: list, totalBalanceUSD: total };
+  }, [realEthBalance]);
 
   return {
-    ethBalance,
+    ethBalance: realEthBalance,
     tokens,
     totalBalanceUSD,
-    totalChange24h: 2.45, // Adding a positive change for "WOW" factor
-    isLoading: false,
+    totalChange24h: 0,
+    isLoading: isRealLoading,
     isError: false,
     error: null,
-    refetch: () => console.log("Refetch triggered in mock mode"),
+    refetch: fetchRealBalance,
   };
 };

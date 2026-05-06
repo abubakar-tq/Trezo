@@ -26,7 +26,8 @@ import {
     HeadlineText,
     TitleText,
 } from "../../../shared/components/Tier1/Text";
-import { Colors, Spacing } from "../../../shared/components/TokenRegistry";
+import { Spacing } from "../../../shared/components/TokenRegistry";
+import { useAppTheme } from "@theme";
 
 interface Contact {
   id: string;
@@ -39,7 +40,6 @@ interface Contact {
 }
 
 interface ContactsScreenProps {
-  isDark?: boolean;
   onAddContact?: () => void;
   onSelectContact?: (contact: Contact) => void;
 }
@@ -74,10 +74,11 @@ const MOCK_CONTACTS: Contact[] = [
 ];
 
 export const ContactsScreen: React.FC<ContactsScreenProps> = ({
-  isDark = true,
   onAddContact,
   onSelectContact,
 }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "verified" | "pending">("all");
 
@@ -92,7 +93,7 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
   });
 
   const renderContactCard = (contact: Contact) => (
-    <CardLevel1 isDark={isDark} key={contact.id}>
+    <CardLevel1 key={contact.id}>
       <View
         style={{
           flexDirection: "row",
@@ -109,7 +110,7 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
             alignItems: "center",
           }}
         >
-          <BodyText isDark={isDark} style={{ fontSize: 32 }}>
+          <BodyText style={{ fontSize: 32 }}>
             {contact.avatar}
           </BodyText>
 
@@ -121,19 +122,18 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
                 alignItems: "center",
               }}
             >
-              <BodyText isDark={isDark} style={{ fontWeight: "600", flex: 1 }}>
+              <BodyText style={{ fontWeight: "600", flex: 1 }}>
                 {contact.name}
               </BodyText>
               {contact.status === "verified" && (
-                <BodyText isDark={isDark} style={{ fontSize: 14 }}>
+                <BodyText style={{ fontSize: 14 }}>
                   ✓
                 </BodyText>
               )}
             </View>
 
             <BodyText
-              isDark={isDark}
-              color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
+              color={colors.textMuted}
               style={{ fontSize: 12 }}
             >
               {contact.email}
@@ -141,8 +141,7 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
 
             {contact.transactions > 0 && (
               <BodyText
-                isDark={isDark}
-                color={Colors.success}
+                color={colors.success}
                 style={{ fontSize: 11, fontWeight: "500" }}
               >
                 {contact.transactions} transaction
@@ -153,7 +152,6 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
         </View>
 
         <Badge
-          isDark={isDark}
           status={contact.status === "verified" ? "success" : "warning"}
           label={contact.status === "verified" ? "Verified" : "Pending"}
         />
@@ -165,7 +163,7 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
     <SafeAreaView
       style={{
         flex: 1,
-        backgroundColor: isDark ? Colors.background : "#ffffff",
+        backgroundColor: colors.background,
       }}
     >
       <ScrollView
@@ -178,10 +176,9 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
       >
         {/* HEADER */}
         <View style={{ gap: Spacing.sp2 }}>
-          <HeadlineText isDark={isDark}>Contacts</HeadlineText>
+          <HeadlineText>Contacts</HeadlineText>
           <BodyText
-            isDark={isDark}
-            color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
+            color={colors.textMuted}
           >
             Manage your transaction and recovery contacts.
           </BodyText>
@@ -189,7 +186,6 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
 
         {/* SEARCH BAR */}
         <Input
-          isDark={isDark}
           label="Search Contacts"
           placeholder="Name or email..."
           value={searchQuery}
@@ -212,7 +208,6 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
             <SecondaryButton
               key={tab.id}
               label={tab.label}
-              isDark={isDark}
               onPress={() => setFilter(tab.id as any)}
             />
           ))}
@@ -221,7 +216,7 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
         {/* CONTACTS LIST */}
         {filteredContacts.length > 0 ? (
           <View style={{ gap: Spacing.sp3 }}>
-            <CaptionText color={Colors.primary}>
+            <CaptionText color={colors.accent}>
               {filter === "all"
                 ? `${filteredContacts.length} Contact${filteredContacts.length === 1 ? "" : "s"}`
                 : `${filteredContacts.length} ${filter === "verified" ? "Verified" : "Pending"} Contact${filteredContacts.length === 1 ? "" : "s"}`}
@@ -230,7 +225,7 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
             {filteredContacts.map((contact) => renderContactCard(contact))}
           </View>
         ) : (
-          <Surface isDark={isDark} elevation={1}>
+          <Surface elevation={1}>
             <View
               style={{
                 alignItems: "center",
@@ -238,16 +233,13 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
                 paddingVertical: Spacing.sp6,
               }}
             >
-              <BodyText isDark={isDark} style={{ fontSize: 48 }}>
+              <BodyText style={{ fontSize: 48 }}>
                 🔍
               </BodyText>
               <View style={{ alignItems: "center", gap: Spacing.sp2 }}>
-                <TitleText isDark={isDark}>No contacts found</TitleText>
+                <TitleText>No contacts found</TitleText>
                 <BodyText
-                  isDark={isDark}
-                  color={
-                    isDark ? Colors.textSecondary : Colors.lightTextSecondary
-                  }
+                  color={colors.textMuted}
                   style={{ fontSize: 13, textAlign: "center" }}
                 >
                   {searchQuery
@@ -260,12 +252,11 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
         )}
 
         {/* INFO SECTION */}
-        <CardLevel1 isDark={isDark}>
+        <CardLevel1>
           <View style={{ gap: Spacing.sp2 }}>
-            <TitleText isDark={isDark}>Why add contacts?</TitleText>
+            <TitleText>Why add contacts?</TitleText>
             <BodyText
-              isDark={isDark}
-              color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
+              color={colors.textMuted}
               style={{ fontSize: 13, lineHeight: 20 }}
             >
               • Quickly access frequent recipients{"\n"}• Track transaction
@@ -278,7 +269,6 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
         {/* ADD CONTACT CTA - Rule of One */}
         <PrimaryButton
           label="Add New Contact"
-          isDark={isDark}
           onPress={onAddContact}
         />
       </ScrollView>

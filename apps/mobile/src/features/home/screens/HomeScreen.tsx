@@ -18,6 +18,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useTabContentBottomInset } from "@hooks";
 import { useUserStore } from "../../../store/useUserStore";
 import { TokenDetailModal } from "../../portfolio/components/TokenDetailModal";
 import type { TokenBalance } from "../../portfolio/services/PortfolioService";
@@ -57,6 +58,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress ?? undefined);
 
   const { isHydrating, hasLocalPasskey } = useAccountManagement();
+  const contentBottomInset = useTabContentBottomInset();
 
   const [selectedToken, setSelectedToken] = React.useState<TokenBalance | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -90,7 +92,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     return tokens.map((t: any) => ({
       symbol: t.symbol,
       name: t.name,
-      amount: parseFloat(t.balance_formatted || "0"),
+      // balance_formatted is now always set; fallback to balance for safety
+      amount: parseFloat(t.balance_formatted ?? t.balance ?? "0"),
       price: t.usd_price || 0,
       value: t.usd_value || 0,
       change24h: 0,
@@ -118,9 +121,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     <TabScreenContainer includeBottomInset>
       <MeshBackground />
       
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomInset }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
@@ -150,7 +153,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
             >
               <Feather name="bell" size={18} color={colors.textPrimary} strokeWidth={1.5} />
               {unreadCount > 0 ? (
-                <View style={[styles.notiDot, { backgroundColor: colors.accentAlt }]} />
+                <View style={[styles.notiDot, { backgroundColor: colors.accentAlt, borderColor: colors.background }]} />
               ) : null}
             </TouchableOpacity>
           </View>
@@ -172,7 +175,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
         </View>
 
         <View style={styles.sectionWrapper}>
-          <View style={[styles.glassSection, styles.glassSectionAction, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
+          <View style={[styles.glassSection, styles.glassSectionAction, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginBottom: 12 }]}>Quick Actions</Text>
             <ActionGrid onActionPress={(action) => {
               if (action.key === 'swap' || action.key === 'bridge') {
@@ -188,15 +191,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
 
         {/* Market Trends - Unified Header */}
         <View style={styles.sectionWrapper}>
-          <View style={[styles.glassSection, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
+          <View style={[styles.glassSection, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary, marginBottom: 12 }]}>Market Trends</Text>
-            <MarketExplorer />
+            <MarketExplorer onTokenPress={handleAssetPress} />
           </View>
         </View>
 
 
         <View style={styles.sectionWrapper}>
-          <View style={[styles.glassSection, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
+          <View style={[styles.glassSection, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Recent Activity</Text>
             <ActivityFeed limit={3} />
           </View>
@@ -248,7 +251,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 12,
-    paddingBottom: 40,
   },
   header: {
     flexDirection: "row",
@@ -305,7 +307,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#050505',
   },
   searchWrapper: {
     marginHorizontal: 20,

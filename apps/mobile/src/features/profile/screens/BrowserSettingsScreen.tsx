@@ -266,7 +266,7 @@ export default function BrowserSettingsScreen() {
           style={styles.modalOverlay}
           onPress={() => setShowHistoryLimitModal(false)}
         >
-          <Pressable style={[styles.modalContent, { backgroundColor: isDark ? '#121212' : '#FFFFFF', borderColor: colors.border }]} onPress={() => {}}>
+          <Pressable style={[styles.modalContent, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>History Limit</Text>
               <Pressable onPress={() => setShowHistoryLimitModal(false)}>
@@ -337,7 +337,7 @@ export default function BrowserSettingsScreen() {
           style={styles.modalOverlay}
           onPress={() => setShowSearchEngineModal(false)}
         >
-          <Pressable style={[styles.modalContent, { backgroundColor: isDark ? '#121212' : '#FFFFFF', borderColor: colors.border }]} onPress={() => {}}>
+          <Pressable style={[styles.modalContent, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Search Engine</Text>
               <Pressable onPress={() => setShowSearchEngineModal(false)}>
@@ -378,7 +378,7 @@ export default function BrowserSettingsScreen() {
       {/* Confirmation Modals */}
       <Modal visible={showClearHistoryModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-           <View style={[styles.modalContent, { backgroundColor: isDark ? '#121212' : '#FFFFFF', borderColor: withAlpha(colors.danger, 0.3) }]}>
+           <View style={[styles.modalContent, { backgroundColor: colors.surfaceCard, borderColor: withAlpha(colors.danger, 0.3) }]}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Purge History?</Text>
               <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
                 This will permanently delete {historyCount} journey logs. This action is irreversible.

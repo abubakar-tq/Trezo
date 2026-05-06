@@ -2,6 +2,7 @@ export { default as Avatar } from "./Avatar";
 export { default as TabScreenContainer } from "./TabScreenContainer";
 export { MeshBackground } from "./MeshBackground";
 export { Sparkline } from "./Sparkline";
+export { InteractiveChart } from "./InteractiveChart";
 export type { TabScreenContainerProps } from "./TabScreenContainer";
 export { TokenIcon } from "./visuals/TokenIcon";
 export * from "./visuals";
@@ -9,9 +10,6 @@ export * from "./visuals";
 // Explicitly export UI components to avoid Button ambiguity
 export { BaseModal, OnboardingPlaceholder, OnboardingSlide, PageIndicator, Skeleton, ThemedAlert } from "./ui";
 export type { BaseModalProps, ThemedAlertButton } from "./ui";
-
-// Design System - Token Registry
-export * from "./TokenRegistry";
 
 // Design System - Component Tiers
 export * from "./Tier1";

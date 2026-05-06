@@ -2,67 +2,95 @@ import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import React, { useRef, useState } from "react";
-import { Dimensions, FlatList, View } from "react-native";
+import { Dimensions, FlatList, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Onboarding1, Onboarding2, Onboarding3 } from "@/assets/components";
 import { AuthStackParamList } from "@/src/types/navigation";
-import { Button, OnboardingSlide, PageIndicator } from "@shared/components";
+import { Button } from "@shared/components";
+import OnboardingSlide from "@shared/components/ui/OnboardingSlide";
+import MultiChainScene from "@shared/components/visuals/onboarding/MultiChainScene";
+import PasskeyOrbScene from "@shared/components/visuals/onboarding/PasskeyOrbScene";
+import ShieldScene from "@shared/components/visuals/onboarding/ShieldScene";
 
 const { width } = Dimensions.get("window");
 
 const pages = [
   {
-    image: Onboarding1,
-    title: "Welcome to Trezo",
+    image: PasskeyOrbScene,
+    title: "Your Keys.\nYour Wallet.",
     subtitle:
-      "Trusted by thousands worldwide, empowering your Web3 journey with seamless access to assets and powerful wallet tools.",
-    gradient: ["#9e9e9e", "#bdbdbd", "#e0e0e0"] as const,
+      "Passkey-first security means only you control your assets. No seed phrases. No compromises.",
+    badge: "Passkey-First",
+    gradient: ["#060312", "#0D0626", "#140B3C"] as [string, string, string],
+    accentColor: "#8B5CF6",
+    glowColor: "rgba(139, 92, 246, 0.38)",
   },
   {
-    image: Onboarding2,
-    title: "EVM Compatible",
+    image: MultiChainScene,
+    title: "Every Chain.\nOne Wallet.",
     subtitle:
-      "Manage your assets across Ethereum, Polygon, BSC and many more chains with fast, secure, and user-friendly integrations.",
-    gradient: ["#2196f3", "#00bcd4", "#80deea"] as const,
+      "Ethereum, Polygon, BSC and 10+ EVM networks — all managed from a single beautiful interface.",
+    badge: "10+ Networks",
+    gradient: ["#030B1A", "#05152E", "#072044"] as [string, string, string],
+    accentColor: "#06B6D4",
+    glowColor: "rgba(6, 182, 212, 0.38)",
   },
   {
-    image: Onboarding3,
-    title: "Secure & Trusted",
+    image: ShieldScene,
+    title: "Built to\nProtect You.",
     subtitle:
-      "Your assets are protected with military-grade encryption, giving you full control and complete peace of mind always.",
-    gradient: ["#8e24aa", "#9c27b0", "#ba68c8"] as const,
+      "Multi-layer security with social recovery and passkey validation. Recover anything, lose nothing.",
+    badge: "Military-Grade",
+    gradient: ["#030A08", "#051610", "#08201A"] as [string, string, string],
+    accentColor: "#10B981",
+    glowColor: "rgba(16, 185, 129, 0.38)",
   },
-] as const;
+];
 
 const IntroductionScreen: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(0);
-  const flatListRef = useRef<FlatList<typeof pages[number]>>(null);
-  const { navigate }: NavigationProp<AuthStackParamList> = useNavigation();
+  const flatListRef = useRef<FlatList>(null);
+  const { navigate } = useNavigation<NavigationProp<AuthStackParamList>>();
 
-  console.log('📱 [IntroductionScreen] Rendering, currentPage:', currentPage);
-
-  const handleScroll = (event: { nativeEvent: { contentOffset: { x: number } } }) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const pageIndex = Math.round(offsetX / width);
+  const handleMomentumScrollEnd = (event: {
+    nativeEvent: { contentOffset: { x: number } };
+  }) => {
+    const pageIndex = Math.round(event.nativeEvent.contentOffset.x / width);
     setCurrentPage(pageIndex);
   };
 
-  const handleGetStarted = () => {
-    console.log('👉 [IntroductionScreen] Get Started pressed, navigating to Welcome');
-    navigate("Welcome");
-  };
-
   return (
-    <LinearGradient
-      colors={pages[currentPage].gradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={{ flex: 1 }}
-    >
-      <SafeAreaView style={{ flex: 1 }}>
-        <StatusBar style="light" backgroundColor="transparent" translucent />
+    <View style={styles.container}>
+      <StatusBar style="light" backgroundColor="transparent" translucent />
 
+      {/* Per-page background gradient — transitions smoothly via state */}
+      <LinearGradient
+        colors={pages[currentPage].gradient}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.3, y: 0 }}
+        end={{ x: 0.7, y: 1 }}
+      />
+
+      <SafeAreaView style={styles.safeArea}>
+        {/* Thin-line progress indicators (reference style) */}
+        <View style={styles.indicators}>
+          {pages.map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.indicator,
+                {
+                  backgroundColor:
+                    i <= currentPage
+                      ? "rgba(255,255,255,0.9)"
+                      : "rgba(255,255,255,0.22)",
+                },
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* Slides */}
         <FlatList
           ref={flatListRef}
           data={pages}
@@ -72,31 +100,64 @@ const IntroductionScreen: React.FC = () => {
               ImageComponent={item.image}
               title={item.title}
               subtitle={item.subtitle}
+              badge={item.badge}
               index={index}
+              isActive={currentPage === index}
+              accentColor={item.accentColor}
+              glowColor={item.glowColor}
             />
           )}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          onScroll={handleScroll}
+          onMomentumScrollEnd={handleMomentumScrollEnd}
           scrollEventThrottle={16}
+          style={styles.list}
         />
 
-        <View style={{ marginBottom: 32 }}>
-          <PageIndicator 
-            totalPages={pages.length} 
-            currentPage={currentPage}
-            activeColor="rgba(255, 255, 255, 0.85)"
-            inactiveColor="rgba(255, 255, 255, 0.25)"
+        {/* CTA button */}
+        <View style={styles.buttonArea}>
+          <Button
+            label="Get Started"
+            onPress={() => navigate("Welcome")}
+            variant="primary"
+            size="lg"
+            fullWidth
           />
         </View>
-
-        <View style={{ paddingBottom: 48, paddingHorizontal: 24 }}>
-          <Button label="Get Started" onPress={handleGetStarted} variant="primary" size="lg" fullWidth />
-        </View>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#060312",
+  },
+  safeArea: {
+    flex: 1,
+  },
+  indicators: {
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  indicator: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+  },
+  list: {
+    flex: 1,
+  },
+  buttonArea: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 8,
+  },
+});
 
 export default IntroductionScreen;

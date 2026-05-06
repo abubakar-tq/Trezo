@@ -2,12 +2,15 @@ import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Clipboard } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useUserStore } from '@store/useUserStore';
+import { useAppTheme } from '@theme';
 import { isContractDeployed } from '../../../integration/viem';
 import PasskeyService from '../services/PasskeyService';
 import { AccountDeploymentService, deriveDefaultWalletId } from '../services/AccountDeploymentService';
 import type { Hex } from 'viem';
 
 export const SmartAccountCard = () => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const authUser = useUserStore((state) => state.user);
   const userId = authUser?.id ?? null;
   const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
@@ -62,7 +65,7 @@ export const SmartAccountCard = () => {
 
   if (!smartAccountAddress) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.surfaceCard }]}>
         <View style={styles.header}>
           <Feather name="shield" size={20} color="#666" />
           <Text style={styles.title}>Smart Account</Text>
@@ -78,7 +81,7 @@ export const SmartAccountCard = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.surfaceCard }]}>
       <View style={styles.header}>
         <Feather name="shield" size={20} color={smartAccountDeployed ? '#10b981' : '#f59e0b'} />
         <Text style={styles.title}>Smart Account</Text>
@@ -119,7 +122,6 @@ export const SmartAccountCard = () => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     margin: 16,

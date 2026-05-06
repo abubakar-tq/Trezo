@@ -30,7 +30,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   const { width } = Dimensions.get('window');
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
+    <View style={[styles.container, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
         <View style={styles.header}>
           <Text style={[styles.label, { color: colors.textSecondary }]}>Balance</Text>
           {isHydrating ? (

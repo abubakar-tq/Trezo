@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "android": "npm --workspace apps/mobile run android",
+    "ios": "npm --workspace apps/mobile run ios",
     "postinstall": "bash scripts/link-contract-node-modules.sh",
     "start": "npm --workspace apps/mobile run start"
   },

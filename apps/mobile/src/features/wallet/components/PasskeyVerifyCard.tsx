@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import { useAppTheme } from "@theme";
 import { checkPasskeyOnChain } from "@/src/integration/viem/account";
 import { getDeployment } from "@/src/integration/viem/deployments";
 import { getPublicClient } from "@/src/integration/viem/clients";
@@ -25,6 +26,8 @@ const shortHex = (value: string, head = 10, tail = 6) =>
   value.length > head + tail ? `${value.slice(0, head)}...${value.slice(-tail)}` : value;
 
 export const PasskeyVerifyCard: React.FC = () => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const userId = useUserStore((state) => state.user?.id ?? null);
   const storedSmartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const aaAccount = useWalletStore((state) => state.aaAccount);
@@ -108,7 +111,7 @@ export const PasskeyVerifyCard: React.FC = () => {
   const overallMatch = result?.onChainExists && result?.pxMatch && result?.pyMatch;
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: colors.surfaceCard }]}>
       <Text style={styles.title}>Passkey On-Chain Verify</Text>
       <Text style={styles.description}>
         Check if your local device passkey matches the passkey installed on the smart account contract.
@@ -118,7 +121,7 @@ export const PasskeyVerifyCard: React.FC = () => {
       <Text style={styles.label}>Validator</Text>
       <Text style={styles.value}>{validator ? shortHex(validator, 8, 6) : "N/A"}</Text>
 
-      <TouchableOpacity onPress={handleCheck} style={styles.primaryButton} disabled={status === "checking"}>
+      <TouchableOpacity onPress={handleCheck} style={[styles.primaryButton, { backgroundColor: colors.accentSoft }]} disabled={status === "checking"}>
         <Text style={styles.buttonText}>
           {status === "checking" ? "Checking..." : "Verify Passkey On-Chain"}
         </Text>
@@ -126,26 +129,26 @@ export const PasskeyVerifyCard: React.FC = () => {
 
       {result && (
         <View style={styles.resultSection}>
-          <Text style={styles.sectionTitle}>Verification Result</Text>
+          <Text style={[styles.sectionTitle, { color: colors.accentSoft }]}>Verification Result</Text>
           <View style={styles.resultRow}>
             <Text style={styles.resultLabel}>Passkey ID</Text>
             <Text style={styles.resultValue}>{shortHex(result.localPasskeyId, 10, 6)}</Text>
           </View>
           <View style={styles.resultRow}>
             <Text style={styles.resultLabel}>On-Chain</Text>
-            <Text style={[styles.resultValue, result.onChainExists ? styles.matchText : styles.mismatchText]}>
+            <Text style={[styles.resultValue, result.onChainExists ? { color: colors.success } : styles.mismatchText]}>
               {result.onChainExists ? "YES" : "NO"}
             </Text>
           </View>
           <View style={styles.resultRow}>
             <Text style={styles.resultLabel}>Public Key X</Text>
-            <Text style={[styles.resultValue, result.pxMatch ? styles.matchText : styles.mismatchText]}>
+            <Text style={[styles.resultValue, result.pxMatch ? { color: colors.success } : styles.mismatchText]}>
               {result.pxMatch ? "MATCH" : "MISMATCH"}
             </Text>
           </View>
           <View style={styles.resultRow}>
             <Text style={styles.resultLabel}>Public Key Y</Text>
-            <Text style={[styles.resultValue, result.pyMatch ? styles.matchText : styles.mismatchText]}>
+            <Text style={[styles.resultValue, result.pyMatch ? { color: colors.success } : styles.mismatchText]}>
               {result.pyMatch ? "MATCH" : "MISMATCH"}
             </Text>
           </View>
@@ -157,7 +160,7 @@ export const PasskeyVerifyCard: React.FC = () => {
             <Text style={styles.resultLabel}>Total Passkeys</Text>
             <Text style={styles.resultValue}>{result.passkeyCount}</Text>
           </View>
-          <View style={[styles.overallBadge, overallMatch ? styles.matchBadge : styles.mismatchBadge]}>
+          <View style={[styles.overallBadge, overallMatch ? [styles.matchBadge, { borderColor: colors.success }] : styles.mismatchBadge]}>
             <Text style={styles.overallBadgeText}>
               {overallMatch ? "PASSKEY CONTROLS WALLET" : "PASSKEY DOES NOT CONTROL WALLET"}
             </Text>
@@ -176,7 +179,6 @@ export const PasskeyVerifyCard: React.FC = () => {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#0f172a",
     borderRadius: 12,
     padding: 16,
     marginVertical: 12,
@@ -203,7 +205,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   primaryButton: {
-    backgroundColor: "#38bdf8",
     borderRadius: 8,
     padding: 10,
     alignItems: "center",
@@ -218,7 +219,6 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   sectionTitle: {
-    color: "#38bdf8",
     fontWeight: "700",
     marginBottom: 6,
   },
@@ -236,9 +236,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-  matchText: {
-    color: "#22c55e",
-  },
+  matchText: {},
   mismatchText: {
     color: "#ef4444",
   },
@@ -251,7 +249,6 @@ const styles = StyleSheet.create({
   matchBadge: {
     backgroundColor: "rgba(34, 197, 94, 0.15)",
     borderWidth: 1,
-    borderColor: "#22c55e",
   },
   mismatchBadge: {
     backgroundColor: "rgba(239, 68, 68, 0.15)",

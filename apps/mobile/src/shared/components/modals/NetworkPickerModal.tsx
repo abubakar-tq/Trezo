@@ -48,8 +48,9 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
   onSelect,
   selectedNetworkId,
 }) => {
-  const { theme } = useAppTheme();
+  const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
+  const isDark = resolvedMode === 'dark';
 
   if (!isVisible) return null;
 
@@ -61,7 +62,7 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
         style={[
           styles.networkItem,
           { 
-            backgroundColor: isSelected ? withAlpha(colors.accent, 0.1) : withAlpha(colors.surfaceCard, 0.5),
+            backgroundColor: isSelected ? withAlpha(colors.accent, 0.1) : (isDark ? '#2C2C2E' : colors.surfaceMuted),
             borderColor: isSelected ? colors.accent : colors.border
           }
         ]}
@@ -103,7 +104,7 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
         activeOpacity={1} 
         onPress={onClose} 
       />
-      <View style={[styles.content, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+      <View style={[styles.content, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderTopColor: colors.border }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
         
         <View style={styles.header}>

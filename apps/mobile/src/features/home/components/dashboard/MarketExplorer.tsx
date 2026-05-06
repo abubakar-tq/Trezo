@@ -5,13 +5,14 @@ import { useAppTheme } from '@theme';
 import { withAlpha } from '@utils/color';
 import { Sparkline, MeshBackground, TokenIcon } from '@shared/components';
 import { useMarketData } from '@hooks/useMarketData';
+import type { TokenBalance } from '../../../portfolio/services/PortfolioService';
 
-const TokenItem = React.memo<{ token: any, colors: any }>(({ token, colors }) => {
+const TokenItem = React.memo<{ token: any, colors: any, onPress?: () => void }>(({ token, colors, onPress }) => {
   const price = parseFloat(token.priceUsd);
   const change = parseFloat(token.changePercent24Hr);
-  
+
   return (
-    <TouchableOpacity style={styles.tokenItem} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.tokenItem} activeOpacity={0.7} onPress={onPress}>
       <View style={styles.tokenLeft}>
         <TokenIcon 
           symbol={token.symbol} 
@@ -47,9 +48,13 @@ const TokenItem = React.memo<{ token: any, colors: any }>(({ token, colors }) =>
   );
 });
 
-export const MarketExplorer = forwardRef<any, {}>((props, ref) => {
+interface MarketExplorerProps {
+  onTokenPress?: (token: TokenBalance) => void;
+}
+
+export const MarketExplorer = forwardRef<any, MarketExplorerProps>(({ onTokenPress }, ref) => {
   const inputRef = useRef<TextInput>(null);
-  
+
   useImperativeHandle(ref, () => ({
     focusSearch: () => inputRef.current?.focus(),
   }));
@@ -151,7 +156,20 @@ export const MarketExplorer = forwardRef<any, {}>((props, ref) => {
           </View>
         ) : (
           filteredData.map((token) => (
-            <TokenItem key={token.id} token={token} colors={colors} />
+            <TokenItem
+              key={token.id}
+              token={token}
+              colors={colors}
+              onPress={() => onTokenPress?.({
+                symbol: token.symbol,
+                name: token.name,
+                amount: 0,
+                price: parseFloat(token.priceUsd),
+                value: 0,
+                change24h: parseFloat(token.changePercent24Hr),
+                address: token.id,
+              })}
+            />
           ))
         )}
         {/* End of list condition handled by ternary above */}

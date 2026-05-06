@@ -1,9 +1,26 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as LocalAuthentication from "expo-local-authentication";
-import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
 import type { RootStackParamList } from "@/src/types/navigation";
 import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
@@ -11,19 +28,42 @@ import { getSupabaseClient } from "@lib/supabase";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
+import { withAlpha } from "../../../utils/color";
+
+const AnimatedView = Animated.createAnimatedComponent(View);
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const DeviceVerificationScreen = () => {
   const { theme } = useAppTheme();
+  const { colors, gradients, mode } = theme;
   const navigation = useNavigation<NavigationProp>();
   const logout = useUserStore((state) => state.logout);
   const setGuardNavigation = useAuthFlowStore((state) => state.setGuardNavigation);
+
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
   const [showReLoginModal, setShowReLoginModal] = useState(false);
   const [hasPendingPairing, setHasPendingPairing] = useState(false);
 
-  // On mount: check for a pending pairing link — if so, show a bypass CTA
+  const autoAttemptedRef = useRef(false);
+
+  const pulse = useSharedValue(0);
+
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withTiming(1, { duration: 1800, easing: Easing.out(Easing.quad) }),
+      -1,
+      false,
+    );
+  }, [pulse]);
+
+  const haloStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.45]) }],
+    opacity: interpolate(pulse.value, [0, 1], [0.6, 0]),
+  }));
+
   useEffect(() => {
     DevicePairingService.getPendingDeepLink()
       .then((link) => setHasPendingPairing(Boolean(link)))
@@ -35,35 +75,25 @@ export const DeviceVerificationScreen = () => {
     navigation.reset({ index: 0, routes: [{ name: "PairDevice" }] });
   }, [navigation, setGuardNavigation]);
 
-
   const handleBiometricAuth = useCallback(async () => {
     try {
+      setLastError(null);
       setIsAuthenticating(true);
 
-      // Check if device supports biometric authentication
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       if (!hasHardware) {
-        Alert.alert(
-          "Not Supported",
-          "Your device doesn't support biometric authentication. Please use re-login option.",
-          [{ text: "OK" }]
-        );
+        setLastError("No biometric hardware found. Use PIN or Password.");
         setIsAuthenticating(false);
         return;
       }
 
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
       if (!isEnrolled) {
-        Alert.alert(
-          "No Biometrics Found",
-          "Please set up biometric authentication in your device settings or use re-login option.",
-          [{ text: "OK" }]
-        );
+        setLastError("No biometrics enrolled. Use PIN or Password.");
         setIsAuthenticating(false);
         return;
       }
 
-      // Authenticate
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: "Verify your identity",
         fallbackLabel: "Use passcode",
@@ -72,42 +102,41 @@ export const DeviceVerificationScreen = () => {
       });
 
       if (result.success) {
-        // Authentication successful — check if we have a pending device-pairing link
         setGuardNavigation(false);
         try {
           const pendingLink = await DevicePairingService.getPendingDeepLink();
           if (pendingLink) {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "PairDevice" }],
-            });
+            navigation.reset({ index: 0, routes: [{ name: "PairDevice" }] });
             return;
           }
         } catch {
-          // ignore — fall through to TabNavigation
+          // fall through to TabNavigation
         }
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "TabNavigation" }],
-        });
+        navigation.reset({ index: 0, routes: [{ name: "TabNavigation" }] });
       } else {
-        Alert.alert(
-          "Authentication Failed",
-          "Unable to verify your identity. Please try again.",
-          [{ text: "OK" }]
-        );
+        setLastError("Authentication failed. Try again.");
       }
-    } catch (error) {
-      console.error("Biometric auth error:", error);
-      Alert.alert(
-        "Error",
-        "An error occurred during authentication. Please try again.",
-        [{ text: "OK" }]
-      );
+    } catch {
+      setLastError("An error occurred. Please try again.");
     } finally {
       setIsAuthenticating(false);
+      autoAttemptedRef.current = true;
     }
   }, [navigation, setGuardNavigation]);
+
+  // Auto-trigger biometrics on mount
+  useEffect(() => {
+    if (autoAttemptedRef.current) return;
+    const timer = setTimeout(() => {
+      handleBiometricAuth();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [handleBiometricAuth]);
+
+  const handleFallback = useCallback(() => {
+    setLastError(null);
+    handleBiometricAuth();
+  }, [handleBiometricAuth]);
 
   const handleReLogin = useCallback(() => {
     setShowReLoginModal(true);
@@ -119,275 +148,143 @@ export const DeviceVerificationScreen = () => {
 
   const handleConfirmReLogin = useCallback(async () => {
     try {
-      setIsAuthenticating(true);
+      setIsLoggingOut(true);
       setShowReLoginModal(false);
 
-      // Sign out from Supabase first
       const supabase = getSupabaseClient();
       await supabase.auth.signOut();
-
-      // Clear all local state and storage
       await logout();
-
-      // Reset guard navigation
       setGuardNavigation(false);
 
-      // Small delay to ensure storage is synced
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Navigate to auth flow with complete reset
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "AuthNavigation" }],
-      });
-    } catch (error) {
-      console.error("Logout error:", error);
-      setShowReLoginModal(false);
-      setIsAuthenticating(false);
+      navigation.reset({ index: 0, routes: [{ name: "AuthNavigation" }] });
+    } catch {
+      setIsLoggingOut(false);
     }
   }, [logout, navigation, setGuardNavigation]);
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-      justifyContent: "center",
-      alignItems: "center",
-      paddingHorizontal: 24,
-    },
-    header: {
-      alignItems: "center",
-      marginBottom: 48,
-    },
-    iconContainer: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: theme.colors.accent + "20",
-      justifyContent: "center",
-      alignItems: "center",
-      marginBottom: 24,
-    },
-    title: {
-      fontSize: 28,
-      fontWeight: "700",
-      color: theme.colors.textPrimary,
-      marginBottom: 12,
-      textAlign: "center",
-    },
-    subtitle: {
-      fontSize: 16,
-      color: theme.colors.textSecondary,
-      textAlign: "center",
-      lineHeight: 24,
-    },
-    optionsContainer: {
-      width: "100%",
-      gap: 16,
-    },
-    optionButton: {
-      backgroundColor: theme.colors.surfaceCard,
-      borderRadius: 16,
-      padding: 20,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 16,
-    },
-    primaryOption: {
-      backgroundColor: theme.colors.accent + "15",
-      borderColor: theme.colors.accent,
-    },
-    optionIconContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: theme.colors.background,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    primaryIconContainer: {
-      backgroundColor: theme.colors.accent + "20",
-    },
-    optionContent: {
-      flex: 1,
-    },
-    optionTitle: {
-      fontSize: 18,
-      fontWeight: "600",
-      color: theme.colors.textPrimary,
-      marginBottom: 4,
-    },
-    optionDescription: {
-      fontSize: 14,
-      color: theme.colors.textSecondary,
-      lineHeight: 20,
-    },
-    optionArrow: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
-      backgroundColor: theme.colors.background,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.7)",
-      justifyContent: "center",
-      alignItems: "center",
-      paddingHorizontal: 24,
-    },
-    modalContainer: {
-      backgroundColor: theme.colors.surfaceCard,
-      borderRadius: 24,
-      padding: 24,
-      width: "100%",
-      maxWidth: 400,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    modalIconContainer: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: theme.colors.warning + "20",
-      justifyContent: "center",
-      alignItems: "center",
-      alignSelf: "center",
-      marginBottom: 20,
-    },
-    modalTitle: {
-      fontSize: 24,
-      fontWeight: "700",
-      color: theme.colors.textPrimary,
-      textAlign: "center",
-      marginBottom: 12,
-    },
-    modalMessage: {
-      fontSize: 16,
-      color: theme.colors.textSecondary,
-      textAlign: "center",
-      lineHeight: 24,
-      marginBottom: 24,
-    },
-    modalButtons: {
-      flexDirection: "row",
-      gap: 12,
-    },
-    modalButton: {
-      flex: 1,
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      borderRadius: 12,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    modalButtonCancel: {
-      backgroundColor: theme.colors.surfaceMuted,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    modalButtonConfirm: {
-      backgroundColor: theme.colors.danger,
-    },
-    modalButtonText: {
-      fontSize: 16,
-      fontWeight: "600",
-      color: theme.colors.textPrimary,
-    },
-    modalButtonTextConfirm: {
-      color: "#ffffff",
-    },
-  });
+  const iconName =
+    Platform.OS === "ios" ? "face-recognition" : "fingerprint";
+  const biometricType = Platform.OS === "ios" ? "Face ID" : "Fingerprint";
+
+  const badgeBackground = withAlpha(colors.surfaceElevated, mode === "dark" ? 0.78 : 0.92);
+  const badgeBorder = withAlpha(colors.accent, mode === "dark" ? 0.5 : 0.32);
+  const secondaryBorder = withAlpha(colors.border, mode === "dark" ? 0.45 : 0.32);
+  const secondaryBackground = withAlpha(colors.surfaceMuted, mode === "dark" ? 0.55 : 0.82);
 
   return (
-    <View style={styles.container}>
-      {/* Pending pairing banner — shown when a pairing link was detected on mount */}
-      {hasPendingPairing && (
-        <TouchableOpacity
-          onPress={handleContinuePairing}
-          activeOpacity={0.85}
-          style={{
-            width: '100%',
-            marginBottom: 20,
-            borderRadius: 16,
-            padding: 16,
-            backgroundColor: theme.colors.accent + '18',
-            borderWidth: 1,
-            borderColor: theme.colors.accent + '60',
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-          }}
-        >
-          <Ionicons name="phone-portrait-outline" size={24} color={theme.colors.accent} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 15 }}>
-              Continue Device Pairing
-            </Text>
-            <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 2 }}>
-              You have a pending pairing request. Tap to add this device.
-            </Text>
-          </View>
-          <Ionicons name="arrow-forward" size={20} color={theme.colors.accent} />
-        </TouchableOpacity>
-      )}
+    <>
+      <LinearGradient
+        colors={gradients.hero}
+        style={[styles.root, { backgroundColor: colors.background }]}
+      >
+        <View style={styles.content}>
+          {/* Pending pairing banner */}
+          {hasPendingPairing && (
+            <TouchableOpacity
+              onPress={handleContinuePairing}
+              activeOpacity={0.85}
+              style={[
+                styles.pairingBanner,
+                {
+                  backgroundColor: withAlpha(colors.accent, 0.12),
+                  borderColor: withAlpha(colors.accent, 0.4),
+                },
+              ]}
+            >
+              <Ionicons name="phone-portrait-outline" size={22} color={colors.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.pairingTitle, { color: colors.textPrimary }]}>
+                  Continue Device Pairing
+                </Text>
+                <Text style={[styles.pairingSubtitle, { color: colors.textSecondary }]}>
+                  Tap to add this device
+                </Text>
+              </View>
+              <Ionicons name="arrow-forward" size={18} color={colors.accent} />
+            </TouchableOpacity>
+          )}
 
-      <View style={styles.header}>
-        <View style={styles.iconContainer}>
-          <Ionicons name="shield-checkmark" size={40} color={theme.colors.accent} />
+          {/* Animated biometric icon */}
+          <View style={[styles.haloContainer, { shadowColor: colors.accent }]}>
+            <AnimatedView
+              style={[styles.halo, haloStyle, { backgroundColor: colors.accent }]}
+            />
+            <View
+              style={[
+                styles.iconBadge,
+                { backgroundColor: badgeBackground, borderColor: badgeBorder },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={iconName}
+                size={42}
+                color={colors.accent}
+              />
+            </View>
+          </View>
+
+          <Text style={[styles.title, { color: colors.textPrimary }]}>
+            Verify Your Identity
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Use {biometricType} or your device credentials to continue
+          </Text>
+
+          {lastError ? (
+            <Text style={[styles.errorText, { color: colors.danger }]}>
+              {lastError}
+            </Text>
+          ) : null}
+
+          {/* Auth actions */}
+          <View style={styles.actions}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[styles.primaryButton, { backgroundColor: colors.accent }]}
+              onPress={handleBiometricAuth}
+              disabled={isAuthenticating}
+            >
+              {isAuthenticating ? (
+                <ActivityIndicator size="small" color={colors.textOnAccent} />
+              ) : (
+                <Text style={[styles.primaryLabel, { color: colors.textOnAccent }]}>
+                  Try again
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[
+                styles.secondaryButton,
+                { borderColor: secondaryBorder, backgroundColor: secondaryBackground },
+              ]}
+              onPress={handleFallback}
+              disabled={isAuthenticating}
+            >
+              <Text style={[styles.secondaryLabel, { color: colors.textPrimary }]}>
+                Use PIN or Password
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Tertiary re-login link */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.reLoginButton}
+            onPress={handleReLogin}
+            disabled={isAuthenticating || isLoggingOut}
+          >
+            <Text style={[styles.reLoginText, { color: colors.textMuted }]}>
+              Re-login to a different account
+            </Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.title}>Welcome Back!</Text>
-        <Text style={styles.subtitle}>
-          Choose how you&apos;d like to continue with your secure wallet
-        </Text>
-      </View>
+      </LinearGradient>
 
-      <View style={styles.optionsContainer}>
-        <TouchableOpacity
-          style={[styles.optionButton, styles.primaryOption]}
-          onPress={handleBiometricAuth}
-          disabled={isAuthenticating}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.optionIconContainer, styles.primaryIconContainer]}>
-            <Ionicons name="finger-print" size={28} color={theme.colors.accent} />
-          </View>
-          <View style={styles.optionContent}>
-            <Text style={styles.optionTitle}>Device Verification</Text>
-            <Text style={styles.optionDescription}>
-              Use biometric or device PIN to securely access your wallet
-            </Text>
-          </View>
-          <View style={styles.optionArrow}>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.optionButton}
-          onPress={handleReLogin}
-          disabled={isAuthenticating}
-          activeOpacity={0.7}
-        >
-          <View style={styles.optionIconContainer}>
-            <Ionicons name="log-in-outline" size={28} color={theme.colors.textSecondary} />
-          </View>
-          <View style={styles.optionContent}>
-            <Text style={styles.optionTitle}>Re-login</Text>
-            <Text style={styles.optionDescription}>
-              Sign out and log in again with your credentials
-            </Text>
-          </View>
-          <View style={styles.optionArrow}>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* Re-login Confirmation Modal */}
+      {/* Re-login confirm modal */}
       <Modal
         visible={showReLoginModal}
         transparent
@@ -395,40 +292,224 @@ export const DeviceVerificationScreen = () => {
         onRequestClose={handleCancelReLogin}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalIconContainer}>
-              <Ionicons name="warning" size={48} color={theme.colors.warning} />
+          <View
+            style={[
+              styles.modalContainer,
+              {
+                backgroundColor: colors.surfaceCard,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.modalIcon,
+                { backgroundColor: withAlpha(colors.warning, 0.15) },
+              ]}
+            >
+              <MaterialCommunityIcons name="logout" size={32} color={colors.warning} />
             </View>
 
-            <Text style={styles.modalTitle}>Re-login Required</Text>
-            <Text style={styles.modalMessage}>
-              Your current session will be closed and all app data will be cleared. You will need to log in again with your credentials.
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+              Re-login Required
+            </Text>
+            <Text style={[styles.modalMessage, { color: colors.textSecondary }]}>
+              Your current session will be closed and all local data cleared. You'll
+              need to log in again with your credentials.
             </Text>
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
+                style={[
+                  styles.modalButton,
+                  {
+                    backgroundColor: colors.surfaceMuted,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                  },
+                ]}
                 onPress={handleCancelReLogin}
-                disabled={isAuthenticating}
+                disabled={isLoggingOut}
                 activeOpacity={0.7}
               >
-                <Text style={styles.modalButtonText}>Cancel</Text>
+                <Text style={[styles.modalButtonText, { color: colors.textPrimary }]}>
+                  Cancel
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonConfirm]}
+                style={[styles.modalButton, { backgroundColor: colors.danger }]}
                 onPress={handleConfirmReLogin}
-                disabled={isAuthenticating}
+                disabled={isLoggingOut}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.modalButtonText, styles.modalButtonTextConfirm]}>
-                  {isAuthenticating ? "Logging out..." : "Continue"}
-                </Text>
+                {isLoggingOut ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                    Continue
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </View>
+    </>
   );
 };
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    gap: 20,
+  },
+  pairingBanner: {
+    position: "absolute",
+    top: 56,
+    left: 0,
+    right: 0,
+    marginHorizontal: 0,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+  },
+  pairingTitle: {
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  pairingSubtitle: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  haloContainer: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+  },
+  halo: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+  },
+  iconBadge: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+    opacity: 0.85,
+  },
+  errorText: {
+    fontSize: 12,
+    textAlign: "center",
+  },
+  actions: {
+    width: "100%",
+    gap: 10,
+  },
+  primaryButton: {
+    borderRadius: 16,
+    paddingVertical: 15,
+    alignItems: "center",
+  },
+  primaryLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  secondaryButton: {
+    borderRadius: 16,
+    paddingVertical: 15,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  secondaryLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  reLoginButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  reLoginText: {
+    fontSize: 12,
+    fontWeight: "500",
+    textDecorationLine: "underline",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  modalContainer: {
+    borderRadius: 24,
+    padding: 24,
+    width: "100%",
+    maxWidth: 380,
+    borderWidth: 1,
+    alignItems: "center",
+    gap: 12,
+  },
+  modalIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 21,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+    marginTop: 4,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+});

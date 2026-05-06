@@ -25,7 +25,8 @@ import {
     HeadlineText,
     TitleText,
 } from "../../../shared/components/Tier1/Text";
-import { Colors, Spacing } from "../../../shared/components/TokenRegistry";
+import { Spacing } from "../../../shared/components/TokenRegistry";
+import { useAppTheme } from "@theme";
 
 interface Notification {
   id: string;
@@ -43,7 +44,6 @@ interface Notification {
 }
 
 interface NotificationCenterScreenProps {
-  isDark?: boolean;
   onSettingsPress?: () => void;
 }
 
@@ -102,7 +102,9 @@ const MOCK_NOTIFICATIONS: Notification[] = [
 
 export const NotificationCenterScreen: React.FC<
   NotificationCenterScreenProps
-> = ({ isDark = true, onSettingsPress }) => {
+> = ({ onSettingsPress }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -118,13 +120,11 @@ export const NotificationCenterScreen: React.FC<
   };
 
   const renderNotificationCard = (notification: Notification) => (
-    <CardLevel1 isDark={isDark} key={notification.id}>
+    <CardLevel1 key={notification.id}>
       <View
         style={{
           backgroundColor: !notification.read
-            ? isDark
-              ? Colors.surface
-              : "#f3f4f6"
+            ? colors.surface
             : "transparent",
           opacity: !notification.read ? 1 : 0.7,
         }}
@@ -146,7 +146,7 @@ export const NotificationCenterScreen: React.FC<
                 alignItems: "center",
               }}
             >
-              <BodyText isDark={isDark} style={{ fontSize: 24 }}>
+              <BodyText style={{ fontSize: 24 }}>
                 {notification.icon}
               </BodyText>
 
@@ -159,7 +159,6 @@ export const NotificationCenterScreen: React.FC<
                   }}
                 >
                   <BodyText
-                    isDark={isDark}
                     style={{ fontWeight: "600", flex: 1 }}
                   >
                     {notification.title}
@@ -170,17 +169,14 @@ export const NotificationCenterScreen: React.FC<
                         width: 8,
                         height: 8,
                         borderRadius: 4,
-                        backgroundColor: Colors.primary,
+                        backgroundColor: colors.accent,
                       }}
                     />
                   )}
                 </View>
 
                 <BodyText
-                  isDark={isDark}
-                  color={
-                    isDark ? Colors.textSecondary : Colors.lightTextSecondary
-                  }
+                  color={colors.textSecondary}
                   style={{ fontSize: 12, lineHeight: 16 }}
                 >
                   {notification.message}
@@ -189,7 +185,6 @@ export const NotificationCenterScreen: React.FC<
             </View>
 
             <Badge
-              isDark={isDark}
               status={
                 notification.priority === "high"
                   ? "danger"
@@ -215,11 +210,11 @@ export const NotificationCenterScreen: React.FC<
               gap: Spacing.sp2,
               paddingTop: Spacing.sp2,
               borderTopWidth: 1,
-              borderTopColor: isDark ? Colors.surfaceMid : "#e5e7eb",
+              borderTopColor: colors.surfaceCard,
             }}
           >
             <CaptionText
-              color={isDark ? Colors.textTertiary : Colors.lightTextTertiary}
+              color={colors.textMuted}
             >
               {notification.timestamp}
             </CaptionText>
@@ -228,7 +223,6 @@ export const NotificationCenterScreen: React.FC<
               {notification.action && (
                 <SecondaryButton
                   label={notification.action.label}
-                  isDark={isDark}
                   onPress={notification.action.onPress}
                 />
               )}
@@ -236,7 +230,6 @@ export const NotificationCenterScreen: React.FC<
               {!notification.read && (
                 <SecondaryButton
                   label="Mark Read"
-                  isDark={isDark}
                   onPress={() => markAsRead(notification.id)}
                 />
               )}
@@ -251,7 +244,7 @@ export const NotificationCenterScreen: React.FC<
     <SafeAreaView
       style={{
         flex: 1,
-        backgroundColor: isDark ? Colors.background : "#ffffff",
+        backgroundColor: colors.background,
       }}
     >
       <ScrollView
@@ -271,18 +264,16 @@ export const NotificationCenterScreen: React.FC<
               alignItems: "center",
             }}
           >
-            <HeadlineText isDark={isDark}>Notifications</HeadlineText>
+            <HeadlineText>Notifications</HeadlineText>
             {unreadCount > 0 && (
               <Badge
-                isDark={isDark}
                 status="danger"
                 label={`${unreadCount} new`}
               />
             )}
           </View>
           <BodyText
-            isDark={isDark}
-            color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
+            color={colors.textSecondary}
           >
             Stay updated on transactions and security.
           </BodyText>
@@ -292,7 +283,6 @@ export const NotificationCenterScreen: React.FC<
         {unreadCount > 0 && (
           <SecondaryButton
             label={`Mark ${unreadCount} as read`}
-            isDark={isDark}
             onPress={markAllAsRead}
           />
         )}
@@ -300,7 +290,7 @@ export const NotificationCenterScreen: React.FC<
         {/* NOTIFICATIONS LIST */}
         {notifications.length > 0 ? (
           <View style={{ gap: Spacing.sp3 }}>
-            <CaptionText color={Colors.primary}>
+            <CaptionText color={colors.accent}>
               {unreadCount > 0 ? `${unreadCount} Unread` : "All caught up"}
             </CaptionText>
 
@@ -309,7 +299,7 @@ export const NotificationCenterScreen: React.FC<
             )}
           </View>
         ) : (
-          <Surface isDark={isDark} elevation={1}>
+          <Surface elevation={1}>
             <View
               style={{
                 alignItems: "center",
@@ -317,16 +307,13 @@ export const NotificationCenterScreen: React.FC<
                 paddingVertical: Spacing.sp6,
               }}
             >
-              <BodyText isDark={isDark} style={{ fontSize: 48 }}>
+              <BodyText style={{ fontSize: 48 }}>
                 🔔
               </BodyText>
               <View style={{ alignItems: "center", gap: Spacing.sp2 }}>
-                <TitleText isDark={isDark}>No notifications</TitleText>
+                <TitleText>No notifications</TitleText>
                 <BodyText
-                  isDark={isDark}
-                  color={
-                    isDark ? Colors.textSecondary : Colors.lightTextSecondary
-                  }
+                  color={colors.textSecondary}
                   style={{ fontSize: 13, textAlign: "center" }}
                 >
                   You're all caught up. New alerts will appear here.
@@ -337,19 +324,17 @@ export const NotificationCenterScreen: React.FC<
         )}
 
         {/* NOTIFICATION SETTINGS */}
-        <CardLevel1 isDark={isDark}>
+        <CardLevel1>
           <View style={{ gap: Spacing.sp2 }}>
-            <TitleText isDark={isDark}>Customize Notifications</TitleText>
+            <TitleText>Customize Notifications</TitleText>
             <BodyText
-              isDark={isDark}
-              color={isDark ? Colors.textSecondary : Colors.lightTextSecondary}
+              color={colors.textSecondary}
               style={{ fontSize: 13 }}
             >
               Manage which notifications you receive in your device settings.
             </BodyText>
             <PrimaryButton
               label="Notification Settings"
-              isDark={isDark}
               onPress={onSettingsPress}
             />
           </View>

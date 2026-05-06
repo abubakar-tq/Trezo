@@ -1,8 +1,7 @@
-import { NavigationProp, RouteProp, useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, {
     Easing,
@@ -17,35 +16,12 @@ import Animated, {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { IMAGES } from "@/assets";
-import { AuthStackParamList, RootStackParamList } from "@/src/types/navigation";
 import { AnimatedSplashBackground } from "@shared/components";
-
-type SplashRedirectTarget = {
-  name: string;
-  params?: Record<string, unknown>;
-};
-
-type SplashRouteParams = {
-  redirectTo?: SplashRedirectTarget;
-};
-
-type GenericSplashRoute = RouteProp<Record<string, SplashRouteParams | undefined>, string>;
 
 const blurhash =
   "|rF?hV%2WCj[ayj[a|j[az_NaeWBj@ayfRayfQfQM{M|azj[azf6fQfQfQIpWXofj[ayj[j[fQayWCoeoeaya}j[ayfQa{oLj?j[WVj[ayayj[fQoff7azayj[ayj[j[ayofayayayj[fQj[ayayj[ayfjj[j[ayjuayj[";
 
 const SplashScreen: React.FC = () => {
-  const navigation = useNavigation<NavigationProp<AuthStackParamList & RootStackParamList>>();
-  const route = useRoute<GenericSplashRoute>();
-  const rawRedirect = route.params?.redirectTo;
-
-  const redirectTarget = useMemo<SplashRedirectTarget>(() => {
-    if (rawRedirect) {
-      return rawRedirect;
-    }
-
-    return { name: "Onboarding" };
-  }, [rawRedirect]);
 
   const glowScale = useSharedValue(1);
   const lightRotation = useSharedValue(0);
@@ -85,35 +61,11 @@ const SplashScreen: React.FC = () => {
     opacity: interpolate(lightScale.value, [1, 1.3], [0.6, 0.9]),
   }));
 
-  useFocusEffect(
-    useCallback(() => {
-      console.log('📍 [SplashScreen] Focused, will redirect to:', redirectTarget);
-      
-      glowScale.value = 1;
-      lightRotation.value = 0;
-      lightScale.value = 1;
-
-      const timeout = setTimeout(() => {
-        console.log('🚀 [SplashScreen] Attempting navigation to:', redirectTarget.name);
-        try {
-          navigation.reset({
-            index: 0,
-            routes: [
-              {
-                name: redirectTarget.name as never,
-                params: redirectTarget.params,
-              },
-            ],
-          });
-          console.log('✅ [SplashScreen] Navigation reset successful');
-        } catch (error) {
-          console.error('❌ [SplashScreen] Navigation error:', error);
-        }
-      }, 3500);
-
-      return () => clearTimeout(timeout);
-    }, [glowScale, lightRotation, lightScale, navigation, redirectTarget]),
-  );
+  useEffect(() => {
+    glowScale.value = 1;
+    lightRotation.value = 0;
+    lightScale.value = 1;
+  }, [glowScale, lightRotation, lightScale]);
 
   return (
     <View style={styles.container}>
