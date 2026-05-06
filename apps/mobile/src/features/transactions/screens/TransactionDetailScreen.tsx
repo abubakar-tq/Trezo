@@ -1,4 +1,5 @@
-import { useRoute, type RouteProp } from "@react-navigation/native";
+import { useRoute, useNavigation, type RouteProp } from "@react-navigation/native";
+import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -28,6 +29,7 @@ const formatValue = (value: unknown): string => {
 export const TransactionDetailScreen: React.FC = () => {
   const { theme } = useAppTheme();
   const { colors } = theme;
+  const navigation = useNavigation<any>();
   const route = useRoute<TransactionDetailRoute>();
 
   const [row, setRow] = useState<WalletTransaction | null>(null);
@@ -122,7 +124,15 @@ export const TransactionDetailScreen: React.FC = () => {
   }, [row]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <TouchableOpacity
+        accessibilityLabel="Close"
+        style={styles.closeButton}
+        onPress={() => navigation.popToTop()}
+        hitSlop={8}
+      >
+        <Feather name="x" size={22} color={colors.textPrimary} />
+      </TouchableOpacity>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Transaction Detail</Text>
 
@@ -169,6 +179,17 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 28,
     gap: 10,
+  },
+  closeButton: {
+    position: "absolute",
+    top: 14,
+    left: 12,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 22,
   },
   title: {
     fontSize: 25,
