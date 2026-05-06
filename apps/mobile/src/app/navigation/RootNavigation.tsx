@@ -44,6 +44,7 @@ import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScr
 import ReceiveScreen from "@features/wallet/screens/ReceiveScreen";
 import SendScreen from "@features/wallet/screens/SendScreen";
 import { useLazyPasskeyBackfill } from "@features/wallet/hooks/useLazyPasskeyBackfill";
+import PasskeyService from "@features/wallet/services/PasskeyService";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
@@ -59,31 +60,66 @@ const RootNavigation = () => {
   );
   const { theme } = useAppTheme();
   const [showingSplash, setShowingSplash] = useState(true);
-  const splashTarget = isLoggedIn ? "DeviceVerification" : "AuthNavigation";
-  // Keep a ref so the timer callback always reads the latest value without
-  // being a dependency (which would cancel + restart the timer on every auth event).
+  const [splashTarget, setSplashTarget] = useState<"DeviceVerification" | "AuthNavigation" | "RecoveryEntry">(
+    isLoggedIn ? "DeviceVerification" : "AuthNavigation",
+  );
   const splashTargetRef = useRef(splashTarget);
+
+  const userId = useUserStore((state) => state.user?.id);
+
   useEffect(() => {
     splashTargetRef.current = splashTarget;
   }, [splashTarget]);
+
+  // Re-resolve target when auth changes; on logged-in, also probe local passkey.
+  useEffect(() => {
+    let cancelled = false;
+    if (!isLoggedIn) {
+      setSplashTarget("AuthNavigation");
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!userId) {
+      setSplashTarget("DeviceVerification");
+      return () => {
+        cancelled = true;
+      };
+    }
+    // Tight timeout: if AsyncStorage is slow, fall through to DeviceVerification
+    // (the inline "Recover account" link still gives the user an exit).
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500));
+    Promise.race([PasskeyService.getPasskey(userId), timeout])
+      .then((passkey) => {
+        if (cancelled) return;
+        const hasLocal = Boolean(passkey && (passkey as { credentialIdRaw?: string }).credentialIdRaw);
+        setSplashTarget(hasLocal ? "DeviceVerification" : "RecoveryEntry");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSplashTarget("DeviceVerification");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, userId]);
 
   useEffect(() => {
     setGuardNavigation(isLoggedIn);
   }, [isLoggedIn, setGuardNavigation]);
 
   useEffect(() => {
-    // Fire once on mount. splashTargetRef is read at fire time so it always
-    // reflects the settled auth state, even if isLoggedIn changed mid-timer.
     const timer = setTimeout(() => {
       setShowingSplash(false);
       if (navigationRef.isReady()) {
-        navigationRef.resetRoot({
-          index: 0,
-          routes: [{ name: splashTargetRef.current }],
-        });
+        const target = splashTargetRef.current;
+        const route =
+          target === "RecoveryEntry"
+            ? { name: "RecoveryEntry" as const, params: { reason: "no_local_passkey" as const } }
+            : { name: target };
+        navigationRef.resetRoot({ index: 0, routes: [route] });
       }
     }, 2500);
-
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -108,7 +144,6 @@ const RootNavigation = () => {
         <Stack.Screen
           name="AppSplash"
           component={SplashScreen}
-          initialParams={{ redirectTo: { name: splashTarget } }}
         />
         <Stack.Screen
           name="DeviceVerification"
