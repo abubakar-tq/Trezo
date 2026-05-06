@@ -3,6 +3,7 @@ import { useAppTheme } from "@theme";
 import { withAlpha } from "@utils/color";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { formatEther } from "viem";
 
 import { TransactionHistoryService } from "@/src/features/transactions/services/TransactionHistoryService";
 import { TransactionReceiptTracker } from "@/src/features/transactions/services/TransactionReceiptTracker";
@@ -66,7 +67,7 @@ export const TransactionDetailScreen: React.FC = () => {
   const detailRows = useMemo(() => {
     if (!row) return [] as { label: string; value: unknown }[];
 
-    return [
+    const rows = [
       { label: "ID", value: row.id },
       { label: "Type", value: row.type },
       { label: "Status", value: row.status },
@@ -107,6 +108,17 @@ export const TransactionDetailScreen: React.FC = () => {
       { label: "Failed", value: row.failedAt },
       { label: "Updated", value: row.updatedAt },
     ];
+
+    const isFailed = ["failed", "cancelled", "dropped"].includes(String(row.status));
+    if (isFailed && row.gasUsed && row.effectiveGasPriceWei) {
+      try {
+        const burnedWei = BigInt(row.gasUsed) * BigInt(row.effectiveGasPriceWei);
+        rows.unshift({ label: "Gas burned", value: `${formatEther(burnedWei)} ETH` });
+      } catch {
+        // malformed numerics; skip
+      }
+    }
+    return rows;
   }, [row]);
 
   return (
