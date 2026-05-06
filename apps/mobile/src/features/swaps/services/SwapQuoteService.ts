@@ -18,6 +18,7 @@ import type {
 import type { SwapQuote } from "@/src/features/swaps/types/swap";
 import type { SupportedChainId } from "@/src/integration/chains";
 import type { NetworkKey } from "@/src/integration/networks";
+import { withTimeoutAndRetry } from "@/src/features/swaps/utils/withTimeoutAndRetry";
 
 const assertSlippage = (slippageBps: number): void => {
   if (!Number.isInteger(slippageBps)) {
@@ -100,7 +101,7 @@ export class SwapQuoteService {
 
     // Prefer network-key-aware provider lookup
     const provider = await this.getProviderForNetwork(request);
-    const quote = await provider.getQuote(request);
+    const quote = await withTimeoutAndRetry(() => provider.getQuote(request), { timeoutMs: 8000 });
     assertQuoteIntegrity(quote, request);
 
     return quote;
