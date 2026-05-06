@@ -116,9 +116,8 @@ apps/guardian-approval/.env
 apps/backend/zk-email-recovery-api/src/future-only/
 scripts/graphify-solidity-parser-scripts
 
-# Documentation (tracked: docs/plans/, docs/ARCHITECTURE.md)
+# Documentation (only docs/ARCHITECTURE.md is tracked; docs/plans/ stays local)
 docs/*
-docs/plans/
 !docs/ARCHITECTURE.md
 
 # Foundry libraries
