@@ -43,6 +43,7 @@ import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
 import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScreen";
 import ReceiveScreen from "@features/wallet/screens/ReceiveScreen";
 import SendScreen from "@features/wallet/screens/SendScreen";
+import { useLazyPasskeyBackfill } from "@features/wallet/hooks/useLazyPasskeyBackfill";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
@@ -86,6 +87,8 @@ const RootNavigation = () => {
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useLazyPasskeyBackfill();
 
   return (
     <NavigationContainer
