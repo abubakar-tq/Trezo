@@ -66,9 +66,17 @@ export const TransactionStatusScreen: React.FC = () => {
   }, [loadStatus]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <TouchableOpacity
+        accessibilityLabel="Close"
+        style={styles.closeButton}
+        onPress={() => navigation.popToTop()}
+        hitSlop={8}
+      >
+        <Feather name="x" size={22} color={colors.textPrimary} />
+      </TouchableOpacity>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Transaction Status</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }, { paddingLeft: 48 }]}>Transaction Status</Text>
 
         {loading ? (
           <View style={styles.centered}>
@@ -134,6 +142,17 @@ export const TransactionStatusScreen: React.FC = () => {
         >
           <Text style={[styles.secondaryButtonText, { color: colors.textPrimary }]}>Open Details</Text>
         </TouchableOpacity>
+
+        {row && (
+          <TouchableOpacity
+            style={[styles.doneButton, { backgroundColor: withAlpha(colors.surfaceCard, 0.75), borderColor: withAlpha(colors.border, 0.35) }]}
+            onPress={() => navigation.popToTop()}
+          >
+            <Text style={[styles.doneButtonText, { color: colors.textPrimary }]}>
+              {["confirmed", "failed", "cancelled", "dropped"].includes(String(row.status)) ? "Done" : "Close"}
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -237,6 +256,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 14,
+    left: 12,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 22,
+  },
+  doneButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  doneButtonText: {
     fontSize: 14,
     fontWeight: "700",
   },
