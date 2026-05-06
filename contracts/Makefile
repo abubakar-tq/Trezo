@@ -51,6 +51,7 @@ PREDICT_WALLET_ENV := \
 .PHONY: help
 help:
 	@echo "Common targets:"
+	@echo "  make bootstrap                          # one-time: init submodules + install modulekit pnpm deps"
 	@echo "  make build"
 	@echo "  make deploy-local"
 	@echo "  make predict-local"
@@ -77,6 +78,14 @@ help:
 	@echo "  make check-root-factory RPC_URL=\$$SEPOLIA_RPC_URL"
 	@echo "  make deploy-sepolia PRIVATE_KEY=\$$PRIVATE_KEY"
 	@echo "  make predict-wallet RPC_URL=\$$BASE_RPC_URL ACCOUNT_FACTORY=0x... WALLET_ID=0x... VALIDATOR=0x... PASSKEY_ID_RAW=0x... PASSKEY_PX=... PASSKEY_PY=... WALLET_INDEX=0"
+
+.PHONY: bootstrap
+bootstrap:
+	@echo "Initializing git submodules..."
+	git -C .. submodule update --init --recursive
+	@echo "Installing modulekit pnpm deps (required for forge build)..."
+	@echo "Note: --node-linker=hoisted + --package-import-method=copy are required when running pnpm against a Windows-mounted drive (/mnt/d) from WSL; plain pnpm install fails with ERR_PNPM_EACCES on DrvFs."
+	cd lib/modulekit && pnpm install --frozen-lockfile --config.node-linker=hoisted --config.package-import-method=copy
 
 .PHONY: build
 build:

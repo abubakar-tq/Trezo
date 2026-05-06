@@ -116,9 +116,18 @@ apps/guardian-approval/.env
 apps/backend/zk-email-recovery-api/src/future-only/
 scripts/graphify-solidity-parser-scripts
 
+# Documentation (tracked: docs/plans/, docs/ARCHITECTURE.md)
+docs/*
+docs/plans/
+!docs/ARCHITECTURE.md
+
+# Foundry libraries
+contracts/lib/email-recovery/
+
 # Claude Code local config (machine-specific paths / private instructions)
 .mcp.json
 CLAUDE.md
+.claude/
 
 # Agent settings / artifacts
 agent-artifacts/
