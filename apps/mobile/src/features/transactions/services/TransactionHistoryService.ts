@@ -58,6 +58,8 @@ type WalletTransactionRow = {
   confirmed_at: string | null;
   failed_at: string | null;
   network_key: string | null;
+  gas_used: string | null;
+  effective_gas_price: string | null;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -137,6 +139,8 @@ const toRecord = (row: WalletTransactionRow): WalletTransaction => ({
   submittedAt: row.submitted_at,
   confirmedAt: row.confirmed_at,
   failedAt: row.failed_at,
+  gasUsed: row.gas_used ?? null,
+  effectiveGasPriceWei: row.effective_gas_price ?? null,
   networkKey: (row.network_key ?? "anvil-local") as NetworkKey,
 });
 
@@ -410,6 +414,7 @@ export class TransactionHistoryService {
     id: string;
     transactionHash?: Hex | null;
     blockNumber?: bigint | null;
+    receipt?: { gasUsed?: bigint; effectiveGasPrice?: bigint };
     debugContext?: JsonObject;
   }): Promise<WalletTransaction> {
     const current = await loadById(params.id);
@@ -435,7 +440,7 @@ export class TransactionHistoryService {
       throw new Error(`Invalid transaction transition in markConfirmed: ${current.status} -> confirmed`);
     }
 
-    return updateById(params.id, {
+    const update: Record<string, unknown> = {
       status: "confirmed",
       transaction_hash: effectiveTxHash,
       block_number: params.blockNumber?.toString() ?? current.blockNumber?.toString() ?? null,
@@ -443,13 +448,24 @@ export class TransactionHistoryService {
       error_code: null,
       error_message: null,
       debug_context: mergeObjects(current.debugContext, params.debugContext),
-    });
+    };
+
+    if (params.receipt?.gasUsed != null) {
+      update.gas_used = params.receipt.gasUsed.toString();
+    }
+
+    if (params.receipt?.effectiveGasPrice != null) {
+      update.effective_gas_price = params.receipt.effectiveGasPrice.toString();
+    }
+
+    return updateById(params.id, update);
   }
 
   static async markFailed(params: {
     id: string;
     errorMessage: string;
     errorCode?: string | null;
+    receipt?: { gasUsed?: bigint; effectiveGasPrice?: bigint };
     debugContext?: JsonObject;
   }): Promise<WalletTransaction> {
     const current = await loadById(params.id);
@@ -473,13 +489,23 @@ export class TransactionHistoryService {
       ...(params.debugContext ?? {}),
     });
 
-    return updateById(params.id, {
+    const update: Record<string, unknown> = {
       status: "failed",
       error_code: params.errorCode ?? null,
       error_message: params.errorMessage,
       failed_at: current.failedAt ?? now,
       debug_context: debugContext,
-    });
+    };
+
+    if (params.receipt?.gasUsed != null) {
+      update.gas_used = params.receipt.gasUsed.toString();
+    }
+
+    if (params.receipt?.effectiveGasPrice != null) {
+      update.effective_gas_price = params.receipt.effectiveGasPrice.toString();
+    }
+
+    return updateById(params.id, update);
   }
 
   static async markCancelled(id: string, reason?: string): Promise<WalletTransaction> {
