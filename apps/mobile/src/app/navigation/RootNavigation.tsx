@@ -66,6 +66,7 @@ const RootNavigation = () => {
   const splashTargetRef = useRef(splashTarget);
 
   const userId = useUserStore((state) => state.user?.id);
+  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
 
   useEffect(() => {
     splashTargetRef.current = splashTarget;
@@ -93,7 +94,13 @@ const RootNavigation = () => {
       .then((passkey) => {
         if (cancelled) return;
         const hasLocal = Boolean(passkey && (passkey as { credentialIdRaw?: string }).credentialIdRaw);
-        setSplashTarget(hasLocal ? "DeviceVerification" : "RecoveryEntry");
+        // Only offer recovery when there is actually a deployed account to recover.
+        // Without a deployed account, no passkey was ever registered — route normally.
+        if (hasLocal || !smartAccountDeployed) {
+          setSplashTarget("DeviceVerification");
+        } else {
+          setSplashTarget("RecoveryEntry");
+        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -102,7 +109,7 @@ const RootNavigation = () => {
     return () => {
       cancelled = true;
     };
-  }, [isLoggedIn, userId]);
+  }, [isLoggedIn, userId, smartAccountDeployed]);
 
   useEffect(() => {
     setGuardNavigation(isLoggedIn);

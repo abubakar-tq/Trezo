@@ -15,6 +15,7 @@ import {
 
 type RecoveryEntryState =
   | { kind: "loading" }
+  | { kind: "no_account" }
   | { kind: "no_passkey"; activeRequest: RecoveryRequest | null }
   | { kind: "has_passkey"; activeRequest: RecoveryRequest | null }
   | { kind: "has_active_request"; request: RecoveryRequest }
@@ -26,6 +27,7 @@ const RecoveryEntryScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<RecoveryEntryRoute>();
   const user = useUserStore((state) => state.user);
+  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
   const [state, setState] = useState<RecoveryEntryState>({ kind: "loading" });
@@ -86,6 +88,9 @@ const RecoveryEntryScreen: React.FC = () => {
         setState({ kind: "has_active_request", request: latestActiveRequest });
       } else if (hasLocalPasskey) {
         setState({ kind: "has_passkey", activeRequest: null });
+      } else if (!smartAccountDeployed) {
+        // No passkey and no deployed account — nothing to recover.
+        setState({ kind: "no_account" });
       } else {
         setState({ kind: "no_passkey", activeRequest: null });
       }
@@ -96,7 +101,7 @@ const RecoveryEntryScreen: React.FC = () => {
         message: error instanceof Error ? error.message : "Couldn't check device.",
       });
     }
-  }, [user?.id]);
+  }, [user?.id, smartAccountDeployed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +120,8 @@ const RecoveryEntryScreen: React.FC = () => {
       ? "Checking device passkey status..."
       : state.kind === "error"
       ? "Couldn't check this device"
+      : state.kind === "no_account"
+      ? "No account set up yet"
       : state.kind === "has_active_request"
       ? "A recovery request is already in progress."
       : state.kind === "has_passkey"
@@ -126,6 +133,8 @@ const RecoveryEntryScreen: React.FC = () => {
   const bodyText =
     state.kind === "error"
       ? state.message
+      : state.kind === "no_account"
+      ? "Your smart account hasn't been deployed yet so there is no passkey to recover. Continue to finish setting up your wallet."
       : state.kind === "has_active_request"
       ? "Resume your active request to view guardian approvals, per-chain status, and timelock progress."
       : state.kind === "has_passkey"
@@ -171,7 +180,9 @@ const RecoveryEntryScreen: React.FC = () => {
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={() => {
-              if (state.kind === "has_active_request") {
+              if (state.kind === "no_account") {
+                navigation.reset({ index: 0, routes: [{ name: "DeviceVerification" }] });
+              } else if (state.kind === "has_active_request") {
                 navigation.navigate("RecoveryProgress", { requestId: state.request.id });
               } else {
                 navigation.navigate(state.kind === "has_passkey" ? "GuardianRecovery" : "CreateRecoveryRequest");
@@ -179,7 +190,9 @@ const RecoveryEntryScreen: React.FC = () => {
             }}
           >
             <Text style={styles.primaryButtonText}>
-              {state.kind === "has_active_request"
+              {state.kind === "no_account"
+                ? "Continue Setup"
+                : state.kind === "has_active_request"
                 ? "Resume Recovery Progress"
                 : state.kind === "has_passkey"
                 ? "Configure Guardian Recovery"
@@ -211,12 +224,14 @@ const RecoveryEntryScreen: React.FC = () => {
           </TouchableOpacity>
         ) : null}
 
-        <TouchableOpacity
-          style={styles.tertiaryButton}
-          onPress={() => navigation.navigate("PairDevice")}
-        >
-          <Text style={styles.tertiaryButtonText}>I have another device</Text>
-        </TouchableOpacity>
+        {state.kind !== "no_account" ? (
+          <TouchableOpacity
+            style={styles.tertiaryButton}
+            onPress={() => navigation.navigate("PairDevice")}
+          >
+            <Text style={styles.tertiaryButtonText}>I have another device</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </ScrollView>
   );
