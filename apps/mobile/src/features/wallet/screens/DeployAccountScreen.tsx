@@ -34,6 +34,7 @@ import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import WalletSyncService from "@/src/features/wallet/services/WalletSyncService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { getChainConfig, isPortableChain, type SupportedChainId } from "@/src/integration/chains";
+import { getSupabaseClient } from "@lib/supabase";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
@@ -193,7 +194,7 @@ export default function DeployAccountScreen() {
       setSmartAccountAddress(accountAddress);
       setSmartAccountDeployed(true);
 
-      await WalletSyncService.persistWalletMetadata({
+      const syncedWallet = await WalletSyncService.persistWalletMetadata({
         userId: user.id,
         predictedAddress: accountAddress,
         ownerAddress: passkey.credentialIdRaw,
@@ -210,9 +211,35 @@ export default function DeployAccountScreen() {
         deployedAt: new Date().toISOString(),
       }).then((wallet) => {
         WalletSyncService.applyWalletToStores(wallet, true);
+        return wallet;
       }).catch((error) => {
         console.warn("[DeployAccount] Failed to persist deployed wallet metadata", error);
+        return null;
       });
+
+      if (!result.alreadyDeployed) {
+        getSupabaseClient()
+          .from("notifications")
+          .insert({
+            user_id: user.id,
+            aa_wallet_id: syncedWallet?.id ?? null,
+            category: "system",
+            status: "unread",
+            title: "Smart Account Deployed",
+            body: `Your smart account (${accountAddress.slice(0, 6)}…${accountAddress.slice(-4)}) is live on-chain.`,
+            icon: "zap",
+            accent: null,
+            payload: {
+              type: "account_deployed",
+              address: accountAddress,
+              chain_id: chainId,
+              tx_hash: result.transactionHash ?? null,
+            },
+          })
+          .then(({ error }) => {
+            if (error) console.warn("[DeployAccount] notification insert failed:", error.message);
+          });
+      }
 
       setDeployedAddress(accountAddress);
       setCurrentStep("success");
