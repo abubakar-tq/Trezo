@@ -5,7 +5,7 @@ DEFAULT_ANVIL_KEY := 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6
 
 DEFAULT_ANVIL_ACCOUNT := 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
 
-ANVIL_RPC_URL = http://192.168.100.68:8545
+ANVIL_RPC_URL ?= http://$(LAPTOP_IP):8545
 LOCAL_PRIVATE_KEY ?= $(DEFAULT_ANVIL_KEY)
 
 # Where the Expo app lives (relative to contracts/)
@@ -24,7 +24,7 @@ CHAIN_ID ?= $(CHAIN_ID_LOCAL)
 SCRIPT_VERBOSITY ?= -vvvv
 
 # ── Base Fork ────────────────────────────────────────────────────────────────
-BASE_FORK_RPC_URL   ?= http://192.168.100.68:8545
+BASE_FORK_RPC_URL   ?= http://$(LAPTOP_IP):8545
 BASE_FORK_CHAIN_ID  ?= 8453
 BASE_FORK_PROFILE   ?= base-mainnet-fork
 ENTRYPOINT         ?= 0x0000000071727De22E5E9d8BAf0edAc6f37da032
@@ -268,8 +268,60 @@ deploy-fork-base:
 		DEPLOYMENT_PROFILE=$(BASE_FORK_PROFILE) \
 		ENTRYPOINT=$(ENTRYPOINT)
 	$(MAKE) verify-infra RPC_URL=$(BASE_FORK_RPC_URL) ENTRYPOINT=$(ENTRYPOINT)
+	$(MAKE) deploy-email-fork-base
+	$(MAKE) fund-bundler-fork-base
 	$(MAKE) sync-mobile CHAIN_ID=$(BASE_FORK_CHAIN_ID) DEPLOYMENT_PROFILE=$(BASE_FORK_PROFILE)
 	$(MAKE) sync-abi
+
+# Deploy email recovery contracts to the Base fork.
+# Uses Anvil default account as both DKIM signer and kill-switch authorizer — fine for dev.
+# sync-mobile + sync-abi are intentionally omitted here; deploy-fork-base runs them after.
+.PHONY: deploy-email-fork-base
+deploy-email-fork-base: build
+	@echo "Deploying EmailRecovery to Base mainnet fork at $(BASE_FORK_RPC_URL)"
+	KILL_SWITCH_AUTHORIZER=$(DEFAULT_ANVIL_ACCOUNT) \
+	DKIM_SIGNER=$(DEFAULT_ANVIL_ACCOUNT) \
+	DEPLOYMENT_PROFILE=$(BASE_FORK_PROFILE) \
+	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
+		--rpc-url $(BASE_FORK_RPC_URL) \
+		--private-key $(LOCAL_PRIVATE_KEY) \
+		--broadcast \
+		-vvvv
+
+# Fund the Alto bundler executor on the Base fork so it can submit UserOperations.
+# Alto uses Anvil key #0 by default (address 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266).
+ALTO_EXECUTOR_ADDRESS ?= 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+BUNDLER_FUND_ETH     ?= 10
+
+.PHONY: fund-bundler-fork-base
+fund-bundler-fork-base:
+	@echo "Funding Alto bundler executor $(ALTO_EXECUTOR_ADDRESS) with $(BUNDLER_FUND_ETH) ETH on fork..."
+	@WEI_HEX=$$(python3 -c "print(hex(int($(BUNDLER_FUND_ETH) * 10**18)))"); \
+	cast rpc anvil_setBalance $(ALTO_EXECUTOR_ADDRESS) $$WEI_HEX \
+		--rpc-url $(BASE_FORK_RPC_URL)
+	@echo "✅ Bundler executor funded:"
+	@cast balance $(ALTO_EXECUTOR_ADDRESS) --rpc-url $(BASE_FORK_RPC_URL) --ether
+
+# Verify ETH / USDC / WETH balances for any address on the Base fork.
+# Usage: make check-balance-fork-base ACCOUNT=0x...
+BASE_FORK_USDC ?= 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+BASE_FORK_WETH ?= 0x4200000000000000000000000000000000000006
+
+.PHONY: check-balance-fork-base
+check-balance-fork-base:
+	@[ -n "$(ACCOUNT)" ] || (echo "❌ Set ACCOUNT=0x... to check balances" && exit 1)
+	@echo "══════════════════════════════════════"
+	@echo "  Balances for $(ACCOUNT) on Base fork"
+	@echo "══════════════════════════════════════"
+	@echo "ETH:"
+	@cast balance $(ACCOUNT) --rpc-url $(BASE_FORK_RPC_URL) --ether
+	@echo "USDC (raw):"
+	@cast call $(BASE_FORK_USDC) "balanceOf(address)(uint256)" $(ACCOUNT) \
+		--rpc-url $(BASE_FORK_RPC_URL)
+	@echo "WETH (raw):"
+	@cast call $(BASE_FORK_WETH) "balanceOf(address)(uint256)" $(ACCOUNT) \
+		--rpc-url $(BASE_FORK_RPC_URL)
+	@echo "══════════════════════════════════════"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ---------- Local dev harness targets ----------
