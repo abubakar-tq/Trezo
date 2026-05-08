@@ -88,7 +88,11 @@ contract DeployEmailRecovery is Script {
     }
 
     function _applyDefaults(Config memory config) internal view {
-        if (block.chainid == LOCAL_CHAIN_ID) {
+        // On local Anvil (31337) or Base fork (8453 served by Anvil), fall back to the
+        // Anvil default account when KILL_SWITCH_AUTHORIZER / DKIM_SIGNER are not set.
+        // Production networks must supply these explicitly.
+        bool isAnvilLike = block.chainid == LOCAL_CHAIN_ID || block.chainid == 8453;
+        if (isAnvilLike) {
             if (config.killSwitchAuthorizer == address(0)) {
                 config.killSwitchAuthorizer = ANVIL_DEFAULT_ACCOUNT;
             }
@@ -199,7 +203,10 @@ contract DeployEmailRecovery is Script {
 
     function _writeDeploymentJson(Config memory config, DeploymentResult memory result) internal {
         string memory root = "root";
-        string memory path = string.concat("deployments/", vm.toString(block.chainid), ".json");
+        // Honour DEPLOYMENT_PROFILE so the email-recovery additions land in the same
+        // JSON as the core infra (e.g. "base-mainnet-fork") rather than a bare chain-id file.
+        string memory profile = vm.envOr("DEPLOYMENT_PROFILE", vm.toString(block.chainid));
+        string memory path = string.concat("deployments/", profile, ".json");
 
         _preserveCoreDeployment(root, path);
         _preserveExistingEmailRecoveryDeployment(root, path);
