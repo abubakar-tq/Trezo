@@ -170,16 +170,16 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
       bundlerUrl:
         process.env.EXPO_PUBLIC_BASE_FORK_BUNDLER_URL ??
         `http://${INFRA_IP}:4337`,
-      paymasterUrl: process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL,
+      paymasterUrl:
+        process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL ??
+        `http://${INFRA_IP}:3000`,
       environment: "local_fork" as ChainEnvironmentExtended,
       blockExplorerUrl: "https://basescan.org",
       isEnabled: Boolean(
         deployment?.entryPoint && deployment?.accountFactory
       ),
       isDevelopmentOnly: true,
-      defaultUsePaymaster: Boolean(
-        process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL
-      ),
+      defaultUsePaymaster: true,
     };
   })(),
 };

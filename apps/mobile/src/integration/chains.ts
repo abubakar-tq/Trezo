@@ -180,7 +180,9 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
     bundlerUrl:
       process.env.EXPO_PUBLIC_BASE_FORK_BUNDLER_URL ??
       `http://${process.env.EXPO_PUBLIC_INFRA_IP ?? "192.168.100.68"}:4337`,
-    paymasterUrl: process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL,
+    paymasterUrl:
+      process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL ??
+      `http://${process.env.EXPO_PUBLIC_INFRA_IP ?? "192.168.100.68"}:3000`,
     ...withDeployment(8453 as never), // 8453 resolves via profile in deployments.ts
     blockExplorerUrl: "https://basescan.org",
     environment: "local_fork" as ChainEnvironment,
