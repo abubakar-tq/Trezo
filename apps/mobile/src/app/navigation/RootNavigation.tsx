@@ -126,7 +126,7 @@ const RootNavigation = () => {
             : { name: target };
         navigationRef.resetRoot({ index: 0, routes: [route] });
       }
-    }, 2500);
+    }, 1300);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
