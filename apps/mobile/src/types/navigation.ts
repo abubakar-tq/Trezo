@@ -19,6 +19,7 @@ export type AuthStackParamList = {
   VerifyEmail: { email: string; flow: AuthVerificationFlow };
   ResetPassword: { email: string; flow: AuthVerificationFlow };
   AuthResult: { type: "account-created" | "password-updated"; email: string };
+  LinkDevice: undefined;
 };
 
 // Main Tab Navigation Types

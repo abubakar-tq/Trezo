@@ -14,6 +14,7 @@ import {
     SplashScreen,
     VerifyEmailScreen,
 } from "@features/auth";
+import { LinkDeviceScreen } from "@features/auth/screens/LinkDeviceScreen";
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
@@ -59,6 +60,7 @@ const AuthNavigation = () => {
       <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
 		<Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
 		<Stack.Screen name="AuthResult" component={AuthResultScreen} />
+      <Stack.Screen name="LinkDevice" component={LinkDeviceScreen} />
 	</Stack.Navigator>
   );
 };
