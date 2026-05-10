@@ -6,7 +6,7 @@
  */
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import React from "react";
 import {
   ActivityIndicator,
@@ -80,7 +80,7 @@ export const OrderStatusCard: React.FC<Props> = ({
   return (
     <View style={[styles.container, { backgroundColor: colors.surfaceCard }]}>
       {/* Icon */}
-      <View style={[styles.iconWrap, { backgroundColor: withAlpha(statusColor, 0.12) }]}>
+      <View style={[styles.iconWrap, { backgroundColor: `${statusColor}1F` }]}>
         {isSuccess ? (
           <Ionicons name="checkmark-circle" size={64} color={colors.success} />
         ) : order.internalStatus === "failed" || order.internalStatus === "expired" ? (
@@ -128,11 +128,11 @@ export const OrderStatusCard: React.FC<Props> = ({
           disabled={isProcessing}
         >
           {isProcessing ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <ActivityIndicator color={colors.textOnAccent} size="small" />
           ) : (
             <>
-              <FontAwesome5 name="magic" size={16} color="#fff" />
-              <Text style={styles.mockBtnText}>Complete Mock Order</Text>
+              <FontAwesome5 name="magic" size={16} color={colors.textOnAccent} />
+              <Text style={[styles.mockBtnText, { color: colors.textOnAccent }]}>Complete Mock Order</Text>
             </>
           )}
         </TouchableOpacity>
@@ -238,7 +238,6 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   mockBtnText: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "700",
   },

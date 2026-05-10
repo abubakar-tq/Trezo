@@ -39,12 +39,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal";
 import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
-import { MeshBackground } from "@shared/components/MeshBackground";
+
 import { useWalletData } from "@hooks/useWalletData";
 import { useUserStore } from "@/src/store/useUserStore";
 import { useWalletStore } from "../store/useWalletStore";
 import { RampService } from "@/src/services/RampService";
-import { type RampOrder, type RampProvider } from "@/src/types/ramp";
+import { type RampOrder, type RampProvider, type TransakNetwork, TRANSAK_NETWORKS } from "@/src/types/ramp";
 import { CHAIN_CONFIG } from "@/src/core/network/chain";
 
 import { BuyAmountForm } from "../components/ramp/BuyAmountForm";
@@ -80,11 +80,10 @@ function estimateCrypto(fiatUsd: number, symbol: string): string {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export const BuyScreen: React.FC = () => {
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const isDark = resolvedMode === "dark";
 
   // ── Store access ──────────────────────────────────────────────────────────
   const smartAccountAddress = useUserStore((s) => s.smartAccountAddress);
@@ -116,6 +115,7 @@ export const BuyScreen: React.FC = () => {
   const [isPolling, setIsPolling] = useState(false);
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [transakUrl, setTransakUrl] = useState<string | null>(null);
+  const [transakNetwork, setTransakNetwork] = useState<TransakNetwork>("ethereum");
 
   // Derived
   const chainId = CHAIN_CONFIG.chainId; // 31337 for local Anvil; update chain.ts for testnet
@@ -188,13 +188,18 @@ export const BuyScreen: React.FC = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
+      const effectiveChainId = selectedProvider === "transak"
+        ? TRANSAK_NETWORKS[transakNetwork].chainId
+        : chainId;
+
       const session = await RampService.createSession({
         walletAddress: targetAddress,
-        chainId,
+        chainId: effectiveChainId,
         fiatCurrency: "USD",
         fiatAmount,
         cryptoCurrency: selectedAsset.symbol,
         provider: selectedProvider,
+        transakNetwork: selectedProvider === "transak" ? transakNetwork : undefined,
       });
 
       const order = await RampService.getOrder(session.orderId);
@@ -253,8 +258,7 @@ export const BuyScreen: React.FC = () => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <MeshBackground intensity={0.6} />
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <StatusBar barStyle="light-content" />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -273,15 +277,25 @@ export const BuyScreen: React.FC = () => {
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Buy Crypto</Text>
           {/* Network badge */}
-          <View style={[styles.networkBadge, { backgroundColor: isDark ? '#1C1C1E' : colors.surfaceCard }]}>
+          <View style={[styles.networkBadge, { backgroundColor: colors.surfaceCard }]}>
             <View
               style={[
                 styles.networkDot,
-                { backgroundColor: chainId === 31337 ? colors.warning : colors.success },
+                {
+                  backgroundColor: selectedProvider === "transak"
+                    ? TRANSAK_NETWORKS[transakNetwork].color
+                    : chainId === 31337
+                    ? colors.warning
+                    : colors.success,
+                },
               ]}
             />
             <Text style={[styles.networkText, { color: colors.textMuted }]}>
-              {chainId === 31337 ? "Anvil" : `Chain ${chainId}`}
+              {selectedProvider === "transak"
+                ? TRANSAK_NETWORKS[transakNetwork].label
+                : chainId === 31337
+                ? "Anvil"
+                : `Chain ${chainId}`}
             </Text>
           </View>
         </View>
@@ -297,12 +311,14 @@ export const BuyScreen: React.FC = () => {
               selectedAsset={selectedAsset}
               estimatedCrypto={estimatedCrypto}
               provider={selectedProvider}
+              transakNetwork={transakNetwork}
               targetAddress={targetAddress}
               displayAddress={displayAddress}
               onAmountChange={handleAmountChange}
               onAssetPress={() => setIsAssetPickerOpen(true)}
               onAccountPress={() => setIsAccountPickerOpen(true)}
               onProviderChange={setSelectedProvider}
+              onNetworkChange={setTransakNetwork}
             />
           ) : (
             <OrderStatusCard
@@ -328,13 +344,13 @@ export const BuyScreen: React.FC = () => {
                 style={[styles.ctaBtn, { opacity: isValidAmount ? 1 : 0.45 }]}
               >
                 {isProcessing ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={colors.textOnAccent} />
                 ) : (
                   <>
-                    <Text style={styles.ctaBtnText}>
+                    <Text style={[styles.ctaBtnText, { color: colors.textOnAccent }]}>
                       Buy {selectedAsset.symbol}
                     </Text>
-                    <Feather name="arrow-right" size={20} color="#fff" />
+                    <Feather name="arrow-right" size={20} color={colors.textOnAccent} />
                   </>
                 )}
               </LinearGradient>
@@ -342,7 +358,7 @@ export const BuyScreen: React.FC = () => {
             <Text style={[styles.poweredBy, { color: colors.textMuted }]}>
               {selectedProvider === "mock"
                 ? "Powered by Local Anvil (Dev Mode)"
-                : "Powered by Transak — Staging"}
+                : `Powered by Transak — ${TRANSAK_NETWORKS[transakNetwork].testnetName}`}
             </Text>
           </View>
         )}
@@ -441,7 +457,6 @@ const styles = StyleSheet.create({
   ctaBtnText: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#fff",
   },
   poweredBy: {
     textAlign: "center",

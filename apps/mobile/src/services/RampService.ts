@@ -168,7 +168,10 @@ export class RampService {
         },
       },
     });
-    if (error) console.error('[RampService] notifyWebhook failed:', error);
+    if (error) {
+      console.error('[RampService] notifyWebhook failed:', error);
+      // Non-fatal: don't throw — polling will pick up status changes
+    }
   }
 
   /**

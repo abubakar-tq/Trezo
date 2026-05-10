@@ -2,11 +2,10 @@
  * BuyAmountForm.tsx
  *
  * The input form for the buy screen.
- * Handles amount entry, asset selection, and provider mode toggle.
+ * Handles amount entry, asset selection, provider toggle, and Transak network selection.
  */
 import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 import React from "react";
 import {
   Image,
@@ -18,19 +17,22 @@ import {
 } from "react-native";
 
 import type { Asset } from "@shared/components/modals/AssetPickerModal";
-import type { RampProvider } from "@/src/types/ramp";
+import type { RampProvider, TransakNetwork } from "@/src/types/ramp";
+import { TRANSAK_NETWORKS } from "@/src/types/ramp";
 
 interface Props {
   amount: string;
   selectedAsset: Asset;
   estimatedCrypto: string;
   provider: RampProvider;
+  transakNetwork: TransakNetwork;
   targetAddress: string;
   displayAddress: string;
   onAmountChange: (v: string) => void;
   onAssetPress: () => void;
   onAccountPress: () => void;
   onProviderChange: (p: RampProvider) => void;
+  onNetworkChange: (n: TransakNetwork) => void;
 }
 
 export const BuyAmountForm: React.FC<Props> = ({
@@ -38,16 +40,17 @@ export const BuyAmountForm: React.FC<Props> = ({
   selectedAsset,
   estimatedCrypto,
   provider,
+  transakNetwork,
   targetAddress,
   displayAddress,
   onAmountChange,
   onAssetPress,
   onAccountPress,
   onProviderChange,
+  onNetworkChange,
 }) => {
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
-  const isDark = resolvedMode === 'dark';
 
   const hasAddress = Boolean(targetAddress);
 
@@ -58,7 +61,7 @@ export const BuyAmountForm: React.FC<Props> = ({
         onPress={onAccountPress}
         style={[
           styles.accountCard,
-          { backgroundColor: isDark ? '#1C1C1E' : colors.surfaceCard },
+          { backgroundColor: colors.surfaceCard },
           !hasAddress && { borderColor: colors.danger, borderWidth: 1 },
         ]}
       >
@@ -95,7 +98,7 @@ export const BuyAmountForm: React.FC<Props> = ({
             onChangeText={onAmountChange}
             keyboardType="decimal-pad"
             placeholder="0"
-            placeholderTextColor={withAlpha(colors.textPrimary, 0.1)}
+            placeholderTextColor={colors.textMuted}
             maxLength={7}
             autoFocus
           />
@@ -107,13 +110,13 @@ export const BuyAmountForm: React.FC<Props> = ({
 
       {/* Asset Chip */}
       <TouchableOpacity
-        style={[styles.assetChip, { backgroundColor: withAlpha(colors.accent, 0.1) }]}
+        style={[styles.assetChip, { backgroundColor: `${colors.accent}1A` }]}
         onPress={onAssetPress}
       >
         {selectedAsset.logo ? (
           <Image source={{ uri: selectedAsset.logo }} style={styles.assetLogo} />
         ) : (
-          <View style={[styles.assetLogoFallback, { backgroundColor: withAlpha(colors.accent, 0.2) }]}>
+          <View style={[styles.assetLogoFallback, { backgroundColor: `${colors.accent}33` }]}>
             <Text style={[styles.assetLogoFallbackText, { color: colors.accent }]}>
               {selectedAsset.symbol[0]}
             </Text>
@@ -123,23 +126,23 @@ export const BuyAmountForm: React.FC<Props> = ({
         <Feather name="chevron-down" size={14} color={colors.accent} />
       </TouchableOpacity>
 
-      {/* Provider Mode Selector (DEV) */}
+      {/* Provider Mode Selector */}
       <View style={styles.providerSection}>
-        <Text style={[styles.providerLabel, { color: colors.textMuted }]}>MODE</Text>
-        <View style={[styles.providerToggle, { backgroundColor: isDark ? '#1C1C1E' : colors.surfaceCard, borderColor: colors.border }]}>
+        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>MODE</Text>
+        <View style={[styles.toggle, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           {(["mock", "transak"] as RampProvider[]).map((p) => (
             <TouchableOpacity
               key={p}
               onPress={() => onProviderChange(p)}
               style={[
-                styles.providerTab,
+                styles.toggleTab,
                 provider === p && { backgroundColor: colors.accent },
               ]}
             >
               <Text
                 style={[
-                  styles.providerTabText,
-                  { color: provider === p ? "#fff" : colors.textSecondary },
+                  styles.toggleTabText,
+                  { color: provider === p ? colors.textOnAccent : colors.textSecondary },
                 ]}
               >
                 {p === "mock" ? "Local Mock" : "Transak"}
@@ -149,18 +152,62 @@ export const BuyAmountForm: React.FC<Props> = ({
         </View>
         <Text style={[styles.providerHint, { color: colors.textMuted }]}>
           {provider === "mock"
-            ? "Funds sent directly to Anvil wallet"
-            : "Opens Transak for card/KYC payment"}
+            ? "Funds sent directly from Anvil wallet"
+            : "Real KYC + card payment via Transak"}
         </Text>
       </View>
+
+      {/* Network Selector — only shown for Transak */}
+      {provider === "transak" && (
+        <View style={styles.networkSection}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>TESTNET</Text>
+          <View style={styles.networkRow}>
+            {(Object.entries(TRANSAK_NETWORKS) as [TransakNetwork, typeof TRANSAK_NETWORKS[TransakNetwork]][]).map(
+              ([key, cfg]) => {
+                const isSelected = transakNetwork === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => onNetworkChange(key)}
+                    style={[
+                      styles.networkChip,
+                      {
+                        backgroundColor: isSelected ? `${cfg.color}22` : colors.surfaceCard,
+                        borderColor: isSelected ? cfg.color : colors.border,
+                        borderWidth: 1.5,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.networkDot,
+                        { backgroundColor: cfg.color },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.networkLabel,
+                        { color: isSelected ? cfg.color : colors.textSecondary },
+                      ]}
+                    >
+                      {cfg.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }
+            )}
+          </View>
+          <Text style={[styles.networkHint, { color: colors.textMuted }]}>
+            Receives TRNSK test token on {TRANSAK_NETWORKS[transakNetwork].testnetName}
+          </Text>
+        </View>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    alignItems: "center",
-  },
+  container: { alignItems: "center" },
   accountCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -170,54 +217,16 @@ const styles = StyleSheet.create({
     marginBottom: 36,
     width: "100%",
   },
-  accountLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  accountLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  accountWarning: {
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 2,
-  },
-  addressText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  amountSection: {
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  amountRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  currencySymbol: {
-    fontSize: 32,
-    fontWeight: "500",
-    marginTop: 10,
-  },
-  amountInput: {
-    fontSize: 72,
-    fontWeight: "800",
-    textAlign: "center",
-    minWidth: 80,
-  },
-  estimatedCrypto: {
-    fontSize: 16,
-    fontWeight: "500",
-    marginTop: 6,
-  },
+  accountLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  accountLabel: { fontSize: 14, fontWeight: "600" },
+  accountWarning: { fontSize: 11, fontWeight: "700", marginTop: 2 },
+  addressText: { fontSize: 13, fontWeight: "500" },
+  amountSection: { alignItems: "center", marginBottom: 4 },
+  amountRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  currencySymbol: { fontSize: 32, fontWeight: "500", marginTop: 10 },
+  amountInput: { fontSize: 72, fontWeight: "800", textAlign: "center", minWidth: 80 },
+  estimatedCrypto: { fontSize: 16, fontWeight: "500", marginTop: 6 },
   assetChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -228,11 +237,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 32,
   },
-  assetLogo: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-  },
+  assetLogo: { width: 22, height: 22, borderRadius: 11 },
   assetLogoFallback: {
     width: 22,
     height: 22,
@@ -240,45 +245,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  assetLogoFallbackText: {
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  assetSymbol: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  providerSection: {
-    alignItems: "center",
-    gap: 8,
-  },
-  providerLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-  },
-  providerToggle: {
+  assetLogoFallbackText: { fontSize: 12, fontWeight: "800" },
+  assetSymbol: { fontSize: 16, fontWeight: "800" },
+  providerSection: { alignItems: "center", gap: 8, width: "100%" },
+  sectionLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 1.5 },
+  toggle: {
     flexDirection: "row",
     borderRadius: 14,
     borderWidth: 1,
     padding: 4,
     width: 220,
   },
-  providerTab: {
+  toggleTab: {
     flex: 1,
     paddingVertical: 9,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  providerTabText: {
-    fontSize: 13,
-    fontWeight: "700",
+  toggleTabText: { fontSize: 13, fontWeight: "700" },
+  providerHint: { fontSize: 11, fontWeight: "500", textAlign: "center", maxWidth: 260 },
+  networkSection: { alignItems: "center", gap: 10, marginTop: 20, width: "100%" },
+  networkRow: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    flexWrap: "wrap",
   },
-  providerHint: {
-    fontSize: 11,
-    fontWeight: "500",
-    textAlign: "center",
-    maxWidth: 220,
+  networkChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
   },
+  networkDot: { width: 7, height: 7, borderRadius: 4 },
+  networkLabel: { fontSize: 12, fontWeight: "700" },
+  networkHint: { fontSize: 11, fontWeight: "500", textAlign: "center", maxWidth: 260 },
 });

@@ -23,7 +23,10 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization")!;
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return json({ error: "Unauthorized" }, { status: 401 });
+    }
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
@@ -39,6 +42,10 @@ serve(async (req) => {
 
     if (!walletAddress || !chainId || !fiatCurrency || !fiatAmount || !cryptoCurrency) {
       return json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    if (fiatAmount <= 0) {
+      return json({ error: "fiatAmount must be greater than 0" }, { status: 400 });
     }
 
     const provider = getRampProvider(requestedProvider);

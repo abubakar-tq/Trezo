@@ -5,6 +5,7 @@ export class TransakProvider implements IRampProvider {
   private supabase;
   private apiKey: string;
   private baseUrl: string;
+  private apiGatewayUrl: string;
   private transakEnv: string;
 
   constructor() {
@@ -14,13 +15,16 @@ export class TransakProvider implements IRampProvider {
 
     this.transakEnv = Deno.env.get("TRANSAK_ENV") || "STAGING";
 
-    // Support both TRANSAK_STAGING_API_KEY and TRANSAK_API_KEY
     this.apiKey = Deno.env.get("TRANSAK_STAGING_API_KEY") ||
       Deno.env.get("TRANSAK_API_KEY") || "";
 
-    this.baseUrl = this.transakEnv === "PRODUCTION"
-      ? "https://global.transak.com"
-      : "https://staging-global.transak.com";
+    if (this.transakEnv === "PRODUCTION") {
+      this.baseUrl = "https://global.transak.com";
+      this.apiGatewayUrl = "https://api-gateway.transak.com";
+    } else {
+      this.baseUrl = "https://global-stg.transak.com";
+      this.apiGatewayUrl = "https://api-gateway-stg.transak.com";
+    }
   }
 
   async createSession(params: CreateSessionParams): Promise<OnRampSession> {
@@ -43,23 +47,73 @@ export class TransakProvider implements IRampProvider {
 
     if (error) throw error;
 
-    // 2. Build Transak widget URL
-    // The domain determines staging vs production — no extra `environment` param needed.
-    const queryParams = new URLSearchParams({
-      apiKey: this.apiKey,
-      walletAddress: params.walletAddress,
-      disableWalletAddressForm: "true",
-      fiatCurrency: params.fiatCurrency,
-      fiatAmount: params.fiatAmount.toString(),
-      cryptoCurrencyCode: params.cryptoCurrency,
-      network: this.mapChainIdToNetwork(params.chainId),
-      // partnerOrderId lets our webhook match Transak events to our DB row
-      partnerOrderId: order.id,
-      // partnerCustomerId enables KYC re-use for the same user across orders
-      partnerCustomerId: params.userId,
-    });
+    const network = this.mapChainIdToNetwork(params.chainId);
 
-    const widgetUrl = `${this.baseUrl}?${queryParams.toString()}`;
+    // 2. Build widget params
+    const widgetParams: Record<string, unknown> = {
+      apiKey: this.apiKey,
+      environment: this.transakEnv,
+      walletAddress: params.walletAddress,
+      walletAddressesData: JSON.stringify({
+        networks: {
+          ethereum: { address: params.walletAddress },
+          base: { address: params.walletAddress },
+          arbitrum: { address: params.walletAddress },
+        },
+      }),
+      disableWalletAddressForm: true,
+      fiatCurrency: params.fiatCurrency,
+      fiatAmount: params.fiatAmount,
+      cryptoCurrencyCode: params.cryptoCurrency,
+      network,
+      partnerOrderId: order.id,
+      partnerCustomerId: params.userId,
+      themeColor: "8B5CF6",
+      colorMode: "DARK",
+      productsAvailed: "BUY",
+      hideMenu: true,
+    };
+
+    // 3. Try Create Widget URL API (signed one-time URL, preferred approach)
+    let widgetUrl: string | null = null;
+    try {
+      const sessionResp = await fetch(`${this.apiGatewayUrl}/api/v2/auth/session`, {
+        method: "POST",
+        headers: {
+          "access-token": this.apiKey,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ widgetParams }),
+      });
+
+      if (sessionResp.ok) {
+        const sessionData = await sessionResp.json();
+        widgetUrl = sessionData?.data?.url ||
+          (sessionData?.data?.accessId
+            ? `${this.baseUrl}?at=${sessionData.data.accessId}`
+            : null);
+        if (widgetUrl) {
+          console.log("[TransakProvider] Got signed widget URL from API");
+        }
+      } else {
+        const errText = await sessionResp.text();
+        console.warn(`[TransakProvider] Create Widget URL API returned ${sessionResp.status}: ${errText}`);
+      }
+    } catch (apiErr) {
+      console.warn("[TransakProvider] Create Widget URL API failed, using raw params fallback:", apiErr);
+    }
+
+    // 4. Fallback: raw query params (still works on the widget)
+    if (!widgetUrl) {
+      const qp = new URLSearchParams();
+      for (const [k, v] of Object.entries(widgetParams)) {
+        if (v !== undefined && v !== null) {
+          qp.set(k, String(v));
+        }
+      }
+      widgetUrl = `${this.baseUrl}?${qp.toString()}`;
+      console.log("[TransakProvider] Using raw query param widget URL");
+    }
 
     return {
       orderId: order.id,
@@ -84,11 +138,11 @@ export class TransakProvider implements IRampProvider {
       if (decoded) {
         orderData = decoded;
       } else {
-        console.warn("[TransakProvider] Could not decode JWT in payload.data — falling back to root payload");
-        orderData = payload;
+        console.warn("[TransakProvider] Could not decode JWT in payload.data — falling back");
+        // data may be at payload root or payload.data as object
+        orderData = payload.data || payload;
       }
     } else if (payload.data && typeof payload.data === "object") {
-      // Older / plain-object format — handle gracefully
       orderData = payload.data;
     } else {
       orderData = payload;
@@ -96,8 +150,7 @@ export class TransakProvider implements IRampProvider {
 
     const eventId = payload.eventID || orderData.status || payload.status || "";
     const internalStatus = this.mapTransakStatus(eventId);
-    // partnerOrderId is the UUID we passed when building the widget URL
-    const orderId = orderData.partnerOrderId || payload.partnerOrderId;
+    const orderId = orderData.partnerOrderId || payload.partnerOrderId || orderData.id;
 
     console.log("[TransakProvider] Webhook received:", { eventId, orderId, internalStatus });
 
@@ -136,34 +189,56 @@ export class TransakProvider implements IRampProvider {
         return "payment_pending";
       case "ORDER_PROCESSING":
       case "CRYPTO_LIQUIDITY_PROVIDER_PENDING":
+      case "PROCESSING":
+      case "PENDING_DELIVERY_FROM_TRANSAK":
         return "processing";
       case "ORDER_COMPLETED":
+      case "COMPLETED":
         return "completed";
       case "ORDER_FAILED":
       case "REFUND_REQUEST_INITIATED":
       case "ORDER_CANCELLED":
+      case "CANCELLED":
+      case "FAILED":
         return "failed";
       case "ORDER_REFUNDED":
+      case "REFUNDED":
         return "refunded";
       case "ORDER_EXPIRED":
+      case "EXPIRED":
         return "expired";
       default:
-        console.warn(`[TransakProvider] Unknown status: ${status}, defaulting to processing`);
+        console.warn(`[TransakProvider] Unknown status: ${status}`);
         return "processing";
     }
   }
 
   private mapChainIdToNetwork(chainId: number): string {
     switch (chainId) {
+      // Production mainnets
       case 1: return "ethereum";
       case 137: return "polygon";
-      case 80002: return "polygon"; // Amoy testnet uses polygon network code in Transak
-      case 11155111: return "ethereum"; // Sepolia - Transak staging uses ethereum
       case 42161: return "arbitrum";
       case 10: return "optimism";
       case 8453: return "base";
-      case 31337: return "ethereum"; // Local Anvil - LocalFulfillmentService handles actual funding
-      default: return "ethereum";
+      case 56: return "bsc";
+      case 43114: return "avaxcchain";
+      case 324: return "zksync";
+      case 59144: return "linea";
+      case 42220: return "celo";
+      // Testnets
+      case 11155111: return "ethereum";   // Sepolia → ethereum network
+      case 84532: return "base";           // Base Sepolia → base network
+      case 421614: return "arbitrum";      // Arbitrum Sepolia → arbitrum network
+      case 80002: return "polygon";        // Polygon Amoy → polygon network
+      case 97: return "bsc";              // BSC Testnet → bsc network
+      case 11155420: return "optimism";   // Optimism Sepolia → optimism network
+      case 59141: return "linea";         // Linea Sepolia → linea network
+      // Local dev
+      case 31337: return "ethereum";      // Anvil → ethereum (LocalFulfillmentService handles actual funding)
+      default:
+        console.warn(`[TransakProvider] Unknown chainId: ${chainId}, defaulting to ethereum`);
+        return "ethereum";
     }
   }
 }
