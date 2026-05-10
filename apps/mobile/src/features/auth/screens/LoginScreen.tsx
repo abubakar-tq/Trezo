@@ -6,6 +6,7 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View }
 import { AppleIconSignin, GoogleIconSignin, SigninIcon } from "@/assets/components";
 import { AuthStackParamList } from "@/src/types/navigation";
 import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
+import { navigate } from "@app/navigation/navigationRef";
 import {
     AuthGradientButton,
     AuthScaffold,
@@ -90,6 +91,19 @@ const LoginScreen: React.FC = () => {
         throw error;
       }
       setPassword("");
+      // If a pairing deep link was stashed, navigate to PairDevice after auth
+      // state propagates (onAuthStateChange fires asynchronously and routes to
+      // TabNavigation first; the setTimeout lets that settle before we push
+      // PairDevice on top).
+      if (hasPendingPairing) {
+        DevicePairingService.getPendingDeepLink()
+          .then((pending) => {
+            if (pending) {
+              setTimeout(() => navigate("PairDevice"), 300);
+            }
+          })
+          .catch(() => {});
+      }
     } catch (err) {
       if (err instanceof SupabaseConfigurationError) {
         Alert.alert("Configuration required", err.message);
