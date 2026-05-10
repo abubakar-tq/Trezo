@@ -74,6 +74,7 @@ export type RootStackParamList = {
   ThresholdConfiguration: undefined;
   Buy: undefined;
   Receive: undefined;
+  ReceiveChain: { chainId: number };
   Send: undefined;
   TransactionHistory: { walletAddress?: Address; chainId?: number } | undefined;
   TransactionStatus: { transactionId: string };

@@ -42,6 +42,7 @@ import BuyScreen from "@features/wallet/screens/BuyScreen";
 import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
 import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScreen";
 import ReceiveScreen from "@features/wallet/screens/ReceiveScreen";
+import ReceiveChainScreen from "@features/wallet/screens/ReceiveChainScreen";
 import SendScreen from "@features/wallet/screens/SendScreen";
 import { useLazyPasskeyBackfill } from "@features/wallet/hooks/useLazyPasskeyBackfill";
 import PasskeyService from "@features/wallet/services/PasskeyService";
@@ -433,6 +434,11 @@ const RootNavigation = () => {
         <Stack.Screen
           name="Receive"
           component={ReceiveScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="ReceiveChain"
+          component={ReceiveChainScreen}
           options={{ headerShown: false, animation: "slide_from_right" }}
         />
         <Stack.Screen
