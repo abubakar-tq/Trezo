@@ -68,6 +68,7 @@ const toAsset = (token: TokenMetadata, balanceRaw: bigint): Asset => ({
   name: token.name,
   balance: formatUnits(balanceRaw, token.decimals),
   usd_value: 0,
+  chainId: token.chainId,
 });
 
 const parseSlippageBps = (pct: string): number => {
