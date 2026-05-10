@@ -74,10 +74,21 @@ export const ActivationSheet = forwardRef<ActivationSheetHandle>((_, ref) => {
 
       const deploymentChainId = resolvedChainId;
 
-      // ── Passkey creation (unprovisioned path) ──────────────────────────────
-      setStep("passkey");
-      // Exact call from DeployAccountScreen.handleCreatePasskey:
-      const passkey = await PasskeyService.createPasskey(user.id);
+      // ── Passkey: create only when unprovisioned; reuse existing when provisioned ──
+      let passkey: Awaited<ReturnType<typeof PasskeyService.createPasskey>>;
+      if (accountState.status === "unprovisioned") {
+        setStep("passkey");
+        passkey = await PasskeyService.createPasskey(user.id);
+      } else {
+        // Provisioned: existing passkey is already bound — just retrieve it from storage.
+        const existing = await PasskeyService.getPasskey(user.id);
+        if (!existing) {
+          setErrorMessage("No passkey found on this device. Please re-register.");
+          setStep("error");
+          return;
+        }
+        passkey = existing;
+      }
 
       const walletIndex = aaAccount?.walletIndex ?? 0;
       const walletId = (aaAccount?.walletId ?? deriveDefaultWalletId(user.id)) as `0x${string}`;
