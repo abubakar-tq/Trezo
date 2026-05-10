@@ -21,10 +21,22 @@ Fill in the "?" cells from `contracts/deployments/`. The mobile team will run `m
 
 ## Paymaster sponsorship
 
-Per Rule 2, the paymaster must sponsor **account deployment only** on the three testnets above. Subsequent UserOps are paid by the user's testnet ETH balance.
+| Chain | Paymaster URL env var | Static config wired? | Activation sheet passes URL? | Runtime sponsorship verified? |
+|---|---|---|---|---|
+| Sepolia (11155111) | `EXPO_PUBLIC_SEPOLIA_PAYMASTER_URL` | yes (via chains.ts line 122) | yes (via `getChainConfig(chainId)?.paymasterUrl`) | **pending user smoke** |
+| Base Sepolia (84532) | `EXPO_PUBLIC_BASE_SEPOLIA_PAYMASTER_URL` | yes (via chains.ts line 139) | yes (same code path) | **pending user smoke** |
+| Arb Sepolia (421614) | `EXPO_PUBLIC_ARB_SEPOLIA_PAYMASTER_URL` | yes (via chains.ts line 156) | yes (same code path) | **pending user smoke** |
+| Anvil (31337) | (`apps/backend/bundler` mock-paymaster on localhost:3000) | yes (default URL via chains.ts line 111) | yes | **pending user smoke** |
 
-- Confirm Pimlico (or whichever paymaster vendor) is configured with sponsorship policy "first UserOp from a fresh address" or equivalent.
-- Confirm `EXPO_PUBLIC_{SEPOLIA,BASE_SEPOLIA,ARB_SEPOLIA}_PAYMASTER_URL` will be populated for QA.
+**How to verify at runtime:**
+
+1. From `apps/backend/bundler/` run `docker compose up`. Confirm `alto` + `mock-paymaster` start.
+2. Run the mobile app: `npm run android`.
+3. Trigger an activation on Anvil (Send / Swap / Buy tap with the account not Active).
+4. In the bundler logs (`docker compose logs -f alto`), confirm the UserOp is accepted with a paymaster signature.
+5. Repeat for Sepolia (if env vars set). For Base Sepolia / Arb Sepolia, see Contract deployments above — also blocked.
+
+**Until runtime sponsorship is confirmed**, Activation sheet copy must not promise "free" or "sponsored" gas. The current sheet body says nothing about gas (intentional) — keep it that way.
 
 ## Test-faucet access
 
