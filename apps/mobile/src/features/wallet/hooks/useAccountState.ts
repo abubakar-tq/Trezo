@@ -33,7 +33,7 @@ export function useAccountState(): AccountState {
     // A passkey credential being present is the signal that the device has
     // completed the registration ceremony and a counterfactual address has
     // been predicted.
-    const isProvisioned = passkeys.length > 0 || aaAccount !== null;
+    const isProvisioned = passkeys.length > 0 || aaAccount !== null || smartAccountAddress !== null;
 
     // Predicted address: prefer the wallet store's aaAccount.predictedAddress
     // (set during the prediction step) and fall back to the user store field.
@@ -63,5 +63,11 @@ export function useAccountState(): AccountState {
       isActiveOnChain,
       isProvisioned,
     };
-  }, [aaAccount, passkeys, smartAccountAddress]);
+  }, [
+    aaAccount?.predictedAddress,
+    aaAccount?.isDeployed,
+    aaAccount?.chainId,
+    passkeys.length,
+    smartAccountAddress,
+  ]);
 }
