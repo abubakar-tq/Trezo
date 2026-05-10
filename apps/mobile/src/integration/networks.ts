@@ -40,6 +40,8 @@ export type NativeCurrency = {
 export type SupportedChainId =
   | 31337
   | 11155111
+  | 84532
+  | 421614
   | 1
   | 324
   | 300

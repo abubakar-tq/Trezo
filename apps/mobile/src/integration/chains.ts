@@ -7,6 +7,8 @@ import { getDeployment } from "./viem/deployments";
 export type SupportedChainId =
   | 31337
   | 11155111
+  | 84532
+  | 421614
   | 1
   | 324
   | 300
@@ -45,7 +47,7 @@ const DEFAULT_NATIVE_CURRENCY: NativeCurrency = {
 
 const parseSupportedChainId = (value?: string): SupportedChainId | undefined => {
   const parsed = Number(value);
-  if ([31337, 11155111, 1, 324, 300, 8453].includes(parsed)) {
+  if ([31337, 11155111, 84532, 421614, 1, 324, 300, 8453].includes(parsed)) {
     return parsed as SupportedChainId;
   }
   return undefined;
@@ -96,6 +98,8 @@ const withDeployment = (chainId: SupportedChainId) => {
 
 const localDeployment = withDeployment(31337);
 const sepoliaDeployment = withDeployment(11155111);
+const baseSepoliaDeployment = withDeployment(84532);
+const arbSepoliaDeployment = withDeployment(421614);
 
 export const CHAINS: Record<SupportedChainId, ChainConfig> = {
   31337: {
@@ -124,6 +128,40 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
       && process.env.EXPO_PUBLIC_SEPOLIA_BUNDLER_URL
       && sepoliaDeployment.entryPoint
       && sepoliaDeployment.accountFactory,
+    ),
+  },
+  84532: {
+    id: 84532,
+    name: "Base Sepolia",
+    nativeCurrency: DEFAULT_NATIVE_CURRENCY,
+    rpcUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_RPC_URL ?? "",
+    bundlerUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_BUNDLER_URL ?? "",
+    paymasterUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_PAYMASTER_URL,
+    ...baseSepoliaDeployment,
+    blockExplorerUrl: "https://sepolia.basescan.org",
+    environment: "testnet",
+    isEnabled: Boolean(
+      process.env.EXPO_PUBLIC_BASE_SEPOLIA_RPC_URL
+      && process.env.EXPO_PUBLIC_BASE_SEPOLIA_BUNDLER_URL
+      && baseSepoliaDeployment.entryPoint
+      && baseSepoliaDeployment.accountFactory,
+    ),
+  },
+  421614: {
+    id: 421614,
+    name: "Arbitrum Sepolia",
+    nativeCurrency: DEFAULT_NATIVE_CURRENCY,
+    rpcUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_RPC_URL ?? "",
+    bundlerUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL ?? "",
+    paymasterUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_PAYMASTER_URL,
+    ...arbSepoliaDeployment,
+    blockExplorerUrl: "https://sepolia.arbiscan.io",
+    environment: "testnet",
+    isEnabled: Boolean(
+      process.env.EXPO_PUBLIC_ARB_SEPOLIA_RPC_URL
+      && process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL
+      && arbSepoliaDeployment.entryPoint
+      && arbSepoliaDeployment.accountFactory,
     ),
   },
   1: {
@@ -186,13 +224,8 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
     ...withDeployment(8453 as never), // 8453 resolves via profile in deployments.ts
     blockExplorerUrl: "https://basescan.org",
     environment: "local_fork" as ChainEnvironment,
-    isEnabled: (() => {
-      // Enabled when the fork deployment manifest is present.
-      // (Use getDeployment so the manifest-resolution logic stays in one place;
-      // the previous inline require used the wrong relative path and always failed.)
-      const d = getDeployment("base-mainnet-fork");
-      return Boolean(d?.entryPoint && d?.accountFactory);
-    })(),
+    // Wallet-ops disabled per docs/plans/App-improvements-brief.md §4.1 — kept for read-only/dev use only.
+    isEnabled: false,
   },
 };
 
