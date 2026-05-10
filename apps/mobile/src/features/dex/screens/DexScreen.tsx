@@ -26,7 +26,7 @@ import { SwapQuoteService } from "@/src/features/swaps/services/SwapQuoteService
 import type { SwapIntent, SwapPlan, SwapQuote } from "@/src/features/swaps/types/swap";
 import WalletPersistenceService from "@/src/features/wallet/services/SupabaseWalletService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
-import { getEnabledChains, type SupportedChainId } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import { resolveNetworkKey, getNetworkConfig } from "@/src/integration/networks";
 import { useUserStore } from "@/src/store/useUserStore";
 import { TabScreenContainer, TokenIcon, AssetPickerModal, type Asset } from "@shared/components";
@@ -91,18 +91,15 @@ export const DexScreen: React.FC = () => {
   const activeChainId = useWalletStore((state) => state.activeChainId);
   const aaAccount = useWalletStore((state) => state.aaAccount);
 
-  const enabledChains = useMemo(() => getEnabledChains(), []);
-
   const [activeTab, setActiveTab] = useState<DexTab>("swap");
-  const [selectedChainId, setSelectedChainId] = useState<SupportedChainId>(
-    (aaAccount?.chainId as SupportedChainId | undefined)
-      ?? (activeChainId as SupportedChainId | undefined)
-      ?? (enabledChains[0]?.id as SupportedChainId | undefined)
-      ?? 31337,
-  );
 
   const [sellToken, setSellToken] = useState<TokenMetadata | null>(null);
   const [buyToken, setBuyToken] = useState<TokenMetadata | null>(null);
+
+  const selectedChainId = useMemo<SupportedChainId>(
+    () => sellToken?.chainId ?? buyToken?.chainId ?? DEFAULT_CHAIN_ID,
+    [sellToken?.chainId, buyToken?.chainId],
+  );
   const [sellAmountDecimal, setSellAmountDecimal] = useState<string>("");
   const [slippagePct, setSlippagePct] = useState<string>("0.5");
   const [customSlippageActive, setCustomSlippageActive] = useState<boolean>(false);
@@ -288,6 +285,15 @@ export const DexScreen: React.FC = () => {
       setQuote(null);
       setApprovalRequired(false);
       setErrorState(classify(new Error("Sell and buy tokens must be different.")));
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (sellToken.chainId !== buyToken.chainId) {
+      setQuote(null);
+      setApprovalRequired(false);
+      setUiState("idle");
       return () => {
         cancelled = true;
       };
@@ -540,38 +546,6 @@ export const DexScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Chain chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chainRow}
-        >
-          {enabledChains.map((chain) => {
-            const isActive = chain.id === selectedChainId;
-            return (
-              <TouchableOpacity
-                key={chain.id}
-                style={[
-                  styles.chainChip,
-                  {
-                    backgroundColor: isActive ? `${colors.accent}22` : colors.glass,
-                    borderColor: isActive ? `${colors.accent}80` : colors.border,
-                  },
-                ]}
-                onPress={() => {
-                  setSelectedChainId(chain.id as SupportedChainId);
-                  setPreparedPlan(null);
-                  setErrorState(null);
-                }}
-              >
-                <Text style={[styles.chainChipText, { color: isActive ? colors.accent : colors.textSecondary }]}>
-                  {chain.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
         {/* Main swap card */}
         <View style={[styles.swapCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           {/* Sell side */}
@@ -713,8 +687,18 @@ export const DexScreen: React.FC = () => {
             )}
           </View>
 
+          {/* Cross-chain refusal */}
+          {sellToken && buyToken && sellToken.chainId !== buyToken.chainId && (
+            <View style={[styles.sectionDivider, { backgroundColor: colors.borderMuted }]} />
+          )}
+          {sellToken && buyToken && sellToken.chainId !== buyToken.chainId && (
+            <Text style={[styles.detailLabel, { color: colors.warning, textAlign: "center" }]}>
+              Cross-chain swap not supported.
+            </Text>
+          )}
+
           {/* Quote details */}
-          {quote && (
+          {quote && sellToken && buyToken && sellToken.chainId === buyToken.chainId && (
             <>
               <View style={[styles.sectionDivider, { backgroundColor: colors.borderMuted }]} />
               <View style={styles.detailRow}>
@@ -901,23 +885,6 @@ const createStyles = (colors: ThemeColors) =>
     },
     tabBtnText: {
       fontSize: 14,
-      fontWeight: "700",
-    },
-
-    // Chain chips
-    chainRow: {
-      gap: 8,
-      marginBottom: 14,
-      paddingRight: 8,
-    },
-    chainChip: {
-      borderRadius: 9,
-      borderWidth: 1,
-      paddingHorizontal: 13,
-      paddingVertical: 7,
-    },
-    chainChipText: {
-      fontSize: 12,
       fontWeight: "700",
     },
 
