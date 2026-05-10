@@ -4,7 +4,6 @@ import { TabScreenContainer } from "@shared/components";
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 
 const ConnectedDevicesScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -33,14 +32,14 @@ const ConnectedDevicesScreen: React.FC = () => {
         <View style={styles.deviceList}>
           {devices.map((device) => (
             <View key={device.id} style={[styles.deviceCard, { backgroundColor: colors.surfaceCard, borderColor: colors.borderMuted }]}>
-              <View style={[styles.iconContainer, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+              <View style={[styles.iconContainer, { backgroundColor: `${colors.accent}1A` }]}>
                 <Feather name={device.icon as any} size={22} color={colors.accent} />
               </View>
               <View style={styles.deviceInfo}>
                 <View style={styles.nameRow}>
                   <Text style={[styles.deviceName, { color: colors.textPrimary }]}>{device.name}</Text>
                   {device.current && (
-                    <View style={[styles.currentBadge, { backgroundColor: withAlpha(colors.success, 0.1) }]}>
+                    <View style={[styles.currentBadge, { backgroundColor: colors.successSoft }]}>
                       <Text style={[styles.currentText, { color: colors.success }]}>Current</Text>
                     </View>
                   )}
@@ -56,7 +55,7 @@ const ConnectedDevicesScreen: React.FC = () => {
           ))}
         </View>
 
-        <TouchableOpacity style={[styles.addDevice, { borderColor: colors.accent, backgroundColor: withAlpha(colors.accent, 0.05) }]}>
+        <TouchableOpacity style={[styles.addDevice, { borderColor: colors.accent, backgroundColor: colors.glass }]}>
           <Feather name="plus" size={20} color={colors.accent} />
           <Text style={[styles.addDeviceText, { color: colors.accent }]}>Link New Device</Text>
         </TouchableOpacity>

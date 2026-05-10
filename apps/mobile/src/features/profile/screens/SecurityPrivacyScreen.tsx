@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { TabScreenContainer } from "@shared/components";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import React from "react";
 import {
   ScrollView,
@@ -20,7 +20,7 @@ const SecurityPrivacyScreen: React.FC = () => {
 
   return (
     <TabScreenContainer style={{ backgroundColor: colors.background }}>
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: `${colors.border}0D` }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Feather name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
@@ -35,7 +35,7 @@ const SecurityPrivacyScreen: React.FC = () => {
             onPress={() => navigation.navigate("DevicesPasskeys")}
           >
             <View style={styles.settingInfo}>
-              <View style={[styles.iconBadge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+              <View style={[styles.iconBadge, { backgroundColor: `${colors.accent}1A` }]}>
                 <Feather name="smartphone" size={20} color={colors.accent} />
               </View>
               <View style={styles.textContainer}>
@@ -54,7 +54,7 @@ const SecurityPrivacyScreen: React.FC = () => {
             onPress={() => navigation.navigate("BackupRecovery")}
           >
             <View style={styles.settingInfo}>
-              <View style={[styles.iconBadge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+              <View style={[styles.iconBadge, { backgroundColor: `${colors.accent}1A` }]}>
                 <Feather name="shield" size={20} color={colors.accent} />
               </View>
               <View style={styles.textContainer}>
@@ -70,7 +70,7 @@ const SecurityPrivacyScreen: React.FC = () => {
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Authentication</Text>
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
-              <View style={[styles.iconBadge, { backgroundColor: withAlpha(colors.accentAlt, 0.1) }]}>
+              <View style={[styles.iconBadge, { backgroundColor: `${colors.accentAlt}1A` }]}>
                 <Feather name="lock" size={20} color={colors.accentAlt} />
               </View>
               <View style={styles.textContainer}>
@@ -95,7 +95,6 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     gap: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.05)",
   },
   backButton: {
     width: 40,

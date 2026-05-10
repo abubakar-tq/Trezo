@@ -28,7 +28,7 @@ import { RootStackParamList } from "@/src/types/navigation";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import { isValidEmail } from "@utils/validation";
 import { type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
@@ -1284,7 +1284,7 @@ const EmailRecoveryScreen: React.FC = () => {
             activeOpacity={0.85}
           >
             {installingModule ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <ActivityIndicator size="small" color={colors.textOnAccent} />
             ) : (
               <Text style={styles.installButtonText}>
                 {moduleInstalledState
@@ -1306,7 +1306,7 @@ const EmailRecoveryScreen: React.FC = () => {
             activeOpacity={0.85}
           >
             {installingModule ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <ActivityIndicator size="small" color={colors.textOnAccent} />
             ) : (
               <Text style={styles.installButtonText}>
                 Save / Sync Cloud Metadata
@@ -1421,8 +1421,8 @@ const createStyles = (colors: ThemeColors) =>
     validationBox: {
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: withAlpha(colors.warning, 0.28),
-      backgroundColor: withAlpha(colors.warning, 0.12),
+      borderColor: `${colors.warning}47`,
+      backgroundColor: `${colors.warning}1F`,
       paddingHorizontal: 14,
       paddingVertical: 12,
     },
@@ -1478,11 +1478,11 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 12,
       paddingVertical: 12,
       alignItems: "center",
-      backgroundColor: withAlpha(colors.textPrimary, 0.04),
+      backgroundColor: `${colors.textPrimary}0A`,
     },
     modeButtonActive: {
       borderColor: colors.accentAlt,
-      backgroundColor: withAlpha(colors.accentAlt, 0.14),
+      backgroundColor: `${colors.accentAlt}24`,
     },
     modeButtonText: {
       color: colors.textPrimary,
@@ -1490,7 +1490,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     numberInput: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.06),
+      backgroundColor: `${colors.textPrimary}0F`,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 14,
@@ -1502,7 +1502,7 @@ const createStyles = (colors: ThemeColors) =>
       textAlign: "center",
     },
     textInput: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.06),
+      backgroundColor: `${colors.textPrimary}0F`,
       borderWidth: 1,
       borderColor: colors.borderMuted,
       borderRadius: 14,
@@ -1547,7 +1547,7 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: `${colors.accentAlt}1A`,
     },
     moduleStatusBadge: {
       flexDirection: "row",
@@ -1558,19 +1558,19 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 12,
     },
     moduleStatusIdle: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: `${colors.accentAlt}1A`,
       borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.2),
+      borderColor: `${colors.accentAlt}33`,
     },
     moduleStatusInstalled: {
-      backgroundColor: withAlpha(colors.success, 0.12),
+      backgroundColor: `${colors.success}1F`,
       borderWidth: 1,
-      borderColor: withAlpha(colors.success, 0.2),
+      borderColor: `${colors.success}33`,
     },
     moduleStatusWarning: {
-      backgroundColor: withAlpha(colors.warning, 0.12),
+      backgroundColor: `${colors.warning}1F`,
       borderWidth: 1,
-      borderColor: withAlpha(colors.warning, 0.2),
+      borderColor: `${colors.warning}33`,
     },
     moduleStatusText: {
       color: colors.textSecondary,
@@ -1602,7 +1602,7 @@ const createStyles = (colors: ThemeColors) =>
       textAlign: "right",
     },
     payloadBox: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.04),
+      backgroundColor: `${colors.textPrimary}0A`,
       borderRadius: 12,
       padding: 12,
       gap: 8,
@@ -1637,11 +1637,11 @@ const createStyles = (colors: ThemeColors) =>
     },
     secondaryButton: {
       borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.3),
+      borderColor: `${colors.accentAlt}4D`,
       borderRadius: 14,
       paddingVertical: 12,
       alignItems: "center",
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: `${colors.accentAlt}1A`,
     },
     secondaryButtonText: {
       color: colors.accentAlt,
@@ -1658,7 +1658,7 @@ const createStyles = (colors: ThemeColors) =>
       opacity: 0.6,
     },
     installButtonText: {
-      color: "#ffffff",
+      color: colors.textOnAccent,
       fontSize: 15,
       fontWeight: "700",
     },
@@ -1702,10 +1702,10 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 10,
     },
     acceptanceBadgeAccepted: {
-      backgroundColor: withAlpha(colors.success, 0.12),
+      backgroundColor: `${colors.success}1F`,
     },
     acceptanceBadgePending: {
-      backgroundColor: withAlpha(colors.warning, 0.12),
+      backgroundColor: `${colors.warning}1F`,
     },
     acceptanceBadgeText: {
       fontSize: 11,

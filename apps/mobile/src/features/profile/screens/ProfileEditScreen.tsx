@@ -20,7 +20,7 @@ import {
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import { StorageTest } from "@utils/StorageTest";
 import { ProfileSyncService } from "../services/ProfileSyncService";
 
@@ -402,7 +402,7 @@ const ProfileEditScreen: React.FC = () => {
               </View>
             )}
             <View style={styles.avatarEditBadge}>
-              <Feather name="camera" size={16} color="#ffffff" />
+              <Feather name="camera" size={16} color={colors.textOnAccent} />
             </View>
           </TouchableOpacity>
 
@@ -511,7 +511,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 120,
       height: 120,
       borderRadius: 60,
-      backgroundColor: withAlpha(colors.textPrimary, 0.06),
+      backgroundColor: `${colors.textPrimary}0F`,
       borderWidth: 2,
       borderColor: colors.borderMuted,
       alignItems: "center",
@@ -565,7 +565,7 @@ const createStyles = (colors: ThemeColors) =>
       marginTop: 6,
     },
     infoCard: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: `${colors.accentAlt}1A`,
       borderRadius: 16,
       padding: 16,
       marginTop: 8,

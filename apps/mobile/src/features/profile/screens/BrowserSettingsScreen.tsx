@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBrowserStore } from "@store/useBrowserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 import { MeshBackground } from "@shared/components";
 
 export default function BrowserSettingsScreen() {
@@ -158,7 +157,7 @@ export default function BrowserSettingsScreen() {
                   value={settings.persistTabs}
                   onValueChange={handleTogglePersistTabs}
                   trackColor={{
-                    false: withAlpha(colors.textMuted, 0.2),
+                    false: `${colors.textMuted}33`,
                     true: colors.accent,
                   }}
                   thumbColor="#ffffff"
@@ -167,7 +166,7 @@ export default function BrowserSettingsScreen() {
             />
 
             {tabCount > 0 && (
-              <View style={[styles.infoBox, { backgroundColor: withAlpha(colors.accent, 0.08) }]}>
+              <View style={[styles.infoBox, { backgroundColor: `${colors.accent}14` }]}>
                 <Feather name="info" size={14} color={colors.accent} />
                 <Text style={[styles.infoText, { color: colors.accent }]}>
                   {tabCount} active tab{tabCount === 1 ? "" : "s"} detected
@@ -195,7 +194,7 @@ export default function BrowserSettingsScreen() {
             />
           </View>
 
-          <View style={[styles.helpBox, { backgroundColor: withAlpha(colors.accent, 0.05) }]}>
+          <View style={[styles.helpBox, { backgroundColor: colors.glass }]}>
             <Feather name="shield" size={14} color={colors.accent} />
             <Text style={[styles.helpText, { color: colors.textSecondary }]}>
               <Text style={{ fontWeight: "800", color: colors.accent }}>Hybrid Mode:</Text> Uses Web3Compass for dApp
@@ -247,7 +246,7 @@ export default function BrowserSettingsScreen() {
         
         {/* Dangerous Actions */}
         <TouchableOpacity 
-          style={[styles.clearAllButton, { borderColor: withAlpha(colors.danger, 0.3), backgroundColor: withAlpha(colors.danger, 0.05) }]}
+          style={[styles.clearAllButton, { borderColor: `${colors.danger}4D`, backgroundColor: colors.glass }]}
           activeOpacity={0.8}
         >
           <Feather name="alert-circle" size={18} color={colors.danger} />
@@ -292,11 +291,11 @@ export default function BrowserSettingsScreen() {
                 value={tempHistoryLimit}
                 onValueChange={handleHistoryLimitSliderChange}
                 minimumTrackTintColor={colors.accent}
-                maximumTrackTintColor={withAlpha(colors.textMuted, 0.1)}
+                maximumTrackTintColor={`${colors.textMuted}1A`}
                 thumbTintColor={colors.accent}
               />
 
-              <View style={[styles.inputContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : colors.background }]}>
+              <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}>
                 <TextInput
                   style={[styles.input, { color: colors.textPrimary }]}
                   value={historyLimitInput}
@@ -310,7 +309,7 @@ export default function BrowserSettingsScreen() {
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: withAlpha(colors.textMuted, 0.1) }]}
+                style={[styles.modalButton, { backgroundColor: `${colors.textMuted}1A` }]}
                 onPress={() => setShowHistoryLimitModal(false)}
               >
                 <Text style={[styles.modalButtonText, { color: colors.textSecondary }]}>Cancel</Text>
@@ -319,7 +318,7 @@ export default function BrowserSettingsScreen() {
                 style={[styles.modalButton, { backgroundColor: colors.accent }]}
                 onPress={handleSaveHistoryLimit}
               >
-                <Text style={[styles.modalButtonText, { color: "#000" }]}>Save Changes</Text>
+                <Text style={[styles.modalButtonText, { color: colors.textOnAccent }]}>Save Changes</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -378,7 +377,7 @@ export default function BrowserSettingsScreen() {
       {/* Confirmation Modals */}
       <Modal visible={showClearHistoryModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-           <View style={[styles.modalContent, { backgroundColor: colors.surfaceCard, borderColor: withAlpha(colors.danger, 0.3) }]}>
+           <View style={[styles.modalContent, { backgroundColor: colors.surfaceCard, borderColor: `${colors.danger}4D` }]}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Purge History?</Text>
               <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
                 This will permanently delete {historyCount} journey logs. This action is irreversible.
@@ -388,7 +387,7 @@ export default function BrowserSettingsScreen() {
                   <Text style={{ color: colors.textMuted }}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.modalButton, { backgroundColor: colors.danger }]} onPress={handleConfirmClearHistory}>
-                  <Text style={{ color: '#FFF', fontWeight: '700' }}>Confirm Purge</Text>
+                  <Text style={{ color: colors.textOnAccent, fontWeight: '700' }}>Confirm Purge</Text>
                 </TouchableOpacity>
               </View>
            </View>
@@ -405,8 +404,8 @@ function SearchOption({ title, description, selected, onPress, colors, styles }:
       style={[
         styles.optionRow, 
         { 
-          backgroundColor: selected ? withAlpha(colors.accent, 0.08) : 'transparent',
-          borderColor: selected ? colors.accent : withAlpha(colors.border, 0.1)
+          backgroundColor: selected ? `${colors.accent}14` : 'transparent',
+          borderColor: selected ? colors.accent : `${colors.border}1A`
         }
       ]}
     >
@@ -431,7 +430,7 @@ function SettingRow({ icon, label, description, colors, onPress, showChevron, ri
       activeOpacity={0.7}
       style={rowStyles.container}
     >
-      <View style={[rowStyles.iconBox, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+      <View style={[rowStyles.iconBox, { backgroundColor: `${colors.accent}1A` }]}>
         <Feather name={icon} size={18} color={colors.accent} />
       </View>
 
@@ -460,7 +459,7 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       width: 40,
       height: 4,
       borderRadius: 2,
-      backgroundColor: withAlpha(colors.accent, 0.3),
+      backgroundColor: `${colors.accent}4D`,
       marginBottom: 16,
     },
     headerKicker: {
@@ -506,10 +505,10 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       letterSpacing: 2,
     },
     glassCard: {
-      backgroundColor: isDark ? 'rgba(20, 20, 20, 0.7)' : 'rgba(255, 255, 255, 0.85)',
+      backgroundColor: colors.surfaceCard,
       borderRadius: 32,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+      borderColor: colors.glassBorder,
       overflow: "hidden",
     },
     divider: {

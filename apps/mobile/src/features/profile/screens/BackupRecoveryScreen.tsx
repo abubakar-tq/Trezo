@@ -9,7 +9,6 @@ import { RootStackParamList } from "@/src/types/navigation";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 
 const BackupRecoveryScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
@@ -100,7 +99,7 @@ const BackupRecoveryScreen: React.FC = () => {
                 <View
                   style={[
                     styles.iconBadge,
-                    { backgroundColor: withAlpha(colors.accentAlt, 0.15) },
+                    { backgroundColor: `${colors.accentAlt}26` },
                   ]}
                 >
                   <Feather name="smartphone" size={20} color={colors.accentAlt} />
@@ -128,7 +127,7 @@ const BackupRecoveryScreen: React.FC = () => {
                 <View
                   style={[
                     styles.iconBadge,
-                    { backgroundColor: withAlpha(colors.accentAlt, 0.15) },
+                    { backgroundColor: `${colors.accentAlt}26` },
                   ]}
                 >
                   <Feather name="shield" size={20} color={colors.accentAlt} />
@@ -163,7 +162,7 @@ const BackupRecoveryScreen: React.FC = () => {
                 <View
                   style={[
                     styles.iconBadge,
-                    { backgroundColor: withAlpha(colors.accentAlt, 0.15) },
+                    { backgroundColor: `${colors.accentAlt}26` },
                   ]}
                 >
                   <Feather name="mail" size={20} color={colors.accentAlt} />
@@ -190,7 +189,7 @@ const BackupRecoveryScreen: React.FC = () => {
                 <View
                   style={[
                     styles.iconBadge,
-                    { backgroundColor: withAlpha(colors.warning, 0.18) },
+                    { backgroundColor: `${colors.warning}2E` },
                   ]}
                 >
                   <Feather name="alert-triangle" size={20} color={colors.warning} />
@@ -274,7 +273,7 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.5),
+      borderColor: `${colors.border}80`,
     },
     optionText: {
       flex: 1,

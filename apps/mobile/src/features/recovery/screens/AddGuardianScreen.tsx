@@ -23,7 +23,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 
 interface AddGuardianScreenProps {
   onSendInvite?: (contact: string) => void;
@@ -106,7 +106,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
               width: 40,
               height: 40,
               borderRadius: 20,
-              backgroundColor: withAlpha(colors.textPrimary, 0.05),
+              backgroundColor: colors.glass,
               alignItems: 'center',
               justifyContent: 'center'
             }}
@@ -135,11 +135,11 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
         {/* BENEFITS SECTION */}
         <View
           style={{
-            backgroundColor: withAlpha(colors.accent, 0.05),
+            backgroundColor: colors.glass,
             borderRadius: 24,
             padding: 20,
             borderWidth: 1,
-            borderColor: withAlpha(colors.accent, 0.1),
+            borderColor: `${colors.accent}1A`,
           }}
         >
           <View style={{ gap: 16 }}>
@@ -161,7 +161,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                     width: 36, 
                     height: 36, 
                     borderRadius: 18, 
-                    backgroundColor: withAlpha(colors.accent, 0.1),
+                    backgroundColor: `${colors.accent}1A`,
                     alignItems: 'center', 
                     justifyContent: 'center' 
                   }}
@@ -184,7 +184,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                     width: 36, 
                     height: 36, 
                     borderRadius: 18, 
-                    backgroundColor: withAlpha(colors.accent, 0.1),
+                    backgroundColor: `${colors.accent}1A`,
                     alignItems: 'center', 
                     justifyContent: 'center' 
                   }}
@@ -207,7 +207,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                     width: 36, 
                     height: 36, 
                     borderRadius: 18, 
-                    backgroundColor: withAlpha(colors.accent, 0.1),
+                    backgroundColor: `${colors.accent}1A`,
                     alignItems: 'center', 
                     justifyContent: 'center' 
                   }}
@@ -255,7 +255,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
               </Text>
               <TextInput
                 style={{
-                  backgroundColor: withAlpha(colors.textPrimary, 0.03),
+                  backgroundColor: colors.glass,
                   borderRadius: 12,
                   paddingHorizontal: 16,
                   paddingVertical: 14,
@@ -295,7 +295,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                   flex: 1,
                   paddingVertical: 12,
                   borderRadius: 12,
-                  backgroundColor: contactType === 'email' ? withAlpha(colors.accent, 0.1) : 'transparent',
+                  backgroundColor: contactType === 'email' ? `${colors.accent}1A` : 'transparent',
                   borderWidth: 1,
                   borderColor: contactType === 'email' ? colors.accent : colors.borderMuted,
                   alignItems: 'center',
@@ -315,7 +315,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                   flex: 1,
                   paddingVertical: 12,
                   borderRadius: 12,
-                  backgroundColor: contactType === 'phone' ? withAlpha(colors.accent, 0.1) : 'transparent',
+                  backgroundColor: contactType === 'phone' ? `${colors.accent}1A` : 'transparent',
                   borderWidth: 1,
                   borderColor: contactType === 'phone' ? colors.accent : colors.borderMuted,
                   alignItems: 'center',
@@ -332,7 +332,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
         {/* HOW IT WORKS */}
         <View
           style={{
-            backgroundColor: withAlpha(colors.textPrimary, 0.03),
+            backgroundColor: colors.glass,
             borderRadius: 24,
             padding: 20,
             borderWidth: 1,

@@ -14,7 +14,6 @@ import {
 import { RootStackParamList } from "@/src/types/navigation";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
-import { withAlpha } from "@utils/color";
 import { CHAINS, type SupportedChainId } from "@/src/integration/chains";
 import {
   EmailRecoveryGroupService,
@@ -404,7 +403,7 @@ const EmailRecoveryGroupStatusScreen: React.FC = () => {
                 <View key={cr.id} style={styles.executionRow}>
                   <View style={styles.executionHeader}>
                     <Text style={styles.executionChainName}>{chainName}</Text>
-                    <View style={[styles.executionBadge, { backgroundColor: withAlpha(statusColor(cr.status, theme.colors), 0.12) }]}>
+                    <View style={[styles.executionBadge, { backgroundColor: `${statusColor(cr.status, theme.colors)}1F` }]}>
                       <Text style={[styles.executionBadgeText, { color: statusColor(cr.status, theme.colors) }]}>
                         {CHAIN_STATUS_LABEL[cr.status] ?? cr.status}
                       </Text>
@@ -620,10 +619,10 @@ const createStyles = (colors: ThemeColors) =>
       height: 36,
       borderRadius: 18,
       borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.3),
+      borderColor: `${colors.accentAlt}4D`,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.accentAlt, 0.06),
+      backgroundColor: `${colors.accentAlt}0F`,
     },
     proofChainRow: {
       borderRadius: 14,
@@ -631,7 +630,7 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
       padding: 12,
       gap: 8,
-      backgroundColor: withAlpha(colors.textPrimary, 0.03),
+      backgroundColor: colors.glass,
     },
     proofChainHeader: {
       flexDirection: "row",
@@ -664,7 +663,7 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
       padding: 12,
       gap: 6,
-      backgroundColor: withAlpha(colors.textPrimary, 0.03),
+      backgroundColor: colors.glass,
     },
     executionHeader: {
       flexDirection: "row",
@@ -732,17 +731,17 @@ const createStyles = (colors: ThemeColors) =>
       opacity: 0.6,
     },
     primaryButtonText: {
-      color: "#ffffff",
+      color: colors.textOnAccent,
       fontSize: 16,
       fontWeight: "700",
     },
     secondaryButton: {
       borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.3),
+      borderColor: `${colors.accentAlt}4D`,
       borderRadius: 14,
       paddingVertical: 12,
       alignItems: "center",
-      backgroundColor: withAlpha(colors.accentAlt, 0.08),
+      backgroundColor: `${colors.accentAlt}14`,
     },
     secondaryButtonText: {
       color: colors.accentAlt,
@@ -751,11 +750,11 @@ const createStyles = (colors: ThemeColors) =>
     },
     dangerButton: {
       borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.3),
+      borderColor: `${colors.danger}4D`,
       borderRadius: 14,
       paddingVertical: 12,
       alignItems: "center",
-      backgroundColor: withAlpha(colors.danger, 0.06),
+      backgroundColor: `${colors.danger}0F`,
     },
     dangerButtonText: {
       color: colors.danger,

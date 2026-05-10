@@ -23,7 +23,7 @@ import {
   View,
 } from "react-native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 
 interface ThresholdConfigurationScreenProps {
   onSaveConfiguration?: (threshold: number) => void;
@@ -74,7 +74,7 @@ export const ThresholdConfigurationScreen: React.FC<
               width: 40,
               height: 40,
               borderRadius: 20,
-              backgroundColor: withAlpha(colors.textPrimary, 0.05),
+              backgroundColor: colors.glass,
               alignItems: 'center',
               justifyContent: 'center'
             }}
@@ -126,7 +126,7 @@ export const ThresholdConfigurationScreen: React.FC<
                   style={{
                     width: '30%',
                     aspectRatio: 1,
-                    backgroundColor: isSelected ? colors.accent : withAlpha(colors.textPrimary, 0.03),
+                    backgroundColor: isSelected ? colors.accent : colors.glass,
                     borderRadius: 20,
                     alignItems: "center",
                     justifyContent: "center",
@@ -162,11 +162,11 @@ export const ThresholdConfigurationScreen: React.FC<
         {/* SECURITY ANALYSIS CARD */}
         <View
           style={{
-            backgroundColor: withAlpha(security.color, 0.08),
+            backgroundColor: `${security.color}14`,
             borderRadius: 24,
             padding: 24,
             borderWidth: 1,
-            borderColor: withAlpha(security.color, 0.2),
+            borderColor: `${security.color}33`,
             gap: 16
           }}
         >
@@ -176,7 +176,7 @@ export const ThresholdConfigurationScreen: React.FC<
                 width: 44, 
                 height: 44, 
                 borderRadius: 22, 
-                backgroundColor: withAlpha(security.color, 0.15),
+                backgroundColor: `${security.color}26`,
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
@@ -203,7 +203,7 @@ export const ThresholdConfigurationScreen: React.FC<
 
           {selectedThreshold === 1 && (
             <View style={{ 
-              backgroundColor: withAlpha(colors.danger, 0.1), 
+              backgroundColor: `${colors.danger}1A`,
               padding: 12, 
               borderRadius: 12,
               borderLeftWidth: 3,

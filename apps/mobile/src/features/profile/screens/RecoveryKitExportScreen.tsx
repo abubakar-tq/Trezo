@@ -15,7 +15,6 @@ import { type Address } from "viem";
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 
 interface RouteParams {
   vaultKey: string;
@@ -79,7 +78,7 @@ const RecoveryKitExportScreen: React.FC = () => {
         <Feather
           name="alert-triangle"
           size={20}
-          color={colors.warning || "#EAB308"}
+          color={colors.warning}
         />
         <Text style={styles.warningText}>
           Never share this key with anyone. Trezo staff will never ask for it.
@@ -151,7 +150,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 64,
       height: 64,
       borderRadius: 32,
-      backgroundColor: withAlpha(colors.accent, 0.1),
+      backgroundColor: `${colors.accent}1A`,
       justifyContent: "center",
       alignItems: "center",
       marginBottom: 16,
@@ -172,17 +171,17 @@ const createStyles = (colors: ThemeColors) =>
     warningCard: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: withAlpha(colors.warning || "#EAB308", 0.1),
+      backgroundColor: `${colors.warning}1A`,
       padding: 12,
       borderRadius: 12,
       marginBottom: 24,
       borderWidth: 1,
-      borderColor: withAlpha(colors.warning || "#EAB308", 0.2),
+      borderColor: `${colors.warning}33`,
     },
     warningText: {
       flex: 1,
       fontSize: 12,
-      color: colors.warning || "#EAB308",
+      color: colors.warning,
       marginLeft: 10,
       fontWeight: "500",
     },
@@ -226,7 +225,7 @@ const createStyles = (colors: ThemeColors) =>
       marginBottom: 10,
     },
     keyBox: {
-      backgroundColor: withAlpha(colors.text, 0.05),
+      backgroundColor: `${colors.text}0D`,
       padding: 12,
       borderRadius: 8,
       marginBottom: 16,

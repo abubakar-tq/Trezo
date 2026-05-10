@@ -15,7 +15,7 @@ import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { useRecoveryStatusStore } from "@store/useRecoveryStatusStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import { Address } from "viem";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -374,7 +374,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
               onPress={onConfigureThreshold}
               activeOpacity={0.85}
               style={{
-                backgroundColor: withAlpha(colors.accent, 0.1),
+                backgroundColor: `${colors.accent}1A`,
                 borderRadius: 16,
                 paddingVertical: 14,
                 alignItems: "center",
@@ -435,7 +435,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
               onPress={onEmailRecovery}
               activeOpacity={0.85}
               style={{
-                backgroundColor: withAlpha(colors.accent, 0.1),
+                backgroundColor: `${colors.accent}1A`,
                 borderRadius: 16,
                 paddingVertical: 14,
                 alignItems: "center",

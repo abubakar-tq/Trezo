@@ -25,7 +25,7 @@ import {
   View,
 } from "react-native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import {
   GuardianListItem,
   GuardianListShowcase,
@@ -96,7 +96,7 @@ export const GuardianManagementScreen: React.FC<
               width: 40,
               height: 40,
               borderRadius: 20,
-              backgroundColor: withAlpha(colors.textPrimary, 0.05),
+              backgroundColor: colors.glass,
               alignItems: 'center',
               justifyContent: 'center'
             }}
@@ -154,7 +154,7 @@ export const GuardianManagementScreen: React.FC<
           ) : (
             <View
               style={{
-                backgroundColor: withAlpha(colors.textPrimary, 0.03),
+                backgroundColor: colors.glass,
                 borderRadius: 20,
                 padding: 32,
                 alignItems: "center",
@@ -208,7 +208,7 @@ export const GuardianManagementScreen: React.FC<
         {/* INFO CARD */}
         <View
           style={{
-            backgroundColor: withAlpha(colors.textPrimary, 0.03),
+            backgroundColor: colors.glass,
             borderRadius: 24,
             padding: 20,
             borderWidth: 1,

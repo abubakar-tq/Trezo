@@ -15,7 +15,6 @@ import { navigate } from "@app/navigation/navigationRef";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
-import { withAlpha } from "@utils/color";
 
 const statusLabel = (status: string) => {
   if (status === "created") return "Waiting for passkey creation";
@@ -237,7 +236,7 @@ const PairDeviceScreen: React.FC = () => {
               activeOpacity={0.9}
             >
               {busy ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.textOnAccent} />
               ) : (
                 <Text style={styles.primaryButtonLabel}>{primaryActionLabel}</Text>
               )}
@@ -291,10 +290,10 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     introCard: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.12),
+      backgroundColor: `${colors.accentAlt}1F`,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.24),
+      borderColor: `${colors.accentAlt}3D`,
       padding: 14,
       gap: 6,
     },
@@ -317,10 +316,10 @@ const createStyles = (colors: ThemeColors) =>
       gap: 6,
     },
     noteCard: {
-      backgroundColor: withAlpha(colors.warning, 0.12),
+      backgroundColor: `${colors.warning}1F`,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: withAlpha(colors.warning, 0.28),
+      borderColor: `${colors.warning}47`,
       padding: 14,
       gap: 6,
     },
@@ -362,7 +361,7 @@ const createStyles = (colors: ThemeColors) =>
       opacity: 0.6,
     },
     primaryButtonLabel: {
-      color: "#fff",
+      color: colors.textOnAccent,
       fontWeight: "700",
       fontSize: 14,
     },
@@ -371,7 +370,7 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
     },
     note: {
-      color: withAlpha(colors.textMuted, 0.85),
+      color: `${colors.textMuted}D9`,
       fontSize: 12,
       lineHeight: 18,
     },

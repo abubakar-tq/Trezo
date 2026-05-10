@@ -19,7 +19,7 @@ import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import { useRecoveryStatusStore } from "@store/useRecoveryStatusStore";
 import type { Guardian } from "@store/useRecoveryStatusStore";
 import { GuardianSyncService } from "../services/GuardianSyncService";
@@ -628,7 +628,7 @@ const GuardianRecoveryScreen: React.FC = () => {
               disabled={isSubmitting}
             >
               {isSubmitting ? (
-                <ActivityIndicator size="small" color="#ffffff" />
+                <ActivityIndicator size="small" color={colors.textOnAccent} />
               ) : (
                 <Text style={styles.submitButtonText}>Save Guardians</Text>
               )}
@@ -895,7 +895,7 @@ const GuardianRecoveryScreen: React.FC = () => {
             activeOpacity={0.85}
           >
             {installingModule ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <ActivityIndicator size="small" color={colors.textOnAccent} />
             ) : (
               <Text style={styles.installButtonText}>
                 {moduleInstalledState ? "Module Installed" : "Install Social Recovery"}
@@ -938,8 +938,8 @@ const createStyles = (colors: ThemeColors) =>
     blockedCard: {
       borderRadius: 24,
       borderWidth: 1,
-      borderColor: withAlpha(colors.warning, 0.28),
-      backgroundColor: withAlpha(colors.warning, 0.1),
+      borderColor: `${colors.warning}47`,
+      backgroundColor: `${colors.warning}1A`,
       padding: 20,
       gap: 12,
       marginTop: 16,
@@ -963,7 +963,7 @@ const createStyles = (colors: ThemeColors) =>
       marginTop: 4,
     },
     blockedPrimaryButtonText: {
-      color: "#ffffff",
+      color: colors.textOnAccent,
       fontSize: 15,
       fontWeight: "700",
     },
@@ -1029,7 +1029,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "600",
     },
     mnInput: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.06),
+      backgroundColor: `${colors.textPrimary}0F`,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 16,
@@ -1068,7 +1068,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     addressInput: {
       flex: 1,
-      backgroundColor: withAlpha(colors.textPrimary, 0.06),
+      backgroundColor: `${colors.textPrimary}0F`,
       borderWidth: 1,
       borderColor: colors.borderMuted,
       borderRadius: 14,
@@ -1089,7 +1089,7 @@ const createStyles = (colors: ThemeColors) =>
       opacity: 0.6,
     },
     submitButtonText: {
-      color: "#ffffff",
+      color: colors.textOnAccent,
       fontSize: 16,
       fontWeight: "700",
     },
@@ -1137,9 +1137,9 @@ const createStyles = (colors: ThemeColors) =>
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: withAlpha(colors.accentAlt, 0.15),
+      backgroundColor: `${colors.accentAlt}26`,
       borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.3),
+      borderColor: `${colors.accentAlt}4D`,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -1158,7 +1158,7 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: `${colors.accentAlt}1A`,
       borderRadius: 12,
       padding: 14,
       marginTop: 16,
@@ -1177,19 +1177,19 @@ const createStyles = (colors: ThemeColors) =>
       marginBottom: 16,
     },
     syncStatusWarning: {
-      backgroundColor: withAlpha(colors.warning, 0.1),
+      backgroundColor: `${colors.warning}1A`,
       borderWidth: 1,
-      borderColor: withAlpha(colors.warning, 0.2),
+      borderColor: `${colors.warning}33`,
     },
     syncStatusNeedSync: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: `${colors.accentAlt}1A`,
       borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.2),
+      borderColor: `${colors.accentAlt}33`,
     },
     syncStatusSynced: {
-      backgroundColor: withAlpha(colors.success, 0.1),
+      backgroundColor: `${colors.success}1A`,
       borderWidth: 1,
-      borderColor: withAlpha(colors.success, 0.2),
+      borderColor: `${colors.success}33`,
     },
     syncStatusText: {
       color: colors.textSecondary,
@@ -1206,7 +1206,7 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     syncButtonText: {
-      color: "#ffffff",
+      color: colors.textOnAccent,
       fontSize: 12,
       fontWeight: "600",
     },
@@ -1216,7 +1216,7 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.borderMuted,
       padding: 14,
-      backgroundColor: withAlpha(colors.surfaceCard, 0.6),
+      backgroundColor: `${colors.surfaceCard}99`,
       gap: 8,
     },
     payloadTitle: {
@@ -1275,7 +1275,7 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 18,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.borderMuted, 0.5),
+      backgroundColor: `${colors.borderMuted}80`,
     },
     moduleDescription: {
       color: colors.textSecondary,
@@ -1291,13 +1291,13 @@ const createStyles = (colors: ThemeColors) =>
       gap: 10,
     },
     moduleStatusInstalled: {
-      backgroundColor: withAlpha(colors.success, 0.15),
+      backgroundColor: colors.successSoft,
     },
     moduleStatusIdle: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.12),
+      backgroundColor: `${colors.accentAlt}1F`,
     },
     moduleStatusWarning: {
-      backgroundColor: withAlpha(colors.warning, 0.15),
+      backgroundColor: colors.warningSoft,
     },
     moduleStatusText: {
       color: colors.textPrimary,
@@ -1313,7 +1313,7 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 12,
     },
     hashRow: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.04),
+      backgroundColor: `${colors.textPrimary}0A`,
       borderRadius: 12,
       padding: 10,
       marginTop: 4,
@@ -1349,7 +1349,7 @@ const createStyles = (colors: ThemeColors) =>
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: withAlpha(colors.background, 0.85),
+      backgroundColor: `${colors.background}D9`,
       alignItems: "center",
       justifyContent: "center",
       gap: 12,

@@ -126,7 +126,7 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     primaryButtonLabel: {
-      color: "#fff",
+      color: colors.textOnAccent,
       fontWeight: "700",
       fontSize: 14,
     },

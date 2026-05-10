@@ -1,17 +1,16 @@
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { Avatar, TabScreenContainer } from "@shared/components";
-import { MeshBackground } from "@shared/components/MeshBackground";
-import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { RootStackParamList } from "@/src/types/navigation";
@@ -21,37 +20,20 @@ import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
 type SettingsItem = {
   label: string;
   icon: FeatherIconName;
+  tint: string;
   route?: keyof RootStackParamList;
 };
 
-const baseSettingsItems: SettingsItem[] = [
-  { label: "Contacts", icon: "book", route: "ContactList" },
-  { label: "Browser settings", icon: "globe", route: "BrowserSettings" },
-  { label: "Devices & passkeys", icon: "smartphone", route: "DevicesPasskeys" },
-  { label: "Notifications", icon: "bell", route: "NotificationSettings" },
-  { label: "Backup & recovery", icon: "cloud", route: "BackupRecovery" },
-];
-
-const settingsItems: SettingsItem[] = [
-  ...baseSettingsItems,
-  // Dev-only quick link into the AA createAccount tester
-  ...(__DEV__
-    ? ([
-        {
-          label: "Dev Controls",
-          icon: "cpu",
-          route: "DevCreateAccount",
-        },
-      ] satisfies SettingsItem[])
-    : []),
-];
+type SettingsGroup = {
+  title: string;
+  items: SettingsItem[];
+};
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
@@ -63,9 +45,7 @@ const ProfileScreen: React.FC = () => {
   const user = useUserStore((state) => state.user);
   const profile = useUserStore((state) => state.profile);
   const resetUser = useUserStore((state) => state.reset);
-  const setGuardNavigation = useAuthFlowStore(
-    (state) => state.setGuardNavigation,
-  );
+  const setGuardNavigation = useAuthFlowStore((state) => state.setGuardNavigation);
 
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
@@ -74,7 +54,6 @@ const ProfileScreen: React.FC = () => {
     profile?.username ??
     user?.email?.split("@")[0]?.replace(/[^a-zA-Z0-9]/g, " ") ??
     "Explorer";
-
   const avatarUri = profile?.avatarUrl ?? null;
 
   const handleToggleTheme = useCallback(() => {
@@ -84,379 +63,386 @@ const ProfileScreen: React.FC = () => {
   const executeSignOut = useCallback(async () => {
     if (isSigningOut) return;
     setIsSigningOut(true);
-
     try {
       const client = getSupabaseClient();
       await client.auth.signOut();
     } catch (error) {
-      // Log but don't block — if Supabase is unreachable (local dev), still clear local state
       console.warn("Supabase signOut failed (continuing locally):", error);
     }
-
-    // Always clear local state and navigate away
     resetUser();
     setGuardNavigation(false);
     setConfirmVisible(false);
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "AuthNavigation" }],
-    });
-
+    navigation.reset({ index: 0, routes: [{ name: "AuthNavigation" }] });
     setIsSigningOut(false);
   }, [isSigningOut, navigation, resetUser, setGuardNavigation]);
 
+  const settingsGroups: SettingsGroup[] = useMemo(
+    () => [
+      {
+        title: "Account",
+        items: [
+          { label: "Edit Profile", icon: "user", tint: colors.accent, route: "ProfileEdit" },
+          { label: "Devices & Passkeys", icon: "smartphone", tint: colors.accentAlt, route: "DevicesPasskeys" },
+          { label: "Backup & Recovery", icon: "shield", tint: colors.success, route: "BackupRecovery" },
+          { label: "Contacts", icon: "book", tint: colors.warning, route: "ContactList" },
+        ],
+      },
+      {
+        title: "Preferences",
+        items: [
+          { label: "Notifications", icon: "bell", tint: colors.accentAlt, route: "NotificationSettings" },
+          { label: "Browser Settings", icon: "globe", tint: colors.success, route: "BrowserSettings" },
+          ...(__DEV__
+            ? [
+                {
+                  label: "Dev Controls",
+                  icon: "cpu" as FeatherIconName,
+                  tint: colors.textMuted,
+                  route: "DevCreateAccount" as keyof RootStackParamList,
+                },
+              ]
+            : []),
+        ],
+      },
+    ],
+    [colors],
+  );
+
   return (
     <TabScreenContainer includeBottomInset>
-      <MeshBackground intensity={resolvedMode === "dark" ? 0.25 : 0.8} />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: contentBottomInset },
-        ]}
+        contentContainerStyle={{ paddingBottom: contentBottomInset + 24 }}
       >
-        <View style={styles.heroWrapper}>
-          <View style={styles.heroCard}>
-            <View style={styles.heroHeader}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate("ProfileEdit")}
-                activeOpacity={0.85}
-              >
-                <Avatar size={72} uri={avatarUri} label={displayName} />
-              </TouchableOpacity>
-              <View style={styles.heroInfo}>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("ProfileEdit")}
-                >
-                  <Text style={styles.name}>{displayName}</Text>
-                </TouchableOpacity>
-                <Text style={styles.email}>
-                  {user?.email ?? "wallet@trezo.app"}
-                </Text>
-                <Text style={styles.modeHint}>
-                  Theme: {resolvedMode === "dark" ? "Dark" : "Light"} mode
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={handleToggleTheme}
-                accessibilityRole="button"
-                accessibilityLabel="Toggle theme"
-                style={styles.themeToggle}
-                activeOpacity={0.85}
-              >
-                <Feather
-                  name={resolvedMode === "dark" ? "sun" : "moon"}
-                  size={18}
-                  color={colors.textPrimary}
-                />
-              </TouchableOpacity>
+        {/* ── Hero ─────────────────────────────────────── */}
+        <LinearGradient colors={gradients.profileHero} style={styles.hero}>
+          <TouchableOpacity
+            style={[styles.themeBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
+            onPress={handleToggleTheme}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle theme"
+          >
+            <Feather
+              name={resolvedMode === "dark" ? "sun" : "moon"}
+              size={16}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate("ProfileEdit")}
+            activeOpacity={0.85}
+            style={styles.avatarTouchable}
+          >
+            <View style={[styles.avatarRing, { borderColor: `${colors.accent}4D` }]}>
+              <Avatar size={84} uri={avatarUri} label={displayName} />
+            </View>
+            <View style={[styles.cameraChip, { backgroundColor: colors.accent }]}>
+              <Feather name="camera" size={11} color={colors.textOnAccent} />
+            </View>
+          </TouchableOpacity>
+
+          <Text style={[styles.heroName, { color: colors.textPrimary }]}>{displayName}</Text>
+          <Text style={[styles.heroEmail, { color: colors.textSecondary }]}>
+            {user?.email ?? "wallet@trezo.app"}
+          </Text>
+
+          <View style={styles.pillRow}>
+            <View style={[styles.pill, { backgroundColor: `${colors.success}1A`, borderColor: `${colors.success}33` }]}>
+              <Feather name="check-circle" size={11} color={colors.success} />
+              <Text style={[styles.pillText, { color: colors.success }]}>Verified</Text>
+            </View>
+            <View style={[styles.pill, { backgroundColor: `${colors.accent}1A`, borderColor: `${colors.accent}33` }]}>
+              <Feather name="shield" size={11} color={colors.accent} />
+              <Text style={[styles.pillText, { color: colors.accent }]}>Protected</Text>
             </View>
           </View>
-        </View>
+        </LinearGradient>
 
-        <View style={styles.card}>
-          <View style={styles.settingsCard}>
-            <Text style={styles.sectionTitle}>TECHNICAL PROFILE</Text>
-          {settingsItems.map((item, index) => (
-            <TouchableOpacity
-              key={item.label}
-              activeOpacity={0.85}
-              style={[
-                styles.settingRow,
-                index < settingsItems.length - 1 && styles.rowBorder,
-              ]}
-              onPress={() => {
-                if (item.route) {
-                  navigation.navigate(item.route as never);
-                }
-              }}
-            >
-              <View style={styles.settingInfo}>
-                <Feather name={item.icon as any} size={18} color={colors.accent} />
-                <Text style={styles.settingLabel}>{item.label}</Text>
-              </View>
-              <Feather
-                name="chevron-right"
-                size={18}
-                color={colors.textMuted}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.signOutButton}
-          onPress={() => setConfirmVisible(true)}
-          disabled={isSigningOut}
-        >
-          {isSigningOut ? (
-            <ActivityIndicator size="small" color={colors.danger} />
-          ) : (
-            <>
-              <View style={styles.signOutIconWrap}>
-                <Feather name="log-out" size={18} color={colors.danger} />
-              </View>
-              <Text style={styles.signOutLabel}>Sign out</Text>
-            </>
-          )}
-        </TouchableOpacity>
-        <Modal
-          visible={confirmVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => {
-            if (!isSigningOut) setConfirmVisible(false);
-          }}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalIconBadge}>
-                <Feather
-                  name="alert-triangle"
-                  size={22}
-                  color={colors.danger}
-                />
-              </View>
-              <Text style={styles.modalTitle}>Sign out of Trezo Wallet?</Text>
-              <Text style={styles.modalBody}>
-                Youll need to authenticate again to access your wallet data.
+        {/* ── Settings ─────────────────────────────────── */}
+        <View style={styles.body}>
+          {settingsGroups.map((group) => (
+            <View key={group.title} style={styles.section}>
+              <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+                {group.title.toUpperCase()}
               </Text>
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalCancel]}
-                  onPress={() => setConfirmVisible(false)}
-                  disabled={isSigningOut}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.modalCancelLabel}>Stay signed in</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.modalButton,
-                    styles.modalDanger,
-                    isSigningOut && styles.modalButtonDisabled,
-                  ]}
-                  onPress={executeSignOut}
-                  activeOpacity={0.85}
-                  disabled={isSigningOut}
-                >
-                  {isSigningOut ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.modalDangerLabel}>Sign out</Text>
-                  )}
-                </TouchableOpacity>
+              <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                {group.items.map((item, idx) => (
+                  <TouchableOpacity
+                    key={item.label}
+                    style={[
+                      styles.row,
+                      idx < group.items.length - 1 && {
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderBottomColor: colors.borderMuted,
+                      },
+                    ]}
+                    onPress={() => item.route && navigation.navigate(item.route as never)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.iconWrap, { backgroundColor: `${item.tint}1A` }]}>
+                      <Feather name={item.icon} size={17} color={item.tint} />
+                    </View>
+                    <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{item.label}</Text>
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
-          </View>
-        </Modal>
+          ))}
+
+          {/* ── Sign Out ──────────────────────────────── */}
+          <TouchableOpacity
+            style={[styles.signOutBtn, { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}33` }]}
+            onPress={() => setConfirmVisible(true)}
+            disabled={isSigningOut}
+            activeOpacity={0.8}
+          >
+            {isSigningOut ? (
+              <ActivityIndicator size="small" color={colors.danger} />
+            ) : (
+              <>
+                <View style={[styles.signOutIconWrap, { backgroundColor: `${colors.danger}1A` }]}>
+                  <Feather name="log-out" size={16} color={colors.danger} />
+                </View>
+                <Text style={[styles.signOutLabel, { color: colors.danger }]}>Sign Out</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <Text style={[styles.versionText, { color: colors.textMuted }]}>Trezo Wallet · v1.0.0</Text>
+        </View>
       </ScrollView>
+
+      {/* ── Confirm Modal ────────────────────────────── */}
+      <Modal
+        visible={confirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { if (!isSigningOut) setConfirmVisible(false); }}
+      >
+        <View style={styles.overlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surfaceCard, borderColor: `${colors.danger}26` }]}>
+            <View style={[styles.modalIconBadge, { backgroundColor: colors.dangerSoft }]}>
+              <Feather name="log-out" size={28} color={colors.danger} />
+            </View>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Sign out of Trezo?</Text>
+            <Text style={[styles.modalBody, { color: colors.textSecondary }]}>
+              {"You'll need to verify your identity again to access your wallet."}
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.glass, borderColor: colors.border, borderWidth: 1 }]}
+                onPress={() => setConfirmVisible(false)}
+                disabled={isSigningOut}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.modalBtnText, { color: colors.textPrimary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.danger, opacity: isSigningOut ? 0.6 : 1 }]}
+                onPress={executeSignOut}
+                disabled={isSigningOut}
+                activeOpacity={0.8}
+              >
+                {isSigningOut ? (
+                  <ActivityIndicator size="small" color={colors.textOnAccent} />
+                ) : (
+                  <Text style={[styles.modalBtnText, { color: colors.textOnAccent }]}>Sign out</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </TabScreenContainer>
   );
 };
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    screen: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    scrollContent: {
-      paddingHorizontal: 20,
-      paddingTop: 12,
-    },
-    heroWrapper: {
-      marginBottom: 20,
-    },
-    heroCard: {
-      backgroundColor: colors.surfaceCard,
-      padding: 24,
-      borderRadius: 28,
-      borderWidth: 1,
-      borderColor: colors.border,
-      // Zero Depth
-      shadowOpacity: 0,
-      elevation: 0,
-    },
-    heroHeader: {
-      flexDirection: "row",
+    hero: {
+      paddingTop: 56,
+      paddingBottom: 40,
+      paddingHorizontal: 24,
       alignItems: "center",
-      gap: 16,
+      gap: 6,
+      position: "relative",
     },
-    heroInfo: {
-      flex: 1,
-    },
-    name: {
-      color: colors.textPrimary,
-      fontSize: 22,
-      fontWeight: "700",
-    },
-    email: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      marginTop: 4,
-    },
-    modeHint: {
-      color: colors.textMuted,
-      fontSize: 12,
-      marginTop: 8,
-    },
-    themeToggle: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+    themeBtn: {
+      position: "absolute",
+      top: 16,
+      right: 20,
+      width: 38,
+      height: 38,
+      borderRadius: 19,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,
-      borderColor: withAlpha(colors.textPrimary, 0.18),
-      backgroundColor: withAlpha(colors.textPrimary, 0.08),
+    },
+    avatarTouchable: {
+      position: "relative",
+      marginBottom: 8,
+    },
+    avatarRing: {
+      borderWidth: 2.5,
+      borderRadius: 50,
+      padding: 3,
+    },
+    cameraChip: {
+      position: "absolute",
+      bottom: 4,
+      right: 4,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    heroName: {
+      fontSize: 24,
+      fontWeight: "800",
+      letterSpacing: -0.5,
+      marginTop: 4,
+    },
+    heroEmail: {
+      fontSize: 13,
+      fontWeight: "500",
+      marginTop: 2,
+    },
+    pillRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 12,
+    },
+    pill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      borderWidth: 1,
+    },
+    pillText: {
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    body: {
+      paddingHorizontal: 20,
+      paddingTop: 28,
+      gap: 20,
+    },
+    section: {
+      gap: 8,
+    },
+    sectionLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 1.2,
+      marginLeft: 4,
     },
     card: {
-      marginBottom: 20,
-    },
-    settingsCard: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 24,
-      padding: 24,
+      borderRadius: 20,
       borderWidth: 1,
-      borderColor: colors.border,
-      // Zero Depth
-      shadowOpacity: 0,
-      elevation: 0,
+      overflow: "hidden",
     },
-    sectionTitle: {
-      color: colors.textPrimary,
-      fontSize: 18,
-      fontWeight: "800",
-      textTransform: 'uppercase',
-      letterSpacing: 2,
-      marginBottom: 16,
-    },
-    settingRow: {
+    row: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
       paddingVertical: 14,
+      paddingHorizontal: 16,
+      gap: 14,
     },
-    settingInfo: {
-      flexDirection: "row",
+    iconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
       alignItems: "center",
-      gap: 12,
+      justifyContent: "center",
     },
-    settingLabel: {
-      color: colors.textPrimary,
+    rowLabel: {
+      flex: 1,
       fontSize: 15,
       fontWeight: "600",
     },
-    rowBorder: {
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderMuted,
-    },
-    signOutButton: {
+    signOutBtn: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: 10,
-      paddingVertical: 16,
-      borderRadius: 20,
+      paddingVertical: 15,
+      borderRadius: 18,
       borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.3),
-      backgroundColor: withAlpha(colors.danger, 0.06),
-      marginTop: 8,
     },
     signOutIconWrap: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
+      width: 30,
+      height: 30,
+      borderRadius: 15,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.danger, 0.18),
-      borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.28),
     },
     signOutLabel: {
-      color: colors.danger,
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: "700",
     },
-    modalBackdrop: {
+    versionText: {
+      textAlign: "center",
+      fontSize: 12,
+      fontWeight: "500",
+      paddingBottom: 4,
+    },
+    overlay: {
       flex: 1,
-      backgroundColor: "rgba(4,3,10,0.78)",
+      backgroundColor: "rgba(0,0,0,0.65)",
       justifyContent: "center",
       alignItems: "center",
-      padding: 24,
+      paddingHorizontal: 24,
     },
     modalCard: {
       width: "100%",
       borderRadius: 28,
       borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.2),
-      backgroundColor: colors.surfaceCard,
-      paddingVertical: 28,
+      paddingVertical: 32,
       paddingHorizontal: 24,
       alignItems: "center",
-      gap: 16,
-      // Zero Depth
-      shadowOpacity: 0,
-      elevation: 0,
+      gap: 12,
     },
     modalIconBadge: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
+      width: 68,
+      height: 68,
+      borderRadius: 34,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.danger, 0.12),
-      borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.22),
+      marginBottom: 4,
     },
     modalTitle: {
-      color: colors.textPrimary,
-      fontSize: 20,
-      fontWeight: "700",
-      textAlign: "center",
+      fontSize: 22,
+      fontWeight: "800",
+      letterSpacing: -0.3,
     },
     modalBody: {
-      color: colors.textSecondary,
       fontSize: 14,
       textAlign: "center",
-      lineHeight: 20,
+      lineHeight: 21,
+      opacity: 0.85,
     },
     modalActions: {
       flexDirection: "row",
-      gap: 12,
+      gap: 10,
       width: "100%",
       marginTop: 8,
     },
-    modalButton: {
+    modalBtn: {
       flex: 1,
-      borderRadius: 16,
       paddingVertical: 14,
+      borderRadius: 14,
       alignItems: "center",
       justifyContent: "center",
-      borderWidth: 1,
     },
-    modalCancel: {
-      borderColor: withAlpha(colors.textPrimary, 0.18),
-      backgroundColor: withAlpha(colors.textPrimary, 0.06),
-    },
-    modalDanger: {
-      borderColor: withAlpha(colors.danger, 0.65),
-      backgroundColor: colors.danger,
-    },
-    modalButtonDisabled: {
-      opacity: 0.6,
-    },
-    modalCancelLabel: {
-      color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: "600",
-    },
-    modalDangerLabel: {
-      color: "#ffffff",
-      fontSize: 14,
+    modalBtnText: {
+      fontSize: 15,
       fontWeight: "700",
     },
   });

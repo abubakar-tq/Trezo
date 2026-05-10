@@ -14,7 +14,6 @@ import {
 import { RootStackParamList } from "@/src/types/navigation";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
-import { withAlpha } from "@utils/color";
 import { CHAINS, DEFAULT_CHAIN_ID, SUPPORTED_CHAIN_IDS, type SupportedChainId } from "@/src/integration/chains";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { useUserStore } from "@/src/store/useUserStore";
@@ -312,7 +311,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
           activeOpacity={0.85}
         >
           {isCreating ? (
-            <ActivityIndicator size="small" color="#ffffff" />
+            <ActivityIndicator size="small" color={colors.textOnAccent} />
           ) : (
             <Text style={styles.primaryButtonText}>
               Create Recovery Request
@@ -395,11 +394,11 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.border,
       gap: 12,
-      backgroundColor: withAlpha(colors.textPrimary, 0.03),
+      backgroundColor: colors.glass,
     },
     chainRowSelected: {
       borderColor: colors.accentAlt,
-      backgroundColor: withAlpha(colors.accentAlt, 0.08),
+      backgroundColor: `${colors.accentAlt}14`,
     },
     chainCheck: {
       width: 24,
@@ -429,7 +428,7 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.textPrimary, 0.04),
+      backgroundColor: `${colors.textPrimary}0A`,
     },
     deadlineValue: {
       color: colors.textPrimary,
@@ -448,7 +447,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: withAlpha(colors.accentAlt, 0.12),
+      backgroundColor: `${colors.accentAlt}1F`,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -486,7 +485,7 @@ const createStyles = (colors: ThemeColors) =>
       opacity: 0.5,
     },
     primaryButtonText: {
-      color: "#ffffff",
+      color: colors.textOnAccent,
       fontSize: 16,
       fontWeight: "700",
     },
