@@ -4,7 +4,9 @@ import { StatusBar } from "expo-status-bar";
 import React from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import "./src/integration/viem/polyfills";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 
 import { AppErrorBoundary } from "@app/components/system/AppErrorBoundary";
 import LockScreen from "@app/components/system/LockScreen";
@@ -19,13 +21,17 @@ import "./global.css";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <SafeAreaProvider>
-    <QueryClientProvider client={queryClient}>
-      <AppThemeProvider>
-        <AppBootstrap />
-      </AppThemeProvider>
-    </QueryClientProvider>
-  </SafeAreaProvider>
+  <GestureHandlerRootView style={{ flex: 1 }}>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <AppThemeProvider>
+          <BottomSheetModalProvider>
+            <AppBootstrap />
+          </BottomSheetModalProvider>
+        </AppThemeProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
+  </GestureHandlerRootView>
 );
 
 const AppBootstrap: React.FC = () => {
