@@ -1,34 +1,28 @@
-/**
- * ReceiveScreen.tsx
- * 
- * Majestic Web3 Receive screen.
- * Part of the "Celestial Cartographer" Design System.
- */
-
 import { Feather, Ionicons } from "@expo/vector-icons";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import { useWalletData } from "@hooks/useWalletData";
 import { useNavigation } from "@react-navigation/native";
 import { TokenIcon } from "@shared/components";
-import { MeshBackground } from "@shared/components/MeshBackground";
+import { FontFamilies } from "@shared/components/TokenRegistry";
+import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal";
+import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
+import { NetworkPickerModal, type Network } from "@shared/components/modals/NetworkPickerModal";
+import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
-    Dimensions,
-    Platform,
-    ScrollView,
-    Share,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ScrollView,
+  Share,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 interface ReceiveScreenProps {
   onCopyAddress?: (address: string) => void;
@@ -36,23 +30,15 @@ interface ReceiveScreenProps {
   onClose?: () => void;
 }
 
-import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
-import { useWalletData } from "@hooks/useWalletData";
-import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal";
-import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
-import { NetworkPickerModal, type Network } from "@shared/components/modals/NetworkPickerModal";
-import { useUserStore } from "@store/useUserStore";
-
 export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
   onCopyAddress,
   onShare,
   onClose,
 }) => {
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const isDark = resolvedMode === 'dark';
 
   const { tokens } = useWalletData();
   const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
@@ -122,18 +108,17 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <MeshBackground intensity={0.4} />
-      
+      <StatusBar barStyle="light-content" />
+
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
         <TouchableOpacity 
           onPress={handleClose} 
-          style={[styles.backButton, { backgroundColor: withAlpha(colors.textPrimary, 0.05) }]}
+          style={[styles.backButton, { backgroundColor: colors.glass }]}
         >
           <Feather name="x" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.labelKicker, { color: withAlpha(colors.accent, 0.8) }]}>SECURE PASSAGE</Text>
+          <Text style={[styles.labelKicker, { color: colors.accent }]}>SECURE PASSAGE</Text>
           <Text style={[styles.title, { color: colors.textPrimary }]}>Receive Funds</Text>
         </View>
         <View style={{ width: 44 }} />
@@ -147,14 +132,14 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
         <View style={styles.selectorsContainer}>
           {/* Account Selector */}
           <TouchableOpacity 
-            style={[styles.selectorRow, { backgroundColor: withAlpha(colors.surfaceCard, 0.4), borderColor: withAlpha(colors.border, 0.1) }]}
+            style={[styles.selectorRow, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}
             onPress={() => setIsAccountPickerVisible(true)}
           >
-             <View style={[styles.selectorIcon, { backgroundColor: withAlpha(colors.accentAlt, 0.1) }]}>
+             <View style={[styles.selectorIcon, { backgroundColor: `${colors.accentAlt}1A` }]}>
                <Text style={[styles.selectorIconText, { color: colors.accentAlt }]}>{activeAccount?.name[0] || 'P'}</Text>
              </View>
              <View style={styles.selectorInfo}>
-               <Text style={[styles.selectorLabel, { color: withAlpha(colors.textSecondary, 0.5) }]}>RECEIVING TO ACCOUNT</Text>
+               <Text style={[styles.selectorLabel, { color: colors.textMuted }]}>RECEIVING TO ACCOUNT</Text>
                <Text style={[styles.selectorValue, { color: colors.textPrimary }]} numberOfLines={1}>{activeAccount?.name || 'Primary'}</Text>
              </View>
              <Feather name="chevron-down" size={16} color={colors.textSecondary} />
@@ -162,18 +147,18 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
 
           {/* Network Selector */}
           <TouchableOpacity 
-            style={[styles.selectorRow, { backgroundColor: withAlpha(colors.surfaceCard, 0.4), borderColor: withAlpha(colors.border, 0.1) }]}
+            style={[styles.selectorRow, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}
             onPress={() => setIsNetworkPickerVisible(true)}
           >
              {selectedNetwork.icon ? (
                <TokenIcon uri={selectedNetwork.icon} symbol={selectedNetwork.name[0]} size={32} />
              ) : (
-               <View style={[styles.selectorIcon, { backgroundColor: withAlpha(selectedNetwork.color, 0.1) }]}>
+               <View style={[styles.selectorIcon, { backgroundColor: `${selectedNetwork.color}1A` }]}>
                  <Text style={[styles.selectorIconText, { color: selectedNetwork.color }]}>{selectedNetwork.name[0]}</Text>
                </View>
              )}
              <View style={styles.selectorInfo}>
-               <Text style={[styles.selectorLabel, { color: withAlpha(colors.textSecondary, 0.5) }]}>NETWORK</Text>
+               <Text style={[styles.selectorLabel, { color: colors.textMuted }]}>NETWORK</Text>
                <Text style={[styles.selectorValue, { color: colors.textPrimary }]} numberOfLines={1}>{selectedNetwork.name}</Text>
              </View>
              <Feather name="chevron-down" size={16} color={colors.textSecondary} />
@@ -181,12 +166,12 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
 
           {/* Asset Selector */}
           <TouchableOpacity 
-            style={[styles.selectorRow, { backgroundColor: withAlpha(colors.surfaceCard, 0.4), borderColor: withAlpha(colors.border, 0.1) }]}
+            style={[styles.selectorRow, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}
             onPress={() => setIsAssetPickerVisible(true)}
           >
              <TokenIcon symbol={selectedAsset.symbol} uri={selectedAsset.logo} size={32} />
              <View style={styles.selectorInfo}>
-               <Text style={[styles.selectorLabel, { color: withAlpha(colors.textSecondary, 0.5) }]}>ASSET</Text>
+               <Text style={[styles.selectorLabel, { color: colors.textMuted }]}>ASSET</Text>
                <Text style={[styles.selectorValue, { color: colors.textPrimary }]} numberOfLines={1}>{selectedAsset.name} ({selectedAsset.symbol})</Text>
              </View>
              <Feather name="chevron-down" size={16} color={colors.textSecondary} />
@@ -194,7 +179,7 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
         </View>
 
         {/* QR Code Section - The "Beacon" */}
-        <View style={[styles.qrCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.4), borderColor: withAlpha(colors.border, 0.1) }]}>
+        <View style={[styles.qrCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           <View style={[styles.qrContainer, { backgroundColor: '#FFF', borderColor: colors.accent }]}>
              <QRCode
                 value={walletAddress}
@@ -210,10 +195,10 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
         </View>
 
         {/* Address Card - Glassmorphic Display */}
-        <View style={[styles.addressCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.6), borderColor: withAlpha(colors.border, 0.1) }]}>
+        <View style={[styles.addressCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
            <View style={styles.addressHeader}>
-              <Text style={[styles.inputLabel, { color: withAlpha(colors.textSecondary, 0.5) }]}>YOUR WALLET ADDRESS</Text>
-              <TouchableOpacity onPress={handleCopyAddress} style={styles.copyBadge}>
+              <Text style={[styles.inputLabel, { color: colors.textMuted }]}>YOUR WALLET ADDRESS</Text>
+              <TouchableOpacity onPress={handleCopyAddress} style={[styles.copyBadge, { backgroundColor: `${colors.accent}14` }]}>
                 <Feather name={copied ? "check" : "copy"} size={14} color={colors.accent} />
                 <Text style={[styles.copyBadgeText, { color: colors.accent }]}>{copied ? "COPIED" : "COPY"}</Text>
               </TouchableOpacity>
@@ -233,7 +218,7 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
            </View>
            <View style={styles.infoRow}>
               <Feather name="lock" size={16} color={colors.textSecondary} />
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>Protected by Trezo's multi-sig security layer.</Text>
+              <Text style={[styles.infoText, { color: colors.textSecondary }]}>{"Protected by Trezo's multi-sig security layer."}</Text>
            </View>
         </View>
 
@@ -244,7 +229,7 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
           onPress={handleShare}
         >
           <LinearGradient
-            colors={[colors.accent, '#85c3c3']}
+            colors={[colors.accent, colors.accentAlt]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.actionButton}
@@ -366,7 +351,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 24,
     borderWidth: 1,
-    shadowColor: '#00FFFF',
+    shadowColor: "#8B5CF6",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.2,
     shadowRadius: 20,
@@ -403,7 +388,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(0,255,255,0.08)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -415,7 +399,7 @@ const styles = StyleSheet.create({
   addressText: {
     fontSize: 10,
     fontWeight: '800',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontFamily: FontFamilies.mono,
     lineHeight: 16,
     textAlign: 'center',
     letterSpacing: 0.2,
@@ -439,7 +423,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   networkIconText: {
-    color: '#FFF',
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: 'bold',
   },

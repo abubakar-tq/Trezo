@@ -16,7 +16,6 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
-    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -38,7 +37,7 @@ import { getSupabaseClient } from "@lib/supabase";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+import { FontFamilies } from "@shared/components/TokenRegistry";
 
 type DeployStep = "intro" | "passkey" | "deploying" | "success" | "error";
   
@@ -423,7 +422,7 @@ export default function DeployAccountScreen() {
             <View
               style={[
                 styles.iconCircle,
-                { backgroundColor: withAlpha(colors.success, 0.15) },
+                { backgroundColor: colors.successSoft },
               ]}
             >
               <Feather name="check-circle" size={32} color={colors.success} />
@@ -483,7 +482,7 @@ export default function DeployAccountScreen() {
             <View
               style={[
                 styles.iconCircle,
-                { backgroundColor: withAlpha(colors.danger, 0.15) },
+                { backgroundColor: colors.dangerSoft },
               ]}
             >
               <Feather name="alert-triangle" size={32} color={colors.danger} />
@@ -568,13 +567,13 @@ const createStyles = (colors: ThemeColors) =>
       paddingTop: 60,
       paddingBottom: 16,
       borderBottomWidth: 1,
-      borderBottomColor: withAlpha(colors.border, 0.3),
+      borderBottomColor: colors.border,
     },
     backButton: {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.6),
+      backgroundColor: colors.surfaceElevated,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -597,11 +596,11 @@ const createStyles = (colors: ThemeColors) =>
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: withAlpha(colors.accent, 0.15),
+      backgroundColor: `${colors.accent}26`,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 2,
-      borderColor: withAlpha(colors.accent, 0.3),
+      borderColor: `${colors.accent}4D`,
       marginTop: 20,
     },
     stepTitle: {
@@ -625,17 +624,17 @@ const createStyles = (colors: ThemeColors) =>
     benefitItem: {
       flexDirection: "row",
       gap: 14,
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.5),
+      backgroundColor: colors.surfaceElevated,
       padding: 16,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.4),
+      borderColor: colors.border,
     },
     benefitIcon: {
       width: 40,
       height: 40,
       borderRadius: 20,
-      backgroundColor: withAlpha(colors.success, 0.15),
+      backgroundColor: colors.successSoft,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -655,9 +654,9 @@ const createStyles = (colors: ThemeColors) =>
     },
     costCard: {
       width: "100%",
-      backgroundColor: withAlpha(colors.accent, 0.08),
+      backgroundColor: `${colors.accent}14`,
       borderWidth: 1.5,
-      borderColor: withAlpha(colors.accent, 0.3),
+      borderColor: `${colors.accent}4D`,
       borderRadius: 20,
       padding: 24,
       alignItems: "center",
@@ -681,11 +680,11 @@ const createStyles = (colors: ThemeColors) =>
     infoBox: {
       flexDirection: "row",
       gap: 10,
-      backgroundColor: withAlpha(colors.accent, 0.08),
+      backgroundColor: `${colors.accent}14`,
       padding: 14,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: withAlpha(colors.accent, 0.2),
+      borderColor: `${colors.accent}33`,
       alignItems: "flex-start",
     },
     infoText: {
@@ -696,9 +695,9 @@ const createStyles = (colors: ThemeColors) =>
     },
     balanceCard: {
       width: "100%",
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.6),
+      backgroundColor: colors.surfaceElevated,
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.4),
+      borderColor: colors.border,
       borderRadius: 20,
       padding: 24,
       alignItems: "center",
@@ -717,7 +716,7 @@ const createStyles = (colors: ThemeColors) =>
     balanceAddress: {
       fontSize: 12,
       color: colors.textMuted,
-      fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+      fontFamily: FontFamilies.mono,
     },
     statusBox: {
       width: "100%",
@@ -729,12 +728,12 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
     },
     statusSuccess: {
-      backgroundColor: withAlpha(colors.success, 0.1),
-      borderColor: withAlpha(colors.success, 0.4),
+      backgroundColor: colors.successSoft,
+      borderColor: `${colors.success}66`,
     },
     statusWarning: {
-      backgroundColor: withAlpha(colors.warning, 0.1),
-      borderColor: withAlpha(colors.warning, 0.4),
+      backgroundColor: colors.warningSoft,
+      borderColor: `${colors.warning}66`,
     },
     statusText: {
       flex: 1,
@@ -744,9 +743,9 @@ const createStyles = (colors: ThemeColors) =>
     },
     passkeyCard: {
       width: "100%",
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.5),
+      backgroundColor: colors.surfaceElevated,
       borderWidth: 2,
-      borderColor: withAlpha(colors.accent, 0.3),
+      borderColor: `${colors.accent}4D`,
       borderRadius: 20,
       padding: 32,
       alignItems: "center",
@@ -777,9 +776,9 @@ const createStyles = (colors: ThemeColors) =>
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: withAlpha(colors.textMuted, 0.2),
+      backgroundColor: `${colors.textMuted}33`,
       borderWidth: 2,
-      borderColor: withAlpha(colors.border, 0.4),
+      borderColor: colors.border,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -798,7 +797,7 @@ const createStyles = (colors: ThemeColors) =>
     progressLine: {
       width: 2,
       height: 30,
-      backgroundColor: withAlpha(colors.border, 0.4),
+      backgroundColor: colors.border,
     },
     deployNote: {
       fontSize: 12,
@@ -808,9 +807,9 @@ const createStyles = (colors: ThemeColors) =>
     },
     addressCard: {
       width: "100%",
-      backgroundColor: withAlpha(colors.success, 0.08),
+      backgroundColor: `${colors.success}14`,
       borderWidth: 1.5,
-      borderColor: withAlpha(colors.success, 0.3),
+      borderColor: `${colors.success}4D`,
       borderRadius: 20,
       padding: 20,
       alignItems: "center",
@@ -825,7 +824,7 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
       fontWeight: "700",
       color: colors.textPrimary,
-      fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+      fontFamily: FontFamilies.mono,
       textAlign: "center",
     },
     addressNote: {
@@ -851,9 +850,9 @@ const createStyles = (colors: ThemeColors) =>
     },
     errorCard: {
       width: "100%",
-      backgroundColor: withAlpha(colors.danger, 0.08),
+      backgroundColor: `${colors.danger}14`,
       borderWidth: 1.5,
-      borderColor: withAlpha(colors.danger, 0.3),
+      borderColor: `${colors.danger}4D`,
       borderRadius: 16,
       padding: 16,
       gap: 8,
@@ -895,11 +894,11 @@ const createStyles = (colors: ThemeColors) =>
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.textMuted, 0.15),
+      backgroundColor: `${colors.textMuted}26`,
       paddingVertical: 16,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.4),
+      borderColor: colors.border,
     },
     secondaryButtonText: {
       fontSize: 15,

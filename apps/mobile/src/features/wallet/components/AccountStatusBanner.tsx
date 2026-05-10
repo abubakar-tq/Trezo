@@ -14,7 +14,7 @@ import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from "reac
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 
 type AccountStatusBannerProps = {
   onDeployPress?: () => void;
@@ -99,9 +99,9 @@ export const AccountStatusBanner: React.FC<AccountStatusBannerProps> = ({ onDepl
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     banner: {
-      backgroundColor: withAlpha(colors.warning, 0.12),
+      backgroundColor: colors.warningSoft,
       borderWidth: 1.5,
-      borderColor: withAlpha(colors.warning, 0.4),
+      borderColor: `${colors.warning}66`,
       borderRadius: 20,
       padding: 16,
       marginHorizontal: 16,
@@ -119,11 +119,11 @@ const createStyles = (colors: ThemeColors) =>
       width: 40,
       height: 40,
       borderRadius: 20,
-      backgroundColor: withAlpha(colors.warning, 0.2),
+      backgroundColor: `${colors.warning}33`,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1,
-      borderColor: withAlpha(colors.warning, 0.5),
+      borderColor: `${colors.warning}80`,
     },
     content: {
       flex: 1,

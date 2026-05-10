@@ -37,7 +37,7 @@ import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+import { FontFamilies } from "@shared/components/TokenRegistry";
 
 interface TestResult {
   name: string;
@@ -701,13 +701,13 @@ const createStyles = (colors: ThemeColors) =>
       paddingTop: 60,
       paddingBottom: 16,
       borderBottomWidth: 1,
-      borderBottomColor: withAlpha(colors.border, 0.3),
+      borderBottomColor: colors.border,
     },
     backButton: {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.6),
+      backgroundColor: colors.surfaceElevated,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -720,7 +720,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: withAlpha(colors.accent, 0.15),
+      backgroundColor: `${colors.accent}26`,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -741,11 +741,11 @@ const createStyles = (colors: ThemeColors) =>
       marginBottom: 12,
     },
     stateCard: {
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.5),
+      backgroundColor: colors.surfaceElevated,
       borderRadius: 16,
       padding: 16,
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.4),
+      borderColor: colors.border,
       gap: 12,
     },
     stateRow: {
@@ -762,7 +762,7 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
       color: colors.textPrimary,
       fontWeight: "600",
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
     statusBadge: {
       paddingHorizontal: 10,
@@ -770,21 +770,21 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 12,
     },
     statusSuccess: {
-      backgroundColor: withAlpha(colors.success, 0.15),
+      backgroundColor: colors.successSoft,
     },
     statusWarning: {
-      backgroundColor: withAlpha(colors.warning, 0.15),
+      backgroundColor: colors.warningSoft,
     },
     statusText: {
       fontSize: 12,
       fontWeight: "700",
     },
     testCard: {
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.4),
+      backgroundColor: colors.surfaceElevated,
       borderRadius: 14,
       padding: 14,
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.4),
+      borderColor: colors.border,
       marginBottom: 10,
     },
     testHeader: {
@@ -806,31 +806,31 @@ const createStyles = (colors: ThemeColors) =>
     testData: {
       marginTop: 8,
       padding: 10,
-      backgroundColor: withAlpha(colors.background, 0.5),
+      backgroundColor: colors.surface,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.3),
+      borderColor: colors.border,
     },
     testDataText: {
       fontSize: 11,
       color: colors.textMuted,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
     actionButton: {
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-      backgroundColor: withAlpha(colors.accent, 0.12),
+      backgroundColor: `${colors.accent}1F`,
       paddingVertical: 14,
       paddingHorizontal: 16,
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: withAlpha(colors.accent, 0.3),
+      borderColor: `${colors.accent}4D`,
       marginBottom: 10,
     },
     actionButtonDanger: {
-      backgroundColor: withAlpha(colors.danger, 0.08),
-      borderColor: withAlpha(colors.danger, 0.3),
+      backgroundColor: `${colors.danger}14`,
+      borderColor: `${colors.danger}4D`,
     },
     actionButtonText: {
       fontSize: 14,
@@ -838,11 +838,11 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.accent,
     },
     instructionCard: {
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.3),
+      backgroundColor: colors.surface,
       borderRadius: 12,
       padding: 14,
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.3),
+      borderColor: colors.border,
       marginBottom: 10,
     },
     instructionTitle: {

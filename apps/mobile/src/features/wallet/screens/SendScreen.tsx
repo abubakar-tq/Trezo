@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -98,11 +98,10 @@ const CHAIN_EMOJI: Record<number, string> = {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const isDark = resolvedMode === "dark";
 
   // ── Wallet state ──────────────────────────────────────────────────────────
   const user = useUserStore((s) => s.user);
@@ -507,7 +506,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
 
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <StatusBar barStyle="light-content" />
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <View style={[s.header, { paddingTop: Math.max(insets.top, 16) }]}>
@@ -545,8 +544,8 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
             style={[
               s.networkPill,
               {
-                backgroundColor: withAlpha(colors.surfaceCard, 0.85),
-                borderColor: withAlpha(colors.border, 0.35),
+                backgroundColor: colors.surfaceCard,
+                borderColor: colors.border,
               },
             ]}
             onPress={() => setNetworkPickerOpen((v) => !v)}
@@ -581,8 +580,8 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
           style={[
             s.dropdown,
             {
-              backgroundColor: withAlpha(colors.surfaceCard, 0.97),
-              borderColor: withAlpha(colors.border, 0.3),
+              backgroundColor: colors.surfaceCard,
+              borderColor: colors.border,
             },
           ]}
         >
@@ -595,7 +594,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                 style={[
                   s.dropdownRow,
                   {
-                    borderBottomColor: withAlpha(colors.border, 0.18),
+                    borderBottomColor: colors.border,
                     opacity: disabled ? 0.4 : 1,
                   },
                 ]}
@@ -628,8 +627,8 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
           style={[
             s.errorBanner,
             {
-              backgroundColor: withAlpha(colors.danger, 0.12),
-              borderColor: withAlpha(colors.danger, 0.3),
+              backgroundColor: colors.dangerSoft,
+              borderColor: `${colors.danger}4D`,
             },
           ]}
         >
@@ -671,13 +670,10 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                 style={[
                   s.tokenRow,
                   {
-                    backgroundColor: withAlpha(
-                      colors.surfaceCard,
-                      active ? 0.9 : 0.6,
-                    ),
+                    backgroundColor: colors.surfaceCard,
                     borderColor: active
-                      ? withAlpha(accent, 0.45)
-                      : withAlpha(colors.border, 0.25),
+                      ? `${accent}73`
+                      : colors.border,
                   },
                 ]}
                 onPress={() => {
@@ -692,8 +688,8 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                     s.tokenIconCircle,
                     {
                       backgroundColor: active
-                        ? withAlpha(accent, 0.18)
-                        : withAlpha(colors.surface, 0.8),
+                        ? `${accent}2E`
+                        : colors.surfaceCard,
                     },
                   ]}
                 >
@@ -777,8 +773,8 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                 style={[
                   s.quickBtn,
                   {
-                    backgroundColor: withAlpha(colors.surfaceCard, 0.75),
-                    borderColor: withAlpha(colors.border, 0.25),
+                    backgroundColor: colors.surfaceCard,
+                    borderColor: colors.border,
                   },
                 ]}
                 onPress={() => handleQuickPercent(pct)}
@@ -805,7 +801,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                     style={[
                       s.numpadKey,
                       {
-                        backgroundColor: withAlpha(colors.surfaceCard, 0.55),
+                        backgroundColor: colors.surfaceCard,
                       },
                     ]}
                     onPress={() => handleNumpad(key)}
@@ -835,7 +831,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                 {
                   backgroundColor: canContinueAmount
                     ? accent
-                    : withAlpha(accent, 0.3),
+                    : `${accent}4D`,
                 },
               ]}
               disabled={!canContinueAmount}
@@ -872,8 +868,8 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
               style={[
                 s.toBar,
                 {
-                  backgroundColor: withAlpha(colors.surfaceCard, 0.75),
-                  borderColor: withAlpha(colors.border, 0.3),
+                  backgroundColor: colors.surfaceCard,
+                  borderColor: colors.border,
                 },
               ]}
             >
@@ -888,12 +884,12 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                 autoCapitalize="none"
                 autoCorrect={false}
                 style={[s.toBarInput, { color: colors.textPrimary }]}
-                placeholderTextColor={withAlpha(colors.textPrimary, 0.3)}
+                placeholderTextColor={colors.textMuted}
               />
               <TouchableOpacity
                 style={[
                   s.toBarPaste,
-                  { backgroundColor: withAlpha(colors.surface, 0.9) },
+                  { backgroundColor: colors.surfaceCard },
                 ]}
                 onPress={handlePaste}
               >
@@ -917,8 +913,8 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                   style={[
                     s.contactRow,
                     {
-                      backgroundColor: withAlpha(colors.surfaceCard, 0.7),
-                      borderColor: withAlpha(colors.border, 0.22),
+                      backgroundColor: colors.surfaceCard,
+                      borderColor: colors.border,
                     },
                   ]}
                   onPress={() => {
@@ -929,7 +925,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                   <View
                     style={[
                       s.contactAvatar,
-                      { backgroundColor: withAlpha(colors.accentAlt, 0.18) },
+                      { backgroundColor: `${colors.accentAlt}2E` },
                     ]}
                   >
                     <Text style={[s.contactAvatarLetter, { color: colors.accentAlt }]}>
@@ -963,7 +959,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                 {
                   backgroundColor: canContinueRecipient
                     ? accent
-                    : withAlpha(accent, 0.28),
+                    : `${accent}47`,
                 },
               ]}
               disabled={!canContinueRecipient}
@@ -1000,7 +996,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
             <View
               style={[
                 s.reviewTokenIcon,
-                { backgroundColor: withAlpha(accent, 0.15) },
+                { backgroundColor: `${accent}26` },
               ]}
             >
               <Text style={[s.reviewTokenLetter, { color: accent }]}>
@@ -1014,19 +1010,19 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
             style={[
               s.reviewCard,
               {
-                backgroundColor: withAlpha(colors.surfaceCard, 0.82),
-                borderColor: withAlpha(colors.border, 0.22),
+                backgroundColor: colors.surfaceCard,
+                borderColor: colors.border,
               },
             ]}
           >
             {/* From */}
-            <View style={[s.reviewRow, { borderBottomColor: withAlpha(colors.border, 0.18) }]}>
+            <View style={[s.reviewRow, { borderBottomColor: colors.border }]}>
               <Text style={[s.reviewKey, { color: colors.textMuted }]}>From</Text>
               <View style={s.reviewValRow}>
                 <View
                   style={[
                     s.reviewAvatar,
-                    { backgroundColor: withAlpha(accent, 0.18) },
+                    { backgroundColor: `${accent}2E` },
                   ]}
                 >
                   <Feather name="user" size={12} color={accent} />
@@ -1038,7 +1034,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
             </View>
 
             {/* To */}
-            <View style={[s.reviewRow, { borderBottomColor: withAlpha(colors.border, 0.18) }]}>
+            <View style={[s.reviewRow, { borderBottomColor: colors.border }]}>
               <Text style={[s.reviewKey, { color: colors.textMuted }]}>To</Text>
               <Text style={[s.reviewVal, { color: colors.textPrimary }]}>
                 {shorten(recipient.trim(), 8, 6)}
@@ -1046,7 +1042,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
             </View>
 
             {/* Network */}
-            <View style={[s.reviewRow, { borderBottomColor: withAlpha(colors.border, 0.18) }]}>
+            <View style={[s.reviewRow, { borderBottomColor: colors.border }]}>
               <Text style={[s.reviewKey, { color: colors.textMuted }]}>Network</Text>
               <Text style={[s.reviewVal, { color: colors.textPrimary }]}>
                 {selectedChain.name}
@@ -1066,8 +1062,8 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
               style={[
                 s.cancelBtn,
                 {
-                  backgroundColor: withAlpha(colors.surfaceCard, 0.8),
-                  borderColor: withAlpha(colors.border, 0.25),
+                  backgroundColor: colors.surfaceCard,
+                  borderColor: colors.border,
                 },
               ]}
               onPress={() => setStep("recipient")}
@@ -1116,10 +1112,10 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
                 {
                   backgroundColor:
                     finalState === "confirmed"
-                      ? withAlpha(colors.success, 0.15)
+                      ? colors.successSoft
                       : finalState === "failed" || finalState === "cancelled"
-                        ? withAlpha(colors.danger, 0.15)
-                        : withAlpha(colors.warning, 0.15),
+                        ? colors.dangerSoft
+                        : colors.warningSoft,
                 },
               ]}
             >
@@ -1163,8 +1159,8 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
               style={[
                 s.errorBanner,
                 {
-                  backgroundColor: withAlpha(colors.danger, 0.12),
-                  borderColor: withAlpha(colors.danger, 0.3),
+                  backgroundColor: colors.dangerSoft,
+                  borderColor: `${colors.danger}4D`,
                 },
               ]}
             >
@@ -1180,25 +1176,25 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
             style={[
               s.reviewCard,
               {
-                backgroundColor: withAlpha(colors.surfaceCard, 0.82),
-                borderColor: withAlpha(colors.border, 0.22),
+                backgroundColor: colors.surfaceCard,
+                borderColor: colors.border,
               },
             ]}
           >
-            <View style={[s.reviewRow, { borderBottomColor: withAlpha(colors.border, 0.18) }]}>
+            <View style={[s.reviewRow, { borderBottomColor: colors.border }]}>
               <Text style={[s.reviewKey, { color: colors.textMuted }]}>Amount</Text>
               <Text style={[s.reviewVal, { color: colors.textPrimary }]}>
                 {amountDecimal} {selectedToken?.symbol}
               </Text>
             </View>
-            <View style={[s.reviewRow, { borderBottomColor: withAlpha(colors.border, 0.18) }]}>
+            <View style={[s.reviewRow, { borderBottomColor: colors.border }]}>
               <Text style={[s.reviewKey, { color: colors.textMuted }]}>To</Text>
               <Text style={[s.reviewVal, { color: colors.textPrimary }]}>
                 {shorten(recipient.trim(), 8, 6)}
               </Text>
             </View>
             {userOpHash && (
-              <View style={[s.reviewRow, { borderBottomColor: withAlpha(colors.border, 0.18) }]}>
+              <View style={[s.reviewRow, { borderBottomColor: colors.border }]}>
                 <Text style={[s.reviewKey, { color: colors.textMuted }]}>UserOp</Text>
                 <Text style={[s.reviewVal, { color: colors.textPrimary }]}>
                   {shorten(userOpHash, 8, 6)}

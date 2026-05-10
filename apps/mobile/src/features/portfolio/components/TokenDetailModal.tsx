@@ -1,13 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
 import { TokenIcon, InteractiveChart } from '@shared/components';
 import type { TokenBalance } from '@features/portfolio/services/PortfolioService';
 import { marketService } from '@services/MarketService';
 import { useAssetHistory } from '@hooks/useMarketData';
-import { ActivityIndicator } from 'react-native';
 
 const { width } = Dimensions.get('window');
 interface TokenDetailModalProps {
@@ -17,9 +15,8 @@ interface TokenDetailModalProps {
 }
 
 export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onClose, token }) => {
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
-  const isDark = resolvedMode === 'dark';
 
   const [selectedPeriod, setSelectedPeriod] = React.useState('1W');
   const [marketDetails, setMarketDetails] = React.useState<any>(null);
@@ -62,7 +59,7 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
   // Fallback: use 24h from API or token prop until chartData loads
   const displayChange = periodChange ?? parseFloat(marketDetails?.changePercent24Hr ?? String(token?.change24h ?? 0));
   const isPositive = displayChange >= 0;
-  const chartColor = isPositive ? colors.accent : colors.danger;
+  const chartColor = isPositive ? colors.success : colors.danger;
 
   React.useEffect(() => {
     if (visible && coinId) {
@@ -84,7 +81,7 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
     >
       <View style={styles.overlay}>
         <TouchableOpacity style={styles.dismissOverlay} onPress={onClose} activeOpacity={1} />
-        <View style={[styles.content, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderColor: colors.border }]}>
+        <View style={[styles.content, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
@@ -94,7 +91,7 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
                 <Text style={[styles.headerSymbol, { color: colors.textSecondary }]}>{token.symbol}</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <TouchableOpacity onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.glass }]}>
               <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -105,7 +102,7 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
               <Text style={[styles.currentPrice, { color: colors.textPrimary }]}>
                 ${(token.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </Text>
-              <View style={[styles.priceChange, { backgroundColor: withAlpha(isPositive ? colors.success : colors.danger, 0.1) }]}>
+              <View style={[styles.priceChange, { backgroundColor: isPositive ? colors.successSoft : colors.dangerSoft }]}>
                 <Text style={[styles.priceChangeText, { color: isPositive ? colors.success : colors.danger }]}>
                   {isPositive ? '+' : ''}{displayChange.toFixed(2)}%
                 </Text>
@@ -114,7 +111,7 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
 
             {/* Holdings row (portfolio tokens only) */}
             {token.value > 0 && (
-              <View style={[styles.holdingRow, { backgroundColor: isDark ? '#2C2C2E' : colors.surfaceMuted }]}>
+              <View style={[styles.holdingRow, { backgroundColor: colors.surfaceMuted }]}>
                 <Text style={[styles.holdingLabel, { color: colors.textMuted }]}>MY HOLDING</Text>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={[styles.holdingValue, { color: colors.textPrimary }]}>
@@ -147,7 +144,7 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
                   <TouchableOpacity
                     key={p}
                     onPress={() => setSelectedPeriod(p)}
-                    style={[styles.filterPill, selectedPeriod === p && { backgroundColor: withAlpha(colors.accent, 0.1) }]}
+                    style={[styles.filterPill, selectedPeriod === p && { backgroundColor: `${colors.accent}1A` }]}
                   >
                     <Text style={[styles.filterText, { color: selectedPeriod === p ? colors.accent : colors.textSecondary }]}>{p}</Text>
                   </TouchableOpacity>
@@ -156,7 +153,7 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
             </View>
 
             {/* Stats grid */}
-            <View style={styles.statsGrid}>
+            <View style={[styles.statsGrid, { borderTopColor: colors.border }]}>
               <View style={styles.statItem}>
                 <Text style={[styles.statLabel, { color: colors.textMuted }]}>MARKET CAP</Text>
                 <Text style={[styles.statValue, { color: colors.textPrimary }]}>
@@ -217,7 +214,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -306,7 +302,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.05)',
   },
   statItem: {
     flex: 1,

@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { checkPasskeyOnChain } from "@/src/integration/viem/account";
 import { getDeployment } from "@/src/integration/viem/deployments";
@@ -38,6 +39,7 @@ export const PasskeyVerifyCard: React.FC = () => {
 
   const smartAccountAddress = aaAccount?.predictedAddress ?? storedSmartAccountAddress;
   const chainId = (aaAccount?.chainId ?? activeChainId ?? DEFAULT_CHAIN_ID) as SupportedChainId;
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const deployment = getDeployment(chainId);
   const validator = deployment?.passkeyValidator as Hex | undefined;
 
@@ -177,7 +179,8 @@ export const PasskeyVerifyCard: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
   card: {
     borderRadius: 12,
     padding: 16,
@@ -185,23 +188,23 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   title: {
-    color: "#e2e8f0",
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: "700",
   },
   description: {
-    color: "#94a3b8",
+    color: colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 4,
   },
   label: {
-    color: "#94a3b8",
+    color: colors.textSecondary,
     fontSize: 12,
     marginTop: 4,
   },
   value: {
-    color: "#e2e8f0",
+    color: colors.textPrimary,
     fontSize: 13,
   },
   primaryButton: {
@@ -211,7 +214,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: {
-    color: "#0b1224",
+    color: colors.background,
     fontWeight: "700",
   },
   resultSection: {
@@ -228,17 +231,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   resultLabel: {
-    color: "#94a3b8",
+    color: colors.textSecondary,
     fontSize: 13,
   },
   resultValue: {
-    color: "#e2e8f0",
+    color: colors.textPrimary,
     fontSize: 13,
     fontWeight: "600",
   },
   matchText: {},
   mismatchText: {
-    color: "#ef4444",
+    color: colors.danger,
   },
   overallBadge: {
     marginTop: 10,
@@ -247,28 +250,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   matchBadge: {
-    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    backgroundColor: colors.successSoft,
     borderWidth: 1,
   },
   mismatchBadge: {
-    backgroundColor: "rgba(239, 68, 68, 0.15)",
+    backgroundColor: colors.dangerSoft,
     borderWidth: 1,
-    borderColor: "#ef4444",
+    borderColor: colors.danger,
   },
   overallBadgeText: {
-    color: "#e2e8f0",
+    color: colors.textPrimary,
     fontSize: 13,
     fontWeight: "700",
     letterSpacing: 0.5,
   },
   errorBox: {
-    backgroundColor: "#7f1d1d",
+    backgroundColor: colors.dangerSoft,
     borderRadius: 8,
     padding: 8,
     marginTop: 8,
   },
   errorText: {
-    color: "#fecdd3",
+    color: colors.danger,
     fontSize: 13,
   },
 });

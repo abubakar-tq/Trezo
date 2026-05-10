@@ -43,7 +43,7 @@ import { isPortableChain, type SupportedChainId } from '@/src/integration/chains
 import { useUserStore } from '@store/useUserStore';
 import type { ThemeColors } from '@theme';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
+import { FontFamilies } from '@shared/components/TokenRegistry';
 
 interface TestResult {
   id: number;
@@ -689,13 +689,13 @@ const createStyles = (colors: ThemeColors) =>
       paddingTop: 60,
       paddingBottom: 16,
       borderBottomWidth: 1,
-      borderBottomColor: withAlpha(colors.border, 0.3),
+      borderBottomColor: colors.border,
     },
     backButton: {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.6),
+      backgroundColor: colors.surfaceElevated,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -708,7 +708,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: withAlpha(colors.accent, 0.15),
+      backgroundColor: `${colors.accent}26`,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -723,12 +723,12 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 12,
-      backgroundColor: withAlpha(colors.accent, 0.1),
+      backgroundColor: `${colors.accent}1A`,
       borderRadius: 12,
       padding: 16,
       marginBottom: 20,
       borderWidth: 1,
-      borderColor: withAlpha(colors.accent, 0.2),
+      borderColor: `${colors.accent}33`,
     },
     infoTitle: {
       fontSize: 14,
@@ -751,12 +751,12 @@ const createStyles = (colors: ThemeColors) =>
       marginBottom: 12,
     },
     testRow: {
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.5),
+      backgroundColor: colors.surfaceElevated,
       borderRadius: 12,
       padding: 14,
       marginBottom: 10,
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.3),
+      borderColor: colors.border,
     },
     testHeader: {
       flexDirection: 'row',
@@ -778,7 +778,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: withAlpha(colors.accent, 0.15),
+      backgroundColor: `${colors.accent}26`,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -789,7 +789,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 18,
     },
     testData: {
-      backgroundColor: withAlpha(colors.background, 0.5),
+      backgroundColor: colors.surface,
       borderRadius: 8,
       padding: 10,
       marginTop: 8,
@@ -797,15 +797,15 @@ const createStyles = (colors: ThemeColors) =>
     testDataText: {
       fontSize: 10,
       color: colors.textMuted,
-      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+      fontFamily: FontFamilies.mono,
     },
     instructionCard: {
-      backgroundColor: withAlpha(colors.surfaceElevated, 0.3),
+      backgroundColor: colors.surface,
       borderRadius: 12,
       padding: 14,
       marginBottom: 10,
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.3),
+      borderColor: colors.border,
     },
     instructionTitle: {
       fontSize: 14,
