@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React, { useEffect, useState } from "react";
+import { useAppTheme } from "@theme";
 
 import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
 import { AuthStackParamList } from "@/src/types/navigation";
@@ -17,6 +18,8 @@ import {
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 const AuthNavigation = () => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const [initialRouteName, setInitialRouteName] = useState<keyof AuthStackParamList>("Onboarding");
 
   useEffect(() => {
@@ -44,7 +47,7 @@ const AuthNavigation = () => {
 				animation: "slide_from_right",
 				gestureEnabled: true,
 				gestureDirection: "horizontal",
-				contentStyle: { backgroundColor: "#000000" },
+				contentStyle: { backgroundColor: colors.background },
 				animationTypeForReplace: "push",
 			}}
 		>

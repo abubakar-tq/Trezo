@@ -14,7 +14,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 
 const TAB_ICON_MAP: Record<
   string,
@@ -27,7 +26,6 @@ const TAB_ICON_MAP: Record<
   Profile: "user",
 };
 
-// Thin top-pill indicator width — fixed, centers on each tab
 const INDICATOR_WIDTH = 30;
 
 const TabBar: React.FC<BottomTabBarProps> = ({
@@ -36,7 +34,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({
   navigation,
 }) => {
   const { theme } = useAppTheme();
-  const { colors, mode } = theme;
+  const { colors, gradients } = theme;
   const insets = useSafeAreaInsets();
 
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -51,6 +49,13 @@ const TabBar: React.FC<BottomTabBarProps> = ({
   const tabScales = useRef(
     state.routes.map((_, i) =>
       new Animated.Value(i === state.index ? 1 : 0.86),
+    ),
+  ).current;
+
+  // Per-tab halo opacity — fades in behind the active icon
+  const tabGlows = useRef(
+    state.routes.map((_, i) =>
+      new Animated.Value(i === state.index ? 1 : 0),
     ),
   ).current;
 
@@ -84,7 +89,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({
     };
   }, [visibility]);
 
-  // Slide indicator + animate each tab's icon scale
+  // Slide indicator + animate icon scales + fade glows
   useEffect(() => {
     const routeKey = state.routes[state.index]?.key;
     if (!routeKey) return;
@@ -107,16 +112,14 @@ const TabBar: React.FC<BottomTabBarProps> = ({
         damping: 22,
         mass: 0.55,
       }).start();
-    });
-  }, [state.index, state.routes, indicatorLeft, tabScales]);
 
-  const glass = useMemo(
-    () => ({
-      background: withAlpha(colors.surfaceElevated, 0.97),
-      border: withAlpha(colors.borderMuted, mode === "dark" ? 0.6 : 0.3),
-    }),
-    [colors, mode],
-  );
+      Animated.timing(tabGlows[i], {
+        toValue: i === state.index ? 1 : 0,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [state.index, state.routes, indicatorLeft, tabScales, tabGlows]);
 
   const animatedContainerStyle = useMemo(
     () => ({
@@ -146,26 +149,33 @@ const TabBar: React.FC<BottomTabBarProps> = ({
             insets.bottom,
             Platform.OS === "ios" ? 16 : 10,
           ),
-          shadowColor: withAlpha(colors.textPrimary, 0.3),
+          shadowColor: colors.accent,
         },
       ]}
       pointerEvents={Platform.OS === "ios" ? undefined : "box-none"}
     >
-      {/* Glass surface */}
+      {/* Ink-dark glass surface with ghost-violet top border */}
       <View
         style={[
           styles.glassBackground,
-          { backgroundColor: glass.background, borderColor: glass.border },
+          {
+            backgroundColor: gradients.tabBar[0],
+            borderColor: colors.border,
+          },
         ]}
       />
 
       <View style={styles.row}>
-        {/* Thin sliding top-pill indicator */}
+        {/* Sliding top-pill indicator with violet glow */}
         <Animated.View
           pointerEvents="none"
           style={[
             styles.activeIndicator,
-            { left: indicatorLeft, backgroundColor: colors.accent },
+            {
+              left: indicatorLeft,
+              backgroundColor: colors.accent,
+              shadowColor: colors.accent,
+            },
           ]}
         />
 
@@ -212,6 +222,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({
                       (e.nativeEvent.layout.width - INDICATOR_WIDTH) / 2,
                   );
                   tabScales[index].setValue(1);
+                  tabGlows[index].setValue(1);
                 }
               }}
               style={styles.tab}
@@ -222,6 +233,17 @@ const TabBar: React.FC<BottomTabBarProps> = ({
                   { transform: [{ scale: tabScales[index] }] },
                 ]}
               >
+                {/* Circular violet halo behind active icon */}
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.iconGlow,
+                    {
+                      opacity: tabGlows[index],
+                      backgroundColor: `${colors.accent}14`,
+                    },
+                  ]}
+                />
                 <Feather
                   name={iconName}
                   size={22}
@@ -257,9 +279,9 @@ function createStyles(_colors: ThemeColors) {
       borderTopLeftRadius: 18,
       borderTopRightRadius: 18,
       overflow: "hidden",
-      shadowOpacity: 0.15,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: -3 },
+      shadowOpacity: 0.22,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: -4 },
       elevation: 14,
     },
     glassBackground: {
@@ -288,18 +310,27 @@ function createStyles(_colors: ThemeColors) {
       justifyContent: "center",
       marginBottom: 3,
     },
+    iconGlow: {
+      position: "absolute",
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+    },
     label: {
       fontSize: 11,
-      fontWeight: "600",
-      letterSpacing: 0.15,
+      fontWeight: "500",
+      letterSpacing: 0.5,
     },
-    // Thin pill at the top edge — slides horizontally with spring
     activeIndicator: {
       position: "absolute",
       top: 0,
       width: INDICATOR_WIDTH,
       height: 3,
       borderRadius: 2,
+      shadowOpacity: 0.65,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 6,
     },
   });
 }

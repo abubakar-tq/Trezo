@@ -27,7 +27,6 @@ import { useAppLockStore } from "../../../store/useAppLockStore";
 import { useAuthFlowStore } from "../../../store/useAuthFlowStore";
 import { useUserStore } from "../../../store/useUserStore";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "../../../utils/color";
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -136,10 +135,10 @@ const LockScreen: React.FC = () => {
     ? `Use ${biometricType} or your device credentials to unlock.`
     : "Use your device passcode to unlock Trezo.";
 
-  const badgeBackground = withAlpha(colors.surfaceElevated, mode === "dark" ? 0.78 : 0.92);
-  const badgeBorder = withAlpha(colors.accent, mode === "dark" ? 0.5 : 0.32);
-  const secondaryBorder = withAlpha(colors.border, mode === "dark" ? 0.45 : 0.32);
-  const secondaryBackground = withAlpha(colors.surfaceMuted, mode === "dark" ? 0.55 : 0.82);
+  const badgeBackground = mode === "dark" ? `${colors.surfaceElevated}C7` : `${colors.surfaceElevated}EB`;
+  const badgeBorder = mode === "dark" ? `${colors.accent}80` : `${colors.accent}52`;
+  const secondaryBorder = mode === "dark" ? `${colors.border}73` : `${colors.border}52`;
+  const secondaryBackground = mode === "dark" ? `${colors.surfaceMuted}8C` : `${colors.surfaceMuted}D1`;
 
   return (
     <>
@@ -248,7 +247,7 @@ const LockScreen: React.FC = () => {
             <View
               style={[
                 styles.modalIcon,
-                { backgroundColor: withAlpha(colors.warning, 0.15) },
+                { backgroundColor: `${colors.warning}26` },
               ]}
             >
               <MaterialCommunityIcons
@@ -292,9 +291,9 @@ const LockScreen: React.FC = () => {
                 activeOpacity={0.7}
               >
                 {isLoggingOut ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color={colors.textOnAccent} />
                 ) : (
-                  <Text style={[styles.modalButtonText, { color: "#fff" }]}>
+                  <Text style={[styles.modalButtonText, { color: colors.textOnAccent }]}>
                     Continue
                   </Text>
                 )}

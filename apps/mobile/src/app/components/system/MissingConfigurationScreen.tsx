@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 interface MissingConfigurationScreenProps {
   message: string;
@@ -10,6 +12,10 @@ export const MissingConfigurationScreen: React.FC<MissingConfigurationScreenProp
   message,
   onRetry,
 }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Configuration required</Text>
@@ -29,45 +35,45 @@ export const MissingConfigurationScreen: React.FC<MissingConfigurationScreenProp
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 32,
-    backgroundColor: "#000000",
+    backgroundColor: colors.background,
   },
   title: {
-    color: "#f9fafb",
+    color: colors.textPrimary,
     fontSize: 22,
     fontWeight: "700",
     marginBottom: 16,
   },
   message: {
-    color: "#f3f4f6",
+    color: colors.textPrimary,
     fontSize: 16,
     textAlign: "center",
     marginBottom: 16,
   },
   instructions: {
-    color: "#9ca3af",
+    color: colors.textMuted,
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 24,
   },
   highlight: {
-    color: "#60a5fa",
+    color: colors.accent,
     fontWeight: "600",
   },
   button: {
-    backgroundColor: "#60a5fa",
+    backgroundColor: colors.accent,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 999,
   },
   buttonLabel: {
-    color: "#0f172a",
+    color: colors.textOnAccent,
     fontWeight: "600",
     fontSize: 16,
   },
