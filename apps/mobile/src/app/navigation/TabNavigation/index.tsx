@@ -30,7 +30,7 @@ const TabNavigation = () => {
         })}
       >
         <Tab.Screen name="Home" component={HomeScreen} />
-        <Tab.Screen name="Browser" component={BrowserScreen} />
+        <Tab.Screen name="Browser" component={BrowserScreen} options={{ tabBarLabel: "Discover" }} />
         <Tab.Screen name="Portfolio" component={PortfolioScreen} />
         <Tab.Screen name="Dex" component={DexScreen} options={{ title: "DEX" }} />
         <Tab.Screen name="Profile" component={ProfileScreen} />

@@ -20,7 +20,7 @@ const TAB_ICON_MAP: Record<
   React.ComponentProps<typeof Feather>["name"]
 > = {
   Home: "home",
-  Browser: "globe",
+  Browser: "compass",
   Portfolio: "pie-chart",
   Dex: "repeat",
   Profile: "user",
