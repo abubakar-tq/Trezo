@@ -1,6 +1,10 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useNotificationsBootstrap } from "@features/notifications/hooks/useNotificationsBootstrap";
 import { useNotificationStore } from "@features/notifications/store/useNotificationStore";
+import { ActivationSheet } from "@features/wallet/components/ActivationSheet";
+import { useAccountState } from "@features/wallet/hooks/useAccountState";
+import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
+import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { useWalletData } from "@hooks/useWalletData";
 import { useNavigation } from "@react-navigation/native";
 import TabScreenContainer from "@shared/components/TabScreenContainer";
@@ -24,6 +28,7 @@ import {
   ActivityFeed,
   BalanceCard,
 } from "../components/dashboard";
+import type { QuickAction } from "../components/dashboard/ActionGrid";
 import { MarketTrendsCarousel } from "../components/dashboard/MarketTrendsCarousel";
 import { useAccountManagement } from "../hooks/useAccountManagement";
 
@@ -43,6 +48,28 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   useNotificationsBootstrap();
   const unreadCount = useNotificationStore((state) => state.unreadCount);
+
+  const { isActiveOnChain } = useAccountState();
+  const activeChainId = useWalletStore((s) => s.activeChainId);
+  const { ref: activationSheetRef, requireActiveOnChain } = useActivationSheet();
+
+  const handleActionPress = (action: QuickAction) => {
+    // Receive does NOT gate via Activation sheet — Phase 6 will wire Set-Up for that.
+    if (action.key === "receive") {
+      navigation.navigate("Receive");
+      return;
+    }
+    const isActive = isActiveOnChain(activeChainId);
+    requireActiveOnChain(activeChainId, isActive, () => {
+      if (action.key === "swap" || action.key === "bridge") {
+        navigation.navigate("Dex", { initialTab: action.key });
+      } else if (action.key === "buy") {
+        navigation.navigate("Buy");
+      } else if (action.key === "send") {
+        navigation.navigate("Send");
+      }
+    });
+  };
 
   const { totalBalanceUSD, isLoading: walletLoading, missingPrices } = useWalletData(smartAccountAddress ?? undefined);
   const { isHydrating, hasLocalPasskey } = useAccountManagement();
@@ -120,14 +147,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
         <View style={styles.sectionWrapper}>
           <View style={[styles.sectionCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>QUICK ACTIONS</Text>
-            <ActionGrid onActionPress={(action) => {
-              if (action.key === "swap" || action.key === "bridge") {
-                navigation.navigate("Dex", { initialTab: action.key });
-              } else {
-                const screenName = action.key.charAt(0).toUpperCase() + action.key.slice(1);
-                navigation.navigate(screenName);
-              }
-            }} />
+            <ActionGrid onActionPress={handleActionPress} />
           </View>
         </View>
 
@@ -155,6 +175,8 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
           token={selectedToken}
         />
       )}
+
+      <ActivationSheet ref={activationSheetRef} />
 
       {/* Security Tooltip */}
       {securityTooltipVisible && (
