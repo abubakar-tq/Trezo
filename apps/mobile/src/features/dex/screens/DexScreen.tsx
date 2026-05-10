@@ -2,9 +2,11 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
+import * as Clipboard from "expo-clipboard";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,6 +31,7 @@ import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import { resolveNetworkKey, getNetworkConfig } from "@/src/integration/networks";
 import { useUserStore } from "@/src/store/useUserStore";
+import { defaultSlippageBps } from "@/src/features/dex/utils/slippage";
 import { TabScreenContainer, TokenIcon, AssetPickerModal, type Asset } from "@shared/components";
 import Toast from "@/src/shared/components/feedback/Toast";
 import { useTabContentBottomInset } from "@hooks";
@@ -49,7 +52,6 @@ type UiState =
   | "failed"
   | "cancelled";
 
-const SLIPPAGE_PRESETS = ["0.3", "0.5", "1.0"] as const;
 const DEFAULT_QUOTE_DEBOUNCE_MS = 500;
 
 const shorten = (value?: string | null): string => {
@@ -70,14 +72,6 @@ const toAsset = (token: TokenMetadata, balanceRaw: bigint): Asset => ({
   usd_value: 0,
   chainId: token.chainId,
 });
-
-const parseSlippageBps = (pct: string): number => {
-  const parsed = parseFloat(pct.trim());
-  if (isNaN(parsed) || parsed <= 0 || parsed > 50) {
-    throw new Error("Slippage must be between 0.01% and 50%.");
-  }
-  return Math.round(parsed * 100);
-};
 
 export const DexScreen: React.FC = () => {
   const { theme } = useAppTheme();
@@ -102,8 +96,8 @@ export const DexScreen: React.FC = () => {
     [sellToken?.chainId, buyToken?.chainId],
   );
   const [sellAmountDecimal, setSellAmountDecimal] = useState<string>("");
-  const [slippagePct, setSlippagePct] = useState<string>("0.5");
-  const [customSlippageActive, setCustomSlippageActive] = useState<boolean>(false);
+  const [slippageBpsOverride, setSlippageBpsOverride] = useState<number | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState<boolean>(false);
 
   const [walletId, setWalletId] = useState<string | null>(aaAccount?.id ?? null);
   const [walletAddress, setWalletAddress] = useState<Address | null>(
@@ -145,10 +139,12 @@ export const DexScreen: React.FC = () => {
     return BalanceService.formatBalance(sellToken, sellTokenBalanceRaw);
   }, [sellToken, sellTokenBalanceRaw]);
 
-  const providerCount = useMemo(
-    () => SwapQuoteService.getProvidersForNetwork(networkKey).length,
-    [networkKey],
+  const defaultBps = useMemo(
+    () => defaultSlippageBps(sellToken?.symbol, buyToken?.symbol),
+    [sellToken?.symbol, buyToken?.symbol],
   );
+
+  const effectiveSlippageBps = slippageBpsOverride ?? defaultBps;
 
   const assetPickerList = useMemo(
     () => swapTokens.map((token) => toAsset(token, tokenBalances[toTokenKey(token) ?? "native"] ?? 0n)),
@@ -306,7 +302,7 @@ export const DexScreen: React.FC = () => {
       setUiState("quoting");
 
       try {
-        const slippageBps = parseSlippageBps(slippagePct);
+        const slippageBps = effectiveSlippageBps;
         const sellAmountRaw = parseUnits(sellAmountDecimal, sellToken.decimals);
         if (sellAmountRaw <= 0n) {
           throw new Error("Sell amount must be greater than zero.");
@@ -354,7 +350,7 @@ export const DexScreen: React.FC = () => {
       cancelled = true;
       clearTimeout(debounce);
     };
-  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, slippagePct, walletAddress, retryNonce]);
+  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, effectiveSlippageBps, walletAddress, retryNonce]);
 
   const buildIntent = (): SwapIntent | null => {
     if (!user?.id || !walletId || !walletAddress || !sellToken || !buyToken) {
@@ -370,7 +366,7 @@ export const DexScreen: React.FC = () => {
       sellToken,
       buyToken,
       sellAmountDecimal: sellAmountDecimal.trim(),
-      slippageBps: parseSlippageBps(slippagePct),
+      slippageBps: effectiveSlippageBps,
     };
   };
 
@@ -598,11 +594,6 @@ export const DexScreen: React.FC = () => {
           <View style={styles.swapSide}>
             <View style={styles.swapSideTopRow}>
               <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You receive</Text>
-              <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
-                {providerCount > 0
-                  ? `${providerCount} provider${providerCount !== 1 ? "s" : ""}`
-                  : "No providers configured"}
-              </Text>
             </View>
             <View style={styles.swapSideRow}>
               <TouchableOpacity
@@ -625,73 +616,25 @@ export const DexScreen: React.FC = () => {
                 )}
               </View>
             </View>
-          </View>
-        </View>
-
-        {/* Details / slippage card */}
-        <View style={[styles.detailsCard, { backgroundColor: colors.glass, borderColor: colors.border }]}>
-          {/* Slippage row */}
-          <View style={styles.slippageBlock}>
-            <View style={styles.slippageTitleRow}>
-              <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Max Slippage</Text>
-              <Text style={[styles.slippageValue, { color: colors.textPrimary }]}>{slippagePct}%</Text>
-            </View>
-            <View style={styles.slippagePresets}>
-              {SLIPPAGE_PRESETS.map((preset) => {
-                const isSelected = !customSlippageActive && slippagePct === preset;
-                return (
-                  <TouchableOpacity
-                    key={preset}
-                    onPress={() => { setSlippagePct(preset); setCustomSlippageActive(false); }}
-                    style={[
-                      styles.slippagePresetBtn,
-                      {
-                        backgroundColor: isSelected ? `${colors.accent}22` : colors.glass,
-                        borderColor: isSelected ? colors.accent : colors.border,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.slippagePresetText, { color: isSelected ? colors.accent : colors.textSecondary }]}>
-                      {preset}%
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-              <TouchableOpacity
-                onPress={() => setCustomSlippageActive(true)}
-                style={[
-                  styles.slippagePresetBtn,
-                  {
-                    backgroundColor: customSlippageActive ? `${colors.accent}22` : colors.glass,
-                    borderColor: customSlippageActive ? colors.accent : colors.border,
-                  },
-                ]}
-              >
-                <Text style={[styles.slippagePresetText, { color: customSlippageActive ? colors.accent : colors.textSecondary }]}>
-                  Custom
+            {buyToken?.type === "erc20" && (
+              <View style={styles.contractRow}>
+                <Text style={[styles.contractAddress, { color: colors.textSecondary }]}>
+                  {shorten(buyToken.address)}
                 </Text>
-              </TouchableOpacity>
-            </View>
-            {customSlippageActive && (
-              <View style={[styles.customSlippageRow, { backgroundColor: colors.glass, borderColor: colors.border }]}>
-                <TextInput
-                  style={[styles.customSlippageInput, { color: colors.textPrimary }]}
-                  value={slippagePct}
-                  onChangeText={setSlippagePct}
-                  keyboardType="decimal-pad"
-                  placeholder="0.5"
-                  placeholderTextColor={colors.textMuted}
-                  autoFocus
-                />
-                <Text style={[styles.customSlippageSuffix, { color: colors.textSecondary }]}>%</Text>
+                <Pressable
+                  onPress={() => Clipboard.setStringAsync(buyToken.address)}
+                  hitSlop={10}
+                >
+                  <Feather name="copy" size={12} color={colors.textSecondary} />
+                </Pressable>
               </View>
             )}
           </View>
+        </View>
 
+        {/* Details card */}
+        <View style={[styles.detailsCard, { backgroundColor: colors.glass, borderColor: colors.border }]}>
           {/* Cross-chain refusal */}
-          {sellToken && buyToken && sellToken.chainId !== buyToken.chainId && (
-            <View style={[styles.sectionDivider, { backgroundColor: colors.borderMuted }]} />
-          )}
           {sellToken && buyToken && sellToken.chainId !== buyToken.chainId && (
             <Text style={[styles.detailLabel, { color: colors.warning, textAlign: "center" }]}>
               Cross-chain swap not supported.
@@ -701,7 +644,6 @@ export const DexScreen: React.FC = () => {
           {/* Quote details */}
           {quote && sellToken && buyToken && sellToken.chainId === buyToken.chainId && (
             <>
-              <View style={[styles.sectionDivider, { backgroundColor: colors.borderMuted }]} />
               <View style={styles.detailRow}>
                 <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Estimated receive</Text>
                 <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
@@ -709,11 +651,19 @@ export const DexScreen: React.FC = () => {
                 </Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Minimum receive</Text>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Minimum received</Text>
                 <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
                   {formatUnits(quote.minimumBuyAmountRaw, quote.buyToken.decimals)} {quote.buyToken.symbol}
                 </Text>
               </View>
+              {quote.priceImpactBps !== undefined && quote.priceImpactBps > 100 && (
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: colors.warning }]}>Price impact</Text>
+                  <Text style={[styles.detailValue, { color: colors.warning }]}>
+                    {(quote.priceImpactBps / 100).toFixed(2)}%
+                  </Text>
+                </View>
+              )}
               {approvalRequired && (
                 <View style={styles.detailRow}>
                   <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Token approval</Text>
@@ -722,7 +672,48 @@ export const DexScreen: React.FC = () => {
                   </View>
                 </View>
               )}
+              <View style={[styles.sectionDivider, { backgroundColor: colors.borderMuted }]} />
             </>
+          )}
+
+          {/* Advanced expander */}
+          <TouchableOpacity
+            onPress={() => setAdvancedOpen((v) => !v)}
+            style={styles.advancedToggle}
+          >
+            <Text style={[styles.detailLabel, { color: colors.textPrimary }]}>Advanced</Text>
+            <Feather
+              name={advancedOpen ? "chevron-up" : "chevron-down"}
+              size={14}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+          {advancedOpen && (
+            <View style={styles.advancedBody}>
+              <View style={styles.slippageTitleRow}>
+                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Slippage tolerance</Text>
+                <Text style={[styles.slippageValue, { color: colors.textPrimary }]}>
+                  {(effectiveSlippageBps / 100).toFixed(2)}%
+                </Text>
+              </View>
+              <View style={[styles.customSlippageRow, { backgroundColor: colors.glass, borderColor: colors.border }]}>
+                <TextInput
+                  style={[styles.customSlippageInput, { color: colors.textPrimary }]}
+                  keyboardType="decimal-pad"
+                  placeholder={`${defaultBps / 100}% (auto)`}
+                  placeholderTextColor={colors.textMuted}
+                  value={slippageBpsOverride !== null ? String(slippageBpsOverride / 100) : ""}
+                  onChangeText={(t) => {
+                    if (t === "") { setSlippageBpsOverride(null); return; }
+                    const n = Number(t);
+                    if (Number.isFinite(n) && n >= 0 && n <= 50) {
+                      setSlippageBpsOverride(Math.round(n * 100));
+                    }
+                  }}
+                />
+                <Text style={[styles.customSlippageSuffix, { color: colors.textSecondary }]}>%</Text>
+              </View>
+            </View>
           )}
 
           {/* Loading */}
@@ -976,6 +967,19 @@ const createStyles = (colors: ThemeColors) =>
       zIndex: 10,
     },
 
+    // Contract address row (below buy token)
+    contractRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 2,
+    },
+    contractAddress: {
+      fontFamily: "monospace",
+      fontSize: 11,
+      opacity: 0.6,
+    },
+
     // Details card
     detailsCard: {
       borderRadius: 20,
@@ -983,9 +987,6 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       gap: 12,
       marginBottom: 16,
-    },
-    slippageBlock: {
-      gap: 10,
     },
     slippageTitleRow: {
       flexDirection: "row",
@@ -995,22 +996,6 @@ const createStyles = (colors: ThemeColors) =>
     slippageValue: {
       fontSize: 13,
       fontWeight: "800",
-    },
-    slippagePresets: {
-      flexDirection: "row",
-      gap: 8,
-    },
-    slippagePresetBtn: {
-      flex: 1,
-      paddingVertical: 8,
-      borderRadius: 9,
-      borderWidth: 1,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    slippagePresetText: {
-      fontSize: 12,
-      fontWeight: "700",
     },
     customSlippageRow: {
       flexDirection: "row",
@@ -1030,6 +1015,14 @@ const createStyles = (colors: ThemeColors) =>
     customSlippageSuffix: {
       fontSize: 15,
       fontWeight: "700",
+    },
+    advancedToggle: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    advancedBody: {
+      gap: 10,
     },
     sectionDivider: {
       height: StyleSheet.hairlineWidth,
