@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useAppTheme } from "@theme";
 import React, {
   MutableRefObject,
   forwardRef,
@@ -29,7 +30,7 @@ const PasswordInput = forwardRef<TextInput, PasswordInputProps>(
   (
     {
       containerStyle,
-      iconColor = "#9ca3af",
+      iconColor,
       style,
       autoCapitalize,
       textContentType,
@@ -42,6 +43,9 @@ const PasswordInput = forwardRef<TextInput, PasswordInputProps>(
     },
     ref,
   ) => {
+    const { theme } = useAppTheme();
+    const { colors } = theme;
+    const effectiveIconColor = iconColor ?? colors.textMuted;
     const [isVisible, setIsVisible] = useState(false);
     const inputRef = useRef<TextInput | null>(null);
 
@@ -102,7 +106,7 @@ const PasswordInput = forwardRef<TextInput, PasswordInputProps>(
             inputRef.current?.focus();
           }}
         >
-          <Feather name={isVisible ? "eye-off" : "eye"} size={18} color={iconColor} />
+          <Feather name={isVisible ? "eye-off" : "eye"} size={18} color={effectiveIconColor} />
         </Pressable>
       </View>
     );

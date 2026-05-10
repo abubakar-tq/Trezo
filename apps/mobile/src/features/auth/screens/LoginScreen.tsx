@@ -14,8 +14,9 @@ import {
 } from "@features/auth/components";
 import { ensureOAuthPrerequisites, startSupabaseOAuth } from "@lib/oauth";
 import { SupabaseConfigurationError, getSupabaseClient } from "@lib/supabase";
+import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 
 type LoginRoute = RouteProp<AuthStackParamList, "Login">;
 
@@ -26,6 +27,7 @@ const LoginScreen: React.FC = () => {
   const route = useRoute<LoginRoute>();
   const { theme } = useAppTheme();
   const { colors, mode } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [email, setEmail] = useState(route.params?.email ?? "");
   const [password, setPassword] = useState("");
@@ -220,8 +222,8 @@ const LoginScreen: React.FC = () => {
               style={[
                 styles.errorContainer,
                 {
-                  backgroundColor: withAlpha(colors.danger, mode === "dark" ? 0.22 : 0.16),
-                  borderColor: withAlpha(colors.danger, mode === "dark" ? 0.5 : 0.28),
+                  backgroundColor: `${colors.danger}${mode === "dark" ? "38" : "29"}`,
+                  borderColor: `${colors.danger}${mode === "dark" ? "80" : "47"}`,
                 },
               ]}
             >
@@ -233,8 +235,8 @@ const LoginScreen: React.FC = () => {
               style={[
                 styles.infoContainer,
                 {
-                  backgroundColor: withAlpha(colors.accentAlt, mode === "dark" ? 0.2 : 0.12),
-                  borderColor: withAlpha(colors.accentAlt, mode === "dark" ? 0.45 : 0.24),
+                  backgroundColor: `${colors.accentAlt}${mode === "dark" ? "33" : "1F"}`,
+                  borderColor: `${colors.accentAlt}${mode === "dark" ? "73" : "3D"}`,
                 },
               ]}
             >
@@ -248,7 +250,7 @@ const LoginScreen: React.FC = () => {
             value={email}
             onChangeText={setEmail}
             placeholder="Email address"
-            placeholderTextColor="#666"
+            placeholderTextColor={colors.textMuted}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
@@ -264,7 +266,7 @@ const LoginScreen: React.FC = () => {
               value={password}
               onChangeText={setPassword}
               placeholder="Password"
-              placeholderTextColor="#666"
+              placeholderTextColor={colors.textMuted}
               style={styles.input}
               returnKeyType="done"
               textContentType="password"
@@ -319,7 +321,7 @@ const LoginScreen: React.FC = () => {
                 value={pairingLink}
                 onChangeText={setPairingLink}
                 placeholder="Paste pairing deep link"
-                placeholderTextColor="#666"
+                placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
                 style={styles.input}
@@ -367,18 +369,18 @@ const LoginScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   formSpacing: {
     rowGap: 16,
   },
   input: {
-    backgroundColor: "#171419",
-    borderColor: "#333333",
+    backgroundColor: colors.inputBackground,
+    borderColor: colors.inputBorder,
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 16,
   },
   forgotPassword: {
@@ -386,7 +388,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   forgotPasswordText: {
-    color: "#9ca3af",
+    color: colors.textMuted,
     fontSize: 12,
   },
   dividerRow: {
@@ -397,10 +399,10 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "rgba(156,163,175,0.45)",
+    backgroundColor: `${colors.border}73`,
   },
   dividerText: {
-    color: "#9ca3af",
+    color: colors.textMuted,
     fontSize: 12,
     marginHorizontal: 12,
     textTransform: "uppercase",
@@ -431,42 +433,42 @@ const styles = StyleSheet.create({
   pairingCard: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: colors.glassBorder,
+    backgroundColor: colors.glass,
     padding: 16,
     rowGap: 12,
   },
   pairingTitle: {
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: "700",
   },
   pairingSubtitle: {
-    color: "#d1d5db",
+    color: colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
   },
   secondaryButton: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: `${colors.border}52`,
+    backgroundColor: colors.glass,
     paddingVertical: 13,
     alignItems: "center",
   },
   secondaryButtonLabel: {
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: "600",
   },
   linkButton: {
     borderRadius: 999,
-    backgroundColor: "rgba(0,136,255,0.18)",
+    backgroundColor: `${colors.accent}2E`,
     paddingVertical: 13,
     alignItems: "center",
   },
   linkButtonLabel: {
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -475,17 +477,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   inlineLinkLabel: {
-    color: "#d1d5db",
+    color: colors.textSecondary,
     fontSize: 13,
     fontWeight: "600",
   },
   footerText: {
     textAlign: "center",
-    color: "#9ca3af",
+    color: colors.textMuted,
     fontSize: 14,
   },
   footerLink: {
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontWeight: "600",
   },
   modalBackdrop: {
@@ -496,17 +498,17 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     borderRadius: 24,
-    backgroundColor: "#161319",
+    backgroundColor: colors.surfaceCard,
     padding: 18,
     rowGap: 14,
   },
   modalTitle: {
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: "700",
   },
   modalSubtitle: {
-    color: "#d1d5db",
+    color: colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -514,7 +516,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderRadius: 20,
     minHeight: 320,
-    backgroundColor: "#000000",
+    backgroundColor: colors.background,
   },
   camera: {
     flex: 1,

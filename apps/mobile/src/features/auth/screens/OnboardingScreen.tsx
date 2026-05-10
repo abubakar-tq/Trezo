@@ -40,7 +40,7 @@ import { AuthGradientButton } from "@features/auth/components";
 import { useUserStore } from "@store/useUserStore";
 import { useAppLockStore } from "@store/useAppLockStore";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 
 const { width, height } = Dimensions.get("window");
 
@@ -313,7 +313,7 @@ const OnboardingScreen: React.FC = () => {
                 <AuthGradientButton 
                   label={currentIndex === PAGES.length - 1 ? "CREATE WALLET" : "CONTINUE"}
                   onPress={currentIndex === PAGES.length - 1 ? handleOnboardingComplete : () => flatListRef.current?.scrollToIndex({ index: currentIndex + 1 })}
-                  colors={[PAGES[currentIndex].accent, withAlpha(PAGES[currentIndex].accent, 0.7)]}
+                  colors={[PAGES[currentIndex].accent, `${PAGES[currentIndex].accent}B3`]}
                 />
                 <TouchableOpacity 
                   onPress={() => navigation.navigate("Login")}

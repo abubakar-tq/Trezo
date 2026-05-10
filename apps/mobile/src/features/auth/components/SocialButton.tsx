@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 type SocialButtonProps = {
   label: string;
@@ -23,6 +25,9 @@ const SocialButton: React.FC<SocialButtonProps> = ({
   loading = false,
   loadingLabel,
 }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const displayLabel = loading ? loadingLabel ?? "Connecting..." : label;
 
   return (
@@ -34,7 +39,7 @@ const SocialButton: React.FC<SocialButtonProps> = ({
       style={[styles.container, style]}
     >
       <LinearGradient
-        colors={["rgba(255,255,255,0.08)", "rgba(255,255,255,0.03)"]}
+        colors={[`${colors.textPrimary}14`, `${colors.textPrimary}08`] as const}
         style={[styles.button, (disabled || loading) && styles.disabled]}
       >
         <View style={styles.iconContainer}>{icon}</View>
@@ -44,7 +49,7 @@ const SocialButton: React.FC<SocialButtonProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     borderRadius: 20,
     overflow: "hidden",
@@ -55,7 +60,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: `${colors.textPrimary}1A`,
     borderWidth: 1,
     borderRadius: 20,
     paddingHorizontal: 16,
@@ -67,7 +72,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   text: {
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 1.5,

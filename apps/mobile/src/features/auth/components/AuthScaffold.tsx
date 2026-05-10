@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
-import React, { ReactElement, ReactNode, useEffect } from "react";
+import React, { ReactElement, ReactNode, useEffect, useMemo } from "react";
 import {
     Dimensions,
     KeyboardAvoidingView,
@@ -20,6 +20,8 @@ import Animated, {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AuthBackground } from "@/assets/components";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 type AuthScaffoldProps = {
   title: string;
@@ -49,6 +51,9 @@ const AuthScaffold: React.FC<AuthScaffoldProps> = ({
     "rgba(6, 182, 212, 0.24)",
   ] as const,
 }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { width, height } = Dimensions.get("screen");
   const glowScale = useSharedValue(1);
 
@@ -142,10 +147,10 @@ const AuthScaffold: React.FC<AuthScaffoldProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000000",
+    backgroundColor: colors.background,
   },
   safeArea: {
     flex: 1,
@@ -165,7 +170,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   card: {
-    backgroundColor: "#161319",
+    backgroundColor: colors.surface,
     padding: 24,
     position: "relative",
   },
@@ -200,12 +205,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 24,
     fontWeight: "700",
-    color: "#ffffff",
+    color: colors.textPrimary,
   },
   subtitle: {
     textAlign: "center",
     fontSize: 14,
-    color: "#b8b8b8",
+    color: colors.textMuted,
     marginBottom: 20,
   },
   content: {
