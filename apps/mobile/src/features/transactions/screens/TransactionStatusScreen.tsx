@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -86,13 +86,13 @@ export const TransactionStatusScreen: React.FC = () => {
         ) : null}
 
         {error ? (
-          <View style={[styles.errorCard, { backgroundColor: withAlpha(colors.danger, 0.12), borderColor: withAlpha(colors.danger, 0.3) }]}>
+          <View style={[styles.errorCard, { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}4D` }]}>
             <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
           </View>
         ) : null}
 
         {row ? (
-          <View style={[styles.card, { backgroundColor: withAlpha(colors.surfaceCard, 0.78), borderColor: withAlpha(colors.border, 0.24) }]}>
+          <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <View style={styles.cardTop}>
               <View>
                 <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{getTypeLabel(row.type)}</Text>
@@ -118,7 +118,7 @@ export const TransactionStatusScreen: React.FC = () => {
               <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{row.blockNumber ? row.blockNumber.toString() : "-"}</Text>
             </View>
             {row.errorMessage ? (
-              <View style={[styles.errorInline, { backgroundColor: withAlpha(colors.danger, 0.12) }]}> 
+              <View style={[styles.errorInline, { backgroundColor: colors.dangerSoft }]}> 
                 <Feather name="alert-circle" size={14} color={colors.danger} />
                 <Text style={[styles.errorInlineText, { color: colors.danger }]}>{row.errorMessage}</Text>
               </View>
@@ -137,7 +137,7 @@ export const TransactionStatusScreen: React.FC = () => {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.secondaryButton, { borderColor: withAlpha(colors.border, 0.35), backgroundColor: withAlpha(colors.surfaceCard, 0.75) }]}
+          style={[styles.secondaryButton, { borderColor: colors.border, backgroundColor: colors.surfaceCard }]}
           onPress={() => navigation.navigate("TransactionDetail", { transactionId: route.params.transactionId })}
         >
           <Text style={[styles.secondaryButtonText, { color: colors.textPrimary }]}>Open Details</Text>
@@ -145,7 +145,7 @@ export const TransactionStatusScreen: React.FC = () => {
 
         {row && (
           <TouchableOpacity
-            style={[styles.doneButton, { backgroundColor: withAlpha(colors.surfaceCard, 0.75), borderColor: withAlpha(colors.border, 0.35) }]}
+            style={[styles.doneButton, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}
             onPress={() => navigation.popToTop()}
           >
             <Text style={[styles.doneButtonText, { color: colors.textPrimary }]}>

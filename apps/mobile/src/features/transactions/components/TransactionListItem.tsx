@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -79,15 +79,15 @@ export const TransactionListItem: React.FC<{
       style={({ pressed }) => [
         styles.card,
         {
-          backgroundColor: withAlpha(colors.surfaceCard, pressed ? 0.9 : 0.78),
-          borderColor: withAlpha(colors.border, 0.24),
+          backgroundColor: pressed ? colors.surfaceElevated : colors.surfaceCard,
+          borderColor: colors.border,
         },
       ]}
       onPress={() => onPress?.(transaction)}
     >
       <View style={styles.topRow}>
         <View style={styles.titleWrap}>
-          <View style={[styles.iconWrap, { backgroundColor: withAlpha(colors.accent, 0.12), borderColor: withAlpha(colors.accent, 0.24) }]}>
+          <View style={[styles.iconWrap, { backgroundColor: `${colors.accent}1F`, borderColor: `${colors.accent}3D` }]}>
             <Feather name={getIcon(transaction)} size={14} color={colors.accent} />
           </View>
           <View style={styles.titleTextWrap}>

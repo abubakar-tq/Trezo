@@ -21,7 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+import { FontFamilies } from "@shared/components/TokenRegistry";
 import { ContactService, type Contact } from "../index";
 
 const ContactDetailScreen: React.FC = () => {
@@ -189,7 +189,7 @@ const ContactDetailScreen: React.FC = () => {
                   <Feather
                     name="x"
                     size={20}
-                    color={withAlpha(colors.textPrimary, 0.6)}
+                    color={colors.textSecondary}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -214,7 +214,7 @@ const ContactDetailScreen: React.FC = () => {
                   <Feather
                     name="trash-2"
                     size={20}
-                    color={withAlpha(colors.textPrimary, 0.6)}
+                    color={colors.textSecondary}
                   />
                 </TouchableOpacity>
               </View>
@@ -240,7 +240,7 @@ const ContactDetailScreen: React.FC = () => {
                   value={editedName}
                   onChangeText={setEditedName}
                   placeholder="Contact name"
-                  placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+                  placeholderTextColor={colors.textMuted}
                   autoCapitalize="words"
                 />
               ) : (
@@ -296,7 +296,7 @@ const ContactDetailScreen: React.FC = () => {
                   value={editedMemo}
                   onChangeText={setEditedMemo}
                   placeholder="Add notes about this contact"
-                  placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+                  placeholderTextColor={colors.textMuted}
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
@@ -361,7 +361,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 20,
       paddingVertical: 16,
       borderBottomWidth: 1,
-      borderBottomColor: withAlpha(colors.textPrimary, 0.1),
+      borderBottomColor: colors.border,
     },
     headerTitle: {
       fontSize: 18,
@@ -387,13 +387,13 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       paddingVertical: 32,
       borderBottomWidth: 1,
-      borderBottomColor: withAlpha(colors.textPrimary, 0.1),
+      borderBottomColor: colors.border,
     },
     avatar: {
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: withAlpha(colors.accentAlt, 0.15),
+      backgroundColor: `${colors.accentAlt}26`,
       alignItems: "center",
       justifyContent: "center",
       marginBottom: 16,
@@ -415,7 +415,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 8,
       paddingHorizontal: 12,
       borderRadius: 8,
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      backgroundColor: colors.glass,
       borderWidth: 1,
       borderColor: colors.accentAlt,
     },
@@ -425,7 +425,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 12,
       paddingHorizontal: 12,
       borderRadius: 8,
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      backgroundColor: colors.glass,
       borderWidth: 1,
       borderColor: colors.accentAlt,
       minHeight: 100,
@@ -434,7 +434,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 20,
       paddingVertical: 24,
       borderBottomWidth: 1,
-      borderBottomColor: withAlpha(colors.textPrimary, 0.1),
+      borderBottomColor: colors.border,
     },
     sectionTitle: {
       fontSize: 14,
@@ -453,7 +453,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 16,
       paddingVertical: 8,
       borderRadius: 20,
-      backgroundColor: withAlpha(colors.accentAlt, 0.15),
+      backgroundColor: `${colors.accentAlt}26`,
       borderWidth: 1,
       borderColor: colors.accentAlt,
     },
@@ -467,7 +467,7 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      backgroundColor: colors.glass,
       borderRadius: 12,
       padding: 16,
       marginBottom: 12,
@@ -485,13 +485,13 @@ const createStyles = (colors: ThemeColors) =>
     addressText: {
       fontSize: 14,
       color: colors.textPrimary,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
     copyButton: {
       padding: 8,
     },
     memoContainer: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      backgroundColor: colors.glass,
       borderRadius: 12,
       padding: 16,
     },
@@ -501,7 +501,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     metadataContainer: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      backgroundColor: colors.glass,
       borderRadius: 12,
       padding: 16,
     },

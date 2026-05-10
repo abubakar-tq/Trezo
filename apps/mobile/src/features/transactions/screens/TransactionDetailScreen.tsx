@@ -1,7 +1,7 @@
 import { useRoute, useNavigation, type RouteProp } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { formatEther } from "viem";
@@ -144,13 +144,13 @@ export const TransactionDetailScreen: React.FC = () => {
         ) : null}
 
         {error ? (
-          <View style={[styles.errorCard, { backgroundColor: withAlpha(colors.danger, 0.12), borderColor: withAlpha(colors.danger, 0.3) }]}>
+          <View style={[styles.errorCard, { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}4D` }]}>
             <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
           </View>
         ) : null}
 
         {detailRows.map((item) => (
-          <View key={item.label} style={[styles.row, { borderColor: withAlpha(colors.border, 0.2), backgroundColor: withAlpha(colors.surfaceCard, 0.78) }]}>
+          <View key={item.label} style={[styles.row, { borderColor: colors.border, backgroundColor: colors.surfaceCard }]}>
             <Text style={[styles.key, { color: colors.textMuted }]}>{item.label}</Text>
             <Text style={[styles.value, { color: colors.textPrimary }]}>{formatValue(item.value)}</Text>
           </View>

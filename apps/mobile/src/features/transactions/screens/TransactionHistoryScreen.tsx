@@ -1,6 +1,6 @@
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -103,15 +103,15 @@ export const TransactionHistoryScreen: React.FC = () => {
       </View>
 
       <View style={styles.summaryRow}>
-        <View style={[styles.summaryCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.75), borderColor: withAlpha(colors.border, 0.24) }]}> 
+        <View style={[styles.summaryCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}> 
           <Text style={[styles.summaryValue, { color: colors.success }]}>{summary.confirmed}</Text>
           <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Confirmed</Text>
         </View>
-        <View style={[styles.summaryCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.75), borderColor: withAlpha(colors.border, 0.24) }]}> 
+        <View style={[styles.summaryCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}> 
           <Text style={[styles.summaryValue, { color: colors.warning }]}>{summary.pending}</Text>
           <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Pending</Text>
         </View>
-        <View style={[styles.summaryCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.75), borderColor: withAlpha(colors.border, 0.24) }]}> 
+        <View style={[styles.summaryCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}> 
           <Text style={[styles.summaryValue, { color: colors.danger }]}>{summary.failed}</Text>
           <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Failed</Text>
         </View>
@@ -125,13 +125,13 @@ export const TransactionHistoryScreen: React.FC = () => {
       ) : null}
 
       {error ? (
-        <View style={[styles.errorCard, { backgroundColor: withAlpha(colors.danger, 0.12), borderColor: withAlpha(colors.danger, 0.3) }]}>
+        <View style={[styles.errorCard, { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}4D` }]}>
           <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
         </View>
       ) : null}
 
       {!loading && rows.length === 0 ? (
-        <View style={[styles.emptyCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.75), borderColor: withAlpha(colors.border, 0.22) }]}>
+        <View style={[styles.emptyCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No transactions yet</Text>
           <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Your send, module, and recovery activity will appear here.</Text>
         </View>

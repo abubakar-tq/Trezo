@@ -16,7 +16,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 import { ContactService, type ContactAddress } from "../index";
 import { useUserStore } from "@store/useUserStore";
 
@@ -168,7 +167,7 @@ const AddContactScreen: React.FC = () => {
             value={name}
             onChangeText={setName}
             placeholder="Enter contact name"
-            placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+            placeholderTextColor={colors.textMuted}
             autoCapitalize="words"
           />
         </View>
@@ -190,7 +189,7 @@ const AddContactScreen: React.FC = () => {
                     value={addr.chain}
                     onChangeText={(value) => updateAddress(index, "chain", value)}
                     placeholder="Chain"
-                    placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+                    placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                   />
                 </View>
@@ -200,7 +199,7 @@ const AddContactScreen: React.FC = () => {
                     value={addr.address}
                     onChangeText={(value) => updateAddress(index, "address", value)}
                     placeholder="0x..."
-                    placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+                    placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
@@ -208,7 +207,7 @@ const AddContactScreen: React.FC = () => {
               </View>
               {addresses.length > 1 && (
                 <TouchableOpacity onPress={() => removeAddress(index)}>
-                  <Feather name="trash-2" size={18} color={withAlpha(colors.textPrimary, 0.6)} />
+                  <Feather name="trash-2" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
             </View>
@@ -253,7 +252,7 @@ const AddContactScreen: React.FC = () => {
               value={tagInput}
               onChangeText={setTagInput}
               placeholder="Add custom tag..."
-              placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+              placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               onSubmitEditing={addCustomTag}
             />
@@ -268,7 +267,7 @@ const AddContactScreen: React.FC = () => {
             value={memo}
             onChangeText={setMemo}
             placeholder="Add notes about this contact..."
-            placeholderTextColor={withAlpha(colors.textPrimary, 0.4)}
+            placeholderTextColor={colors.textMuted}
             multiline
             numberOfLines={4}
             textAlignVertical="top"
@@ -297,7 +296,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 20,
       paddingVertical: 16,
       borderBottomWidth: 1,
-      borderBottomColor: withAlpha(colors.textPrimary, 0.1),
+      borderBottomColor: colors.border,
     },
     headerTitle: {
       fontSize: 18,
@@ -329,13 +328,13 @@ const createStyles = (colors: ThemeColors) =>
       marginBottom: 8,
     },
     input: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      backgroundColor: colors.glass,
       borderRadius: 12,
       padding: 16,
       fontSize: 16,
       color: colors.textPrimary,
       borderWidth: 1,
-      borderColor: withAlpha(colors.textPrimary, 0.1),
+      borderColor: colors.border,
     },
     addressItem: {
       flexDirection: "row",
@@ -364,12 +363,12 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 16,
       paddingVertical: 8,
       borderRadius: 20,
-      backgroundColor: withAlpha(colors.textPrimary, 0.05),
+      backgroundColor: colors.glass,
       borderWidth: 1,
-      borderColor: withAlpha(colors.textPrimary, 0.1),
+      borderColor: colors.border,
     },
     tagActive: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.15),
+      backgroundColor: `${colors.accentAlt}26`,
       borderColor: colors.accentAlt,
     },
     tagText: {

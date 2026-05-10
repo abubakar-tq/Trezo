@@ -2,7 +2,6 @@ import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { TabScreenContainer } from "@shared/components";
 import { useAppTheme, type ThemeColors } from "@theme";
-import { withAlpha } from "@utils/color";
 import React, { useCallback, useEffect, useMemo } from "react";
 import {
   FlatList,
@@ -107,10 +106,10 @@ const NotificationCenterScreen: React.FC = () => {
           style={[
             styles.item,
             { backgroundColor: colors.surfaceCard, borderColor: colors.borderMuted },
-            isUnread && { borderColor: withAlpha(tint, 0.3) },
+            isUnread && { borderColor: `${tint}4D` },
           ]}
         >
-          <View style={[styles.itemIcon, { backgroundColor: withAlpha(tint, 0.12) }]}>
+          <View style={[styles.itemIcon, { backgroundColor: `${tint}1F` }]}>
             <Feather name={iconName} size={20} color={tint} />
           </View>
           <View style={styles.itemBody}>
