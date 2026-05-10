@@ -1,20 +1,16 @@
 import { useTabContentBottomInset } from "@hooks";
 import { Feather } from "@expo/vector-icons";
 import { TabScreenContainer } from "@shared/components";
-import { FontFamilies } from "@shared/components/TokenRegistry";
 import {
   isUrl,
   toDestination,
   useBrowserStore,
-  type BrowserFavorite,
-  type BrowserHistoryEntry,
   type BrowserTab,
 } from "@store/useBrowserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Image,
   Modal,
   Platform,
   ScrollView,
@@ -25,24 +21,7 @@ import {
   View,
 } from "react-native";
 import { WebView } from "react-native-webview";
-
-const CATEGORIES = [
-  { id: "all", label: "All", icon: "grid" },
-  { id: "defi", label: "DeFi", icon: "bar-chart-2" },
-  { id: "nft", label: "NFT", icon: "image" },
-  { id: "games", label: "Games", icon: "play" },
-  { id: "social", label: "Social", icon: "users" },
-  { id: "tools", label: "Tools", icon: "tool" },
-];
-
-const FEATURED_DAPPS = [
-  { id: "uniswap", name: "Uniswap", url: "https://app.uniswap.org", icon: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984/logo.png", category: "defi", desc: "Decentralized exchange" },
-  { id: "aave", name: "Aave", url: "https://app.aave.com", icon: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2EEAeE/logo.png", category: "defi", desc: "Liquidity protocol" },
-  { id: "opensea", name: "OpenSea", url: "https://opensea.io", icon: "https://storage.googleapis.com/opensea-static/Logomark/Logomark-Blue.png", category: "nft", desc: "NFT marketplace" },
-  { id: "lido", name: "Lido", url: "https://stake.lido.fi", icon: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32/logo.png", category: "defi", desc: "Liquid staking" },
-  { id: "blur", name: "Blur", url: "https://blur.io", icon: "https://blur.io/favicon.ico", category: "nft", desc: "NFT marketplace for pros" },
-  { id: "1inch", name: "1inch", url: "https://app.1inch.io", icon: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x111111111117dC0aa78b770fA6A738034120C302/logo.png", category: "defi", desc: "DEX aggregator" },
-];
+import { DiscoverHome } from "../components/discover/DiscoverHome";
 
 export default function BrowserScreen() {
   const { theme } = useAppTheme();
@@ -52,8 +31,6 @@ export default function BrowserScreen() {
 
   const tabs = useBrowserStore((state) => state.tabs);
   const activeTabId = useBrowserStore((state) => state.activeTabId);
-  const favorites = useBrowserStore((state) => state.favorites);
-  const history = useBrowserStore((state) => state.history);
   const settings = useBrowserStore((state) => state.settings);
   const addTab = useBrowserStore((state) => state.addTab);
   const removeTab = useBrowserStore((state) => state.removeTab);
@@ -135,7 +112,8 @@ export default function BrowserScreen() {
     [setActiveTab],
   );
 
-  const handleFavoriteClick = useCallback(
+  // Shared helper: load a URL in the active (or new) tab and exit home.
+  const openUrl = useCallback(
     (url: string) => {
       if (!activeTabId) {
         const newTabId = addTab(url);
@@ -146,11 +124,6 @@ export default function BrowserScreen() {
       }
     },
     [activeTabId, addTab, updateTab],
-  );
-
-  const handleHistoryClick = useCallback(
-    (url: string) => { handleFavoriteClick(url); },
-    [handleFavoriteClick],
   );
 
   return (
@@ -244,12 +217,19 @@ export default function BrowserScreen() {
         ]}
       >
         {showHome ? (
-          <HomeView
-            favorites={favorites}
-            history={history}
-            onFavoritePress={handleFavoriteClick}
-            onHistoryPress={handleHistoryClick}
-            colors={colors}
+          <DiscoverHome
+            onSubmitSearch={(intent) => {
+              if (intent.kind === "url") {
+                openUrl(intent.value);
+              } else if (intent.kind === "ticker") {
+                openUrl(`https://www.coingecko.com/en/search?query=${encodeURIComponent(intent.value)}`);
+              } else {
+                openUrl(`https://www.google.com/search?q=${encodeURIComponent(intent.value)}`);
+              }
+            }}
+            onOpenTabs={() => setShowTabSwitcher(true)}
+            onTokenPress={(id) => openUrl(`https://www.coingecko.com/en/coins/${id}`)}
+            onSitePress={openUrl}
           />
         ) : (
           tabs.map((tab) => (
@@ -378,165 +358,6 @@ function NavBtn({
     >
       <Feather name={icon} size={16} color={colors.textSecondary} />
     </TouchableOpacity>
-  );
-}
-
-// ── Home View ─────────────────────────────────────────────────────────────────
-
-function HomeView({
-  favorites,
-  history,
-  onFavoritePress,
-  onHistoryPress,
-  colors,
-}: {
-  favorites: BrowserFavorite[];
-  history: BrowserHistoryEntry[];
-  onFavoritePress: (url: string) => void;
-  onHistoryPress: (url: string) => void;
-  colors: ThemeColors;
-}) {
-  const [activeCategory, setActiveCategory] = useState("all");
-  const s = useMemo(() => createHomeStyles(colors), [colors]);
-
-  const filteredDApps = useMemo(() => {
-    if (activeCategory === "all") return FEATURED_DAPPS;
-    return FEATURED_DAPPS.filter((d) => d.category === activeCategory);
-  }, [activeCategory]);
-
-  return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View style={s.header}>
-        <Text style={[s.headerTitle, { color: colors.textPrimary }]}>Discover</Text>
-        <Text style={[s.headerSub, { color: colors.textSecondary }]}>Explore Web3 apps</Text>
-      </View>
-
-      {/* Category chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.categoryRow}
-        style={s.categoryScroll}
-      >
-        {CATEGORIES.map((cat) => (
-          <TouchableOpacity
-            key={cat.id}
-            style={[
-              s.categoryChip,
-              {
-                backgroundColor: activeCategory === cat.id ? colors.accent : colors.surfaceElevated,
-                borderColor: activeCategory === cat.id ? colors.accent : colors.border,
-              },
-            ]}
-            onPress={() => setActiveCategory(cat.id)}
-            activeOpacity={0.7}
-          >
-            <Feather
-              name={cat.icon as any}
-              size={13}
-              color={activeCategory === cat.id ? colors.textOnAccent : colors.textSecondary}
-            />
-            <Text
-              style={[s.categoryLabel, { color: activeCategory === cat.id ? colors.textOnAccent : colors.textSecondary }]}
-            >
-              {cat.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* DApp list */}
-      <View style={[s.dappList, { borderColor: colors.border }]}>
-        {filteredDApps.map((dapp, idx) => (
-          <TouchableOpacity
-            key={dapp.id}
-            style={[
-              s.dappRow,
-              { backgroundColor: colors.surfaceElevated },
-              idx < filteredDApps.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderMuted },
-            ]}
-            onPress={() => onFavoritePress(dapp.url)}
-            activeOpacity={0.7}
-          >
-            <View style={[s.dappIconWrap, { backgroundColor: colors.glass }]}>
-              <Image source={{ uri: dapp.icon }} style={s.dappIcon} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.dappName, { color: colors.textPrimary }]}>{dapp.name}</Text>
-              <Text style={[s.dappDesc, { color: colors.textSecondary }]} numberOfLines={1}>
-                {dapp.desc}
-              </Text>
-            </View>
-            <View style={[s.dappArrow, { backgroundColor: `${colors.accent}14` }]}>
-              <Feather name="arrow-up-right" size={14} color={colors.accent} />
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Favorites */}
-      {favorites.length > 0 && (
-        <View style={s.section}>
-          <Text style={[s.sectionLabel, { color: colors.textMuted }]}>BOOKMARKS</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {favorites.map((fav) => (
-              <TouchableOpacity
-                key={fav.url}
-                style={[s.favChip, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
-                onPress={() => onFavoritePress(fav.url)}
-                activeOpacity={0.7}
-              >
-                <Feather name={fav.icon as any} size={13} color={colors.accent} />
-                <Text style={[s.favLabel, { color: colors.textPrimary }]} numberOfLines={1}>
-                  {fav.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* History */}
-      {history.length > 0 && (
-        <View style={s.section}>
-          <Text style={[s.sectionLabel, { color: colors.textMuted }]}>RECENT</Text>
-          <View style={[s.historyCard, { borderColor: colors.border }]}>
-            {history.slice(0, 5).map((item, idx) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  s.historyRow,
-                  { backgroundColor: colors.surfaceElevated },
-                  idx < Math.min(history.length, 5) - 1 && {
-                    borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: colors.borderMuted,
-                  },
-                ]}
-                onPress={() => onHistoryPress(item.url)}
-                activeOpacity={0.7}
-              >
-                <View style={[s.historyIcon, { backgroundColor: `${colors.accent}14` }]}>
-                  <Feather name="clock" size={12} color={colors.accent} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.historyTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <Text
-                    style={[s.historyUrl, { color: colors.textMuted, fontFamily: FontFamilies.mono }]}
-                    numberOfLines={1}
-                  >
-                    {item.url}
-                  </Text>
-                </View>
-                <Feather name="chevron-right" size={14} color={colors.textMuted} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
-    </ScrollView>
   );
 }
 
@@ -694,108 +515,6 @@ function createStyles(colors: ThemeColors) {
     },
     webViewContainer: { flex: 1 },
     webView: { flex: 1 },
-  });
-}
-
-function createHomeStyles(colors: ThemeColors) {
-  return StyleSheet.create({
-    content: {
-      paddingHorizontal: 16,
-      paddingTop: 20,
-      paddingBottom: 40,
-      gap: 20,
-    },
-    header: { gap: 3 },
-    headerTitle: {
-      fontSize: 28,
-      fontWeight: "800",
-      letterSpacing: -0.5,
-    },
-    headerSub: {
-      fontSize: 14,
-      fontWeight: "500",
-    },
-    categoryScroll: { marginHorizontal: -16 },
-    categoryRow: { gap: 8, paddingHorizontal: 16 },
-    categoryChip: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 20,
-      borderWidth: 1,
-    },
-    categoryLabel: { fontSize: 13, fontWeight: "600" },
-    dappList: {
-      borderRadius: 18,
-      borderWidth: 1,
-      overflow: "hidden",
-    },
-    dappRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      padding: 14,
-      gap: 12,
-    },
-    dappIconWrap: {
-      width: 44,
-      height: 44,
-      borderRadius: 12,
-      alignItems: "center",
-      justifyContent: "center",
-      overflow: "hidden",
-    },
-    dappIcon: {
-      width: 28,
-      height: 28,
-      resizeMode: "contain",
-    },
-    dappName: { fontSize: 15, fontWeight: "700" },
-    dappDesc: { fontSize: 12, fontWeight: "500", marginTop: 2, opacity: 0.75 },
-    dappArrow: {
-      width: 30,
-      height: 30,
-      borderRadius: 10,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    section: { gap: 10 },
-    sectionLabel: {
-      fontSize: 11,
-      fontWeight: "700",
-      letterSpacing: 1.2,
-    },
-    favChip: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 14,
-      borderWidth: 1,
-    },
-    favLabel: { fontSize: 13, fontWeight: "600" },
-    historyCard: {
-      borderRadius: 16,
-      borderWidth: 1,
-      overflow: "hidden",
-    },
-    historyRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      padding: 14,
-      gap: 12,
-    },
-    historyIcon: {
-      width: 28,
-      height: 28,
-      borderRadius: 8,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    historyTitle: { fontSize: 14, fontWeight: "600" },
-    historyUrl: { fontSize: 11, fontWeight: "500", marginTop: 2, opacity: 0.7 },
   });
 }
 
