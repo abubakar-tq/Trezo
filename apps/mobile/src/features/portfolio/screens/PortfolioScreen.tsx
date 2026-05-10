@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   ScrollView,
   StyleSheet,
@@ -22,8 +21,10 @@ import { useTabContentBottomInset } from "@hooks";
 import { useUserStore } from "../../../store/useUserStore";
 import { useNavigation } from "@react-navigation/native";
 import { ActivationSheet } from "@features/wallet/components/ActivationSheet";
+import { SetUpWalletSheet } from "@features/wallet/components/SetUpWalletSheet";
 import { useAccountState } from "@features/wallet/hooks/useAccountState";
 import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
+import { useSetUpWalletSheet } from "@features/wallet/hooks/useSetUpWalletSheet";
 import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { TokenDetailModal } from "../components/TokenDetailModal";
 import type { TokenBalance } from "../services/PortfolioService";
@@ -41,6 +42,7 @@ const PortfolioScreen: React.FC = () => {
   const { isActiveOnChain, isProvisioned } = useAccountState();
   const activeChainId = useWalletStore((s) => s.activeChainId);
   const { ref: activationSheetRef, requireActiveOnChain } = useActivationSheet();
+  const { ref: setUpRef, requireProvisioned } = useSetUpWalletSheet();
 
   const smartAccountAddress =
     useUserStore((state) => state.smartAccountAddress) ??
@@ -329,14 +331,7 @@ const PortfolioScreen: React.FC = () => {
               navigation.navigate('Send', { tokenSymbol: t.symbol }),
             )
           }
-          onRequestReceive={() => {
-            // TODO(Phase 6): replace with SetUpWalletSheet — see docs/plans/2026-05-11-mobile-polish-pass-plan.md
-            if (!isProvisioned) {
-              Alert.alert('Set up your wallet', 'Available shortly.');
-              return;
-            }
-            navigation.navigate('Receive');
-          }}
+          onRequestReceive={() => requireProvisioned(isProvisioned, () => navigation.navigate('Receive'))}
           onRequestSwap={(preselect) =>
             requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
               navigation.navigate('Dex', { initialTab: 'swap', preselect }),
@@ -346,6 +341,7 @@ const PortfolioScreen: React.FC = () => {
       )}
 
       <ActivationSheet ref={activationSheetRef} />
+      <SetUpWalletSheet ref={setUpRef} />
     </TabScreenContainer>
   );
 };

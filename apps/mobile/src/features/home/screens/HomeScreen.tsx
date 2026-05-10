@@ -2,8 +2,10 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useNotificationsBootstrap } from "@features/notifications/hooks/useNotificationsBootstrap";
 import { useNotificationStore } from "@features/notifications/store/useNotificationStore";
 import { ActivationSheet } from "@features/wallet/components/ActivationSheet";
+import { SetUpWalletSheet } from "@features/wallet/components/SetUpWalletSheet";
 import { useAccountState } from "@features/wallet/hooks/useAccountState";
 import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
+import { useSetUpWalletSheet } from "@features/wallet/hooks/useSetUpWalletSheet";
 import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { useWalletData } from "@hooks/useWalletData";
 import { useNavigation } from "@react-navigation/native";
@@ -12,7 +14,6 @@ import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -53,6 +54,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   const { isActiveOnChain, isProvisioned } = useAccountState();
   const activeChainId = useWalletStore((s) => s.activeChainId);
   const { ref: activationSheetRef, requireActiveOnChain } = useActivationSheet();
+  const { ref: setUpRef, requireProvisioned } = useSetUpWalletSheet();
 
   const handleActionPress = (action: QuickAction) => {
     // Receive does NOT gate via Activation sheet — Phase 6 will wire Set-Up for that.
@@ -179,14 +181,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
               navigation.navigate('Send', { tokenSymbol: t.symbol }),
             )
           }
-          onRequestReceive={() => {
-            // TODO(Phase 6): replace with SetUpWalletSheet — see docs/plans/2026-05-11-mobile-polish-pass-plan.md
-            if (!isProvisioned) {
-              Alert.alert('Set up your wallet', 'Available shortly.');
-              return;
-            }
-            navigation.navigate('Receive');
-          }}
+          onRequestReceive={() => requireProvisioned(isProvisioned, () => navigation.navigate('Receive'))}
           onRequestSwap={(preselect) =>
             requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
               navigation.navigate('Dex', { initialTab: 'swap', preselect }),
@@ -196,6 +191,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
       )}
 
       <ActivationSheet ref={activationSheetRef} />
+      <SetUpWalletSheet ref={setUpRef} />
 
       {/* Security Tooltip */}
       {securityTooltipVisible && (
