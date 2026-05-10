@@ -2,7 +2,6 @@ import { Feather } from "@expo/vector-icons";
 import { MARKET_CHAIN_OPTIONS, type EvmChain, type MarketToken } from "@lib/api/web3Data";
 import { MarketTokenSkeleton } from "@shared/components/ui";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 import React, { useMemo } from 'react';
 import { Animated, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -97,7 +96,7 @@ export const MarketSection: React.FC<MarketSectionProps> = ({
                 style={[
                   styles.marketChainLabel,
                   { color: colors.textSecondary },
-                  isActive && { color: "#ffffff", fontWeight: '700' },
+                  isActive && { color: colors.textOnAccent, fontWeight: '700' },
                 ]}
               >
                 {option.label}
@@ -116,7 +115,7 @@ export const MarketSection: React.FC<MarketSectionProps> = ({
         {error && tokens.length > 0 ? (
           <TouchableOpacity
             activeOpacity={0.85}
-            style={[styles.marketErrorPill, { backgroundColor: withAlpha(colors.danger, 0.1) }]}
+            style={[styles.marketErrorPill, { backgroundColor: colors.dangerSoft }]}
             onPress={onRetry}
           >
             <Feather name="alert-circle" size={14} color={colors.danger} />
@@ -129,13 +128,13 @@ export const MarketSection: React.FC<MarketSectionProps> = ({
         <Feather
           name="search"
           size={16}
-          color={withAlpha(colors.textMuted, 0.65)}
+          color={colors.textMuted}
         />
         <TextInput
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Search by token or symbol"
-          placeholderTextColor={withAlpha(colors.textMuted, 0.55)}
+          placeholderTextColor={colors.textMuted}
           style={[styles.marketSearchInput, { color: colors.textPrimary }]}
           autoCapitalize="none"
           autoCorrect={false}
@@ -186,7 +185,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: withAlpha(colors.accent, 0.1),
+    backgroundColor: `${colors.accent}1A`,
   },
   marketChainScroller: {
     paddingVertical: 4,

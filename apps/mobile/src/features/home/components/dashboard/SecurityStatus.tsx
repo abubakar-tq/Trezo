@@ -2,8 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
-
 export const SecurityStatus: React.FC = () => {
   const { theme } = useAppTheme();
   const { colors } = theme;
@@ -11,7 +9,7 @@ export const SecurityStatus: React.FC = () => {
   return (
     <View style={[styles.container, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
       <View style={styles.content}>
-        <View style={[styles.iconBox, { backgroundColor: withAlpha(colors.success, 0.1) }]}>
+        <View style={[styles.iconBox, { backgroundColor: colors.successSoft }]}>
           <Feather name="shield" size={20} color={colors.success} />
         </View>
         <View style={styles.textContainer}>
@@ -19,7 +17,7 @@ export const SecurityStatus: React.FC = () => {
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>3 guardians securing your account</Text>
         </View>
       </View>
-      <TouchableOpacity style={[styles.manageButton, { backgroundColor: withAlpha(colors.accent, 0.15) }]}>
+      <TouchableOpacity style={[styles.manageButton, { backgroundColor: `${colors.accent}26` }]}>
         <Text style={[styles.manageText, { color: colors.accent }]}>Manage</Text>
       </TouchableOpacity>
     </View>

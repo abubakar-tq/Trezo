@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+import { FontFamilies } from "@shared/components/TokenRegistry";
 import React, { useCallback, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -149,7 +149,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 3 }) => {
             key={tx.id}
             style={[
               styles.item,
-              index !== rows.length - 1 && { borderBottomWidth: 1, borderBottomColor: withAlpha(colors.accent, 0.08) },
+              index !== rows.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
             ]}
             activeOpacity={0.7}
             onPress={() => navigation.navigate("TransactionStatus", { transactionId: tx.id })}
@@ -172,7 +172,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 3 }) => {
 
             <View style={styles.itemRight}>
               {isFailedStatus(tx.status) ? (
-                <View style={[styles.failedBadge, { backgroundColor: withAlpha(colors.danger, 0.15) }]}>
+                <View style={[styles.failedBadge, { backgroundColor: colors.dangerSoft }]}>
                   <Text style={[styles.failedBadgeText, { color: colors.danger }]}>Failed</Text>
                 </View>
               ) : null}
@@ -271,12 +271,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     letterSpacing: 0.5,
-    fontFamily: "monospace",
+    fontFamily: FontFamilies.mono,
     textAlign: "right",
   },
   statusIndicator: {
     width: 6,
-    height: 14,
+    height: 6,
     borderRadius: 3,
   },
   failedBadge: {

@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
 import type { MarketToken } from '@lib/api/web3Data';
 
 interface TokenDetailSheetProps {
@@ -49,7 +48,7 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
           
           <View style={styles.header}>
             <View style={styles.tokenInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+              <View style={[styles.iconContainer, { backgroundColor: `${colors.accent}1A` }]}>
                 <Text style={{ fontSize: 24 }}>{token.symbol.charAt(0)}</Text>
               </View>
               <View>
@@ -64,7 +63,7 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
 
           <View style={styles.priceContainer}>
             <Text style={[styles.price, { color: colors.textPrimary }]}>{formatPrice(token.priceUsd)}</Text>
-            <View style={[styles.badge, { backgroundColor: isPositive ? withAlpha(colors.success, 0.1) : withAlpha(colors.danger, 0.1) }]}>
+            <View style={[styles.badge, { backgroundColor: isPositive ? colors.successSoft : colors.dangerSoft }]}>
               <Text style={{ color: isPositive ? colors.success : colors.danger, fontWeight: '700' }}>
                 {formatChange(token.change24h)}
               </Text>
@@ -75,7 +74,7 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
             <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.accent }]}>
               <Text style={{ color: colors.textOnAccent, fontWeight: '700' }}>Buy</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionButton, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+            <TouchableOpacity style={[styles.actionButton, { backgroundColor: `${colors.accent}1A` }]}>
               <Text style={{ color: colors.accent, fontWeight: '700' }}>Swap</Text>
             </TouchableOpacity>
           </View>

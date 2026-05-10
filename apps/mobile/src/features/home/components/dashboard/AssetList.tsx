@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
+import { FontFamilies } from '@shared/components/TokenRegistry';
 import { TokenIcon } from '@shared/components';
 import type { TokenBalance } from '@features/portfolio/services/PortfolioService';
 
@@ -66,7 +66,7 @@ export const AssetList = React.memo<AssetListProps>(({
               style={[
                 styles.item, 
                 { opacity: 0.3 },
-                index !== placeholders.length - 1 && { borderBottomWidth: 1, borderBottomColor: withAlpha(colors.accent, 0.08) }
+                index !== placeholders.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
               ]}
             >
               <View style={styles.itemLeft}>
@@ -95,7 +95,7 @@ export const AssetList = React.memo<AssetListProps>(({
             key={`${token.address}-${index}`} 
             style={[
               styles.item, 
-              index !== assets.length - 1 && { borderBottomWidth: 1, borderBottomColor: withAlpha(colors.accent, 0.08) }
+              index !== assets.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
             ]}
             onPress={() => onAssetPress?.(token)}
             activeOpacity={0.7}
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     marginTop: 4,
-    fontFamily: 'monospace',
+    fontFamily: FontFamilies.mono,
     textAlign: 'right',
   },
   amountSymbol: {

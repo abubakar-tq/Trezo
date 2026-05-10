@@ -1,8 +1,7 @@
 import React from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
 
 interface QuickActionSheetProps {
   visible: boolean;
@@ -10,7 +9,6 @@ interface QuickActionSheetProps {
   onDismiss: () => void;
 }
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const QuickActionSheet: React.FC<QuickActionSheetProps> = ({
   visible,
@@ -53,7 +51,7 @@ const QuickActionSheet: React.FC<QuickActionSheetProps> = ({
             {actions.map((item) => (
               <TouchableOpacity 
                 key={item.id}
-                style={[styles.item, { backgroundColor: withAlpha(item.color, 0.1) }]}
+                style={[styles.item, { backgroundColor: `${item.color}1A` }]}
                 onPress={onDismiss}
               >
                 <View style={[styles.iconBox, { backgroundColor: item.color }]}>
