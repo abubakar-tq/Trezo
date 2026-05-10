@@ -7,6 +7,7 @@ import { FontFamilies } from "@shared/components/TokenRegistry";
 import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal";
 import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
 import { NetworkPickerModal, type Network } from "@shared/components/modals/NetworkPickerModal";
+import { getEnabledChains } from "@/src/integration/chains";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
 import * as Haptics from "expo-haptics";
@@ -67,13 +68,22 @@ export const ReceiveScreen: React.FC<ReceiveScreenProps> = ({
     name: 'Ethereum',
   });
 
-  const [selectedNetwork, setSelectedNetwork] = useState<Network>({
-    id: 'ethereum',
-    name: 'Ethereum',
-    chainId: 1,
-    color: '#627EEA',
-    icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png'
-  });
+  const defaultNetwork: Network = (() => {
+    const enabled = getEnabledChains();
+    const first = enabled[0];
+    if (!first) {
+      return { id: '31337', name: 'Anvil', chainId: 31337, color: '#4f46e5', isMainnet: false };
+    }
+    return {
+      id: String(first.id),
+      name: first.name,
+      chainId: first.id,
+      color: '#4f46e5',
+      isMainnet: first.environment === 'mainnet',
+    };
+  })();
+
+  const [selectedNetwork, setSelectedNetwork] = useState<Network>(defaultNetwork);
 
   const handleCopyAddress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

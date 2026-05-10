@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import { useAppTheme } from '@theme';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { TokenIcon } from '../visuals/TokenIcon';
+import { getEnabledChains } from '@/src/integration/chains';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -23,16 +24,41 @@ export interface Network {
   isMainnet?: boolean;
 }
 
-const NETWORKS: Network[] = [
-  { id: 'ethereum', name: 'Ethereum', chainId: 1, color: '#627EEA', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png' },
-  { id: 'polygon', name: 'Polygon', chainId: 137, color: '#8247E5', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png' },
-  { id: 'arbitrum', name: 'Arbitrum', chainId: 42161, color: '#28A0F0', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png' },
-  { id: 'optimism', name: 'Optimism', chainId: 10, color: '#FF0420', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png' },
-  { id: 'base', name: 'Base', chainId: 8453, color: '#0052FF', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png' },
-  { id: 'scroll', name: 'Scroll', chainId: 534352, color: '#FFDBB0', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/scroll/info/logo.png' },
-  { id: 'zksync', name: 'zkSync Era', chainId: 324, color: '#8C8DFC', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/zksync/info/logo.png' },
-  { id: 'anvil', name: 'Anvil', chainId: 31337, color: '#4f46e5', isMainnet: false },
-];
+/** Map a chain ID to a TrustWallet icon URL, or undefined for chains without one. */
+function chainIconUrl(chainId: number): string | undefined {
+  switch (chainId) {
+    case 1:       return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
+    case 11155111: return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
+    case 137:     return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png';
+    case 42161:   return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png';
+    case 421614:  return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png';
+    case 10:      return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png';
+    case 8453:    return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png';
+    case 84532:   return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png';
+    case 534352:  return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/scroll/info/logo.png';
+    case 324:     return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/zksync/info/logo.png';
+    default:      return undefined;
+  }
+}
+
+/** Map a chain ID to a brand colour for the fallback icon. */
+function chainColor(chainId: number): string {
+  switch (chainId) {
+    case 1:       return '#627EEA';
+    case 11155111: return '#627EEA';
+    case 137:     return '#8247E5';
+    case 42161:   return '#28A0F0';
+    case 421614:  return '#28A0F0';
+    case 10:      return '#FF0420';
+    case 8453:    return '#0052FF';
+    case 84532:   return '#0052FF';
+    case 534352:  return '#FFDBB0';
+    case 324:     return '#8C8DFC';
+    case 300:     return '#8C8DFC';
+    case 31337:   return '#4f46e5';
+    default:      return '#888888';
+  }
+}
 
 interface NetworkPickerModalProps {
   isVisible: boolean;
@@ -50,6 +76,19 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
   const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
   const isDark = resolvedMode === 'dark';
+
+  const networks = useMemo<Network[]>(
+    () =>
+      getEnabledChains().map((c) => ({
+        id: String(c.id),
+        name: c.name,
+        chainId: c.id,
+        color: chainColor(c.id),
+        icon: chainIconUrl(c.id),
+        isMainnet: c.environment === 'mainnet',
+      })),
+    [],
+  );
 
   if (!isVisible) return null;
 
@@ -114,7 +153,7 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
         </View>
 
         <FlatList
-          data={NETWORKS}
+          data={networks}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
