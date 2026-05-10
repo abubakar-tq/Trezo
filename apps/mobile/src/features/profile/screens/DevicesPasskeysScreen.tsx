@@ -414,7 +414,7 @@ const DevicesPasskeysScreen: React.FC = () => {
         </TouchableOpacity>
         <View style={styles.headerTitleBlock}>
           <Text style={styles.headerKicker}>SECURITY</Text>
-          <Text style={styles.headerTitle}>Devices & Passkeys</Text>
+          <Text style={styles.headerTitle}>Linked Devices</Text>
         </View>
         <View style={{ width: 40 }} />
       </View>

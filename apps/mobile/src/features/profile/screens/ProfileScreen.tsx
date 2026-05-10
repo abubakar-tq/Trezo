@@ -83,7 +83,7 @@ const ProfileScreen: React.FC = () => {
         title: "Account",
         items: [
           { label: "Edit Profile", icon: "user", tint: colors.accent, route: "ProfileEdit" },
-          { label: "Devices & Passkeys", icon: "smartphone", tint: colors.accentAlt, route: "DevicesPasskeys" },
+          { label: LABELS.linkedDevices, icon: "smartphone", tint: colors.accentAlt, route: "DevicesPasskeys" },
           { label: "Backup & Recovery", icon: "shield", tint: colors.success, route: "BackupRecovery" },
           { label: LABELS.connectedDApps, icon: "link-2", tint: colors.success, route: "ConnectedDApps" },
           { label: "Contacts", icon: "book", tint: colors.warning, route: "ContactList" },
@@ -193,6 +193,18 @@ const ProfileScreen: React.FC = () => {
               </View>
             </View>
           ))}
+
+          {/* ── My wallet is compromised ──────────────── */}
+          <TouchableOpacity
+            style={[styles.signOutBtn, { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}33` }]}
+            onPress={() => navigation.navigate("CompromisedWallet")}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.signOutIconWrap, { backgroundColor: `${colors.danger}1A` }]}>
+              <Feather name="alert-octagon" size={16} color={colors.danger} />
+            </View>
+            <Text style={[styles.signOutLabel, { color: colors.danger }]}>{LABELS.compromiseRowTitle}</Text>
+          </TouchableOpacity>
 
           {/* ── Sign Out ──────────────────────────────── */}
           <TouchableOpacity
