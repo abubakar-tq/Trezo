@@ -22,12 +22,49 @@ import {
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { DiscoverHome } from "../components/discover/DiscoverHome";
+import { INJECTED_PROVIDER_SCRIPT } from "@features/browser/web/injectedProvider.template";
+import { handleRPC } from "@features/browser/web/rpcRouter";
+import { useDAppSessionsStore } from "@features/browser/store/useDAppSessionsStore";
+import {
+  ApproveConnectionSheet,
+  type ApproveHandle,
+} from "@features/browser/components/dapp/ApproveConnectionSheet";
+import {
+  SignMessageSheet,
+  type SignMessageHandle,
+} from "@features/browser/components/dapp/SignMessageSheet";
+import {
+  SignTypedDataSheet,
+  type SignTypedDataHandle,
+} from "@features/browser/components/dapp/SignTypedDataSheet";
+import {
+  SendTransactionSheet,
+  type SendTransactionHandle,
+} from "@features/browser/components/dapp/SendTransactionSheet";
+import {
+  SwitchChainSheet,
+  type SwitchChainHandle,
+} from "@features/browser/components/dapp/SwitchChainSheet";
+import { useWalletStore } from "@features/wallet/store/useWalletStore";
+import { useUserStore } from "@store/useUserStore";
 
 export default function BrowserScreen() {
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
   const bottomInset = useTabContentBottomInset(-28);
+
+  // EIP-1193 approval sheet refs
+  const approveRef = useRef<ApproveHandle>(null);
+  const signMessageRef = useRef<SignMessageHandle>(null);
+  const signTypedDataRef = useRef<SignTypedDataHandle>(null);
+  const sendTxRef = useRef<SendTransactionHandle>(null);
+  const switchChainRef = useRef<SwitchChainHandle>(null);
+
+  // Source the smart-account address for dApp sessions
+  const aaAccount = useWalletStore((s) => s.aaAccount);
+  const smartAccountAddress = useUserStore((s) => s.smartAccountAddress);
+  const accountAddress = (aaAccount?.predictedAddress ?? smartAccountAddress ?? null) as `0x${string}` | null;
 
   const tabs = useBrowserStore((state) => state.tabs);
   const activeTabId = useBrowserStore((state) => state.activeTabId);
@@ -240,6 +277,77 @@ export default function BrowserScreen() {
               <WebView
                 ref={(ref) => { if (ref) webRefs.current.set(tab.id, ref); }}
                 source={{ uri: tab.url }}
+                injectedJavaScriptBeforeContentLoaded={INJECTED_PROVIDER_SCRIPT}
+                onMessage={(event) => {
+                  if (tab.id !== activeTabId) return;
+                  let msg: { type?: string; id?: string; method?: string; params?: unknown[] };
+                  try {
+                    msg = JSON.parse(event.nativeEvent.data);
+                  } catch {
+                    return;
+                  }
+                  if (msg?.type !== "rpc" || !msg.id || !msg.method) return;
+
+                  let origin: string;
+                  try {
+                    origin = new URL(tab.url).origin;
+                  } catch {
+                    origin = tab.url;
+                  }
+
+                  const webview = webRefs.current.get(tab.id) ?? null;
+
+                  handleRPC(
+                    {
+                      webview,
+                      origin,
+                      requestApproval: async (o, chainId) => {
+                        const ok = await approveRef.current?.ask(o);
+                        if (!ok) return null;
+                        if (!accountAddress) return null;
+                        return useDAppSessionsStore
+                          .getState()
+                          .addSession({ origin: o, accountAddress, chainId });
+                      },
+                      requestSignMessage: async (o, hex) => {
+                        const ok = await signMessageRef.current?.ask(o, hex);
+                        if (!ok) return null;
+                        // TODO(browser/signing-v2): wire personal_sign into the passkey pipeline.
+                        // PasskeyService.signWithPasskey is designed for UserOp hashes (bytes32),
+                        // not arbitrary personal_sign messages. A separate "sign arbitrary message"
+                        // entry-point needs to be added to the signing pipeline before this can
+                        // be wired up. For v1, the approval UX is functional; the signature is null.
+                        return null;
+                      },
+                      requestSignTypedData: async (o, td) => {
+                        const ok = await signTypedDataRef.current?.ask(o, td);
+                        if (!ok) return null;
+                        // TODO(browser/signing-v2): wire eth_signTypedData_v4 into the passkey
+                        // pipeline once an arbitrary-message signing path exists.
+                        return null;
+                      },
+                      requestSendTransaction: async (o, tx) => {
+                        const ok = await sendTxRef.current?.ask(o, tx);
+                        if (!ok) return null;
+                        // TODO(browser/signing-v2): wire eth_sendTransaction through the AA
+                        // UserOp pipeline (buildUserOp → signWithPasskey → sendUserOp).
+                        return null;
+                      },
+                      requestSwitchChain: async (o, chainId) => {
+                        const ok = await switchChainRef.current?.ask(o, chainId);
+                        if (!ok) return false;
+                        useDAppSessionsStore.getState().updateSessionChain(o, chainId);
+                        return true;
+                      },
+                    },
+                    {
+                      type: "rpc",
+                      id: msg.id,
+                      method: msg.method,
+                      params: msg.params ?? [],
+                    },
+                  );
+                }}
                 onNavigationStateChange={(nav) => {
                   if (tab.id === activeTabId) {
                     setCanGoBack(nav.canGoBack);
@@ -278,6 +386,13 @@ export default function BrowserScreen() {
         onNewTab={handleNewTab}
         colors={colors}
       />
+
+      {/* EIP-1193 dApp approval sheets */}
+      <ApproveConnectionSheet ref={approveRef} />
+      <SignMessageSheet ref={signMessageRef} />
+      <SignTypedDataSheet ref={signTypedDataRef} />
+      <SendTransactionSheet ref={sendTxRef} />
+      <SwitchChainSheet ref={switchChainRef} />
     </TabScreenContainer>
   );
 }
