@@ -1,7 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+import type { ThemeColors } from "@theme";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -29,7 +29,7 @@ import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { getEnabledChains, type SupportedChainId } from "@/src/integration/chains";
 import { resolveNetworkKey, getNetworkConfig } from "@/src/integration/networks";
 import { useUserStore } from "@/src/store/useUserStore";
-import { TabScreenContainer, MeshBackground, TokenIcon, AssetPickerModal, type Asset } from "@shared/components";
+import { TabScreenContainer, TokenIcon, AssetPickerModal, type Asset } from "@shared/components";
 import Toast from "@/src/shared/components/feedback/Toast";
 import { useTabContentBottomInset } from "@hooks";
 
@@ -79,15 +79,13 @@ const parseSlippageBps = (pct: string): number => {
 };
 
 export const DexScreen: React.FC = () => {
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
   const contentBottomInset = useTabContentBottomInset();
-
-  const isDark = resolvedMode === "dark";
-  const glassBackground = isDark ? "rgba(22, 22, 22, 0.7)" : "#FFFFFF";
 
   const user = useUserStore((state) => state.user);
   const activeChainId = useWalletStore((state) => state.activeChainId);
@@ -477,10 +475,16 @@ export const DexScreen: React.FC = () => {
   );
   const canExecute = Boolean(preparedPlan);
 
+  const envColor = (() => {
+    const env = networkConfig?.environment ?? "local";
+    if (env === "mainnet") return colors.accent;
+    if (env === "local_fork") return "#F59E0B";
+    if (env === "testnet") return "#A78BFA";
+    return colors.success;
+  })();
+
   return (
     <TabScreenContainer includeBottomInset>
-      <MeshBackground intensity={0.8} />
-
       <Toast
         visible={Boolean(toast)}
         message={toast?.message ?? ""}
@@ -502,47 +506,41 @@ export const DexScreen: React.FC = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Exchange</Text>
+          <View>
+            <Text style={styles.headerKicker}>DECENTRALIZED EXCHANGE</Text>
+            <Text style={styles.headerTitle}>Exchange</Text>
+          </View>
           <View style={styles.headerMeta}>
-            {(() => {
-              const env = networkConfig?.environment ?? "local";
-              const dotColor =
-                env === "mainnet" ? colors.accent
-                : env === "local_fork" ? "#F59E0B"
-                : env === "testnet" ? "#A78BFA"
-                : colors.success;
-              const displayName = networkConfig?.displayName ?? `Chain ${selectedChainId}`;
-              return (
-                <View style={[styles.networkBadge, { backgroundColor: withAlpha(dotColor, 0.1), borderColor: withAlpha(dotColor, 0.28) }]}>
-                  <View style={[styles.networkDot, { backgroundColor: dotColor }]} />
-                  <Text style={[styles.networkBadgeText, { color: dotColor }]}>{displayName}</Text>
-                </View>
-              );
-            })()}
+            <View style={[styles.networkBadge, { backgroundColor: `${envColor}1A`, borderColor: `${envColor}47` }]}>
+              <View style={[styles.networkDot, { backgroundColor: envColor }]} />
+              <Text style={[styles.networkBadgeText, { color: envColor }]}>
+                {networkConfig?.displayName ?? `Chain ${selectedChainId}`}
+              </Text>
+            </View>
             {walletAddress && (
-              <Text style={[styles.walletAddressText, { color: colors.textSecondary }]}>
+              <Text style={[styles.walletAddressText, { color: colors.textMuted }]}>
                 {shorten(walletAddress)}
               </Text>
             )}
           </View>
         </View>
 
-        {/* Swap / Bridge tabs */}
-        <View style={[styles.tabContainer, { backgroundColor: withAlpha(colors.surfaceCard, 0.9) }]}>
+        {/* Swap / Bridge tab selector */}
+        <View style={[styles.tabBar, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           <TouchableOpacity
             onPress={() => setActiveTab("swap")}
-            style={[styles.tab, activeTab === "swap" && { backgroundColor: colors.accent }]}
+            style={[styles.tabBtn, activeTab === "swap" && { backgroundColor: colors.accent }]}
           >
-            <Text style={[styles.tabText, { color: activeTab === "swap" ? colors.textOnAccent : colors.textSecondary }]}>
+            <Text style={[styles.tabBtnText, { color: activeTab === "swap" ? colors.textOnAccent : colors.textSecondary }]}>
               Swap
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity disabled style={[styles.tab, { opacity: 0.4 }]}>
-            <Text style={[styles.tabText, { color: colors.textSecondary }]}>Bridge (soon)</Text>
+          <TouchableOpacity disabled style={[styles.tabBtn, { opacity: 0.35 }]}>
+            <Text style={[styles.tabBtnText, { color: colors.textSecondary }]}>Bridge (soon)</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Network selection */}
+        {/* Chain chips */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -556,8 +554,8 @@ export const DexScreen: React.FC = () => {
                 style={[
                   styles.chainChip,
                   {
-                    backgroundColor: isActive ? withAlpha(colors.accent, 0.18) : withAlpha(colors.surfaceCard, 0.85),
-                    borderColor: isActive ? withAlpha(colors.accent, 0.5) : withAlpha(colors.border, 0.35),
+                    backgroundColor: isActive ? `${colors.accent}22` : colors.glass,
+                    borderColor: isActive ? `${colors.accent}80` : colors.border,
                   },
                 ]}
                 onPress={() => {
@@ -574,14 +572,14 @@ export const DexScreen: React.FC = () => {
           })}
         </ScrollView>
 
-        {/* Swap card */}
-        <View style={[styles.mainCard, { backgroundColor: glassBackground, borderColor: withAlpha(colors.border, 0.5) }]}>
+        {/* Main swap card */}
+        <View style={[styles.swapCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           {/* Sell side */}
           <View style={styles.swapSide}>
-            <View style={styles.swapSideHeader}>
+            <View style={styles.swapSideTopRow}>
               <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You pay</Text>
-              <Text style={[styles.balanceHint, { color: colors.textSecondary }]}>
-                Bal:{" "}
+              <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
+                {"Bal: "}
                 <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
                   {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
                 </Text>
@@ -589,19 +587,19 @@ export const DexScreen: React.FC = () => {
             </View>
             <View style={styles.swapSideRow}>
               <TouchableOpacity
-                style={[styles.tokenButton, { backgroundColor: withAlpha(colors.textPrimary, 0.06), borderColor: withAlpha(colors.border, 0.25) }]}
+                style={[styles.tokenBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
                 onPress={() => { setAssetPickerSide("sell"); setIsAssetPickerVisible(true); }}
               >
                 <TokenIcon symbol={sellToken?.symbol ?? "?"} size={26} />
-                <Text style={[styles.tokenButtonSymbol, { color: colors.textPrimary }]}>
+                <Text style={[styles.tokenBtnSymbol, { color: colors.textPrimary }]}>
                   {sellToken?.symbol ?? "Select"}
                 </Text>
-                <Feather name="chevron-down" size={14} color={colors.textSecondary} />
+                <Feather name="chevron-down" size={13} color={colors.textSecondary} />
               </TouchableOpacity>
               <TextInput
                 style={[styles.amountInput, { color: colors.textPrimary }]}
                 placeholder="0.00"
-                placeholderTextColor={withAlpha(colors.textPrimary, 0.18)}
+                placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
                 value={sellAmountDecimal}
                 onChangeText={setSellAmountDecimal}
@@ -609,42 +607,44 @@ export const DexScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Swap direction divider */}
-          <View style={styles.dividerRow}>
-            <View style={[styles.dividerLine, { backgroundColor: withAlpha(colors.border, 0.5) }]} />
+          {/* Swap direction button */}
+          <View style={styles.swapDivider}>
+            <View style={[styles.dividerLine, { backgroundColor: colors.borderMuted }]} />
             <TouchableOpacity
-              style={[styles.swapDirectionBtn, { backgroundColor: colors.surfaceCard, borderColor: withAlpha(colors.border, 0.5) }]}
+              style={[styles.swapDirBtn, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}
               onPress={handleSwapDirection}
             >
-              <Ionicons name="swap-vertical" size={17} color={colors.accent} />
+              <Ionicons name="swap-vertical" size={16} color={colors.accent} />
             </TouchableOpacity>
-            <View style={[styles.dividerLine, { backgroundColor: withAlpha(colors.border, 0.5) }]} />
+            <View style={[styles.dividerLine, { backgroundColor: colors.borderMuted }]} />
           </View>
 
           {/* Buy side */}
           <View style={styles.swapSide}>
-            <View style={styles.swapSideHeader}>
+            <View style={styles.swapSideTopRow}>
               <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You receive</Text>
-              <Text style={[styles.balanceHint, { color: colors.textSecondary }]}>
-                {providerCount > 0 ? `${providerCount} provider${providerCount !== 1 ? "s" : ""}` : "No providers configured"}
+              <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
+                {providerCount > 0
+                  ? `${providerCount} provider${providerCount !== 1 ? "s" : ""}`
+                  : "No providers configured"}
               </Text>
             </View>
             <View style={styles.swapSideRow}>
               <TouchableOpacity
-                style={[styles.tokenButton, { backgroundColor: withAlpha(colors.textPrimary, 0.06), borderColor: withAlpha(colors.border, 0.25) }]}
+                style={[styles.tokenBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
                 onPress={() => { setAssetPickerSide("buy"); setIsAssetPickerVisible(true); }}
               >
                 <TokenIcon symbol={buyToken?.symbol ?? "?"} size={26} />
-                <Text style={[styles.tokenButtonSymbol, { color: colors.textPrimary }]}>
+                <Text style={[styles.tokenBtnSymbol, { color: colors.textPrimary }]}>
                   {buyToken?.symbol ?? "Select"}
                 </Text>
-                <Feather name="chevron-down" size={14} color={colors.textSecondary} />
+                <Feather name="chevron-down" size={13} color={colors.textSecondary} />
               </TouchableOpacity>
-              <View style={styles.receiveAmountBox}>
+              <View style={styles.receiveBox}>
                 {isQuoteLoading ? (
                   <ActivityIndicator size="small" color={colors.accent} />
                 ) : (
-                  <Text style={[styles.receiveAmount, { color: quote ? colors.textPrimary : withAlpha(colors.textPrimary, 0.2) }]}>
+                  <Text style={[styles.receiveAmount, { color: quote ? colors.textPrimary : colors.textMuted }]}>
                     {quote ? formatUnits(quote.estimatedBuyAmountRaw, quote.buyToken.decimals) : "0.00"}
                   </Text>
                 )}
@@ -654,13 +654,12 @@ export const DexScreen: React.FC = () => {
         </View>
 
         {/* Details / slippage card */}
-        <View style={[styles.detailsCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.5), borderColor: withAlpha(colors.border, 0.4) }]}>
-
-          {/* Slippage */}
-          <View style={styles.slippageSection}>
+        <View style={[styles.detailsCard, { backgroundColor: colors.glass, borderColor: colors.border }]}>
+          {/* Slippage row */}
+          <View style={styles.slippageBlock}>
             <View style={styles.slippageTitleRow}>
               <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Max Slippage</Text>
-              <Text style={[styles.slippageCurrentPct, { color: colors.textPrimary }]}>{slippagePct}%</Text>
+              <Text style={[styles.slippageValue, { color: colors.textPrimary }]}>{slippagePct}%</Text>
             </View>
             <View style={styles.slippagePresets}>
               {SLIPPAGE_PRESETS.map((preset) => {
@@ -672,8 +671,8 @@ export const DexScreen: React.FC = () => {
                     style={[
                       styles.slippagePresetBtn,
                       {
-                        backgroundColor: isSelected ? withAlpha(colors.accent, 0.14) : withAlpha(colors.surfaceCard, 0.7),
-                        borderColor: isSelected ? colors.accent : withAlpha(colors.border, 0.4),
+                        backgroundColor: isSelected ? `${colors.accent}22` : colors.glass,
+                        borderColor: isSelected ? colors.accent : colors.border,
                       },
                     ]}
                   >
@@ -688,8 +687,8 @@ export const DexScreen: React.FC = () => {
                 style={[
                   styles.slippagePresetBtn,
                   {
-                    backgroundColor: customSlippageActive ? withAlpha(colors.accent, 0.14) : withAlpha(colors.surfaceCard, 0.7),
-                    borderColor: customSlippageActive ? colors.accent : withAlpha(colors.border, 0.4),
+                    backgroundColor: customSlippageActive ? `${colors.accent}22` : colors.glass,
+                    borderColor: customSlippageActive ? colors.accent : colors.border,
                   },
                 ]}
               >
@@ -699,7 +698,7 @@ export const DexScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
             {customSlippageActive && (
-              <View style={[styles.customSlippageRow, { backgroundColor: withAlpha(colors.surfaceCard, 0.7), borderColor: withAlpha(colors.border, 0.4) }]}>
+              <View style={[styles.customSlippageRow, { backgroundColor: colors.glass, borderColor: colors.border }]}>
                 <TextInput
                   style={[styles.customSlippageInput, { color: colors.textPrimary }]}
                   value={slippagePct}
@@ -714,10 +713,10 @@ export const DexScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Quote details — only shown when quote is available */}
+          {/* Quote details */}
           {quote && (
             <>
-              <View style={[styles.sectionDivider, { backgroundColor: withAlpha(colors.border, 0.4) }]} />
+              <View style={[styles.sectionDivider, { backgroundColor: colors.borderMuted }]} />
               <View style={styles.detailRow}>
                 <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Estimated receive</Text>
                 <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
@@ -733,15 +732,15 @@ export const DexScreen: React.FC = () => {
               {approvalRequired && (
                 <View style={styles.detailRow}>
                   <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Token approval</Text>
-                  <View style={[styles.badge, { backgroundColor: withAlpha(colors.warning, 0.14), borderColor: withAlpha(colors.warning, 0.35) }]}>
-                    <Text style={[styles.badgeText, { color: colors.warning }]}>Required</Text>
+                  <View style={[styles.statusPill, { backgroundColor: colors.warningSoft, borderColor: `${colors.warning}59` }]}>
+                    <Text style={[styles.statusPillText, { color: colors.warning }]}>Required</Text>
                   </View>
                 </View>
               )}
             </>
           )}
 
-          {/* Loading state */}
+          {/* Loading */}
           {(isQuoteLoading || balancesLoading) && (
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={colors.accent} />
@@ -754,7 +753,7 @@ export const DexScreen: React.FC = () => {
           {/* Error */}
           {errorState ? (
             errorState.kind === "user_rejected" ? (
-              <View style={[styles.infoPill, { backgroundColor: withAlpha(colors.accent, 0.12), borderColor: withAlpha(colors.accent, 0.4) }]}>
+              <View style={[styles.infoPill, { backgroundColor: `${colors.accent}1F`, borderColor: `${colors.accent}66` }]}>
                 <Text style={[styles.infoPillText, { color: colors.accent }]}>{errorState.userMessage}</Text>
               </View>
             ) : (
@@ -762,14 +761,8 @@ export const DexScreen: React.FC = () => {
                 style={[
                   styles.errorBanner,
                   {
-                    backgroundColor: withAlpha(
-                      errorState.severity === "warning" ? colors.warning : colors.danger,
-                      0.12,
-                    ),
-                    borderColor: withAlpha(
-                      errorState.severity === "warning" ? colors.warning : colors.danger,
-                      0.4,
-                    ),
+                    backgroundColor: errorState.severity === "warning" ? colors.warningSoft : colors.dangerSoft,
+                    borderColor: errorState.severity === "warning" ? `${colors.warning}66` : `${colors.danger}66`,
                   },
                 ]}
               >
@@ -787,9 +780,9 @@ export const DexScreen: React.FC = () => {
                       setErrorState(null);
                       setRetryNonce((n) => n + 1);
                     }}
-                    style={styles.retryButton}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text style={[styles.retryButtonText, { color: colors.accent }]}>Try again</Text>
+                    <Text style={[styles.retryText, { color: colors.accent }]}>Try again</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -812,13 +805,7 @@ export const DexScreen: React.FC = () => {
 
         {canExecute && (
           <TouchableOpacity
-            style={[
-              styles.secondaryBtn,
-              {
-                backgroundColor: withAlpha(colors.surfaceCard, 0.8),
-                borderColor: withAlpha(colors.border, 0.3),
-              },
-            ]}
+            style={[styles.secondaryBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
             onPress={handleExecuteSwap}
           >
             <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Confirm & Execute</Text>
@@ -840,338 +827,338 @@ export const DexScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 40,
-  },
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+    },
 
-  // Header
-  header: {
-    gap: 10,
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: "900",
-    letterSpacing: -1,
-  },
-  headerMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  networkBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  networkDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  networkBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-  },
-  walletAddressText: {
-    fontSize: 12,
-    fontWeight: "500",
-    letterSpacing: 0.3,
-  },
+    // Header
+    header: {
+      gap: 8,
+      marginBottom: 18,
+    },
+    headerKicker: {
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 2,
+      color: colors.accent,
+      marginBottom: 2,
+    },
+    headerTitle: {
+      fontSize: 30,
+      fontWeight: "900",
+      letterSpacing: -1,
+      color: colors.textPrimary,
+    },
+    headerMeta: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    networkBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 9,
+      borderWidth: 1,
+    },
+    networkDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+    },
+    networkBadgeText: {
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.2,
+    },
+    walletAddressText: {
+      fontSize: 12,
+      fontWeight: "500",
+      letterSpacing: 0.3,
+    },
 
-  // Tabs
-  tabContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 4,
-    borderRadius: 14,
-    marginBottom: 12,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
+    // Tab bar
+    tabBar: {
+      flexDirection: "row",
+      padding: 4,
+      borderRadius: 14,
+      borderWidth: 1,
+      marginBottom: 12,
+    },
+    tabBtn: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    tabBtnText: {
+      fontSize: 14,
+      fontWeight: "700",
+    },
 
-  // Chain chips
-  chainRow: {
-    gap: 8,
-    marginBottom: 14,
-    paddingRight: 8,
-  },
-  chainChip: {
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-  },
-  chainChipText: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.1,
-  },
+    // Chain chips
+    chainRow: {
+      gap: 8,
+      marginBottom: 14,
+      paddingRight: 8,
+    },
+    chainChip: {
+      borderRadius: 9,
+      borderWidth: 1,
+      paddingHorizontal: 13,
+      paddingVertical: 7,
+    },
+    chainChipText: {
+      fontSize: 12,
+      fontWeight: "700",
+    },
 
-  // Main swap card
-  mainCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    overflow: "hidden",
-    marginBottom: 12,
-  },
-  swapSide: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 10,
-  },
-  swapSideHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  swapSideLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  balanceHint: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  swapSideRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  tokenButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 7,
-  },
-  tokenButtonSymbol: {
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  amountInput: {
-    flex: 1,
-    textAlign: "right",
-    fontSize: 30,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-    padding: 0,
-  },
-  receiveAmountBox: {
-    flex: 1,
-    alignItems: "flex-end",
-    justifyContent: "center",
-    minHeight: 36,
-  },
-  receiveAmount: {
-    fontSize: 26,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-    textAlign: "right",
-  },
+    // Swap card
+    swapCard: {
+      borderRadius: 24,
+      borderWidth: 1,
+      overflow: "hidden",
+      marginBottom: 12,
+    },
+    swapSide: {
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+      gap: 10,
+    },
+    swapSideTopRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    swapSideLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    balanceHint: {
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    swapSideRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    tokenBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 6,
+    },
+    tokenBtnSymbol: {
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    amountInput: {
+      flex: 1,
+      textAlign: "right",
+      fontSize: 30,
+      fontWeight: "700",
+      letterSpacing: -0.5,
+      padding: 0,
+    },
+    receiveBox: {
+      flex: 1,
+      alignItems: "flex-end",
+      justifyContent: "center",
+      minHeight: 36,
+    },
+    receiveAmount: {
+      fontSize: 26,
+      fontWeight: "700",
+      letterSpacing: -0.5,
+      textAlign: "right",
+    },
 
-  // Swap direction divider
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 28,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-  },
-  swapDirectionBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    position: "absolute",
-    left: "50%",
-    marginLeft: -19,
-    zIndex: 10,
-  },
+    // Swap direction divider
+    swapDivider: {
+      flexDirection: "row",
+      alignItems: "center",
+      height: 28,
+    },
+    dividerLine: {
+      flex: 1,
+      height: StyleSheet.hairlineWidth,
+    },
+    swapDirBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: "center",
+      alignItems: "center",
+      borderWidth: 1,
+      position: "absolute",
+      left: "50%",
+      marginLeft: -18,
+      zIndex: 10,
+    },
 
-  // Details card
-  detailsCard: {
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    gap: 12,
-    marginBottom: 16,
-  },
-  slippageSection: {
-    gap: 10,
-  },
-  slippageTitleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  slippageCurrentPct: {
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  slippagePresets: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  slippagePresetBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  slippagePresetText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  customSlippageRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 6,
-  },
-  customSlippageInput: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "700",
-    padding: 0,
-  },
-  customSlippageSuffix: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  sectionDivider: {
-    height: 1,
-    marginVertical: 2,
-  },
-  detailRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-  },
-  detailLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  detailValue: {
-    fontSize: 13,
-    fontWeight: "700",
-    textAlign: "right",
-    flex: 1,
-    flexShrink: 1,
-  },
-  badge: {
-    borderRadius: 6,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-  },
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  loadingText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  errorBanner: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  errorBannerText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  retryButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  retryButtonText: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  infoPill: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  infoPillText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
+    // Details card
+    detailsCard: {
+      borderRadius: 20,
+      padding: 16,
+      borderWidth: 1,
+      gap: 12,
+      marginBottom: 16,
+    },
+    slippageBlock: {
+      gap: 10,
+    },
+    slippageTitleRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    slippageValue: {
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    slippagePresets: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    slippagePresetBtn: {
+      flex: 1,
+      paddingVertical: 8,
+      borderRadius: 9,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    slippagePresetText: {
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    customSlippageRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderRadius: 10,
+      borderWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      gap: 6,
+    },
+    customSlippageInput: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: "700",
+      padding: 0,
+    },
+    customSlippageSuffix: {
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    sectionDivider: {
+      height: StyleSheet.hairlineWidth,
+      marginVertical: 2,
+    },
+    detailRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 8,
+    },
+    detailLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    detailValue: {
+      fontSize: 13,
+      fontWeight: "700",
+      textAlign: "right",
+      flex: 1,
+      flexShrink: 1,
+    },
+    statusPill: {
+      borderRadius: 7,
+      borderWidth: 1,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    statusPillText: {
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 0.3,
+    },
+    loadingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    loadingText: {
+      fontSize: 13,
+      fontWeight: "500",
+    },
+    errorBanner: {
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    errorBannerText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    retryText: {
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    infoPill: {
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    infoPillText: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
 
-  // Buttons
-  primaryBtn: {
-    height: 56,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  primaryBtnText: {
-    fontSize: 16,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-  },
-  secondaryBtn: {
-    marginTop: 10,
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  secondaryBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-  },
-});
+    // Buttons
+    primaryBtn: {
+      height: 56,
+      borderRadius: 17,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    primaryBtnText: {
+      fontSize: 16,
+      fontWeight: "800",
+      letterSpacing: 0.3,
+    },
+    secondaryBtn: {
+      marginTop: 10,
+      height: 52,
+      borderRadius: 17,
+      borderWidth: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    secondaryBtnText: {
+      fontSize: 14,
+      fontWeight: "700",
+      letterSpacing: 0.2,
+    },
+  });
 
 export default DexScreen;
