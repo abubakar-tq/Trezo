@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Svg, { Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
-import { withAlpha } from '@utils/color';
 import { useAppTheme } from '@theme';
 
 interface MeshBackgroundProps {

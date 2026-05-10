@@ -2,7 +2,6 @@ import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 
 export type ToastSeverity = "info" | "warning" | "error";
 
@@ -43,7 +42,7 @@ export const Toast: React.FC<ToastProps> = ({
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.wrap, { opacity, backgroundColor: withAlpha(color, 0.18), borderColor: withAlpha(color, 0.5) }]}
+      style={[styles.wrap, { opacity, backgroundColor: `${color}2E`, borderColor: `${color}80` }]}
     >
       <View style={[styles.dot, { backgroundColor: color }]} />
       <Text style={[styles.text, { color: theme.colors.textPrimary }]} numberOfLines={2}>

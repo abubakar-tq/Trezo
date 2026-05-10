@@ -1,6 +1,5 @@
 import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -65,15 +64,15 @@ export const ThemedAlert: React.FC<ThemedAlertProps> = ({
         >
           <LinearGradient
             colors={[
-              withAlpha(colors.accent, 0.08),
-              withAlpha(colors.accent, 0.02),
+              `${colors.accent}14`,
+              `${colors.accent}05`,
             ]}
             style={styles.header}
           >
             <View
               style={[
                 styles.iconCircle,
-                { backgroundColor: withAlpha(colors.accent, 0.15) },
+                { backgroundColor: `${colors.accent}26` },
               ]}
             >
               <Feather name="info" size={24} color={colors.accent} />
@@ -92,7 +91,7 @@ export const ThemedAlert: React.FC<ThemedAlertProps> = ({
           <View
             style={[
               styles.buttonContainer,
-              { borderTopColor: withAlpha(colors.textPrimary, 0.1) },
+              { borderTopColor: `${colors.textPrimary}1A` },
             ]}
           >
             {defaultButtons.map((button, index) => {
@@ -111,7 +110,7 @@ export const ThemedAlert: React.FC<ThemedAlertProps> = ({
                     styles.button,
                     index < defaultButtons.length - 1 && {
                       borderRightWidth: 1,
-                      borderRightColor: withAlpha(colors.textPrimary, 0.1),
+                      borderRightColor: `${colors.textPrimary}1A`,
                     },
                   ]}
                   onPress={() => handleButtonPress(button)}

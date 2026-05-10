@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { View, ViewProps } from "react-native";
 import { useAppTheme } from "@theme";
-import { BorderRadius, Shadows, Spacing } from "../TokenRegistry";
+import { BorderRadius, Phi, Shadows } from "../TokenRegistry";
 
 type CardVariant = "default" | "elevated" | "glass" | "hero";
 type CardSize = "sm" | "md" | "lg";
@@ -15,9 +15,9 @@ interface CardProps extends ViewProps {
 
 const getPadding = (size: CardSize): number => {
   switch (size) {
-    case "sm": return Spacing.sp3;
-    case "lg": return Spacing.sp6;
-    default:   return Spacing.sp4;
+    case "sm": return Phi.phi3;   // 12
+    case "lg": return Phi.phi5;   // 32
+    default:   return Phi.phi4;   // 20 — golden ratio default (up from 16)
   }
 };
 
@@ -36,7 +36,17 @@ export const Card: React.FC<CardProps> = ({
     return (
       <LinearGradient
         colors={gradients.hero}
-        style={[{ borderRadius: BorderRadius.lg, padding }, style as any]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={[
+          {
+            borderRadius: BorderRadius.lg,
+            padding,
+            borderWidth: 1,
+            borderColor: colors.glassBorder,
+          },
+          style as any,
+        ]}
       >
         {children}
       </LinearGradient>
@@ -49,14 +59,13 @@ export const Card: React.FC<CardProps> = ({
     glass:    colors.glass,
   };
 
-  const borderMap: Record<Exclude<CardVariant, "hero">, string | undefined> = {
+  const borderMap: Record<Exclude<CardVariant, "hero">, string> = {
     default:  colors.border,
-    elevated: undefined,
+    elevated: colors.border,       // elevated now has border too
     glass:    colors.glassBorder,
   };
 
-  const shadowStyle = variant === "elevated" ? Shadows.level1 : {};
-  const borderColor = borderMap[variant as Exclude<CardVariant, "hero">];
+  const shadowStyle = variant === "elevated" ? Shadows.level2 : Shadows.level1;
 
   return (
     <View
@@ -65,8 +74,8 @@ export const Card: React.FC<CardProps> = ({
           backgroundColor: bgMap[variant as Exclude<CardVariant, "hero">],
           borderRadius: BorderRadius.lg,
           padding,
-          borderWidth: borderColor ? 1 : 0,
-          borderColor,
+          borderWidth: 1,
+          borderColor: borderMap[variant as Exclude<CardVariant, "hero">],
           ...shadowStyle,
         },
         style,

@@ -18,7 +18,6 @@ import {
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 
 export interface BaseModalProps extends Omit<ModalProps, "children"> {
   visible?: boolean;
@@ -97,7 +96,7 @@ const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: withAlpha(colors.background, 0.92),
+      backgroundColor: `${colors.background}EB`,
       justifyContent: "center",
       alignItems: "center",
       padding: 20,
@@ -116,7 +115,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingTop: 20,
       paddingBottom: 16,
       borderBottomWidth: 1,
-      borderBottomColor: withAlpha(colors.border, 0.1),
+      borderBottomColor: `${colors.border}1A`,
     },
     title: {
       fontSize: 20,
@@ -131,7 +130,7 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       borderRadius: 16,
-      backgroundColor: withAlpha(colors.border, 0.1),
+      backgroundColor: `${colors.border}1A`,
     },
     scrollView: {
       flex: 1,

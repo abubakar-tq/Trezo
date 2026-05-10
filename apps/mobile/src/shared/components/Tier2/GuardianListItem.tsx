@@ -8,7 +8,6 @@ import React from "react";
 import { ActivityIndicator, View, TouchableOpacity, Text } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 
 export type GuardianState =
   | "invited"
@@ -113,11 +112,11 @@ export const GuardianListItem: React.FC<GuardianListItemProps> = ({
               width: 44,
               height: 44,
               borderRadius: 22,
-              backgroundColor: withAlpha(color, 0.1),
+              backgroundColor: `${color}1A`,
               justifyContent: "center",
               alignItems: "center",
               borderWidth: 1,
-              borderColor: withAlpha(color, 0.2),
+              borderColor: `${color}33`,
             }}
           >
             <Text style={{ fontSize: 18, color: color }}>{icon}</Text>
@@ -162,7 +161,7 @@ export const GuardianListItem: React.FC<GuardianListItemProps> = ({
               style={{ 
                 padding: 8,
                 borderRadius: 12,
-                backgroundColor: withAlpha(colors.textPrimary, 0.03)
+                backgroundColor: colors.glass
               }}
             >
               <Feather name="edit-2" size={16} color={colors.textSecondary} />
@@ -173,7 +172,7 @@ export const GuardianListItem: React.FC<GuardianListItemProps> = ({
               style={{ 
                 padding: 8,
                 borderRadius: 12,
-                backgroundColor: withAlpha(colors.danger, 0.05)
+                backgroundColor: colors.glass
               }}
             >
               <Feather name="trash-2" size={16} color={colors.danger} />

@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useAppTheme } from '@theme';
 import { TokenIcon } from '../visuals/TokenIcon';
-import { withAlpha } from '@utils/color';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
@@ -44,7 +43,7 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
 
   const renderItem = ({ item }: { item: Asset }) => (
     <TouchableOpacity
-      style={[styles.assetItem, { backgroundColor: withAlpha(colors.surfaceCard, 0.6), borderColor: withAlpha(colors.border, 0.5) }]}
+      style={[styles.assetItem, { backgroundColor: `${colors.surfaceCard}99`, borderColor: `${colors.border}80` }]}
       onPress={() => {
         Haptics.selectionAsync();
         onSelect(item);
@@ -82,14 +81,14 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
           activeOpacity={1}
           onPress={onClose}
         />
-        <View style={[styles.content, { backgroundColor: colors.surface, borderTopColor: withAlpha(colors.border, 0.4) }]}>
-          <View style={[styles.handle, { backgroundColor: withAlpha(colors.border, 0.6) }]} />
+        <View style={[styles.content, { backgroundColor: colors.surface, borderTopColor: `${colors.border}66` }]}>
+          <View style={[styles.handle, { backgroundColor: `${colors.border}99` }]} />
 
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
             <TouchableOpacity
               onPress={onClose}
-              style={[styles.closeButton, { backgroundColor: withAlpha(colors.surfaceMuted, 0.8) }]}
+              style={[styles.closeButton, { backgroundColor: `${colors.surfaceMuted}CC` }]}
             >
               <Feather name="x" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -110,7 +109,7 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
             }
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
-                <Ionicons name="cube-outline" size={52} color={withAlpha(colors.textSecondary, 0.2)} />
+                <Ionicons name="cube-outline" size={52} color={`${colors.textSecondary}33`} />
                 <Text style={[styles.emptyText, { color: colors.textPrimary }]}>No tokens available</Text>
                 <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
                   Switch to a supported network

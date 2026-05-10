@@ -48,7 +48,7 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
               }}
             >
               <OverlineText
-                color={idx <= currentStep ? "#ffffff" : colors.textSecondary}
+                color={idx <= currentStep ? colors.textOnAccent : colors.textSecondary}
               >
                 {idx < currentStep ? "✓" : idx + 1}
               </OverlineText>

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, ViewStyle, ImageStyle, StyleProp } from 'react-native';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
 
 interface TokenIconProps {
   symbol: string;
@@ -64,8 +63,8 @@ export const TokenIcon: React.FC<TokenIconProps> = ({
         width: size, 
         height: size, 
         borderRadius: size / 2,
-        backgroundColor: withAlpha(colors.accent, 0.1),
-        borderColor: withAlpha(colors.accent, 0.2)
+        backgroundColor: `${colors.accent}1A`,
+        borderColor: `${colors.accent}33`
       },
       style
     ]}>

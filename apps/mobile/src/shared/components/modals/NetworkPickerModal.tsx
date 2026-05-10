@@ -8,7 +8,6 @@ import {
   Dimensions,
 } from 'react-native';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { TokenIcon } from '../visuals/TokenIcon';
@@ -62,7 +61,7 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
         style={[
           styles.networkItem,
           { 
-            backgroundColor: isSelected ? withAlpha(colors.accent, 0.1) : (isDark ? '#2C2C2E' : colors.surfaceMuted),
+            backgroundColor: isSelected ? `${colors.accent}1A` : colors.surfaceMuted,
             borderColor: isSelected ? colors.accent : colors.border
           }
         ]}
@@ -104,7 +103,7 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
         activeOpacity={1} 
         onPress={onClose} 
       />
-      <View style={[styles.content, { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderTopColor: colors.border }]}>
+      <View style={[styles.content, { backgroundColor: colors.surfaceCard, borderTopColor: colors.border }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
         
         <View style={styles.header}>
@@ -204,7 +203,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   networkInitial: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 18,
   },

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  Animated as RNAnimated,
   Text as RNText,
   TextInput as RNTextInput,
   TextInputProps as RNTextInputProps,
@@ -7,13 +8,14 @@ import {
 } from "react-native";
 import { useAppTheme } from "@theme";
 import { CaptionText } from "./Text";
-import { BorderRadius } from "../TokenRegistry";
+import { BorderRadius, TouchTargets } from "../TokenRegistry";
 
 interface InputProps extends Omit<RNTextInputProps, "style"> {
   isLocked?: boolean;
   errorMessage?: string;
   label?: string;
   icon?: React.ReactNode;
+  iconRight?: React.ReactNode;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -21,6 +23,7 @@ export const Input: React.FC<InputProps> = ({
   errorMessage,
   label,
   icon,
+  iconRight,
   onFocus,
   onBlur,
   editable = true,
@@ -30,8 +33,28 @@ export const Input: React.FC<InputProps> = ({
   const { colors } = theme;
   const [isFocused, setIsFocused] = useState(false);
 
-  const handleFocus = (e: any) => { setIsFocused(true); onFocus?.(e); };
-  const handleBlur = (e: any) => { setIsFocused(false); onBlur?.(e); };
+  // Animated value drives border color and glow interpolation
+  const focusAnim = React.useRef(new RNAnimated.Value(0)).current;
+
+  const handleFocus = (e: any) => {
+    setIsFocused(true);
+    RNAnimated.timing(focusAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+    onFocus?.(e);
+  };
+
+  const handleBlur = (e: any) => {
+    setIsFocused(false);
+    RNAnimated.timing(focusAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+    onBlur?.(e);
+  };
 
   const borderColor = errorMessage
     ? colors.danger
@@ -39,11 +62,24 @@ export const Input: React.FC<InputProps> = ({
       ? colors.accent
       : colors.inputBorder;
 
-  return (
-    <View style={{ gap: 4 }}>
-      {label && <CaptionText color={colors.textSecondary}>{label}</CaptionText>}
+  // Shadow elevation animates on focus — creates the glow ring
+  const shadowOpacity = focusAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.25],
+  });
 
-      <View
+  return (
+    <View style={{ gap: 6, opacity: editable ? 1 : 0.45 }}>
+      {label && (
+        <CaptionText
+          color={isFocused ? colors.accent : colors.textSecondary}
+          style={{ letterSpacing: 0.5 }}
+        >
+          {label}
+        </CaptionText>
+      )}
+
+      <RNAnimated.View
         style={{
           flexDirection: "row",
           alignItems: "center",
@@ -51,10 +87,13 @@ export const Input: React.FC<InputProps> = ({
           borderWidth: 1,
           borderColor,
           borderRadius: BorderRadius.md,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          gap: 8,
-          opacity: editable ? 1 : 0.5,
+          height: TouchTargets.comfort,   // 52px — touchComfort, was ~42px
+          paddingHorizontal: 14,
+          gap: 10,
+          shadowColor: colors.accent,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity,
+          shadowRadius: 8,
         }}
       >
         {icon && <View>{icon}</View>}
@@ -64,16 +103,26 @@ export const Input: React.FC<InputProps> = ({
           editable={editable}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          style={{ flex: 1, fontSize: 16, color: colors.text, paddingVertical: 0 }}
+          style={{
+            flex: 1,
+            fontSize: 16,
+            color: colors.text,
+            paddingVertical: 0,
+          }}
           placeholderTextColor={colors.textMuted}
         />
 
         {isLocked && (
           <RNText style={{ fontSize: 16, color: colors.accent }}>🔒</RNText>
         )}
-      </View>
+        {iconRight && !isLocked && <View>{iconRight}</View>}
+      </RNAnimated.View>
 
-      {errorMessage && <CaptionText color={colors.danger}>{errorMessage}</CaptionText>}
+      {errorMessage && (
+        <CaptionText color={colors.danger}>
+          {errorMessage}
+        </CaptionText>
+      )}
     </View>
   );
 };

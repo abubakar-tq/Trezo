@@ -15,7 +15,6 @@ import Animated, {
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 
 interface SkeletonProps {
   width?: number | string;
@@ -59,7 +58,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
           width,
           height,
           borderRadius,
-          backgroundColor: withAlpha(colors.textPrimary, 0.12),
+          backgroundColor: `${colors.textPrimary}1F`,
         },
         animatedStyle,
         style,
