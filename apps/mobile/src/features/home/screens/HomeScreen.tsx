@@ -12,6 +12,7 @@ import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
 import React, { useMemo, useState } from "react";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -49,7 +50,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   useNotificationsBootstrap();
   const unreadCount = useNotificationStore((state) => state.unreadCount);
 
-  const { isActiveOnChain } = useAccountState();
+  const { isActiveOnChain, isProvisioned } = useAccountState();
   const activeChainId = useWalletStore((s) => s.activeChainId);
   const { ref: activationSheetRef, requireActiveOnChain } = useActivationSheet();
 
@@ -173,6 +174,24 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
           visible={modalVisible}
           onClose={() => setModalVisible(false)}
           token={selectedToken}
+          onRequestSend={(t) =>
+            requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+              navigation.navigate('Send', { tokenSymbol: t.symbol }),
+            )
+          }
+          onRequestReceive={() => {
+            // TODO(Phase 6): replace with SetUpWalletSheet — see docs/plans/2026-05-11-mobile-polish-pass-plan.md
+            if (!isProvisioned) {
+              Alert.alert('Set up your wallet', 'Available shortly.');
+              return;
+            }
+            navigation.navigate('Receive');
+          }}
+          onRequestSwap={(preselect) =>
+            requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+              navigation.navigate('Dex', { initialTab: 'swap', preselect }),
+            )
+          }
         />
       )}
 

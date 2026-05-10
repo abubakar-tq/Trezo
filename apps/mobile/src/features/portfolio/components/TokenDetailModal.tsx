@@ -1,22 +1,39 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
 import { TokenIcon, InteractiveChart } from '@shared/components';
 import type { TokenBalance } from '@features/portfolio/services/PortfolioService';
 import { marketService } from '@services/MarketService';
 import { useAssetHistory } from '@hooks/useMarketData';
+import { useUserHoldsToken } from '@features/wallet/hooks/useUserHoldsToken';
+import { isTokenSwappableOnTestnet } from '@services/market/testnetBias';
 
 const { width } = Dimensions.get('window');
+
 interface TokenDetailModalProps {
   visible: boolean;
   onClose: () => void;
   token: TokenBalance | null;
+  onRequestSend?: (token: TokenBalance) => void;
+  onRequestReceive?: () => void;
+  onRequestSwap?: (preselect: { symbol: string; side: 'in' | 'out' }) => void;
 }
 
-export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onClose, token }) => {
+export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
+  visible,
+  onClose,
+  token,
+  onRequestSend,
+  onRequestReceive,
+  onRequestSwap,
+}) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
+
+  const symbol = token?.symbol ?? '';
+  const swappable = isTokenSwappableOnTestnet(symbol);
+  const userHolds = useUserHoldsToken(symbol);
 
   const [selectedPeriod, setSelectedPeriod] = React.useState('1W');
   const [marketDetails, setMarketDetails] = React.useState<any>(null);
@@ -177,6 +194,42 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({ visible, onC
                 </Text>
               </View>
             </View>
+
+            {/* Send / Receive / Swap action row */}
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
+                onPress={() => { onClose(); onRequestSend?.(token); }}
+                activeOpacity={0.75}
+              >
+                <Feather name="arrow-up-right" size={20} color={colors.accent} />
+                <Text style={[styles.actionTileLabel, { color: colors.accent }]}>Send</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
+                onPress={() => { onClose(); onRequestReceive?.(); }}
+                activeOpacity={0.75}
+              >
+                <Feather name="arrow-down-left" size={20} color={colors.accent} />
+                <Text style={[styles.actionTileLabel, { color: colors.accent }]}>Receive</Text>
+              </TouchableOpacity>
+
+              {swappable ? (
+                <TouchableOpacity
+                  style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
+                  onPress={() => { onClose(); onRequestSwap?.({ symbol: token.symbol, side: userHolds ? 'in' : 'out' }); }}
+                  activeOpacity={0.75}
+                >
+                  <Feather name="repeat" size={20} color={colors.accent} />
+                  <Text style={[styles.actionTileLabel, { color: colors.accent }]}>Swap</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.actionTile, { backgroundColor: colors.surfaceMuted }]}>
+                  <Text style={[styles.notAvailableText, { color: colors.textMuted }]}>Not available</Text>
+                </View>
+              )}
+            </View>
           </ScrollView>
         </View>
       </View>
@@ -315,5 +368,28 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  actionTile: {
+    flex: 1,
+    height: 64,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+  },
+  actionTileLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  notAvailableText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

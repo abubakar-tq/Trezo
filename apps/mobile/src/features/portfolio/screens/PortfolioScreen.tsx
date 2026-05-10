@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   ScrollView,
   StyleSheet,
@@ -19,6 +20,11 @@ import { useMarketData } from "@hooks/useMarketData";
 import { usePortfolioHistory } from "@hooks/usePortfolioHistory";
 import { useTabContentBottomInset } from "@hooks";
 import { useUserStore } from "../../../store/useUserStore";
+import { useNavigation } from "@react-navigation/native";
+import { ActivationSheet } from "@features/wallet/components/ActivationSheet";
+import { useAccountState } from "@features/wallet/hooks/useAccountState";
+import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
+import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { TokenDetailModal } from "../components/TokenDetailModal";
 import type { TokenBalance } from "../services/PortfolioService";
 import { TokenIcon } from "@shared/components/visuals/TokenIcon";
@@ -30,6 +36,11 @@ const PortfolioScreen: React.FC = () => {
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
   const contentBottomInset = useTabContentBottomInset();
+  const navigation = useNavigation<any>();
+
+  const { isActiveOnChain, isProvisioned } = useAccountState();
+  const activeChainId = useWalletStore((s) => s.activeChainId);
+  const { ref: activationSheetRef, requireActiveOnChain } = useActivationSheet();
 
   const smartAccountAddress =
     useUserStore((state) => state.smartAccountAddress) ??
@@ -313,8 +324,28 @@ const PortfolioScreen: React.FC = () => {
           visible={modalVisible}
           onClose={() => setModalVisible(false)}
           token={selectedToken}
+          onRequestSend={(t) =>
+            requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+              navigation.navigate('Send', { tokenSymbol: t.symbol }),
+            )
+          }
+          onRequestReceive={() => {
+            // TODO(Phase 6): replace with SetUpWalletSheet — see docs/plans/2026-05-11-mobile-polish-pass-plan.md
+            if (!isProvisioned) {
+              Alert.alert('Set up your wallet', 'Available shortly.');
+              return;
+            }
+            navigation.navigate('Receive');
+          }}
+          onRequestSwap={(preselect) =>
+            requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+              navigation.navigate('Dex', { initialTab: 'swap', preselect }),
+            )
+          }
         />
       )}
+
+      <ActivationSheet ref={activationSheetRef} />
     </TabScreenContainer>
   );
 };

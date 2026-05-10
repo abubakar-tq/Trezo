@@ -3,6 +3,8 @@ import { View, Text, Modal, TouchableOpacity, StyleSheet, Dimensions } from 'rea
 import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
 import type { MarketToken } from '@lib/api/web3Data';
+import { useUserHoldsToken } from '@features/wallet/hooks/useUserHoldsToken';
+import { isTokenSwappableOnTestnet } from '@services/market/testnetBias';
 
 interface TokenDetailSheetProps {
   visible: boolean;
@@ -10,9 +12,48 @@ interface TokenDetailSheetProps {
   onClose: () => void;
   formatPrice: (price: any) => string;
   formatChange: (change: any) => string;
+  onRequestSend: (token: MarketToken) => void;
+  onRequestReceive: () => void;
+  onRequestSwap: (preselect: { symbol: string; side: 'in' | 'out' }) => void;
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Minimal tile used for the three action buttons.
+interface ActionTileProps {
+  icon: React.ComponentProps<typeof Feather>['name'];
+  label: string;
+  onPress: () => void;
+  accent: string;
+  accentBg: string;
+  textOnAccent: string;
+}
+
+const ActionTile: React.FC<ActionTileProps> = ({ icon, label, onPress, accent, accentBg, textOnAccent }) => (
+  <TouchableOpacity
+    style={[tileSt.tile, { backgroundColor: accentBg }]}
+    onPress={onPress}
+    activeOpacity={0.75}
+  >
+    <Feather name={icon} size={20} color={accent} />
+    <Text style={[tileSt.label, { color: accent }]}>{label}</Text>
+  </TouchableOpacity>
+);
+
+const tileSt = StyleSheet.create({
+  tile: {
+    flex: 1,
+    height: 64,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+});
 
 const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
   visible,
@@ -20,9 +61,16 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
   onClose,
   formatPrice,
   formatChange,
+  onRequestSend,
+  onRequestReceive,
+  onRequestSwap,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
+
+  const symbol = token?.symbol ?? '';
+  const swappable = isTokenSwappableOnTestnet(symbol);
+  const userHolds = useUserHoldsToken(symbol);
 
   if (!token) return null;
 
@@ -35,17 +83,17 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <TouchableOpacity 
-        style={styles.overlay} 
-        activeOpacity={1} 
+      <TouchableOpacity
+        style={styles.overlay}
+        activeOpacity={1}
         onPress={onClose}
       >
-        <TouchableOpacity 
-          activeOpacity={1} 
+        <TouchableOpacity
+          activeOpacity={1}
           style={[styles.sheet, { backgroundColor: colors.surfaceCard }]}
         >
           <View style={[styles.handle, { backgroundColor: colors.borderMuted }]} />
-          
+
           <View style={styles.header}>
             <View style={styles.tokenInfo}>
               <View style={[styles.iconContainer, { backgroundColor: `${colors.accent}1A` }]}>
@@ -70,13 +118,37 @@ const TokenDetailSheet: React.FC<TokenDetailSheetProps> = ({
             </View>
           </View>
 
-          <View style={styles.actions}>
-            <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.accent }]}>
-              <Text style={{ color: colors.textOnAccent, fontWeight: '700' }}>Buy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionButton, { backgroundColor: `${colors.accent}1A` }]}>
-              <Text style={{ color: colors.accent, fontWeight: '700' }}>Swap</Text>
-            </TouchableOpacity>
+          <View style={styles.actionRow}>
+            <ActionTile
+              icon="arrow-up-right"
+              label="Send"
+              onPress={() => { onClose(); onRequestSend(token); }}
+              accent={colors.accent}
+              accentBg={`${colors.accent}1A`}
+              textOnAccent={colors.textOnAccent}
+            />
+            <ActionTile
+              icon="arrow-down-left"
+              label="Receive"
+              onPress={() => { onClose(); onRequestReceive(); }}
+              accent={colors.accent}
+              accentBg={`${colors.accent}1A`}
+              textOnAccent={colors.textOnAccent}
+            />
+            {swappable ? (
+              <ActionTile
+                icon="repeat"
+                label="Swap"
+                onPress={() => { onClose(); onRequestSwap({ symbol: token.symbol, side: userHolds ? 'in' : 'out' }); }}
+                accent={colors.accent}
+                accentBg={`${colors.accent}1A`}
+                textOnAccent={colors.textOnAccent}
+              />
+            ) : (
+              <View style={[styles.notAvailable, { backgroundColor: colors.surfaceMuted }]}>
+                <Text style={[styles.notAvailableText, { color: colors.textMuted }]}>Not available</Text>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -146,16 +218,20 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
   },
-  actions: {
+  actionRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
-  actionButton: {
+  notAvailable: {
     flex: 1,
-    height: 56,
-    borderRadius: 28,
+    height: 64,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  notAvailableText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 
