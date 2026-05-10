@@ -39,6 +39,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal";
 import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
+import { NetworkPickerModal, type Network } from "@shared/components/modals/NetworkPickerModal";
 
 import { useWalletData } from "@hooks/useWalletData";
 import { useUserStore } from "@/src/store/useUserStore";
@@ -46,6 +47,7 @@ import { useWalletStore } from "../store/useWalletStore";
 import { RampService } from "@/src/services/RampService";
 import { type RampOrder, type RampProvider, type TransakNetwork, TRANSAK_NETWORKS } from "@/src/types/ramp";
 import { CHAIN_CONFIG } from "@/src/core/network/chain";
+import { getChainConfig, getEnabledChains } from "@/src/integration/chains";
 
 import { BuyAmountForm } from "../components/ramp/BuyAmountForm";
 import { OrderStatusCard } from "../components/ramp/OrderStatusCard";
@@ -101,6 +103,20 @@ export const BuyScreen: React.FC = () => {
   // ── Ramp mode: read from env, default to "auto" ───────────────────────────
   const rampMode = process.env.EXPO_PUBLIC_RAMP_MODE ?? "auto";
 
+  // ── Network selection — defaults to current CHAIN_CONFIG chain ────────────
+  const enabledChains = useMemo(() => getEnabledChains(), []);
+  const defaultChainId = CHAIN_CONFIG.chainId;
+  const [selectedChainId, setSelectedChainId] = useState<number>(defaultChainId);
+  const [isNetworkPickerOpen, setIsNetworkPickerOpen] = useState(false);
+
+  const selectedChain = useMemo(
+    () => getChainConfig(selectedChainId as any) ?? enabledChains[0],
+    [selectedChainId, enabledChains]
+  );
+
+  // Provider is resolved automatically — never shown to the user
+  const provider = resolveProvider(rampMode, selectedChainId);
+
   // ── Local state ───────────────────────────────────────────────────────────
   const [amount, setAmount] = useState("");
   const [selectedAsset, setSelectedAsset] = useState<Asset>({
@@ -115,12 +131,14 @@ export const BuyScreen: React.FC = () => {
   const [isPolling, setIsPolling] = useState(false);
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [transakUrl, setTransakUrl] = useState<string | null>(null);
-  const [transakNetwork, setTransakNetwork] = useState<TransakNetwork>("ethereum");
+  // transakNetwork is derived from selectedChainId when provider === "transak"
+  const transakNetwork = useMemo<TransakNetwork>(() => {
+    const entry = (Object.entries(TRANSAK_NETWORKS) as [TransakNetwork, typeof TRANSAK_NETWORKS[TransakNetwork]][])
+      .find(([, cfg]) => cfg.chainId === selectedChainId);
+    return entry ? entry[0] : "ethereum";
+  }, [selectedChainId]);
 
   // Derived
-  const chainId = CHAIN_CONFIG.chainId; // 31337 for local Anvil; update chain.ts for testnet
-  const provider = resolveProvider(rampMode, chainId);
-  const [selectedProvider, setSelectedProvider] = useState<RampProvider>(provider);
   const fiatAmount = parseFloat(amount || "0");
   const estimatedCrypto = useMemo(
     () => estimateCrypto(fiatAmount, selectedAsset.symbol),
@@ -188,9 +206,9 @@ export const BuyScreen: React.FC = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const effectiveChainId = selectedProvider === "transak"
+      const effectiveChainId = provider === "transak"
         ? TRANSAK_NETWORKS[transakNetwork].chainId
-        : chainId;
+        : selectedChainId;
 
       const session = await RampService.createSession({
         walletAddress: targetAddress,
@@ -198,15 +216,15 @@ export const BuyScreen: React.FC = () => {
         fiatCurrency: "USD",
         fiatAmount,
         cryptoCurrency: selectedAsset.symbol,
-        provider: selectedProvider,
-        transakNetwork: selectedProvider === "transak" ? transakNetwork : undefined,
+        provider,
+        transakNetwork: provider === "transak" ? transakNetwork : undefined,
       });
 
       const order = await RampService.getOrder(session.orderId);
       setActiveOrder(order);
       setIsPolling(true);
 
-      // Open widget for Transak, mock shows the status card directly
+      // Open widget for Transak; mock shows the status card directly
       if (session.provider === "transak" && session.widgetUrl) {
         setTransakUrl(session.widgetUrl);
       }
@@ -236,7 +254,7 @@ export const BuyScreen: React.FC = () => {
     setIsProcessing(true);
     try {
       await RampService.completeMockOrder(activeOrder.id);
-      // ── Immediately refresh order state — don't wait for the poll tick ──────
+      // Immediately refresh order state — don't wait for the poll tick
       const updated = await RampService.getOrder(activeOrder.id);
       setActiveOrder(updated);
       stopPolling(); // terminal state reached — stop the interval
@@ -248,11 +266,15 @@ export const BuyScreen: React.FC = () => {
     }
   };
 
-
   const handleReset = () => {
     setActiveOrder(null);
     setAmount("");
     stopPolling();
+  };
+
+  const handleNetworkSelect = (network: Network) => {
+    setSelectedChainId(network.chainId);
+    setIsNetworkPickerOpen(false);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -276,28 +298,21 @@ export const BuyScreen: React.FC = () => {
             <Feather name="chevron-left" size={28} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Buy Crypto</Text>
-          {/* Network badge */}
-          <View style={[styles.networkBadge, { backgroundColor: colors.surfaceCard }]}>
+          {/* Network badge — shows chain name; tap opens network picker */}
+          <TouchableOpacity
+            style={[styles.networkBadge, { backgroundColor: colors.surfaceCard }]}
+            onPress={() => setIsNetworkPickerOpen(true)}
+          >
             <View
               style={[
                 styles.networkDot,
-                {
-                  backgroundColor: selectedProvider === "transak"
-                    ? TRANSAK_NETWORKS[transakNetwork].color
-                    : chainId === 31337
-                    ? colors.warning
-                    : colors.success,
-                },
+                { backgroundColor: selectedChain?.environment === "local" ? colors.warning : colors.success },
               ]}
             />
             <Text style={[styles.networkText, { color: colors.textMuted }]}>
-              {selectedProvider === "transak"
-                ? TRANSAK_NETWORKS[transakNetwork].label
-                : chainId === 31337
-                ? "Anvil"
-                : `Chain ${chainId}`}
+              {selectedChain?.name ?? "Select Network"}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Body */}
@@ -310,19 +325,16 @@ export const BuyScreen: React.FC = () => {
               amount={amount}
               selectedAsset={selectedAsset}
               estimatedCrypto={estimatedCrypto}
-              provider={selectedProvider}
-              transakNetwork={transakNetwork}
               targetAddress={targetAddress}
               displayAddress={displayAddress}
               onAmountChange={handleAmountChange}
               onAssetPress={() => setIsAssetPickerOpen(true)}
               onAccountPress={() => setIsAccountPickerOpen(true)}
-              onProviderChange={setSelectedProvider}
-              onNetworkChange={setTransakNetwork}
             />
           ) : (
             <OrderStatusCard
               order={activeOrder}
+              chainName={selectedChain?.name ?? "Anvil"}
               displayAddress={displayAddress}
               isProcessing={isProcessing}
               onCompleteMock={handleCompleteMock}
@@ -355,11 +367,6 @@ export const BuyScreen: React.FC = () => {
                 )}
               </LinearGradient>
             </TouchableOpacity>
-            <Text style={[styles.poweredBy, { color: colors.textMuted }]}>
-              {selectedProvider === "mock"
-                ? "Powered by Local Anvil (Dev Mode)"
-                : `Powered by Transak — ${TRANSAK_NETWORKS[transakNetwork].testnetName}`}
-            </Text>
           </View>
         )}
       </KeyboardAvoidingView>
@@ -383,6 +390,12 @@ export const BuyScreen: React.FC = () => {
           setIsAssetPickerOpen(false);
         }}
         assets={tokens}
+      />
+      <NetworkPickerModal
+        isVisible={isNetworkPickerOpen}
+        onClose={() => setIsNetworkPickerOpen(false)}
+        onSelect={handleNetworkSelect}
+        selectedNetworkId={String(selectedChainId)}
       />
 
       {transakUrl && (
@@ -457,12 +470,6 @@ const styles = StyleSheet.create({
   ctaBtnText: {
     fontSize: 18,
     fontWeight: "800",
-  },
-  poweredBy: {
-    textAlign: "center",
-    fontSize: 11,
-    marginTop: 10,
-    fontWeight: "500",
   },
 });
 

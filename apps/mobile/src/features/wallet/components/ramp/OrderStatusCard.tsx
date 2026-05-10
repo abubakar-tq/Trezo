@@ -20,6 +20,7 @@ import { RampOrder, RampStatus } from "@/src/types/ramp";
 
 interface Props {
   order: RampOrder;
+  chainName: string;
   displayAddress: string;
   isProcessing: boolean;
   onCompleteMock: () => void;
@@ -28,6 +29,7 @@ interface Props {
 
 export const OrderStatusCard: React.FC<Props> = ({
   order,
+  chainName,
   displayAddress,
   isProcessing,
   onCompleteMock,
@@ -57,8 +59,8 @@ export const OrderStatusCard: React.FC<Props> = ({
       case "widget_opened": return "Awaiting Payment";
       case "payment_pending": return "Confirming Payment";
       case "processing": return "Funding Wallet...";
-      case "completed": return "Funds Delivered";
-      case "local_mock_completed": return "Mock Funding Successful";
+      case "completed": return `Purchase complete on ${chainName}`;
+      case "local_mock_completed": return `Test purchase complete on ${chainName}`;
       case "failed": return "Transaction Failed";
       case "refunded": return "Order Refunded";
       case "expired": return "Order Expired";
@@ -96,12 +98,16 @@ export const OrderStatusCard: React.FC<Props> = ({
       <Text style={[styles.subtitle, { color: colors.textMuted }]}>
         ${order.fiatAmount} {order.fiatCurrency} → {order.cryptoCurrency}
       </Text>
+      {order.internalStatus === "local_mock_completed" && (
+        <Text style={[styles.testNote, { color: colors.textMuted }]}>
+          This was a local test — no real funds moved.
+        </Text>
+      )}
 
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
       {/* Details */}
       <View style={styles.details}>
-        <DetailRow label="Provider" value={order.provider} colors={colors} capitalize />
         <DetailRow label="Destination" value={displayAddress} colors={colors} />
         {txHash && (
           <DetailRow
@@ -200,7 +206,14 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     fontWeight: "500",
-    marginBottom: 24,
+    marginBottom: 8,
+  },
+  testNote: {
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
+    marginBottom: 16,
+    opacity: 0.7,
   },
   divider: {
     width: "100%",
