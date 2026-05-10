@@ -24,7 +24,7 @@ import {
   ActivityFeed,
   BalanceCard,
 } from "../components/dashboard";
-import { MarketExplorer } from "../components/dashboard/MarketExplorer";
+import { MarketTrendsCarousel } from "../components/dashboard/MarketTrendsCarousel";
 import { useAccountManagement } from "../hooks/useAccountManagement";
 
 interface HomeScreenProps {
@@ -135,7 +135,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
         <View style={styles.sectionWrapper}>
           <View style={[styles.sectionCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>MARKET TRENDS</Text>
-            <MarketExplorer onTokenPress={handleAssetPress} />
+            <MarketTrendsCarousel onTokenPress={handleAssetPress} />
           </View>
         </View>
 
