@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { Avatar, TabScreenContainer } from "@shared/components";
+import { LABELS } from "@shared/copy/labels";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -84,6 +85,7 @@ const ProfileScreen: React.FC = () => {
           { label: "Edit Profile", icon: "user", tint: colors.accent, route: "ProfileEdit" },
           { label: "Devices & Passkeys", icon: "smartphone", tint: colors.accentAlt, route: "DevicesPasskeys" },
           { label: "Backup & Recovery", icon: "shield", tint: colors.success, route: "BackupRecovery" },
+          { label: LABELS.connectedDApps, icon: "link-2", tint: colors.success, route: "ConnectedDApps" },
           { label: "Contacts", icon: "book", tint: colors.warning, route: "ContactList" },
         ],
       },

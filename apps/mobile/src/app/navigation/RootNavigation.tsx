@@ -10,6 +10,7 @@ import ContactDetailScreen from "@features/contacts/screens/ContactDetailScreen"
 import ContactListScreen from "@features/contacts/screens/ContactListScreen";
 import BackupRecoveryScreen from "@features/profile/screens/BackupRecoveryScreen";
 import BrowserSettingsScreen from "@features/profile/screens/BrowserSettingsScreen";
+import { ConnectedDAppsScreen } from "@features/profile/screens/ConnectedDAppsScreen";
 import CompromisedWalletScreen from "@features/profile/screens/CompromisedWalletScreen";
 import ConnectedDevicesScreen from "@features/profile/screens/ConnectedDevicesScreen";
 import DevicesPasskeysScreen from "@features/profile/screens/DevicesPasskeysScreen";
@@ -304,6 +305,14 @@ const RootNavigation = () => {
         <Stack.Screen
           name="ProfileEdit"
           component={ProfileEditScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="ConnectedDApps"
+          component={ConnectedDAppsScreen}
           options={{
             headerShown: false,
             animation: "slide_from_right",

@@ -56,6 +56,7 @@ export type RootStackParamList = {
     smartAccountAddress: string;
   };
   ProfileEdit: undefined;
+  ConnectedDApps: undefined;
   ContactList: undefined;
   AddContact: undefined;
   ContactDetail: { contactId: string };
