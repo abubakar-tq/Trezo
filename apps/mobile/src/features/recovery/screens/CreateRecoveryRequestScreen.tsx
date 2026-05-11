@@ -52,9 +52,13 @@ const CreateRecoveryRequestScreen: React.FC = () => {
       const recoveryService = new RecoveryRequestService();
       const walletService = new SupabaseWalletService();
 
+      // Only chains marked `isEnabled` are safe for wallet ops. Chain 8453
+      // (Base Mainnet Fork) keeps a default RPC URL for read-only dev use but
+      // is intentionally disabled — filtering by `rpcUrl` alone would pull it
+      // in and trip "chain is disabled" inside getPublicClient().
       const candidateChains = SUPPORTED_CHAIN_IDS.filter((chainId) => {
         if (chainId === DEFAULT_CHAIN_ID) return true;
-        return Boolean(CHAINS[chainId]?.rpcUrl);
+        return Boolean(CHAINS[chainId]?.isEnabled);
       });
 
       const chainState = await SocialRecoveryService.getMultiChainRecoveryState(
