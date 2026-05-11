@@ -8,6 +8,7 @@ import {
   http,
   parseAbi,
   type Address,
+  type Chain,
   type Hex,
 } from 'viem';
 import { anvil } from 'viem/chains';
@@ -15,6 +16,21 @@ import { Shield, CheckCircle, AlertCircle, Wallet, ArrowRight, ExternalLink, Clo
 import { motion, AnimatePresence } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
 import { buildRecoveryTypedData, type RecoveryIntent } from './lib/recovery';
+
+// Allow overriding the local Anvil RPC URL at build time. In production the
+// page can't reach the host's `127.0.0.1:8545`, so callers tunnel it (e.g. via
+// localtunnel/ngrok) and set VITE_ANVIL_RPC_URL to the public tunnel URL.
+const ANVIL_RPC_URL =
+  ((import.meta as any).env?.VITE_ANVIL_RPC_URL as string | undefined) ??
+  anvil.rpcUrls.default.http[0];
+
+const localChain: Chain = {
+  ...anvil,
+  rpcUrls: {
+    default: { http: [ANVIL_RPC_URL] },
+    public: { http: [ANVIL_RPC_URL] },
+  },
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -442,7 +458,7 @@ const GuardianApproval: React.FC = () => {
 
     const resolve = async () => {
       try {
-        const publicClient = createPublicClient({ chain: anvil, transport: http() });
+        const publicClient = createPublicClient({ chain: localChain, transport: http(ANVIL_RPC_URL) });
         const code = await publicClient.getBytecode({ address });
         setApprovalMode(code && code !== '0x' ? 'APPROVE_HASH' : 'EOA_ECDSA');
       } catch {
@@ -523,7 +539,7 @@ const GuardianApproval: React.FC = () => {
       return;
     }
     try {
-      const wc = createWalletClient({ chain: anvil, transport: custom((window as any).ethereum) });
+      const wc = createWalletClient({ chain: localChain, transport: custom((window as any).ethereum) });
       const [account] = await wc.requestAddresses();
       setAddress(account);
       toast.success('Wallet connected!');
@@ -551,7 +567,7 @@ const GuardianApproval: React.FC = () => {
       if (approvalMode === 'EOA_ECDSA') {
         // Sign typed data with the guardian's EOA
         const typedData = buildRecoveryTypedData(typedIntent, primaryScope.socialRecovery as Address);
-        const wc = createWalletClient({ account: address, chain: anvil, transport: custom((window as any).ethereum) });
+        const wc = createWalletClient({ account: address, chain: localChain, transport: custom((window as any).ethereum) });
         signature = await wc.signTypedData({
           account: address,
           domain: typedData.domain,
@@ -561,7 +577,7 @@ const GuardianApproval: React.FC = () => {
         });
       } else {
         // Contract wallet: send approveHash on-chain
-        const wc = createWalletClient({ account: address, chain: anvil, transport: custom((window as any).ethereum) });
+        const wc = createWalletClient({ account: address, chain: localChain, transport: custom((window as any).ethereum) });
         approvalTxHash = await wc.sendTransaction({
           to: primaryScope.socialRecovery as Address,
           data: encodeFunctionData({
