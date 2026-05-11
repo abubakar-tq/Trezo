@@ -102,6 +102,12 @@ agent-plans/
 RTK.md
 Context_Capsule.md
 LEVEL2_IMPLEMENTATION_NOTES.md
+# Local dev scripts
+deploy-android.ps1
+build-android.ps1
+install-android.ps1
+start-metro.ps1
+
 # Local testing scripts / temporary files
 apps/backend/query_db.js
 apps/guardian-approval/test_*.js
