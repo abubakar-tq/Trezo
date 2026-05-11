@@ -12,7 +12,9 @@ export type SupportedChainId =
   | 1
   | 324
   | 300
-  | 8453;
+  | 8453
+  | 84532
+  | 421614;
 
 /** @deprecated Use ChainEnvironmentExtended from networks.ts which includes 'local_fork'. */
 export type ChainEnvironment = "local" | "local_fork" | "testnet" | "mainnet";
@@ -130,40 +132,6 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
       && sepoliaDeployment.accountFactory,
     ),
   },
-  84532: {
-    id: 84532,
-    name: "Base Sepolia",
-    nativeCurrency: DEFAULT_NATIVE_CURRENCY,
-    rpcUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_RPC_URL ?? "",
-    bundlerUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_BUNDLER_URL ?? "",
-    paymasterUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_PAYMASTER_URL,
-    ...baseSepoliaDeployment,
-    blockExplorerUrl: "https://sepolia.basescan.org",
-    environment: "testnet",
-    isEnabled: Boolean(
-      process.env.EXPO_PUBLIC_BASE_SEPOLIA_RPC_URL
-      && process.env.EXPO_PUBLIC_BASE_SEPOLIA_BUNDLER_URL
-      && baseSepoliaDeployment.entryPoint
-      && baseSepoliaDeployment.accountFactory,
-    ),
-  },
-  421614: {
-    id: 421614,
-    name: "Arbitrum Sepolia",
-    nativeCurrency: DEFAULT_NATIVE_CURRENCY,
-    rpcUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_RPC_URL ?? "",
-    bundlerUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL ?? "",
-    paymasterUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_PAYMASTER_URL,
-    ...arbSepoliaDeployment,
-    blockExplorerUrl: "https://sepolia.arbiscan.io",
-    environment: "testnet",
-    isEnabled: Boolean(
-      process.env.EXPO_PUBLIC_ARB_SEPOLIA_RPC_URL
-      && process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL
-      && arbSepoliaDeployment.entryPoint
-      && arbSepoliaDeployment.accountFactory,
-    ),
-  },
   1: {
     id: 1,
     name: "Ethereum Mainnet",
@@ -207,6 +175,38 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
     blockExplorerUrl: "https://sepolia.explorer.zksync.io",
     environment: "testnet",
     isEnabled: false,
+  },
+  84532: {
+    id: 84532,
+    name: "Base Sepolia",
+    nativeCurrency: DEFAULT_NATIVE_CURRENCY,
+    rpcUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org",
+    bundlerUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_BUNDLER_URL ?? "",
+    paymasterUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_PAYMASTER_URL,
+    ...baseSepoliaDeployment,
+    blockExplorerUrl: "https://sepolia.basescan.org",
+    environment: "testnet",
+    isEnabled: Boolean(
+      process.env.EXPO_PUBLIC_BASE_SEPOLIA_BUNDLER_URL
+      && baseSepoliaDeployment.entryPoint
+      && baseSepoliaDeployment.accountFactory,
+    ),
+  },
+  421614: {
+    id: 421614,
+    name: "Arbitrum Sepolia",
+    nativeCurrency: DEFAULT_NATIVE_CURRENCY,
+    rpcUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_RPC_URL ?? "https://sepolia-rollup.arbitrum.io/rpc",
+    bundlerUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL ?? "",
+    paymasterUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_PAYMASTER_URL,
+    ...arbSepoliaDeployment,
+    blockExplorerUrl: "https://sepolia.arbiscan.io",
+    environment: "testnet",
+    isEnabled: Boolean(
+      process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL
+      && arbSepoliaDeployment.entryPoint
+      && arbSepoliaDeployment.accountFactory,
+    ),
   },
   8453: {
     id: 8453,

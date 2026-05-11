@@ -57,6 +57,8 @@ const VIEM_CHAINS: Record<SupportedChainId, Chain> = {
   324: chainConfigToViemChain(CHAINS[324]),
   300: chainConfigToViemChain(CHAINS[300]),
   8453: chainConfigToViemChain(CHAINS[8453]),
+  84532: chainConfigToViemChain(CHAINS[84532]),
+  421614: chainConfigToViemChain(CHAINS[421614]),
 };
 
 const requireLegacyRpcUrl = (chainId: SupportedChainId): string => {

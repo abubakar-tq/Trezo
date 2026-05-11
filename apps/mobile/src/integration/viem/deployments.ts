@@ -10,9 +10,9 @@
 // Static imports of known manifests
 import deployment31337 from "../contracts/deployment.31337.json";
 
-// NOTE: deployment.base-mainnet-fork.json is loaded dynamically so it doesn't
-// break the build if the file doesn't exist yet. We catch the require error and
-// return undefined in that case.
+// NOTE: testnet manifests are loaded dynamically so an absent deployment file
+// does not break the build. The mobile app reads `isEnabled` on the network
+// to gate UI surfaces.
 let deploymentBaseFork: DeploymentAddresses | undefined;
 try {
   deploymentBaseFork = require("../contracts/deployment.base-mainnet-fork.json") as DeploymentAddresses;
@@ -20,10 +20,36 @@ try {
   deploymentBaseFork = undefined;
 }
 
+let deploymentSepolia: DeploymentAddresses | undefined;
+try {
+  deploymentSepolia = require("../contracts/deployment.sepolia.json") as DeploymentAddresses;
+} catch {
+  deploymentSepolia = undefined;
+}
+
+let deploymentBaseSepolia: DeploymentAddresses | undefined;
+try {
+  deploymentBaseSepolia = require("../contracts/deployment.base-sepolia.json") as DeploymentAddresses;
+} catch {
+  deploymentBaseSepolia = undefined;
+}
+
+let deploymentArbSepolia: DeploymentAddresses | undefined;
+try {
+  deploymentArbSepolia = require("../contracts/deployment.arb-sepolia.json") as DeploymentAddresses;
+} catch {
+  deploymentArbSepolia = undefined;
+}
+
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 /** App-level deployment profile identifier — decoupled from chainId. */
-export type DeploymentProfile = "31337" | "base-mainnet-fork";
+export type DeploymentProfile =
+  | "31337"
+  | "base-mainnet-fork"
+  | "sepolia"
+  | "base-sepolia"
+  | "arb-sepolia";
 
 /**
  * Local mobile reads the derived compatibility manifest generated under
@@ -59,6 +85,14 @@ export type DeploymentAddresses = {
     tags?: string[];
     isSwapSupported?: boolean;
   }>;
+  /** CrossChainExecutor deployed by DeployInfra alongside the 5 core contracts. */
+  crossChainExecutor?: `0x${string}`;
+  /** Uniswap V3 WETH/USDC pool address pinned per chain for the swap-healthcheck. */
+  swapPoolWethUsdc?: `0x${string}`;
+  /** Set by `make swap-healthcheck`; gates the Swap action in the mobile UI. */
+  swapSupported?: boolean;
+  /** Block timestamp when swap-healthcheck was last run. */
+  swapHealthcheckAt?: number;
   deployer?: `0x${string}`;
   success: boolean;
 };
@@ -68,6 +102,9 @@ export type DeploymentAddresses = {
 export const DEPLOYMENTS_BY_PROFILE: Partial<Record<DeploymentProfile, DeploymentAddresses>> = {
   "31337": deployment31337 as DeploymentAddresses,
   "base-mainnet-fork": deploymentBaseFork,
+  "sepolia": deploymentSepolia,
+  "base-sepolia": deploymentBaseSepolia,
+  "arb-sepolia": deploymentArbSepolia,
 };
 
 // ─── Lookup by profile ────────────────────────────────────────────────────────
@@ -81,6 +118,9 @@ export function getDeployment(profileOrChainId: DeploymentProfile | number): Dep
     // Legacy chain-id lookup for callers that have not moved to networkKey yet.
     if (profileOrChainId === 31337) return DEPLOYMENTS_BY_PROFILE["31337"];
     if (profileOrChainId === 8453) return DEPLOYMENTS_BY_PROFILE["base-mainnet-fork"];
+    if (profileOrChainId === 11155111) return DEPLOYMENTS_BY_PROFILE["sepolia"];
+    if (profileOrChainId === 84532) return DEPLOYMENTS_BY_PROFILE["base-sepolia"];
+    if (profileOrChainId === 421614) return DEPLOYMENTS_BY_PROFILE["arb-sepolia"];
     return undefined;
   }
   return DEPLOYMENTS_BY_PROFILE[profileOrChainId];
@@ -95,7 +135,9 @@ export function getDeploymentForNetwork(networkKey: string): DeploymentAddresses
   // (which itself imports this module, causing a cycle).
   const profileMap: Record<string, DeploymentProfile> = {
     "anvil-local": "31337",
-    "ethereum-sepolia": "31337",
+    "ethereum-sepolia": "sepolia",
+    "base-sepolia": "base-sepolia",
+    "arbitrum-sepolia": "arb-sepolia",
     "base-mainnet": "base-mainnet-fork",
     "base-mainnet-fork": "base-mainnet-fork",
   };
