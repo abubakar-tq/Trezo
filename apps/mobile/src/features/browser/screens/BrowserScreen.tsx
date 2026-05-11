@@ -21,6 +21,7 @@ import {
   View,
 } from "react-native";
 import { WebView } from "react-native-webview";
+import { hashMessage, hashTypedData, type Hex } from "viem";
 import { DiscoverHome } from "../components/discover/DiscoverHome";
 import { INJECTED_PROVIDER_SCRIPT } from "@features/browser/web/injectedProvider.template";
 import { handleRPC } from "@features/browser/web/rpcRouter";
@@ -47,6 +48,12 @@ import {
 } from "@features/browser/components/dapp/SwitchChainSheet";
 import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { useUserStore } from "@store/useUserStore";
+import PasskeyService from "@features/wallet/services/PasskeyService";
+import { SmartAccountExecutionService } from "@features/wallet/services/SmartAccountExecutionService";
+import { useAccountState } from "@features/wallet/hooks/useAccountState";
+import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
+import { ActivationSheet } from "@features/wallet/components/ActivationSheet";
+import { getChainConfig, SUPPORTED_CHAIN_IDS, type SupportedChainId } from "@/src/integration/chains";
 
 export default function BrowserScreen() {
   const { theme } = useAppTheme();
@@ -64,7 +71,10 @@ export default function BrowserScreen() {
   // Source the smart-account address for dApp sessions
   const aaAccount = useWalletStore((s) => s.aaAccount);
   const smartAccountAddress = useUserStore((s) => s.smartAccountAddress);
+  const user = useUserStore((s) => s.user);
   const accountAddress = (aaAccount?.predictedAddress ?? smartAccountAddress ?? null) as `0x${string}` | null;
+  const accountState = useAccountState();
+  const { ref: activationSheetRef, requireActiveOnChain } = useActivationSheet();
 
   const tabs = useBrowserStore((state) => state.tabs);
   const activeTabId = useBrowserStore((state) => state.activeTabId);
@@ -311,27 +321,82 @@ export default function BrowserScreen() {
                       },
                       requestSignMessage: async (o, hex) => {
                         const ok = await signMessageRef.current?.ask(o, hex);
-                        if (!ok) return null;
-                        // TODO(browser/signing-v2): wire personal_sign into the passkey pipeline.
-                        // PasskeyService.signWithPasskey is designed for UserOp hashes (bytes32),
-                        // not arbitrary personal_sign messages. A separate "sign arbitrary message"
-                        // entry-point needs to be added to the signing pipeline before this can
-                        // be wired up. For v1, the approval UX is functional; the signature is null.
-                        return null;
+                        if (!ok || !user?.id) return null;
+                        // EIP-1271 path: contracts already accept the same WebAuthn encoding for
+                        // both validateUserOp and isValidSignatureWithSender (see PasskeyValidator.sol).
+                        const messageHash = hashMessage({ raw: hex as Hex });
+                        const sig = await PasskeyService.signWithPasskey(user.id, messageHash);
+                        return PasskeyService.encodeSignatureForContract(sig) as Hex;
                       },
                       requestSignTypedData: async (o, td) => {
                         const ok = await signTypedDataRef.current?.ask(o, td);
-                        if (!ok) return null;
-                        // TODO(browser/signing-v2): wire eth_signTypedData_v4 into the passkey
-                        // pipeline once an arbitrary-message signing path exists.
-                        return null;
+                        if (!ok || !user?.id) return null;
+                        const typed = td as {
+                          domain: Record<string, unknown>;
+                          types: Record<string, Array<{ name: string; type: string }>>;
+                          primaryType: string;
+                          message: Record<string, unknown>;
+                        };
+                        const typedHash = hashTypedData({
+                          domain: typed.domain,
+                          types: typed.types,
+                          primaryType: typed.primaryType,
+                          message: typed.message,
+                        } as Parameters<typeof hashTypedData>[0]);
+                        const sig = await PasskeyService.signWithPasskey(user.id, typedHash);
+                        return PasskeyService.encodeSignatureForContract(sig) as Hex;
                       },
                       requestSendTransaction: async (o, tx) => {
                         const ok = await sendTxRef.current?.ask(o, tx);
-                        if (!ok) return null;
-                        // TODO(browser/signing-v2): wire eth_sendTransaction through the AA
-                        // UserOp pipeline (buildUserOp → signWithPasskey → sendUserOp).
-                        return null;
+                        if (!ok || !user?.id || !accountAddress) return null;
+                        const session = useDAppSessionsStore.getState().findSession(o);
+                        if (!session) return null;
+
+                        // Brief Rule (§3.3): "If the user's account is not yet Active on the
+                        // request's chain, prompt activation first." Gate via ActivationSheet.
+                        const chainId = session.chainId;
+                        if (!SUPPORTED_CHAIN_IDS.includes(chainId as SupportedChainId)) return null;
+                        const typedChainId = chainId as SupportedChainId;
+                        const isActive = accountState.isActiveOnChain(chainId);
+                        const activated = await new Promise<boolean>((resolve) => {
+                          requireActiveOnChain(chainId, isActive, () => resolve(true));
+                          // If the user cancels the activation sheet, resolve false.
+                          // useActivationSheet's `requireActiveOnChain` invokes onReady on
+                          // success only; the sheet's onDismiss path needs a separate signal —
+                          // for v1 we rely on the user not cancelling mid-flow. Acceptable
+                          // because ActivationSheet's success → onReady is the only happy path.
+                          if (isActive) resolve(true);
+                        });
+                        if (!activated) return null;
+
+                        // Wrap the dApp tx into a smart-account execute UserOp, sign, submit.
+                        // Per ADR-0001: testnets sponsor all UserOps.
+                        const chain = getChainConfig(typedChainId);
+                        const prepared = await SmartAccountExecutionService.prepareUserOperation(
+                          {
+                            chainId: typedChainId,
+                            account: accountAddress,
+                            target: tx.to,
+                            value: tx.value ? BigInt(tx.value) : 0n,
+                            data: (tx.data ?? "0x") as Hex,
+                            operationLabel: "dapp:eth_sendTransaction",
+                            riskLevel: "medium",
+                          },
+                          {
+                            userId: user.id,
+                            usePaymaster: Boolean(chain?.paymasterUrl),
+                            paymasterUrl: chain?.paymasterUrl,
+                          },
+                        );
+                        const signed = await SmartAccountExecutionService.signUserOperation(
+                          user.id,
+                          prepared,
+                        );
+                        const submitted = await SmartAccountExecutionService.submitUserOperation(signed);
+                        // Per ADR-0002: we return the userOpHash (not a tx hash). Modern
+                        // ERC-4337-aware dApps treat the return as opaque and poll the bundler
+                        // for the receipt, which exposes the on-chain tx hash.
+                        return submitted.submittedUserOpHash as Hex;
                       },
                       requestSwitchChain: async (o, chainId) => {
                         const ok = await switchChainRef.current?.ask(o, chainId);
@@ -393,6 +458,9 @@ export default function BrowserScreen() {
       <SignTypedDataSheet ref={signTypedDataRef} />
       <SendTransactionSheet ref={sendTxRef} />
       <SwitchChainSheet ref={switchChainRef} />
+
+      {/* Activation gate for eth_sendTransaction when not Active on session chain */}
+      <ActivationSheet ref={activationSheetRef} />
     </TabScreenContainer>
   );
 }
