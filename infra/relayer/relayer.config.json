@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "name": "trezo-testnet-relayer",
+  "description": "On-demand Across V3 relayer for Trezo testnet bridge demos. Run via `make relayer-up` from contracts/.",
+  "chains": {
+    "11155111": {
+      "name": "Sepolia",
+      "spokePool": "0x5ef6C01E11889d86803e0B23e3cB3F9E9d97B662",
+      "rpcUrlEnv": "SEPOLIA_RPC_URL"
+    },
+    "84532": {
+      "name": "Base Sepolia",
+      "spokePool": "0x82B564983aE7274c86695917BBf8C99ECb6F0F8F",
+      "rpcUrlEnv": "BASE_SEPOLIA_RPC_URL"
+    },
+    "421614": {
+      "name": "Arbitrum Sepolia",
+      "spokePool": "0x7E63A5f1a8F0B4d0934B2f2327DAED3F6bb2ee75",
+      "rpcUrlEnv": "ARB_SEPOLIA_RPC_URL"
+    }
+  },
+  "allowedTokens": {
+    "11155111": [
+      "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"
+    ],
+    "84532": [
+      "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "0x4200000000000000000000000000000000000006"
+    ],
+    "421614": [
+      "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+      "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73"
+    ]
+  },
+  "allowedRoutes": [
+    [11155111, 84532], [84532, 11155111],
+    [11155111, 421614], [421614, 11155111],
+    [84532, 421614], [421614, 84532]
+  ],
+  "minProfitThresholdBps": 0,
+  "maxFillSizeUsdc": 100,
+  "logLevel": "info"
+}

@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  across-relayer:
+    # Pin to a specific tag at first run — check
+    # https://github.com/across-protocol/relayer/pkgs/container/relayer for the
+    # latest stable image. Default below is illustrative; do NOT trust without
+    # cross-checking before first deploy.
+    image: ghcr.io/across-protocol/relayer:latest
+    container_name: trezo-across-relayer
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./relayer.config.json:/app/relayer.config.json:ro
+      - ./logs:/app/logs
+    command: ["node", "dist/index.js", "--config", "/app/relayer.config.json"]
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
