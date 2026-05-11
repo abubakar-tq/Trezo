@@ -18,11 +18,13 @@ export type AppLockState = {
   isLocked: boolean;
   isAuthenticating: boolean;
   isBiometricAvailable: boolean;
+  securityLevel: LocalAuthentication.SecurityLevel;
   lockEnabled: boolean;
   lastError: string | null;
   lastUnlockedAt: number | null;
   authContextActive: boolean;
   initialize: () => Promise<void>;
+  refreshSecurityLevel: () => Promise<LocalAuthentication.SecurityLevel>;
   authenticate: (options?: LocalAuthentication.LocalAuthenticationOptions) => Promise<boolean>;
   lock: () => void;
   unlock: () => void;
@@ -35,6 +37,7 @@ export const useAppLockStore = create<AppLockState>((set, get) => ({
   isLocked: false, // Start unlocked until initialized
   isAuthenticating: false,
   isBiometricAvailable: false,
+  securityLevel: LocalAuthentication.SecurityLevel.NONE,
   lockEnabled: true,
   lastError: null,
   lastUnlockedAt: Date.now(), // Set initial unlock time
@@ -46,9 +49,10 @@ export const useAppLockStore = create<AppLockState>((set, get) => ({
     const storedPreference = await SecureStore.getItemAsync(LOCK_ENABLED_KEY);
     const lockEnabled = storedPreference !== "false";
 
-    const [hasHardware, isEnrolled] = await Promise.all([
+    const [hasHardware, isEnrolled, securityLevel] = await Promise.all([
       LocalAuthentication.hasHardwareAsync(),
       LocalAuthentication.isEnrolledAsync(),
+      LocalAuthentication.getEnrolledLevelAsync(),
     ]);
 
     // Don't lock immediately on initialization - let the app load first
@@ -58,16 +62,50 @@ export const useAppLockStore = create<AppLockState>((set, get) => ({
       lockEnabled,
       isLocked: false, // Start unlocked, let useAppLock determine if lock is needed
       isBiometricAvailable: hasHardware && isEnrolled,
+      securityLevel,
       lastError: null,
       lastUnlockedAt: Date.now(), // Set initial time to prevent immediate lock
     });
   },
 
+  refreshSecurityLevel: async () => {
+    const [hasHardware, isEnrolled, securityLevel] = await Promise.all([
+      LocalAuthentication.hasHardwareAsync(),
+      LocalAuthentication.isEnrolledAsync(),
+      LocalAuthentication.getEnrolledLevelAsync(),
+    ]);
+    set({
+      isBiometricAvailable: hasHardware && isEnrolled,
+      securityLevel,
+    });
+    return securityLevel;
+  },
+
   authenticate: async (options) => {
-    const { lockEnabled, authContextActive } = get();
+    const { lockEnabled, authContextActive, securityLevel, isAuthenticating } = get();
     if (!lockEnabled || !authContextActive) {
       set({ isLocked: false, lastError: null, isAuthenticating: false });
       return true;
+    }
+
+    // Drop concurrent calls. Expo's Android module cancels the in-flight
+    // promise and replaces it without opening a new prompt — that race is what
+    // makes the lock screen "blink" when the auto-attempt and a button press
+    // overlap. Let the in-flight call finish; the caller can retry after.
+    if (isAuthenticating) {
+      return false;
+    }
+
+    // Nothing to authenticate against — don't fire the native prompt (it will
+    // reject instantly and cause the lock screen to "blink"). Caller is expected
+    // to surface the device-setup prompt UI instead.
+    if (securityLevel === LocalAuthentication.SecurityLevel.NONE) {
+      set({
+        isLocked: true,
+        isAuthenticating: false,
+        lastError: "Set up a screen lock (PIN, pattern, or biometric) in your device settings to unlock Trezo.",
+      });
+      return false;
     }
 
     set({ isAuthenticating: true, lastError: null });

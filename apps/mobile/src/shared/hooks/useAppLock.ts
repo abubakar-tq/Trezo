@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { AppState, AppStateStatus } from "react-native";
 
 import { useAppLockStore } from "../../store/useAppLockStore";
+import { useAppPinStore } from "../../store/useAppPinStore";
 import { useAuthFlowStore } from "../../store/useAuthFlowStore";
 import { useUserStore } from "../../store/useUserStore";
 
@@ -9,6 +10,7 @@ const APP_LOCK_TIMEOUT_MS = 2 * 60 * 1000;
 
 export const useAppLock = () => {
   const initialize = useAppLockStore((state) => state.initialize);
+  const initializePin = useAppPinStore((state) => state.initialize);
   const lock = useAppLockStore((state) => state.lock);
   const lockEnabled = useAppLockStore((state) => state.lockEnabled);
   const lastUnlockedAt = useAppLockStore((state) => state.lastUnlockedAt);
@@ -19,7 +21,8 @@ export const useAppLock = () => {
 
   useEffect(() => {
     initialize();
-  }, [initialize]);
+    void initializePin();
+  }, [initialize, initializePin]);
 
   useEffect(() => {
     // If guardNavigation is true (Device Verification screen active), unlock and disable app lock
