@@ -12,7 +12,7 @@
   "proxyFactory": "0x3854e7f61907675a43FFd8152DEfff5cB06e85c3",
   "rootFactory": "0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7",
   "smartAccountImpl": "0x3c8175Fcc8308d0372D6cc25EFed36FeBE06B14f",
-  "socialRecovery": "0xa6472a303C76fe7c8D2AF46F006839ab3Dc36785",
+  "socialRecovery": "0x735fD4912c11AB281C482E2c7B32D37D48b574B5",
   "success": true,
   "zkEmailAuthImpl": "0x408450Ce2E089cDCEB73516f09D7F4dCb0abCE41",
   "zkEmailDkimRegistry": "0xD054c910f048155c4a8ff5C491419dA23C007117",
