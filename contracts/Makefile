@@ -435,7 +435,7 @@ deploy-sepolia:
 		DEPLOYMENT_PROFILE=sepolia \
 		DEPLOYMENT_NAMESPACE=sepolia
 	$(MAKE) verify-infra RPC_URL=$(SEPOLIA_RPC_URL)
-	$(MAKE) deploy-email-sepolia
+	@echo "Skipping deploy-email-sepolia: ZK Email hosted relayer is Base Sepolia only (ADR-0006)."
 	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=sepolia
 	$(MAKE) sync-abi
 
@@ -455,12 +455,26 @@ deploy-base-sepolia:
 	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=base-sepolia
 	$(MAKE) sync-abi
 
+# ── ZK Email hosted infra on Base Sepolia ────────────────────────────────────
+# Pinned from https://docs.zk.email/account-recovery/deployed-contracts
+# Reusing these means our EmailRecovery wrapper deploys ONLY itself (1 contract,
+# not 5) and is compatible with the hosted ZK Email relayer at
+# https://auth-base-sepolia-staging.prove.email/api.
+ZK_EMAIL_VERIFIER_BASE_SEPOLIA        ?= 0x3E5f29a7cCeb30D5FCD90078430CA110c2985716
+ZK_EMAIL_DKIM_REGISTRY_BASE_SEPOLIA   ?= 0x3D3935B3C030893f118a84C92C66dF1B9E4169d6
+ZK_EMAIL_AUTH_IMPL_BASE_SEPOLIA       ?= 0x2721a8eB83Ef105f7B30DAB4e8A4da97cD54f970
+ZK_EMAIL_COMMAND_HANDLER_BASE_SEPOLIA ?= 0x6f114A2628F358eaE4b798aC8803eF7b6F6C4257
+
 .PHONY: deploy-email-base-sepolia
 deploy-email-base-sepolia: build
 	@[ -n "$(KILL_SWITCH_AUTHORIZER)" ] || (echo "❌ Set KILL_SWITCH_AUTHORIZER=0x... (typically the deployer EOA for testnet)" && exit 1)
-	@echo "Deploying EmailRecovery to Base Sepolia (recipe muted to prevent ETHERSCAN_API_KEY echo)..."
+	@echo "Deploying EmailRecovery to Base Sepolia (reusing ZK Email hosted infra; recipe muted)..."
 	@KILL_SWITCH_AUTHORIZER=$(KILL_SWITCH_AUTHORIZER) \
 	DKIM_SIGNER=$(if $(DKIM_SIGNER),$(DKIM_SIGNER),$(KILL_SWITCH_AUTHORIZER)) \
+	VERIFIER=$(ZK_EMAIL_VERIFIER_BASE_SEPOLIA) \
+	DKIM_REGISTRY=$(ZK_EMAIL_DKIM_REGISTRY_BASE_SEPOLIA) \
+	EMAIL_AUTH_IMPL=$(ZK_EMAIL_AUTH_IMPL_BASE_SEPOLIA) \
+	COMMAND_HANDLER=$(ZK_EMAIL_COMMAND_HANDLER_BASE_SEPOLIA) \
 	DEPLOYMENT_PROFILE=base-sepolia \
 	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
 		--rpc-url $(BASE_SEPOLIA_RPC_URL) \
@@ -481,7 +495,7 @@ deploy-arb-sepolia:
 		DEPLOYMENT_PROFILE=arb-sepolia \
 		DEPLOYMENT_NAMESPACE=arb-sepolia
 	$(MAKE) verify-infra RPC_URL=$(ARB_SEPOLIA_RPC_URL)
-	$(MAKE) deploy-email-arb-sepolia
+	@echo "Skipping deploy-email-arb-sepolia: ZK Email hosted relayer is Base Sepolia only (ADR-0006)."
 	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=arb-sepolia
 	$(MAKE) sync-abi
 
