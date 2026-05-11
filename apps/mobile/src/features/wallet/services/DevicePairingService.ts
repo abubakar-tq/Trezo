@@ -112,7 +112,7 @@ export class DevicePairingService {
     }
 
     const request = data as DevicePairingRequest;
-    const deepLink = `trezo://pair-device?requestId=${encodeURIComponent(request.id)}&secret=${encodeURIComponent(secret)}`;
+    const deepLink = `trezowallet://pair-device?requestId=${encodeURIComponent(request.id)}&secret=${encodeURIComponent(secret)}`;
 
     return { request, secret, deepLink };
   }
@@ -134,14 +134,22 @@ export class DevicePairingService {
   }
 
   static async stashPendingDeepLink(params: PairingDeepLinkParams): Promise<void> {
-    await AsyncStorage.setItem(PENDING_DEEPLINK_KEY, JSON.stringify(params));
+    const payload = { ...params, stashedAt: Date.now() };
+    await AsyncStorage.setItem(PENDING_DEEPLINK_KEY, JSON.stringify(payload));
   }
 
   static async getPendingDeepLink(): Promise<PairingDeepLinkParams | null> {
     const json = await AsyncStorage.getItem(PENDING_DEEPLINK_KEY);
     if (!json) return null;
     try {
-      return JSON.parse(json) as PairingDeepLinkParams;
+      const parsed = JSON.parse(json) as PairingDeepLinkParams & { stashedAt?: number };
+      // Drop links older than the pairing TTL — a stale link from an abandoned
+      // attempt would point at an already-expired request and only confuse the user.
+      if (parsed.stashedAt && Date.now() - parsed.stashedAt > PAIRING_TTL_MS) {
+        await AsyncStorage.removeItem(PENDING_DEEPLINK_KEY);
+        return null;
+      }
+      return { requestId: parsed.requestId, secret: parsed.secret };
     } catch {
       return null;
     }
@@ -152,6 +160,10 @@ export class DevicePairingService {
     if (!parsed) return null;
     await AsyncStorage.removeItem(PENDING_DEEPLINK_KEY);
     return parsed;
+  }
+
+  static async clearPendingDeepLink(): Promise<void> {
+    await AsyncStorage.removeItem(PENDING_DEEPLINK_KEY);
   }
 
   static async getPairingRequestForUser(params: {

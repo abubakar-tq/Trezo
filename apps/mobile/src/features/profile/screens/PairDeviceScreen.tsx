@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { NavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import { CommonActions, NavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -26,6 +26,8 @@ const statusLabel = (status: string) => {
   return status;
 };
 
+const TERMINAL_STATUSES: ReadonlyArray<string> = ["approved", "rejected", "expired", "failed"];
+
 type PairDeviceRoute = RouteProp<RootStackParamList, "PairDevice">;
 
 const PairDeviceScreen: React.FC = () => {
@@ -47,6 +49,9 @@ const PairDeviceScreen: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approvedRequestHydrated, setApprovedRequestHydrated] = useState<string | null>(null);
+  const [hydrating, setHydrating] = useState(false);
+  const [hydrationError, setHydrationError] = useState<string | null>(null);
+  const [hydrationComplete, setHydrationComplete] = useState(false);
 
   const loadRequest = useCallback(
     async (params: PairingDeepLinkParams) => {
@@ -87,39 +92,56 @@ const PairDeviceScreen: React.FC = () => {
 
   useEffect(() => {
     if (!linkParams || !user?.id) return;
+    // Don't keep polling after the request reaches a terminal state — the
+    // status can no longer change from the new device's perspective.
+    if (request && TERMINAL_STATUSES.includes(request.status)) return;
 
     const timer = setInterval(() => {
       void loadRequest(linkParams).catch(() => {});
     }, 4000);
 
     return () => clearInterval(timer);
-  }, [linkParams, loadRequest, user?.id]);
+  }, [linkParams, loadRequest, request, user?.id]);
+
+  const runHydration = useCallback(async () => {
+    if (!user?.id || !request || request.status !== "approved") return;
+    setHydrating(true);
+    setHydrationError(null);
+    try {
+      await WalletSyncService.hydrateWalletForUser({
+        userId: user.id,
+        preferredChainId: request.chain_id as SupportedChainId,
+      });
+      await DevicePairingService.ensureLocalDeviceSynced({
+        userId: user.id,
+        walletAddress: request.wallet_address,
+        chainId: request.chain_id,
+      });
+      setHydrationComplete(true);
+    } catch (syncError) {
+      console.warn("[PairDevice] Failed to hydrate wallet after approval", syncError);
+      setHydrationError(
+        syncError instanceof Error
+          ? syncError.message
+          : "Could not sync your wallet on this device. Tap retry to try again.",
+      );
+    } finally {
+      setHydrating(false);
+    }
+  }, [request, user?.id]);
 
   useEffect(() => {
-    if (!user?.id || !request || request.status !== "approved") {
-      return;
-    }
-    if (approvedRequestHydrated === request.id) {
-      return;
-    }
-
+    if (!user?.id || !request || request.status !== "approved") return;
+    if (approvedRequestHydrated === request.id) return;
     setApprovedRequestHydrated(request.id);
-    void (async () => {
-      try {
-        await WalletSyncService.hydrateWalletForUser({
-          userId: user.id,
-          preferredChainId: request.chain_id as SupportedChainId,
-        });
-        await DevicePairingService.ensureLocalDeviceSynced({
-          userId: user.id,
-          walletAddress: request.wallet_address,
-          chainId: request.chain_id,
-        });
-      } catch (syncError) {
-        console.warn("[PairDevice] Failed to hydrate wallet after approval", syncError);
-      }
-    })();
-  }, [approvedRequestHydrated, request, user?.id]);
+    void runHydration();
+  }, [approvedRequestHydrated, request, runHydration, user?.id]);
+
+  const handleOpenWallet = useCallback(() => {
+    navigation.dispatch(
+      CommonActions.reset({ index: 0, routes: [{ name: "TabNavigation" }] }),
+    );
+  }, [navigation]);
 
   const handleCreateAndSubmitPasskey = useCallback(async () => {
     if (!user?.id || !linkParams) return;
@@ -199,7 +221,60 @@ const PairDeviceScreen: React.FC = () => {
         ) : !linkParams ? (
           <>
             <Text style={styles.title}>No pairing link found</Text>
-            <Text style={styles.subtitle}>Open a pairing deep link from your trusted device QR code.</Text>
+            <Text style={styles.subtitle}>Open a pairing deep link from your trusted device QR code, or go back and start over.</Text>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.primaryButtonLabel}>Go back</Text>
+            </TouchableOpacity>
+          </>
+        ) : request?.status === "approved" ? (
+          <>
+            <View style={styles.successBadge}>
+              <Feather name="check" size={28} color={theme.colors.success} />
+            </View>
+            <Text style={styles.title}>Device paired successfully</Text>
+            <Text style={styles.subtitle}>
+              {hydrationComplete
+                ? "Your wallet is ready on this device. You can now sign on-chain actions from here."
+                : hydrating
+                  ? "Syncing your wallet from chain — this only takes a moment."
+                  : hydrationError
+                    ? "Pairing succeeded on-chain but your local wallet state didn't sync. Tap retry below."
+                    : "Finishing setup on this device…"}
+            </Text>
+            {hydrationError && (
+              <Text style={styles.errorText}>{hydrationError}</Text>
+            )}
+            {hydrationError ? (
+              <TouchableOpacity
+                style={[styles.primaryButton, hydrating && styles.disabledButton]}
+                onPress={() => void runHydration()}
+                disabled={hydrating}
+                activeOpacity={0.9}
+              >
+                {hydrating ? (
+                  <ActivityIndicator color={theme.colors.textOnAccent} />
+                ) : (
+                  <Text style={styles.primaryButtonLabel}>Retry sync</Text>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.primaryButton, (hydrating || !hydrationComplete) && styles.disabledButton]}
+                onPress={handleOpenWallet}
+                disabled={hydrating || !hydrationComplete}
+                activeOpacity={0.9}
+              >
+                {hydrating || !hydrationComplete ? (
+                  <ActivityIndicator color={theme.colors.textOnAccent} />
+                ) : (
+                  <Text style={styles.primaryButtonLabel}>Open wallet</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </>
         ) : (
           <>
@@ -236,7 +311,7 @@ const PairDeviceScreen: React.FC = () => {
               activeOpacity={0.9}
             >
               {busy ? (
-                <ActivityIndicator color={colors.textOnAccent} />
+                <ActivityIndicator color={theme.colors.textOnAccent} />
               ) : (
                 <Text style={styles.primaryButtonLabel}>{primaryActionLabel}</Text>
               )}
@@ -373,6 +448,18 @@ const createStyles = (colors: ThemeColors) =>
       color: `${colors.textMuted}D9`,
       fontSize: 12,
       lineHeight: 18,
+    },
+    successBadge: {
+      alignSelf: "center",
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: `${colors.success}1F`,
+      borderWidth: 1,
+      borderColor: `${colors.success}66`,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 4,
     },
   });
 

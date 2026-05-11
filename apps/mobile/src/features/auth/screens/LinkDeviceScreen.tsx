@@ -1,4 +1,4 @@
-import { NavigationProp, useNavigation } from "@react-navigation/native";
+import { NavigationProp, useFocusEffect, useNavigation } from "@react-navigation/native";
 import { CameraView, type BarcodeScanningResult, useCameraPermissions } from "expo-camera";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -115,26 +115,48 @@ export function LinkDeviceScreen() {
   const [pasteLink, setPasteLink] = useState("");
   const [isPasting, setIsPasting] = useState(false);
 
-  // Lock scanner after first successful scan so the same frame doesn't fire twice
+  // Lock scanner after first successful scan so the same frame doesn't fire twice.
+  // Reset whenever the screen regains focus so users can rescan after backing out.
   const scannerLocked = useRef(false);
 
-  // Request camera permission on mount
+  useFocusEffect(
+    useCallback(() => {
+      scannerLocked.current = false;
+      return () => {
+        scannerLocked.current = false;
+      };
+    }, []),
+  );
+
+  // Request camera permission as soon as we know the current state. The expo
+  // hook returns `null` on first render, so an empty-deps effect never sees a
+  // real value — keep `cameraPermission` in deps so we re-run once it lands.
+  // A ref guards us from re-prompting if the user has already responded.
+  const cameraPromptAttempted = useRef(false);
+
   useEffect(() => {
-    if (cameraPermission && !cameraPermission.granted && !cameraPermission.canAskAgain) {
-      // Already permanently denied — show paste as primary
-      setPasteExpanded(true);
-      setErrorMessage("Camera access denied. Expand the section below to paste a pairing link.");
+    if (!cameraPermission) return;
+    if (cameraPermission.granted) {
+      setErrorMessage((prev) =>
+        prev && prev.toLowerCase().includes("camera") ? null : prev,
+      );
       return;
     }
-    if (cameraPermission && !cameraPermission.granted) {
-      requestCameraPermission().then((result) => {
-        if (!result.granted) {
-          setPasteExpanded(true);
-          setErrorMessage("Camera access required for scanning. Expand the section below to paste a pairing link instead.");
-        }
-      });
+    if (!cameraPermission.canAskAgain) {
+      // Permanently denied via OS settings — surface the paste fallback.
+      setPasteExpanded(true);
+      setErrorMessage("Camera access denied. Open device settings to allow it, or paste the pairing link below.");
+      return;
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (cameraPromptAttempted.current) return;
+    cameraPromptAttempted.current = true;
+    requestCameraPermission().then((result) => {
+      if (!result.granted) {
+        setPasteExpanded(true);
+        setErrorMessage("Camera access is required to scan the pairing QR. Paste the pairing link below instead.");
+      }
+    });
+  }, [cameraPermission, requestCameraPermission]);
 
   const handlePairingUrl = useCallback(
     async (rawUrl: string) => {

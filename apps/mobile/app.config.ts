@@ -70,6 +70,12 @@ const config: ExpoConfig = {
         defaultChannel: "default",
       },
     ],
+    [
+      "expo-camera",
+      {
+        cameraPermission: "Allow Trezo Wallet to use the camera to scan pairing QR codes from a trusted device.",
+      },
+    ],
     "expo-web-browser",
   ],
   experiments: {
