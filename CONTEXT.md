@@ -56,6 +56,24 @@ _Avoid_: "market data" (when ambiguous), "token data"
 On-chain operations (send, receive, swap, buy, deploy, sign) targeting Sepolia (11155111), Base Sepolia (84532), Arbitrum Sepolia (421614), and Anvil (31337). The only chains the wallet transacts on during the testnet-demo phase.
 _Avoid_: "supported chains" (when ambiguous with read-only data)
 
+### Swap and cross-chain
+
+**Same-chain swap**:
+A swap action where source and destination tokens live on the same chain (e.g. USDC → ETH on Base Sepolia). Routes through external DEX liquidity (Uniswap V3) using the addresses pinned per chain in `dexRegistry.ts`. Per-chain support is gated by a `swapSupported` flag on `NetworkConfig`, flipped by the swap-pool healthcheck. The Swap action in the UI maps to this when source and destination chain are equal.
+_Avoid_: "swap" (when ambiguous with cross-chain swap)
+
+**Cross-chain swap**:
+A single signed action that moves value from chain A to chain B, optionally changing the token in the process (e.g. USDC on Sepolia → ETH on Arbitrum Sepolia). Implemented by depositing into the Across V3 SpokePool on the source chain with a `message` payload, then having the **CrossChainExecutor** on the destination chain swap the bridged token via Uniswap V3 before forwarding to the user's smart account. Per-chain support is gated by a `crossChainSwapSupported` flag on `NetworkConfig`.
+_Avoid_: "bridge swap", "multi-chain swap"
+
+**CrossChainExecutor**:
+A deterministic Trezo module deployed via Safe Singleton Factory on every chain in **Testnet wallet ops** at the same address. Receives Across bridge proceeds (USDC, WETH), decodes the embedded `message`, swaps the bridged token through the destination's Uniswap V3 router to the user's chosen `buyToken`, and forwards the output to the user's smart account. Falls back to forwarding the raw bridged token if the destination-side swap fails.
+_Avoid_: "swap helper", "bridge handler", "destination contract"
+
+**Across relayer (self-hosted)**:
+A Trezo-operated instance of the upstream `across-protocol/relayer` Docker image, run **on-demand** during testnet demo windows to win the permissionless filler race against the Across community testnet relayer. Brings testnet bridge latency from minutes to ~30 seconds. Funded with a small float of testnet WETH/USDC on each chain. Lifecycle: `make relayer-up` / `make relayer-down`. Not run in production — mainnet Across relayer market is competitive and Trezo is not a filler.
+_Avoid_: "Across server", "bridge backend"
+
 ### Recovery
 
 **Wallet compromise (action)**:
@@ -70,6 +88,8 @@ _Avoid_: "panic button", "lock wallet"
 - A **Linked Device** is tied to a passkey credential, which in turn is bound to the user's smart account address; therefore each Linked Device added must consume a valid **Pairing link** from an already-Linked Device.
 - The **Discover tab**'s discovery content uses **Mainnet read-only data**; any Buy/Swap/Send action launched from a token surface routes through **Testnet wallet ops**. The two surfaces are intentionally disjoint and never reveal the split as user-visible chrome.
 - A **Connected dApp** is bound to a specific Linked Device's session; disconnecting from Profile terminates the session for that device only (Phase 2 will broaden this for WalletConnect cross-device sessions).
+- A **Cross-chain swap** requires the user to be **Active on chain X** for *both* the source and destination chain — the source side needs a deployed smart account to sign the deposit, and the destination side needs a deployed smart account to receive the output. The **Activation sheet** handles missing activation on either chain before the cross-chain UserOp is built.
+- **Same-chain swap** support per chain is determined at runtime by a swap-pool healthcheck against the Uniswap V3 pools pinned in `dexRegistry.ts`. The **CrossChainExecutor** depends on the destination chain's `swapSupported` being true for swap-on-arrival to work; falls back to forwarding the bridged token when false.
 
 ## Example dialogue
 
