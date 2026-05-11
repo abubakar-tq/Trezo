@@ -141,6 +141,7 @@ deploy-email-sepolia: build
 	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
 		--rpc-url $(SEPOLIA_RPC_URL) \
 		$(KEYSTORE_FLAGS) \
+		--sender $(if $(SENDER),$(SENDER),$(KILL_SWITCH_AUTHORIZER)) \
 		--broadcast \
 		$(VERIFY_FLAGS) \
 		$(SCRIPT_VERBOSITY)
@@ -479,6 +480,7 @@ deploy-email-base-sepolia: build
 	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
 		--rpc-url $(BASE_SEPOLIA_RPC_URL) \
 		$(KEYSTORE_FLAGS) \
+		--sender $(if $(SENDER),$(SENDER),$(KILL_SWITCH_AUTHORIZER)) \
 		--broadcast \
 		$(VERIFY_FLAGS) \
 		$(SCRIPT_VERBOSITY)
@@ -509,6 +511,7 @@ deploy-email-arb-sepolia: build
 	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
 		--rpc-url $(ARB_SEPOLIA_RPC_URL) \
 		$(KEYSTORE_FLAGS) \
+		--sender $(if $(SENDER),$(SENDER),$(KILL_SWITCH_AUTHORIZER)) \
 		--broadcast \
 		$(VERIFY_FLAGS) \
 		$(SCRIPT_VERBOSITY)
