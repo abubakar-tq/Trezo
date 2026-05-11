@@ -61,8 +61,6 @@ export default function DeployAccountScreen() {
 
   const handleNext = useCallback(() => {
     if (currentStep === "intro") {
-      setCurrentStep("passkey");
-    } else if (currentStep === "passkey") {
       handleCreatePasskey();
     }
   }, [currentStep]);
@@ -74,6 +72,9 @@ export default function DeployAccountScreen() {
         setCurrentStep("error");
         return;
       }
+
+      // Show the passkey spinner while the system credential UI is in flight.
+      setCurrentStep("passkey");
 
       // Create passkey (biometric prompt handled inside)
       const passkey = await PasskeyService.createPasskey(user.id);
