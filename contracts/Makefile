@@ -174,7 +174,8 @@ predict-infra:
 
 .PHONY: deploy-infra
 deploy-infra: build
-	$(DEPLOY_SCRIPT_ENV) forge script script/DeployInfra.s.sol:DeployInfra \
+	@echo "Deploying infra to $(RPC_URL) (recipe muted to prevent ETHERSCAN_API_KEY echo)..."
+	@$(DEPLOY_SCRIPT_ENV) forge script script/DeployInfra.s.sol:DeployInfra \
 		--rpc-url $(RPC_URL) \
 		$(if $(USE_KEYSTORE),$(KEYSTORE_FLAGS),--private-key $(PRIVATE_KEY)) \
 		--broadcast \
@@ -260,6 +261,9 @@ sync-abi:
 
 	jq '{abi: .abi}' out/EmailRecovery.sol/EmailRecovery.json \
 		> $(MOBILE_DIR)/abi/EmailRecovery.json
+
+	jq '{abi: .abi}' out/CrossChainExecutor.sol/CrossChainExecutor.json \
+		> $(MOBILE_DIR)/abi/CrossChainExecutor.json
 
 # ---------- Sync deployment JSON to indexer ----------
 
