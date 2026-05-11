@@ -29,6 +29,18 @@ BASE_FORK_CHAIN_ID  ?= 8453
 BASE_FORK_PROFILE   ?= base-mainnet-fork
 ENTRYPOINT         ?= 0x0000000071727De22E5E9d8BAf0edAc6f37da032
 
+# ── Testnet deployer keystore + Etherscan verify ─────────────────────────────
+# Created once via: cast wallet import trezo-testnet-deployer --interactive
+DEPLOYER_KEYSTORE ?= trezo-testnet-deployer
+ETHERSCAN_API_KEY ?=
+VERIFY_FLAGS := $(if $(ETHERSCAN_API_KEY),--verify --etherscan-api-key $(ETHERSCAN_API_KEY))
+KEYSTORE_FLAGS := --account $(DEPLOYER_KEYSTORE)
+
+# ── Testnet RPC URLs (set in .env or pass via env) ──────────────────────────
+SEPOLIA_RPC_URL      ?=
+BASE_SEPOLIA_RPC_URL ?= https://sepolia.base.org
+ARB_SEPOLIA_RPC_URL  ?= https://sepolia-rollup.arbitrum.io/rpc
+
 ANVIL_NETWORK_ARGS := --rpc-url $(ANVIL_RPC_URL) --private-key $(LOCAL_PRIVATE_KEY) --broadcast $(SCRIPT_VERBOSITY)
 
 DEPLOY_SCRIPT_ENV := \
@@ -63,7 +75,6 @@ help:
 	@echo "  make check-chain-support RPC_URL=<rpc>"
 	@echo "  make predict-infra RPC_URL=<rpc> [ENTRYPOINT=...]"
 	@echo "  make deploy-infra RPC_URL=<rpc> PRIVATE_KEY=<pk> [ENTRYPOINT=...]"
-	@echo "  make deploy-sepolia   # compatibility alias for make deploy-infra-sepolia"
 	@echo "  make verify-infra RPC_URL=<rpc> [ENTRYPOINT=...]"
 	@echo "  make predict-wallet RPC_URL=<rpc> ACCOUNT_FACTORY=<addr> WALLET_ID=<bytes32> VALIDATOR=<addr> PASSKEY_ID_RAW=<bytes32> PASSKEY_PX=<uint256> PASSKEY_PY=<uint256> [WALLET_INDEX=0]"
 	@echo ""
@@ -76,8 +87,18 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make check-root-factory RPC_URL=\$$SEPOLIA_RPC_URL"
-	@echo "  make deploy-sepolia PRIVATE_KEY=\$$PRIVATE_KEY"
+	@echo "  make deploy-sepolia SEPOLIA_RPC_URL=... ETHERSCAN_API_KEY=..."
+	@echo "  make deploy-base-sepolia ETHERSCAN_API_KEY=...   # uses default RPC https://sepolia.base.org"
+	@echo "  make deploy-arb-sepolia ETHERSCAN_API_KEY=...    # uses default RPC https://sepolia-rollup.arbitrum.io/rpc"
+	@echo "  make swap-healthcheck DEPLOYMENT_PROFILE=base-sepolia RPC_URL=\$$BASE_SEPOLIA_RPC_URL"
+	@echo "  make relayer-up   # bring up the on-demand Across relayer for cross-chain demos"
 	@echo "  make predict-wallet RPC_URL=\$$BASE_RPC_URL ACCOUNT_FACTORY=0x... WALLET_ID=0x... VALIDATOR=0x... PASSKEY_ID_RAW=0x... PASSKEY_PX=... PASSKEY_PY=... WALLET_INDEX=0"
+	@echo ""
+	@echo "Testnet deploy prerequisites:"
+	@echo "  - cast wallet import trezo-testnet-deployer --interactive   # once"
+	@echo "  - Fund deployer address with ~0.1 ETH on each testnet"
+	@echo "  - Set ETHERSCAN_API_KEY (Etherscan v2 multichain) in .env"
+	@echo "  - Set PIMLICO_API_KEY in apps/mobile/.env (for bundler/paymaster URLs)"
 
 .PHONY: bootstrap
 bootstrap:
@@ -110,19 +131,15 @@ deploy-email-local: build
 	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL)
 	$(MAKE) sync-abi
 
-.PHONY: deploy-sepolia
-deploy-sepolia:
-	@echo "deploy-sepolia is a compatibility alias for the canonical portable infra flow."
-	@echo "For the full Sepolia stack, run make deploy-sepolia then make deploy-email-sepolia."
-	$(MAKE) deploy-infra-sepolia PRIVATE_KEY=$(PRIVATE_KEY) $(OPTIONAL_ENTRYPOINT_MAKE)
-
 .PHONY: deploy-email-sepolia
 deploy-email-sepolia: build
 	@echo "Deploying email recovery after canonical infra deployment on Sepolia."
 	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
 		--rpc-url $(SEPOLIA_RPC_URL) \
-		--account sepKey \
-		--broadcast -vvv
+		$(KEYSTORE_FLAGS) \
+		--broadcast \
+		$(VERIFY_FLAGS) \
+		-vvv
 
 .PHONY: ping-anvil
 ping-anvil:
@@ -159,7 +176,9 @@ predict-infra:
 deploy-infra: build
 	$(DEPLOY_SCRIPT_ENV) forge script script/DeployInfra.s.sol:DeployInfra \
 		--rpc-url $(RPC_URL) \
+		$(if $(USE_KEYSTORE),$(KEYSTORE_FLAGS),--private-key $(PRIVATE_KEY)) \
 		--broadcast \
+		$(VERIFY_FLAGS) \
 		$(SCRIPT_VERBOSITY)
 
 .PHONY: verify-infra
@@ -367,3 +386,105 @@ mock-complete-email-recovery-local: build
 	@echo "Optional env: RECOVERY_HARNESS=<override> PASSKEY_VALIDATOR=<override> NEW_PASSKEY_ID=<bytes32> ANVIL_RPC_URL=<override>"
 	forge script script/dev/MockCompleteEmailRecovery.s.sol:MockCompleteEmailRecovery \
 	$(ANVIL_NETWORK_ARGS)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ---------- Testnet deploy targets (Sepolia / Base Sepolia / Arbitrum Sepolia)
+# These run the canonical portable Safe-root flow with the encrypted keystore
+# and Etherscan v2 verification baked in. Required env:
+#   ETHERSCAN_API_KEY    — one Etherscan v2 multichain key
+#   PIMLICO_API_KEY      — for the mobile-side bundler/paymaster URLs
+#   The DEPLOYER_KEYSTORE (default `trezo-testnet-deployer`) must exist.
+
+.PHONY: check-spokepool
+check-spokepool:
+	@[ -n "$(RPC_URL)" ] || (echo "❌ Set RPC_URL" && exit 1)
+	forge script script/CheckSpokePool.s.sol:CheckSpokePool --rpc-url $(RPC_URL) $(SCRIPT_VERBOSITY)
+
+.PHONY: swap-healthcheck
+swap-healthcheck:
+	@[ -n "$(DEPLOYMENT_PROFILE)" ] || (echo "❌ Set DEPLOYMENT_PROFILE=sepolia|base-sepolia|arb-sepolia" && exit 1)
+	@[ -n "$(RPC_URL)" ] || (echo "❌ Set RPC_URL" && exit 1)
+	DEPLOYMENT_PROFILE=$(DEPLOYMENT_PROFILE) forge script script/CheckSwapPools.s.sol:CheckSwapPools \
+		--rpc-url $(RPC_URL) $(SCRIPT_VERBOSITY)
+
+.PHONY: seed-swap-liquidity
+seed-swap-liquidity:
+	@[ -n "$(DEPLOYMENT_PROFILE)" ] || (echo "❌ Set DEPLOYMENT_PROFILE" && exit 1)
+	@[ -n "$(RPC_URL)" ] || (echo "❌ Set RPC_URL" && exit 1)
+	DEPLOYMENT_PROFILE=$(DEPLOYMENT_PROFILE) forge script script/SeedSwapLiquidity.s.sol:SeedSwapLiquidity \
+		--rpc-url $(RPC_URL) $(SCRIPT_VERBOSITY)
+
+.PHONY: deploy-sepolia
+deploy-sepolia:
+	@[ -n "$(SEPOLIA_RPC_URL)" ] || (echo "❌ Set SEPOLIA_RPC_URL in env" && exit 1)
+	$(MAKE) check-root-factory RPC_URL=$(SEPOLIA_RPC_URL)
+	$(MAKE) check-chain-support RPC_URL=$(SEPOLIA_RPC_URL)
+	$(MAKE) check-spokepool RPC_URL=$(SEPOLIA_RPC_URL)
+	$(MAKE) predict-infra RPC_URL=$(SEPOLIA_RPC_URL)
+	$(MAKE) deploy-infra \
+		RPC_URL=$(SEPOLIA_RPC_URL) \
+		USE_KEYSTORE=1 \
+		DEPLOYMENT_PROFILE=sepolia \
+		DEPLOYMENT_NAMESPACE=sepolia
+	$(MAKE) verify-infra RPC_URL=$(SEPOLIA_RPC_URL)
+	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=sepolia
+	$(MAKE) sync-abi
+
+.PHONY: deploy-base-sepolia
+deploy-base-sepolia:
+	$(MAKE) check-root-factory RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	$(MAKE) check-chain-support RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	$(MAKE) check-spokepool RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	$(MAKE) predict-infra RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	$(MAKE) deploy-infra \
+		RPC_URL=$(BASE_SEPOLIA_RPC_URL) \
+		USE_KEYSTORE=1 \
+		DEPLOYMENT_PROFILE=base-sepolia \
+		DEPLOYMENT_NAMESPACE=base-sepolia
+	$(MAKE) verify-infra RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=base-sepolia
+	$(MAKE) sync-abi
+
+.PHONY: deploy-arb-sepolia
+deploy-arb-sepolia:
+	$(MAKE) check-root-factory RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	$(MAKE) check-chain-support RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	$(MAKE) check-spokepool RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	$(MAKE) predict-infra RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	$(MAKE) deploy-infra \
+		RPC_URL=$(ARB_SEPOLIA_RPC_URL) \
+		USE_KEYSTORE=1 \
+		DEPLOYMENT_PROFILE=arb-sepolia \
+		DEPLOYMENT_NAMESPACE=arb-sepolia
+	$(MAKE) verify-infra RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=arb-sepolia
+	$(MAKE) sync-abi
+
+.PHONY: verify-chain
+verify-chain:
+	@[ -n "$(CHAIN)" ] || (echo "❌ Set CHAIN=sepolia|base-sepolia|arb-sepolia" && exit 1)
+	@[ -n "$(ETHERSCAN_API_KEY)" ] || (echo "❌ Set ETHERSCAN_API_KEY" && exit 1)
+	$(MAKE) verify-infra RPC_URL=$($(shell echo $(CHAIN) | tr 'a-z-' 'A-Z_')_RPC_URL)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ---------- Across relayer (on-demand) ----------------------------------------
+
+RELAYER_DIR ?= ../infra/relayer
+
+.PHONY: relayer-up
+relayer-up:
+	docker compose -f $(RELAYER_DIR)/docker-compose.yml up -d
+	@echo "✅ Relayer up. Tail logs with: make relayer-logs"
+
+.PHONY: relayer-down
+relayer-down:
+	docker compose -f $(RELAYER_DIR)/docker-compose.yml down
+	@echo "✅ Relayer down."
+
+.PHONY: relayer-logs
+relayer-logs:
+	docker compose -f $(RELAYER_DIR)/docker-compose.yml logs -f --tail=100
+
+.PHONY: relayer-status
+relayer-status:
+	docker compose -f $(RELAYER_DIR)/docker-compose.yml ps
