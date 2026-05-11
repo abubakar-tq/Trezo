@@ -133,13 +133,17 @@ deploy-email-local: build
 
 .PHONY: deploy-email-sepolia
 deploy-email-sepolia: build
-	@echo "Deploying email recovery after canonical infra deployment on Sepolia."
+	@[ -n "$(KILL_SWITCH_AUTHORIZER)" ] || (echo "❌ Set KILL_SWITCH_AUTHORIZER=0x... (typically the deployer EOA for testnet)" && exit 1)
+	@echo "Deploying EmailRecovery to Sepolia (recipe muted)..."
+	@KILL_SWITCH_AUTHORIZER=$(KILL_SWITCH_AUTHORIZER) \
+	DKIM_SIGNER=$(if $(DKIM_SIGNER),$(DKIM_SIGNER),$(KILL_SWITCH_AUTHORIZER)) \
+	DEPLOYMENT_PROFILE=sepolia \
 	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
 		--rpc-url $(SEPOLIA_RPC_URL) \
 		$(KEYSTORE_FLAGS) \
 		--broadcast \
 		$(VERIFY_FLAGS) \
-		-vvv
+		$(SCRIPT_VERBOSITY)
 
 .PHONY: ping-anvil
 ping-anvil:
@@ -431,6 +435,7 @@ deploy-sepolia:
 		DEPLOYMENT_PROFILE=sepolia \
 		DEPLOYMENT_NAMESPACE=sepolia
 	$(MAKE) verify-infra RPC_URL=$(SEPOLIA_RPC_URL)
+	$(MAKE) deploy-email-sepolia
 	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=sepolia
 	$(MAKE) sync-abi
 
@@ -446,8 +451,23 @@ deploy-base-sepolia:
 		DEPLOYMENT_PROFILE=base-sepolia \
 		DEPLOYMENT_NAMESPACE=base-sepolia
 	$(MAKE) verify-infra RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	$(MAKE) deploy-email-base-sepolia
 	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=base-sepolia
 	$(MAKE) sync-abi
+
+.PHONY: deploy-email-base-sepolia
+deploy-email-base-sepolia: build
+	@[ -n "$(KILL_SWITCH_AUTHORIZER)" ] || (echo "❌ Set KILL_SWITCH_AUTHORIZER=0x... (typically the deployer EOA for testnet)" && exit 1)
+	@echo "Deploying EmailRecovery to Base Sepolia (recipe muted to prevent ETHERSCAN_API_KEY echo)..."
+	@KILL_SWITCH_AUTHORIZER=$(KILL_SWITCH_AUTHORIZER) \
+	DKIM_SIGNER=$(if $(DKIM_SIGNER),$(DKIM_SIGNER),$(KILL_SWITCH_AUTHORIZER)) \
+	DEPLOYMENT_PROFILE=base-sepolia \
+	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
+		--rpc-url $(BASE_SEPOLIA_RPC_URL) \
+		$(KEYSTORE_FLAGS) \
+		--broadcast \
+		$(VERIFY_FLAGS) \
+		$(SCRIPT_VERBOSITY)
 
 .PHONY: deploy-arb-sepolia
 deploy-arb-sepolia:
@@ -461,8 +481,23 @@ deploy-arb-sepolia:
 		DEPLOYMENT_PROFILE=arb-sepolia \
 		DEPLOYMENT_NAMESPACE=arb-sepolia
 	$(MAKE) verify-infra RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	$(MAKE) deploy-email-arb-sepolia
 	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=arb-sepolia
 	$(MAKE) sync-abi
+
+.PHONY: deploy-email-arb-sepolia
+deploy-email-arb-sepolia: build
+	@[ -n "$(KILL_SWITCH_AUTHORIZER)" ] || (echo "❌ Set KILL_SWITCH_AUTHORIZER=0x... (typically the deployer EOA for testnet)" && exit 1)
+	@echo "Deploying EmailRecovery to Arbitrum Sepolia (recipe muted)..."
+	@KILL_SWITCH_AUTHORIZER=$(KILL_SWITCH_AUTHORIZER) \
+	DKIM_SIGNER=$(if $(DKIM_SIGNER),$(DKIM_SIGNER),$(KILL_SWITCH_AUTHORIZER)) \
+	DEPLOYMENT_PROFILE=arb-sepolia \
+	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
+		--rpc-url $(ARB_SEPOLIA_RPC_URL) \
+		$(KEYSTORE_FLAGS) \
+		--broadcast \
+		$(VERIFY_FLAGS) \
+		$(SCRIPT_VERBOSITY)
 
 .PHONY: verify-chain
 verify-chain:
