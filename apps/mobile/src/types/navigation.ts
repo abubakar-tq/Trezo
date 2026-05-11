@@ -40,6 +40,7 @@ export type RootStackParamList = {
   BrowserSettings: undefined;
   BackupRecovery: undefined;
   DevicesPasskeys: undefined;
+  LinkDevice: undefined;
   PairDevice: { requestId?: string; secret?: string } | undefined;
   CompromisedWallet: undefined;
   GuardianRecovery: undefined;

@@ -1,4 +1,4 @@
-import { NavigationProp, useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { CameraView, type BarcodeScanningResult, useCameraPermissions } from "expo-camera";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -11,9 +11,10 @@ import {
 } from "react-native";
 
 import { SigninIcon } from "@/assets/components";
-import { AuthStackParamList } from "@/src/types/navigation";
 import DevicePairingService from "@features/wallet/services/DevicePairingService";
 import { AuthGradientButton, AuthScaffold } from "@features/auth/components";
+import { navigate } from "@app/navigation/navigationRef";
+import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 
@@ -104,10 +105,11 @@ const createStyles = (colors: ThemeColors) =>
   });
 
 export function LinkDeviceScreen() {
-  const navigation = useNavigation<NavigationProp<AuthStackParamList>>();
+  const navigation = useNavigation();
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const isLoggedIn = useUserStore((state) => state.isLoggedIn);
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -167,10 +169,17 @@ export function LinkDeviceScreen() {
         return false;
       }
       await DevicePairingService.stashPendingDeepLink(params);
-      navigation.navigate("Login", { pairingMode: "resume" });
+      // Authenticated path: the user is already signed in and this screen was
+      // entered from the Security Center, so jump straight to pairing. The
+      // login-resume path is only needed for the rare pre-auth deep link case.
+      if (isLoggedIn) {
+        navigate("PairDevice");
+      } else {
+        navigate("Login", { pairingMode: "resume" });
+      }
       return true;
     },
-    [navigation],
+    [isLoggedIn],
   );
 
   const handleBarcodeScanned = useCallback(

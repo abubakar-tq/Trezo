@@ -1,7 +1,6 @@
 import { NavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import { Feather } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { AppleIconSignin, GoogleIconSignin, SigninIcon } from "@/assets/components";
 import { AuthStackParamList } from "@/src/types/navigation";
@@ -267,14 +266,6 @@ const LoginScreen: React.FC = () => {
           onPress={() => handleSocial("apple")}
           loading={socialLoading === "apple"}
         />
-
-        <Pressable
-          onPress={() => navigation.navigate("LinkDevice")}
-          style={({ pressed }) => [styles.linkDeviceBtn, pressed && { opacity: 0.7 }]}
-        >
-          <Feather name="smartphone" size={16} color={colors.textSecondary} />
-          <Text style={styles.linkDeviceText}>{LABELS.linkADevice}</Text>
-        </Pressable>
       </View>
     </AuthScaffold>
   );
@@ -349,20 +340,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   footerLink: {
     color: colors.textPrimary,
     fontWeight: "600",
-  },
-  linkDeviceBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  linkDeviceText: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "500",
   },
 });
 

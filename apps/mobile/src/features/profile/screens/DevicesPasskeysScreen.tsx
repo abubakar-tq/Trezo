@@ -22,7 +22,7 @@ import { PasskeyAccountService } from "@/src/features/wallet/services/PasskeyAcc
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { SupabaseWalletService } from "@/src/features/wallet/services/SupabaseWalletService";
 import WalletSyncService from "@/src/features/wallet/services/WalletSyncService";
-import { CardSkeleton, EmptyState } from "@shared/components/ui";
+import { CardSkeleton } from "@shared/components/ui";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useWalletStore, type PasskeyInfo } from "@/src/features/wallet/store/useWalletStore";
 import type { Address, Hex } from "viem";
@@ -646,14 +646,32 @@ const DevicesPasskeysScreen: React.FC = () => {
             {checkingLocalSigner ? (
               <CardSkeleton height={160} />
             ) : (
-              <EmptyState
-                icon="shield-off"
-                title="Authorization Required"
-                description="This device is not yet registered to authorize security changes. Use a trusted device to approve this pairing, or use recovery if you lost your primary device."
-                actionLabel="Open recovery options"
-                onAction={() => navigation.navigate("RecoveryEntry")}
-                style={{ backgroundColor: `${colors.surfaceCard}CC` }}
-              />
+              <View style={[styles.authRequiredCard, { backgroundColor: `${colors.surfaceCard}CC`, borderColor: colors.border }]}>
+                <View style={[styles.authRequiredIcon, { backgroundColor: `${colors.warning}1A`, borderColor: `${colors.warning}40` }]}>
+                  <Feather name="shield-off" size={20} color={colors.warning} />
+                </View>
+                <Text style={[styles.authRequiredTitle, { color: colors.textPrimary }]}>This device isn't authorized yet</Text>
+                <Text style={[styles.authRequiredBody, { color: colors.textSecondary }]}>
+                  Pair this device with a trusted device that already has your wallet, or use recovery if you no longer have access to your trusted device.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.addDeviceBtn, { backgroundColor: colors.accentAlt, marginTop: 4 }]}
+                  onPress={() => navigation.navigate("LinkDevice")}
+                  activeOpacity={0.88}
+                >
+                  <View style={[styles.addDeviceIconWrap, { backgroundColor: "rgba(255,255,255,0.18)" }]}>
+                    <Feather name="link-2" size={16} color={colors.textOnAccent} />
+                  </View>
+                  <Text style={[styles.addDeviceLabel, { color: colors.textOnAccent }]}>Pair this device</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.authRequiredSecondaryBtn, { borderColor: colors.border }]}
+                  onPress={() => navigation.navigate("RecoveryEntry")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.authRequiredSecondaryLabel, { color: colors.textPrimary }]}>Use recovery instead</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         ) : (
@@ -1213,6 +1231,41 @@ const createStyles = (colors: ThemeColors) =>
       flex: 1,
       fontSize: 12,
       lineHeight: 18,
+    },
+    authRequiredCard: {
+      borderRadius: 20,
+      borderWidth: 1,
+      padding: 18,
+      gap: 12,
+      alignItems: "stretch",
+    },
+    authRequiredIcon: {
+      alignSelf: "flex-start",
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    authRequiredTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      letterSpacing: -0.2,
+    },
+    authRequiredBody: {
+      fontSize: 13,
+      lineHeight: 19,
+    },
+    authRequiredSecondaryBtn: {
+      borderRadius: 14,
+      borderWidth: 1,
+      paddingVertical: 13,
+      alignItems: "center",
+    },
+    authRequiredSecondaryLabel: {
+      fontSize: 13,
+      fontWeight: "700",
     },
   });
 
