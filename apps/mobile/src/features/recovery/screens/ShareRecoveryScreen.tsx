@@ -25,7 +25,9 @@ const ShareRecoveryScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const link = `https://trezo.app/recovery/guardian/${route.params.requestId}`;
+  const guardianPortalBaseUrl =
+    process.env.EXPO_PUBLIC_GUARDIAN_PORTAL_URL ?? "https://guardian-approval.vercel.app";
+  const link = `${guardianPortalBaseUrl}/${route.params.requestId}`;
 
   const loadState = useCallback(async () => {
     const [nextRequest, nextApprovals] = await Promise.all([
