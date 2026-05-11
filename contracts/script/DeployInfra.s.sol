@@ -17,13 +17,14 @@ import {AccountFactory} from "src/factory/AccountFactory.sol";
 contract DeployInfra is Script {
     function run() external returns (PredictInfra.InfraAddresses memory deployed) {
         address entryPoint = vm.envOr("ENTRYPOINT", DeployConstants.ENTRYPOINT_V07);
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address rootFactory = DeployConstants.SAFE_SINGLETON_FACTORY;
 
         PredictInfra predictor = new PredictInfra();
         PredictInfra.InfraAddresses memory predicted = predictor.predict();
 
-        vm.startBroadcast(deployerKey);
+        // Broadcaster comes from Foundry CLI: --account <keystore> OR --private-key <pk>.
+        // Don't read PRIVATE_KEY from env — that conflicts with the --account flow.
+        vm.startBroadcast();
 
         deployed.smartAccountImpl = DeployUtils.deployThroughRootFactory(
             rootFactory,
