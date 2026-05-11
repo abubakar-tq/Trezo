@@ -430,7 +430,7 @@ deploy-sepolia:
 	$(MAKE) check-chain-support RPC_URL=$(SEPOLIA_RPC_URL)
 	$(MAKE) check-spokepool RPC_URL=$(SEPOLIA_RPC_URL)
 	$(MAKE) predict-infra RPC_URL=$(SEPOLIA_RPC_URL)
-	$(MAKE) deploy-infra \
+	-$(MAKE) deploy-infra \
 		RPC_URL=$(SEPOLIA_RPC_URL) \
 		USE_KEYSTORE=1 \
 		DEPLOYMENT_PROFILE=sepolia \
@@ -446,13 +446,13 @@ deploy-base-sepolia:
 	$(MAKE) check-chain-support RPC_URL=$(BASE_SEPOLIA_RPC_URL)
 	$(MAKE) check-spokepool RPC_URL=$(BASE_SEPOLIA_RPC_URL)
 	$(MAKE) predict-infra RPC_URL=$(BASE_SEPOLIA_RPC_URL)
-	$(MAKE) deploy-infra \
+	-$(MAKE) deploy-infra \
 		RPC_URL=$(BASE_SEPOLIA_RPC_URL) \
 		USE_KEYSTORE=1 \
 		DEPLOYMENT_PROFILE=base-sepolia \
 		DEPLOYMENT_NAMESPACE=base-sepolia
 	$(MAKE) verify-infra RPC_URL=$(BASE_SEPOLIA_RPC_URL)
-	$(MAKE) deploy-email-base-sepolia
+	-$(MAKE) deploy-email-base-sepolia
 	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=base-sepolia
 	$(MAKE) sync-abi
 
@@ -491,7 +491,7 @@ deploy-arb-sepolia:
 	$(MAKE) check-chain-support RPC_URL=$(ARB_SEPOLIA_RPC_URL)
 	$(MAKE) check-spokepool RPC_URL=$(ARB_SEPOLIA_RPC_URL)
 	$(MAKE) predict-infra RPC_URL=$(ARB_SEPOLIA_RPC_URL)
-	$(MAKE) deploy-infra \
+	-$(MAKE) deploy-infra \
 		RPC_URL=$(ARB_SEPOLIA_RPC_URL) \
 		USE_KEYSTORE=1 \
 		DEPLOYMENT_PROFILE=arb-sepolia \
