@@ -23,7 +23,7 @@ import { useUserStore } from "@store/useUserStore";
 import { getSupabaseClient } from "@lib/supabase";
 
 export type ActivationSheetHandle = {
-  present: (chainId: number, onSuccess: () => void) => void;
+  present: (chainId: number, onSuccess: () => void, onCancel?: () => void) => void;
   dismiss: () => void;
 };
 
@@ -34,6 +34,8 @@ export const ActivationSheet = forwardRef<ActivationSheetHandle>((_, ref) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deployedAddress, setDeployedAddress] = useState<string | null>(null);
   const onSuccessRef = useRef<(() => void) | null>(null);
+  const onCancelRef = useRef<(() => void) | null>(null);
+  const successFiredRef = useRef<boolean>(false);
 
   const accountState = useAccountState();
 
@@ -48,12 +50,14 @@ export const ActivationSheet = forwardRef<ActivationSheetHandle>((_, ref) => {
   const markAsDeployed = useWalletStore((s) => s.markAsDeployed);
 
   useImperativeHandle(ref, () => ({
-    present: (cId, onSuccess) => {
+    present: (cId, onSuccess, onCancel) => {
       setChainId(cId);
       setStep("intro");
       setErrorMessage(null);
       setDeployedAddress(null);
       onSuccessRef.current = onSuccess;
+      onCancelRef.current = onCancel ?? null;
+      successFiredRef.current = false;
       sheetRef.current?.present();
     },
     dismiss: () => sheetRef.current?.dismiss(),
@@ -240,7 +244,17 @@ export const ActivationSheet = forwardRef<ActivationSheetHandle>((_, ref) => {
   ]);
 
   return (
-    <TrezoBottomSheet ref={sheetRef} snapPoints={["60%"]} enableDynamicSizing>
+    <TrezoBottomSheet
+      ref={sheetRef}
+      snapPoints={["60%"]}
+      enableDynamicSizing
+      onDismiss={() => {
+        if (!successFiredRef.current) onCancelRef.current?.();
+        successFiredRef.current = false;
+        onSuccessRef.current = null;
+        onCancelRef.current = null;
+      }}
+    >
       {chainId !== null && (
         <DeployAccountSheetBody
           step={step}
@@ -250,6 +264,7 @@ export const ActivationSheet = forwardRef<ActivationSheetHandle>((_, ref) => {
           onActivate={runActivation}
           onRetry={runActivation}
           onDone={() => {
+            successFiredRef.current = true;
             sheetRef.current?.dismiss();
             onSuccessRef.current?.();
           }}

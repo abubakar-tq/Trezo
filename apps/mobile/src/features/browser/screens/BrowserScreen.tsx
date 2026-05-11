@@ -359,13 +359,12 @@ export default function BrowserScreen() {
                         const typedChainId = chainId as SupportedChainId;
                         const isActive = accountState.isActiveOnChain(chainId);
                         const activated = await new Promise<boolean>((resolve) => {
-                          requireActiveOnChain(chainId, isActive, () => resolve(true));
-                          // If the user cancels the activation sheet, resolve false.
-                          // useActivationSheet's `requireActiveOnChain` invokes onReady on
-                          // success only; the sheet's onDismiss path needs a separate signal —
-                          // for v1 we rely on the user not cancelling mid-flow. Acceptable
-                          // because ActivationSheet's success → onReady is the only happy path.
-                          if (isActive) resolve(true);
+                          requireActiveOnChain(
+                            chainId,
+                            isActive,
+                            () => resolve(true),
+                            () => resolve(false),
+                          );
                         });
                         if (!activated) return null;
 

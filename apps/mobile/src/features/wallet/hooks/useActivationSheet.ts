@@ -6,12 +6,12 @@ export function useActivationSheet() {
   const ref = useRef<ActivationSheetHandle>(null);
 
   const requireActiveOnChain = useCallback(
-    (chainId: number, isActive: boolean, onReady: () => void) => {
+    (chainId: number, isActive: boolean, onReady: () => void, onCancel?: () => void) => {
       if (isActive) {
         onReady();
         return;
       }
-      ref.current?.present(chainId, onReady);
+      ref.current?.present(chainId, onReady, onCancel);
     },
     [],
   );
