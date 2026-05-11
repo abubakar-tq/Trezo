@@ -105,25 +105,23 @@ export async function checkPasskeyOnChain({
       functionName: 'hasPasskey',
       args: [smartAccountAddress, passkeyId],
     }) as Promise<boolean>,
+    // See note in getPasskeyOnchainState — viem returns multi-named-output
+    // reads as a tuple when the ABI isn't `as const`, so destructure by index.
     publicClient.readContract({
       address: validator,
       abi: ABIS.passkeyValidator,
       functionName: 'getPasskeyRecord',
       args: [smartAccountAddress, passkeyId],
-    }) as Promise<{
-      px: bigint;
-      py: bigint;
-      signCounter: number;
-      counterInitialized: boolean;
-    }>,
+    }) as Promise<readonly [bigint, bigint, bigint | number, boolean]>,
   ]);
 
+  const [px, py, signCounter, counterInitialized] = record;
   return {
     exists,
-    px: record.px,
-    py: record.py,
-    signCounter: record.signCounter,
-    counterInitialized: record.counterInitialized,
+    px: BigInt(px ?? 0n),
+    py: BigInt(py ?? 0n),
+    signCounter: Number(signCounter ?? 0),
+    counterInitialized: Boolean(counterInitialized),
   };
 }
 
@@ -159,23 +157,24 @@ export async function getPasskeyOnchainState({
       functionName: 'hasPasskey',
       args: [smartAccountAddress, passkeyId],
     }) as Promise<boolean>,
+    // Viem decodes multi-named-output reads as a tuple (not as a named object)
+    // when the ABI isn't `as const` — and ours is cast to the generic Abi type.
+    // Read by index, not by `.executeAfter` etc., or every field comes back as
+    // undefined and pending_removal detection silently fails.
     publicClient.readContract({
       address: validator,
       abi: ABIS.passkeyValidator,
       functionName: 'pendingRemovals',
       args: [smartAccountAddress, passkeyId],
-    }) as Promise<{
-      executeAfter: bigint;
-      requestedAt: bigint;
-      cancelled: boolean;
-    }>,
+    }) as Promise<readonly [bigint, bigint, boolean]>,
   ]);
 
+  const [executeAfter, requestedAt, cancelled] = pending;
   return {
     exists,
-    executeAfter: pending.executeAfter,
-    requestedAt: pending.requestedAt,
-    cancelled: pending.cancelled,
+    executeAfter: BigInt(executeAfter ?? 0n),
+    requestedAt: BigInt(requestedAt ?? 0n),
+    cancelled: Boolean(cancelled),
   };
 }
 
