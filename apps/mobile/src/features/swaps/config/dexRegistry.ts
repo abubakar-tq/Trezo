@@ -104,8 +104,22 @@ const DEX_CONFIGS: Partial<Record<NetworkKey, DexConfig>> = {
     wrappedNativeAddress: BASE_SEPOLIA_WETH,
     trustedSpenders: [UNISWAP_SWAP_ROUTER02_BASE_SEPOLIA],
     supportedPools: [
-      { sellToken: BASE_SEPOLIA_USDC, buyToken: BASE_SEPOLIA_WETH, feeTier: 500, enabled: true },
-      { sellToken: BASE_SEPOLIA_WETH, buyToken: BASE_SEPOLIA_USDC, feeTier: 500, enabled: true },
+      // 3000 bps tier has the most liquidity on Base Sepolia (verified via swap-healthcheck).
+      // 500 bps and 10000 bps pools exist but have ~10^9x less liquidity.
+      {
+        sellToken: BASE_SEPOLIA_USDC,
+        buyToken: BASE_SEPOLIA_WETH,
+        feeTier: 3000,
+        poolAddress: "0x46880b404CD35c165EDdefF7421019F8dD25F4Ad" as Address,
+        enabled: true,
+      },
+      {
+        sellToken: BASE_SEPOLIA_WETH,
+        buyToken: BASE_SEPOLIA_USDC,
+        feeTier: 3000,
+        poolAddress: "0x46880b404CD35c165EDdefF7421019F8dD25F4Ad" as Address,
+        enabled: true,
+      },
     ],
   },
   "arbitrum-sepolia": {

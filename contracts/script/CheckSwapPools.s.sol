@@ -35,9 +35,12 @@ contract CheckSwapPools is Script {
         console2.log("liquidity:", uint256(liq));
         console2.log("healthy:", healthy);
 
-        string memory root = "swapHealth";
-        vm.serializeBool(root, "swapSupported", healthy);
-        string memory updated = vm.serializeUint(root, "swapHealthcheckAt", block.timestamp);
-        vm.writeJson(updated, manifestPath, ".swapSupported");
+        // Write each field at its own JSON path as a flat scalar.
+        // Mobile config reads `swapSupported: boolean` and `swapHealthcheckAt: number`
+        // directly. A previous version of this script accidentally serialized them
+        // under a nested object — fixed by writing each value separately with its
+        // own jsonPath argument.
+        vm.writeJson(healthy ? "true" : "false", manifestPath, ".swapSupported");
+        vm.writeJson(vm.toString(block.timestamp), manifestPath, ".swapHealthcheckAt");
     }
 }
