@@ -1170,6 +1170,27 @@ export class PasskeyService {
     }
   }
 
+  /**
+   * Delete a passkey row from Supabase by credential_id.
+   * Idempotent — succeeds silently if no row matches.
+   */
+  static async deleteCloudPasskey(userId: string, credentialId: string): Promise<void> {
+    try {
+      const { getSupabaseClient } = require('@lib/supabase') as typeof import('@lib/supabase');
+      const client = getSupabaseClient();
+      const { error } = await client
+        .from('passkeys')
+        .delete()
+        .eq('user_id', userId)
+        .eq('credential_id', credentialId);
+      if (error) {
+        console.warn('Failed to delete cloud passkey:', error);
+      }
+    } catch (err) {
+      console.warn('Failed to delete cloud passkey:', err);
+    }
+  }
+
   static async syncPasskeyToCloud(
     userId: string,
     walletId: string,

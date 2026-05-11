@@ -47,6 +47,45 @@ const requestStatusLabel = (status: string) => {
   return status;
 };
 
+// Selectors come from keccak256 of the error signatures defined in
+// contracts/src/modules/passkey/PasskeyValidator.sol. The bundler / paymaster
+// surfaces these as the inner revert bytes when a UserOp simulation reverts.
+const PASSKEY_VALIDATOR_ERRORS: Record<
+  string,
+  { friendly: string; autoRefresh: boolean }
+> = {
+  "0x84f7de53": {
+    friendly: "Cannot remove the last passkey on this wallet. Add another device first.",
+    autoRefresh: false,
+  },
+  "0xdcc10551": {
+    friendly: "This passkey isn't registered on-chain — it may already be removed.",
+    autoRefresh: true,
+  },
+  "0x61c9401a": {
+    friendly: "A removal is already scheduled for this passkey — refreshing status.",
+    autoRefresh: true,
+  },
+  "0x6ab276fc": {
+    friendly: "No pending removal to act on for this passkey — refreshing status.",
+    autoRefresh: true,
+  },
+  "0x00ed0147": {
+    friendly: "The 1-day timelock hasn't elapsed yet — try again later.",
+    autoRefresh: true,
+  },
+};
+
+const decodePasskeyValidatorError = (
+  err: unknown,
+): { friendly: string; autoRefresh: boolean } | null => {
+  const haystack = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  for (const [selector, info] of Object.entries(PASSKEY_VALIDATOR_ERRORS)) {
+    if (haystack.includes(selector.slice(2))) return info;
+  }
+  return null;
+};
+
 const DevicesPasskeysScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { theme } = useAppTheme();
@@ -69,6 +108,9 @@ const DevicesPasskeysScreen: React.FC = () => {
   const { passkeys, addPasskey, removePasskey, aaAccount, activeChainId } = useWalletStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  // Tracks which device row currently has a removal/cancel/finalize in flight,
+  // so we can render a spinner on that specific button instead of a global one.
+  const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
 
   const resolvedChainId = useMemo(
     () => aaAccount?.chainId || activeChainId || DEFAULT_CHAIN_ID,
@@ -242,15 +284,102 @@ const DevicesPasskeysScreen: React.FC = () => {
     }
   };
 
+  const removeLocalPasskeyArtifacts = useCallback(
+    async (pk: PasskeyInfo) => {
+      if (!user?.id) return;
+      removePasskey(pk.id);
+      if (pk.idRaw) {
+        await PasskeyAccountService.removePendingPasskey(user.id, pk.idRaw).catch(() => {});
+      }
+      // If this entry happens to be the device's stored credential metadata, scrub it
+      // so the app does not keep referencing a passkey the user thinks they deleted.
+      if (pk.idRaw && currentPasskeyId && pk.idRaw === currentPasskeyId) {
+        await PasskeyService.deletePasskey(user.id).catch(() => {});
+        setCurrentPasskeyId(null);
+      }
+    },
+    [currentPasskeyId, removePasskey, user?.id],
+  );
+
   const handleRemovePasskey = (pk: PasskeyInfo) => {
+    if (pk.isOnChain) {
+      const matchingDevice = devices.find((d) => d.passkey_id === pk.idRaw);
+      if (matchingDevice?.status === "pending_removal") {
+        Alert.alert(
+          "Removal already scheduled",
+          matchingDevice.removal_execute_after
+            ? `On-chain removal is already scheduled and finalizes after ${new Date(matchingDevice.removal_execute_after).toLocaleString()}. Use the actions in Wallet Devices to cancel or finalize.`
+            : "On-chain removal is already scheduled for this passkey. Use the actions in Wallet Devices to cancel or finalize.",
+        );
+        return;
+      }
+      const activeOnChain = devices.filter((d) => d.status === "active").length;
+      if (activeOnChain <= 1) {
+        Alert.alert(
+          "Cannot remove last passkey",
+          "At least one active passkey must remain on-chain. Add another device first, then remove this one.",
+        );
+        return;
+      }
+      Alert.alert(
+        "Remove Passkey",
+        "This passkey is registered on-chain. We'll schedule an on-chain removal — after a 1-day timelock you can finalize it, which will permanently revoke this passkey on-chain and remove its off-chain record.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Schedule removal",
+            style: "destructive",
+            onPress: () => {
+              if (!pk.idRaw) return;
+              void (async () => {
+                setProcessingId(pk.id);
+                setError(null);
+                try {
+                  await submitRemovalAction(pk.idRaw as Hex);
+                  await loadData();
+                  Alert.alert(
+                    "Removal scheduled",
+                    "The passkey is now pending removal on-chain. Finalize it after the timelock expires from the Wallet Devices section.",
+                  );
+                } catch (err) {
+                  console.warn("[DevicesPasskeys] schedule removal failed", err);
+                  const decoded = decodePasskeyValidatorError(err);
+                  if (decoded) {
+                    setError(decoded.friendly);
+                    if (decoded.autoRefresh) {
+                      await loadData().catch(() => {});
+                    }
+                  } else {
+                    setError(err instanceof Error ? err.message : "Failed to schedule on-chain removal");
+                  }
+                } finally {
+                  setProcessingId(null);
+                }
+              })();
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     Alert.alert(
       "Remove Passkey",
-      pk.isOnChain
-        ? "This passkey is registered on-chain. Removing it locally does not remove it on-chain."
-        : "Are you sure you want to remove this passkey from this device?",
+      pk.idRaw && currentPasskeyId && pk.idRaw === currentPasskeyId
+        ? "This is the passkey your device uses to sign. Removing it will sign you out of on-chain actions until you re-pair — continue?"
+        : "Remove this local-only passkey from this device? It has not been registered on-chain, so this is a local cleanup only.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Remove", style: "destructive", onPress: () => { removePasskey(pk.id); } },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            setProcessingId(pk.id);
+            void removeLocalPasskeyArtifacts(pk)
+              .catch((err) => setError(err instanceof Error ? err.message : "Failed to remove local passkey"))
+              .finally(() => setProcessingId(null));
+          },
+        },
       ],
     );
   };
@@ -355,19 +484,25 @@ const DevicesPasskeysScreen: React.FC = () => {
     [loadData, user?.id],
   );
 
-  const submitRemovalAction = useCallback(
-    async (device: WalletDevice) => {
-      if (!user?.id || !walletAddress) return;
+  const buildRemovalPayload = useCallback(
+    async (targetPasskeyId: Hex) => {
+      if (!user?.id || !walletAddress) throw new Error("Wallet session unavailable");
       const passkey = await PasskeyService.getPasskey(user.id);
       if (!passkey?.credentialIdRaw) throw new Error("Current passkey is required to authorize this action");
-      const payload = {
+      return {
         smartAccountAddress: walletAddress as `0x${string}`,
-        targetPasskeyId: device.passkey_id as `0x${string}`,
+        targetPasskeyId,
         signingPasskeyId: passkey.credentialIdRaw as `0x${string}`,
         chainId: DEFAULT_CHAIN_ID,
         usePaymaster: true,
       };
-      const built = await PasskeyAccountService.buildRemovePasskeyUserOp(payload);
+    },
+    [user?.id, walletAddress],
+  );
+
+  const signAndSubmitRemovalUserOp = useCallback(
+    async (built: { userOp: any; userOpHash: `0x${string}` }, errorLabel: string) => {
+      if (!user?.id || !walletAddress) throw new Error("Wallet session unavailable");
       const signature = await PasskeyService.signWithPasskey(user.id, built.userOpHash);
       const encoded = PasskeyService.encodeSignatureForContract(signature) as `0x${string}`;
       const submittedHash = await PasskeyAccountService.submitAddPasskeyUserOp(
@@ -375,30 +510,116 @@ const DevicesPasskeysScreen: React.FC = () => {
         DEFAULT_CHAIN_ID,
       );
       const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, DEFAULT_CHAIN_ID);
-      if (!Boolean((receipt as { success?: boolean }).success)) throw new Error("Passkey removal operation reverted");
+      if (!Boolean((receipt as { success?: boolean }).success)) throw new Error(`${errorLabel} reverted on-chain`);
       await DevicePairingService.syncWalletDevicesFromChain({ userId: user.id, walletAddress, chainId: DEFAULT_CHAIN_ID });
     },
     [user?.id, walletAddress],
   );
 
+  const submitRemovalAction = useCallback(
+    async (targetPasskeyId: Hex) => {
+      const payload = await buildRemovalPayload(targetPasskeyId);
+      const built = await PasskeyAccountService.buildRemovePasskeyUserOp(payload);
+      await signAndSubmitRemovalUserOp(built, "Passkey removal scheduling");
+    },
+    [buildRemovalPayload, signAndSubmitRemovalUserOp],
+  );
+
+  const executeRemovalAction = useCallback(
+    async (targetPasskeyId: Hex, credentialId?: string | null) => {
+      const payload = await buildRemovalPayload(targetPasskeyId);
+      const built = await PasskeyAccountService.buildExecuteRemovePasskeyUserOp(payload);
+      await signAndSubmitRemovalUserOp(built, "Passkey removal execution");
+      // Off-chain cleanup once the on-chain entry is gone.
+      if (user?.id && credentialId) {
+        await PasskeyService.deleteCloudPasskey(user.id, credentialId).catch(() => {});
+      }
+    },
+    [buildRemovalPayload, signAndSubmitRemovalUserOp, user?.id],
+  );
+
+  const cancelRemovalAction = useCallback(
+    async (targetPasskeyId: Hex) => {
+      const payload = await buildRemovalPayload(targetPasskeyId);
+      const built = await PasskeyAccountService.buildCancelRemovePasskeyUserOp(payload);
+      await signAndSubmitRemovalUserOp(built, "Passkey removal cancellation");
+    },
+    [buildRemovalPayload, signAndSubmitRemovalUserOp],
+  );
+
+  const runDeviceAction = useCallback(
+    async (
+      device: WalletDevice,
+      action: () => Promise<void>,
+      defaultErrorMessage: string,
+    ) => {
+      if (deviceActionId) return; // already running another row's action
+      setDeviceActionId(device.id);
+      setError(null);
+      try {
+        await action();
+        await loadData();
+      } catch (err) {
+        console.warn("[DevicesPasskeys] device action failed", err);
+        const decoded = decodePasskeyValidatorError(err);
+        if (decoded) {
+          setError(decoded.friendly);
+          if (decoded.autoRefresh) {
+            await loadData().catch(() => {});
+          }
+        } else {
+          setError(err instanceof Error ? err.message : defaultErrorMessage);
+        }
+      } finally {
+        setDeviceActionId(null);
+      }
+    },
+    [deviceActionId, loadData],
+  );
+
   const handleRemoveDevice = useCallback(
-    async (device: WalletDevice) => {
+    (device: WalletDevice) => {
       if (devices.filter((d) => d.status === "active").length <= 1) {
         Alert.alert("Cannot remove last passkey", "At least one active passkey must remain on-chain.");
         return;
       }
-      setBusy(true);
-      setError(null);
-      try {
-        await submitRemovalAction(device);
-        await loadData();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to remove device");
-      } finally {
-        setBusy(false);
+      // The chain already tracks pending_removal — if we somehow have a stale
+      // local view, treat the click as a no-op and force a refresh.
+      if (device.status !== "active") {
+        void loadData();
+        return;
       }
+      void runDeviceAction(
+        device,
+        () => submitRemovalAction(device.passkey_id as Hex),
+        "Failed to remove device",
+      );
     },
-    [devices, loadData, submitRemovalAction],
+    [devices, loadData, runDeviceAction, submitRemovalAction],
+  );
+
+  const handleFinalizeRemoval = useCallback(
+    (device: WalletDevice) => {
+      const matchingPasskey = passkeys.find((p) => p.idRaw === device.passkey_id);
+      const credentialId = matchingPasskey?.credentialId ?? matchingPasskey?.id ?? null;
+      void runDeviceAction(
+        device,
+        () => executeRemovalAction(device.passkey_id as Hex, credentialId),
+        "Failed to finalize removal",
+      );
+    },
+    [executeRemovalAction, passkeys, runDeviceAction],
+  );
+
+  const handleCancelRemoval = useCallback(
+    (device: WalletDevice) => {
+      void runDeviceAction(
+        device,
+        () => cancelRemovalAction(device.passkey_id as Hex),
+        "Failed to cancel removal",
+      );
+    },
+    [cancelRemovalAction, runDeviceAction],
   );
 
   return (
@@ -593,9 +814,14 @@ const DevicesPasskeysScreen: React.FC = () => {
                       )}
                       <TouchableOpacity
                         onPress={() => handleRemovePasskey(pk)}
-                        style={[styles.iconBtn, { backgroundColor: `${colors.danger}18`, borderColor: `${colors.danger}33` }]}
+                        disabled={processingId === pk.id}
+                        style={[styles.iconBtn, { backgroundColor: `${colors.danger}18`, borderColor: `${colors.danger}33`, opacity: processingId === pk.id ? 0.5 : 1 }]}
                       >
-                        <Feather name="trash-2" size={14} color={colors.danger} />
+                        {processingId === pk.id ? (
+                          <ActivityIndicator size="small" color={colors.danger} />
+                        ) : (
+                          <Feather name="trash-2" size={14} color={colors.danger} />
+                        )}
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -618,6 +844,11 @@ const DevicesPasskeysScreen: React.FC = () => {
                 devices.map((device, i) => {
                   const sc = statusConfig(device.status, colors);
                   const isThis = currentPasskeyId && device.passkey_id === currentPasskeyId;
+                  const removalReadyAt = device.removal_execute_after
+                    ? new Date(device.removal_execute_after)
+                    : null;
+                  const removalReady =
+                    removalReadyAt !== null && removalReadyAt.getTime() <= Date.now();
                   return (
                     <View
                       key={device.id}
@@ -649,19 +880,76 @@ const DevicesPasskeysScreen: React.FC = () => {
                           {device.platform ? `${device.platform.toUpperCase()} · ` : ""}
                           {device.passkey_id.slice(0, 12)}…
                         </Text>
-                        {device.status === "pending_removal" && device.removal_execute_after && (
+                        {device.status === "pending_removal" && removalReadyAt && (
                           <Text style={[styles.deviceMeta, { color: colors.warning }]}>
-                            {`Removal executes after ${new Date(device.removal_execute_after).toLocaleString()}`}
+                            {removalReady
+                              ? "Removal timelock elapsed — finalize to permanently revoke this passkey."
+                              : `Finalize available after ${removalReadyAt.toLocaleString()}`}
                           </Text>
                         )}
                       </View>
                       {device.status === "active" && (
                         <TouchableOpacity
-                          style={[styles.pillBtn, { backgroundColor: `${colors.danger}1A`, borderColor: `${colors.danger}40` }]}
-                          onPress={() => void handleRemoveDevice(device)}
+                          style={[
+                            styles.pillBtn,
+                            {
+                              backgroundColor: `${colors.danger}1A`,
+                              borderColor: `${colors.danger}40`,
+                              opacity: deviceActionId && deviceActionId !== device.id ? 0.4 : 1,
+                            },
+                          ]}
+                          onPress={() => handleRemoveDevice(device)}
+                          disabled={Boolean(deviceActionId)}
                         >
-                          <Text style={[styles.pillBtnText, { color: colors.danger }]}>Remove</Text>
+                          {deviceActionId === device.id ? (
+                            <ActivityIndicator size="small" color={colors.danger} />
+                          ) : (
+                            <Text style={[styles.pillBtnText, { color: colors.danger }]}>Remove</Text>
+                          )}
                         </TouchableOpacity>
+                      )}
+                      {device.status === "pending_removal" && (
+                        <View style={styles.actionPair}>
+                          <TouchableOpacity
+                            style={[
+                              styles.pillBtn,
+                              {
+                                backgroundColor: `${colors.textMuted}18`,
+                                borderColor: `${colors.textMuted}40`,
+                                opacity: deviceActionId && deviceActionId !== device.id ? 0.4 : 1,
+                              },
+                            ]}
+                            onPress={() => handleCancelRemoval(device)}
+                            disabled={Boolean(deviceActionId)}
+                          >
+                            {deviceActionId === device.id ? (
+                              <ActivityIndicator size="small" color={colors.textPrimary} />
+                            ) : (
+                              <Text style={[styles.pillBtnText, { color: colors.textPrimary }]}>Cancel</Text>
+                            )}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.pillBtn,
+                              {
+                                backgroundColor: removalReady ? `${colors.danger}22` : `${colors.danger}0A`,
+                                borderColor: `${colors.danger}47`,
+                                opacity:
+                                  (deviceActionId && deviceActionId !== device.id) || !removalReady
+                                    ? 0.4
+                                    : 1,
+                              },
+                            ]}
+                            onPress={() => handleFinalizeRemoval(device)}
+                            disabled={Boolean(deviceActionId) || !removalReady}
+                          >
+                            {deviceActionId === device.id ? (
+                              <ActivityIndicator size="small" color={colors.danger} />
+                            ) : (
+                              <Text style={[styles.pillBtnText, { color: colors.danger }]}>Finalize</Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
                       )}
                     </View>
                   );

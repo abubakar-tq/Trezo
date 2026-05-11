@@ -4,6 +4,8 @@ import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import {
   buildAddPasskeyUserOp,
+  buildCancelRemovePasskeyUserOp,
+  buildExecuteRemovePasskeyUserOp,
   buildScheduleRemovePasskeyUserOp,
   getDeployment,
   sendUserOp,
@@ -156,6 +158,66 @@ export class PasskeyAccountService {
       : params.paymasterUrl;
 
     const { userOp, userOpHash } = await buildScheduleRemovePasskeyUserOp({
+      chainId,
+      bundlerUrl,
+      smartAccountAddress: params.smartAccountAddress,
+      targetPasskeyId: params.targetPasskeyId,
+      signingPasskeyId: params.signingPasskeyId,
+      validatorAddress: params.validatorAddress,
+      nonce: params.nonce,
+      nonceKey: params.nonceKey,
+      usePaymaster: params.usePaymaster,
+      paymasterUrl,
+      maxFeePerGas: params.maxFeePerGas,
+      maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+      callGasLimit: params.callGasLimit,
+      verificationGasLimit: params.verificationGasLimit,
+      preVerificationGas: params.preVerificationGas,
+    } satisfies RemovePasskeyUserOpParams);
+
+    return { userOp, userOpHash };
+  }
+
+  static async buildExecuteRemovePasskeyUserOp(
+    params: RemovePasskeyBuildRequest,
+  ): Promise<PasskeyUserOpResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const paymasterUrl = params.usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl()
+      : params.paymasterUrl;
+
+    const { userOp, userOpHash } = await buildExecuteRemovePasskeyUserOp({
+      chainId,
+      bundlerUrl,
+      smartAccountAddress: params.smartAccountAddress,
+      targetPasskeyId: params.targetPasskeyId,
+      signingPasskeyId: params.signingPasskeyId,
+      validatorAddress: params.validatorAddress,
+      nonce: params.nonce,
+      nonceKey: params.nonceKey,
+      usePaymaster: params.usePaymaster,
+      paymasterUrl,
+      maxFeePerGas: params.maxFeePerGas,
+      maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+      callGasLimit: params.callGasLimit,
+      verificationGasLimit: params.verificationGasLimit,
+      preVerificationGas: params.preVerificationGas,
+    } satisfies RemovePasskeyUserOpParams);
+
+    return { userOp, userOpHash };
+  }
+
+  static async buildCancelRemovePasskeyUserOp(
+    params: RemovePasskeyBuildRequest,
+  ): Promise<PasskeyUserOpResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const paymasterUrl = params.usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl()
+      : params.paymasterUrl;
+
+    const { userOp, userOpHash } = await buildCancelRemovePasskeyUserOp({
       chainId,
       bundlerUrl,
       smartAccountAddress: params.smartAccountAddress,
