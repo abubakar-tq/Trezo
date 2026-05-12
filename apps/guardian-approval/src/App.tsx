@@ -70,9 +70,46 @@ const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_URL
 const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_ANON_KEY
   || (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
 
+// MetaMask injects a SES (Secure EcmaScript) lockdown shim into every page
+// before our code runs. That shim sometimes routes outgoing fetch headers
+// through a tracing wrapper that adds non-Latin-1 code points (Symbol tags),
+// and the native `Headers.set` rejects those with
+// "TypeError: Failed to execute 'set' on 'Headers': String contains non
+// ISO-8859-1 code point.".
+//
+// Strip anything outside Latin-1 from header VALUES before fetch runs. Our
+// real headers (apikey, Authorization, Content-Type) are pure ASCII, so this
+// is a no-op for legitimate traffic — only the SES-injected junk gets removed.
+const sanitizeHeaders = (
+  source: HeadersInit | undefined,
+): Record<string, string> | undefined => {
+  if (!source) return undefined;
+  const entries: Array<[string, string]> =
+    source instanceof Headers
+      ? Array.from(source.entries())
+      : Array.isArray(source)
+        ? (source as Array<[string, string]>)
+        : Object.entries(source as Record<string, string>);
+  const cleaned: Record<string, string> = {};
+  for (const [name, value] of entries) {
+    cleaned[name] = String(value).replace(/[^\x00-\xFF]/g, "");
+  }
+  return cleaned;
+};
+
+const sesSafeFetch: typeof fetch = async (input, init) => {
+  if (init?.headers) {
+    init = { ...init, headers: sanitizeHeaders(init.headers) };
+  }
+  return fetch(input, init);
+};
+
 const supabase: SupabaseClient | null =
   supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } })
+    ? createClient(supabaseUrl, supabaseAnonKey, {
+        auth: { persistSession: false },
+        global: { fetch: sesSafeFetch },
+      })
     : null;
 
 const isFunctionsHttpError = (error: unknown): error is {
