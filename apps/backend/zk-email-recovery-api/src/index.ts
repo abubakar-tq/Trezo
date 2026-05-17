@@ -24,8 +24,10 @@ async function main() {
   const relayerConfig: ZkEmailRelayerConfig = {
     baseUrl: relayerUrl,
     apiKey: process.env.ZK_EMAIL_RELAYER_API_KEY || undefined,
+    // Both templates resolve to idx=0 on the canonical EmailRecoveryCommandHandler;
+    // the handler reverts with InvalidTemplateIndex for any other value.
     acceptanceTemplateIdx: Number(process.env.ZK_EMAIL_ACCEPTANCE_TEMPLATE_IDX ?? "0"),
-    recoveryTemplateIdx: Number(process.env.ZK_EMAIL_RECOVERY_TEMPLATE_IDX ?? "1"),
+    recoveryTemplateIdx: Number(process.env.ZK_EMAIL_RECOVERY_TEMPLATE_IDX ?? "0"),
     proofMode: process.env.ZK_EMAIL_PROOF_MODE === "reusable" ? "reusable" : "per_chain_hosted",
   };
 

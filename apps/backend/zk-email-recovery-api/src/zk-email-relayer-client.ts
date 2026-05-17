@@ -31,12 +31,14 @@ export class ZkEmailRelayerClient {
   async sendAcceptanceRequest(params: {
     controllerEthAddr: string;
     guardianEmailAddr: string;
+    accountCode: string;
     templateIdx?: number;
     command: string;
   }): Promise<RelayerRequestRef> {
     const body = {
       controller_eth_addr: params.controllerEthAddr,
       guardian_email_addr: params.guardianEmailAddr,
+      account_code: params.accountCode,
       template_idx: params.templateIdx ?? this.config.acceptanceTemplateIdx,
       command: params.command,
     };
@@ -88,11 +90,19 @@ export class ZkEmailRelayerClient {
 
   async completeRequest(params: {
     controllerEthAddr: string;
-    recoveryData: string;
+    accountEthAddr: string;
+    completeCalldata: string;
   }): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    // The hosted relayer expects three fields per the prove.email API spec:
+    //   controller_eth_addr — the EmailRecovery module
+    //   account_eth_addr    — the smart account being recovered
+    //   complete_calldata   — abi-encoded recoveryData (opaque to relayer)
+    // Earlier we sent `recovery_data` which the relayer ignores, and we
+    // omitted account_eth_addr entirely — both fatal for the hosted flow.
     const body = {
       controller_eth_addr: params.controllerEthAddr,
-      recovery_data: params.recoveryData,
+      account_eth_addr: params.accountEthAddr,
+      complete_calldata: params.completeCalldata,
     };
 
     try {
@@ -111,12 +121,17 @@ export class ZkEmailRelayerClient {
   }
 
   async getAccountSalt(params: {
-    controllerEthAddr: string;
+    accountCode: string;
     guardianEmailAddr: string;
   }): Promise<string | null> {
+    // getAccountSalt is a stateless Poseidon compute on the relayer:
+    //   salt = Poseidon(accountCode, emailCommitment)
+    // The earlier `{controller_eth_addr, guardian_email_addr}` body shape
+    // produced nonsense — it was likely returning null on every call. The
+    // canonical body shape per the prove.email API is `{account_code, email_addr}`.
     const body = {
-      controller_eth_addr: params.controllerEthAddr,
-      guardian_email_addr: params.guardianEmailAddr,
+      account_code: params.accountCode,
+      email_addr: params.guardianEmailAddr,
     };
 
     const resp = await this.post<RelayerSaltResponse>("getAccountSalt", body);

@@ -3,6 +3,7 @@ import { z } from "zod";
 export const AcceptanceRequestSchema = z.object({
   controllerEthAddr: z.string().regex(/^0x[0-9a-f]{40}$/),
   guardianEmailAddr: z.string().email(),
+  accountCode: z.string().regex(/^0x[0-9a-f]{64}$/),
   templateIdx: z.number().int().nonnegative().optional(),
   command: z.string().min(1),
 });
@@ -27,13 +28,14 @@ export type RequestStatusRequest = z.infer<typeof RequestStatusSchema>;
 
 export const CompleteRequestSchema = z.object({
   controllerEthAddr: z.string().regex(/^0x[0-9a-f]{40}$/),
-  recoveryData: z.string().min(1),
+  accountEthAddr: z.string().regex(/^0x[0-9a-f]{40}$/),
+  completeCalldata: z.string().min(1),
 });
 
 export type CompleteRequest = z.infer<typeof CompleteRequestSchema>;
 
 export const AccountSaltSchema = z.object({
-  controllerEthAddr: z.string().regex(/^0x[0-9a-f]{40}$/),
+  accountCode: z.string().regex(/^0x[0-9a-f]{64}$/),
   guardianEmailAddr: z.string().email(),
 });
 
