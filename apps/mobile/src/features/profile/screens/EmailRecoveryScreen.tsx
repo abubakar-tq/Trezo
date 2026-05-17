@@ -89,6 +89,7 @@ const EmailRecoveryScreen: React.FC = () => {
     useState<EmailRecoverySecurityMode>("none");
   const [vaultKeyInput, setVaultKeyInput] = useState("");
   const [hasVaultKey, setHasVaultKey] = useState(false);
+  const [recoveryKitAcked, setRecoveryKitAcked] = useState<boolean | null>(null);
 
   const [checkingModule, setCheckingModule] = useState(false);
   const [moduleInstalledState, setModuleInstalledState] = useState<
@@ -338,6 +339,10 @@ const EmailRecoveryScreen: React.FC = () => {
         EmailRecoveryService.hasVaultKey(smartAccountAddress)
           .then(setHasVaultKey)
           .catch(() => setHasVaultKey(false));
+
+        EmailRecoveryService.isRecoveryKitAcknowledged(smartAccountAddress)
+          .then(setRecoveryKitAcked)
+          .catch(() => setRecoveryKitAcked(false));
       })
       .catch((error) => {
         if (cancelled) return;
@@ -914,6 +919,24 @@ const EmailRecoveryScreen: React.FC = () => {
     user?.id,
     securityMode,
   ]);
+
+  const handleAcknowledgeRecoveryKit = useCallback(async () => {
+    if (!smartAccountAddress) return;
+    Alert.alert(
+      "Confirm Backup",
+      "Have you saved your Recovery Kit somewhere secure (password manager, encrypted note)? Without it, after a guardian recovery to a new device, guardian emails will appear locked.",
+      [
+        { text: "Not yet", style: "cancel" },
+        {
+          text: "Yes, I've backed it up",
+          onPress: async () => {
+            await EmailRecoveryService.markRecoveryKitAcknowledged(smartAccountAddress);
+            setRecoveryKitAcked(true);
+          },
+        },
+      ],
+    );
+  }, [smartAccountAddress]);
 
   const handleExportRecoveryKit = useCallback(async () => {
     if (!smartAccountAddress) {
@@ -1524,6 +1547,43 @@ const EmailRecoveryScreen: React.FC = () => {
             )}
           </TouchableOpacity>
 
+          {moduleInstalledState
+            && smartAccountReady
+            && securityMode === "extra"
+            && recoveryKitAcked === false ? (
+            <View style={styles.recoveryKitBanner}>
+              <View style={styles.recoveryKitBannerHeader}>
+                <Feather name="alert-triangle" size={20} color={colors.warning} />
+                <Text style={styles.recoveryKitBannerTitle}>
+                  Back up your Recovery Kit
+                </Text>
+              </View>
+              <Text style={styles.recoveryKitBannerBody}>
+                Email recovery is active on this device. If you ever recover to a new
+                device, you'll need this kit to read your guardian emails — without it
+                they appear locked.
+              </Text>
+              <View style={styles.recoveryKitBannerActions}>
+                <TouchableOpacity
+                  style={styles.recoveryKitBannerPrimary}
+                  onPress={() => void handleExportRecoveryKit()}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.recoveryKitBannerPrimaryText}>Back Up Now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.recoveryKitBannerSecondary}
+                  onPress={() => void handleAcknowledgeRecoveryKit()}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.recoveryKitBannerSecondaryText}>
+                    I've backed it up
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
           {moduleInstalledState && smartAccountReady && (
             <View style={styles.guardianAcceptanceSection}>
               <Text style={styles.cardTitle}>Guardian Approval Status</Text>
@@ -1906,6 +1966,59 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
       padding: 20,
       gap: 12,
+    },
+    recoveryKitBanner: {
+      backgroundColor: `${colors.warning}1A`,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: `${colors.warning}66`,
+      padding: 16,
+      gap: 10,
+    },
+    recoveryKitBannerHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    recoveryKitBannerTitle: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.textPrimary,
+    },
+    recoveryKitBannerBody: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.textSecondary,
+    },
+    recoveryKitBannerActions: {
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 4,
+    },
+    recoveryKitBannerPrimary: {
+      flex: 1,
+      backgroundColor: colors.warning,
+      borderRadius: 12,
+      paddingVertical: 10,
+      alignItems: "center",
+    },
+    recoveryKitBannerPrimaryText: {
+      color: colors.textOnAccent,
+      fontWeight: "700",
+      fontSize: 13,
+    },
+    recoveryKitBannerSecondary: {
+      flex: 1,
+      borderRadius: 12,
+      paddingVertical: 10,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    recoveryKitBannerSecondaryText: {
+      color: colors.textPrimary,
+      fontWeight: "600",
+      fontSize: 13,
     },
     guardianStatusRow: {
       flexDirection: "row",

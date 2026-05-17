@@ -118,6 +118,7 @@ export type LoadedEmailRecoveryMetadata = {
 const normalizeGuardianEmail = (email: string) => email.trim().toLowerCase();
 const RECOVERY_VAULT_KEY_PREFIX = "trezo_recovery_vault_";
 const GUARDIAN_ACCOUNT_CODE_PREFIX = "trezo_guardian_acct_code_";
+const RECOVERY_KIT_ACK_PREFIX = "trezo_recovery_kit_ack_";
 const PLAINTEXT_PREFIX = "plain-v1:";
 
 // BN254 scalar field modulus — the curve used by ZK Email's Poseidon proofs.
@@ -283,6 +284,36 @@ export class EmailRecoveryService {
   ): Promise<void> {
     const storageKey = guardianAccountCodeStorageKey(smartAccountAddress, guardianEmail);
     await SecureStore.deleteItemAsync(storageKey).catch(() => undefined);
+  }
+
+  /**
+   * Tracks whether the user has explicitly acknowledged backing up their
+   * Recovery Kit on this device for this smart account. Per-device — when a
+   * new device pairs or recovers, it has to acknowledge separately. This is
+   * intentional: the device that just paired needs to also have the vault
+   * key, and the user is prompted to set that up. Without acknowledgment the
+   * Email Recovery screen shows a persistent warning banner.
+   */
+  static async isRecoveryKitAcknowledged(
+    smartAccountAddress: Address,
+  ): Promise<boolean> {
+    const key = `${RECOVERY_KIT_ACK_PREFIX}${smartAccountAddress.toLowerCase()}`;
+    const value = await SecureStore.getItemAsync(key);
+    return value === "1";
+  }
+
+  static async markRecoveryKitAcknowledged(
+    smartAccountAddress: Address,
+  ): Promise<void> {
+    const key = `${RECOVERY_KIT_ACK_PREFIX}${smartAccountAddress.toLowerCase()}`;
+    await SecureStore.setItemAsync(key, "1");
+  }
+
+  static async clearRecoveryKitAcknowledged(
+    smartAccountAddress: Address,
+  ): Promise<void> {
+    const key = `${RECOVERY_KIT_ACK_PREFIX}${smartAccountAddress.toLowerCase()}`;
+    await SecureStore.deleteItemAsync(key).catch(() => undefined);
   }
 
   /**
