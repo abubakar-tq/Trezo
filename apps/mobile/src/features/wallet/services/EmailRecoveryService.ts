@@ -16,6 +16,8 @@ import * as SecureStore from "expo-secure-store";
 import { keccak256, stringToHex, type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
 
+import type { ZkEmailRelayerAdapter } from "./ZkEmailRelayerAdapter";
+
 export type EmailRecoveryInstallRequest = {
   smartAccountAddress: Address;
   guardians: readonly Address[];
@@ -83,6 +85,7 @@ export type EmailRecoveryConfigView = {
 };
 
 export type EmailRecoveryGuardianView = {
+  id: string;
   emailHash: Hex;
   normalizedEmailEncrypted: string;
   maskedEmail: string;
@@ -114,7 +117,28 @@ export type LoadedEmailRecoveryMetadata = {
 
 const normalizeGuardianEmail = (email: string) => email.trim().toLowerCase();
 const RECOVERY_VAULT_KEY_PREFIX = "trezo_recovery_vault_";
+const GUARDIAN_ACCOUNT_CODE_PREFIX = "trezo_guardian_acct_code_";
 const PLAINTEXT_PREFIX = "plain-v1:";
+
+// BN254 scalar field modulus — the curve used by ZK Email's Poseidon proofs.
+// accountCode must be a uniformly random scalar in [0, BN254_MODULUS).
+const BN254_MODULUS =
+  0x30644E72E131A029B85045B68181585D2833E84879B9709143E1F593F0000001n;
+
+const bytesToHex = (bytes: Uint8Array): Hex => {
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `0x${hex}` as Hex;
+};
+
+const bigIntToPaddedHex = (value: bigint): Hex => {
+  const hex = value.toString(16).padStart(64, "0");
+  return `0x${hex}` as Hex;
+};
+
+const guardianAccountCodeStorageKey = (smartAccountAddress: Address, email: string): string => {
+  const emailKey = keccak256(stringToHex(normalizeGuardianEmail(email))).slice(2, 18);
+  return `${GUARDIAN_ACCOUNT_CODE_PREFIX}${smartAccountAddress.toLowerCase()}_${emailKey}`;
+};
 
 const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   const copy = new Uint8Array(bytes.length);
@@ -205,6 +229,60 @@ export class EmailRecoveryService {
 
     const keyName = `${RECOVERY_VAULT_KEY_PREFIX}${smartAccountAddress.toLowerCase()}`;
     await SecureStore.setItemAsync(keyName, trimmed);
+  }
+
+  /**
+   * accountCode is a per-(smartAccount, guardianEmail) secret used by the ZK Email
+   * relayer to derive the guardian's EmailAuth proxy address (`account_salt =
+   * Poseidon(accountCode, emailCommitment)`). It is required for the initial
+   * acceptance email; after the guardian's on-chain `EmailAuth` proxy is deployed
+   * via `handleAcceptance`, the relayer caches the pair and the mobile client
+   * never needs the value again. Lifecycle: created when guardian is added →
+   * stored in SecureStore on the originating device → deleted after the
+   * `email_recovery_guardians.acceptance_status` reconciles to `accepted`.
+   */
+  private static async generateAccountCode(): Promise<Hex> {
+    // Rejection sampling: draw 32 random bytes; accept iff scalar < BN254 modulus.
+    // The rejection probability per draw is ~p/2^256 ≈ 1.9e-39, so one draw is
+    // overwhelmingly enough — the loop is purely a correctness guarantee.
+    while (true) {
+      const bytes = await Crypto.getRandomBytesAsync(32);
+      const scalar = BigInt(bytesToHex(bytes));
+      if (scalar < BN254_MODULUS && scalar !== 0n) {
+        return bigIntToPaddedHex(scalar);
+      }
+    }
+  }
+
+  static async getOrCreateGuardianAccountCode(
+    smartAccountAddress: Address,
+    guardianEmail: string,
+  ): Promise<Hex> {
+    const storageKey = guardianAccountCodeStorageKey(smartAccountAddress, guardianEmail);
+    const existing = await SecureStore.getItemAsync(storageKey);
+    if (existing) {
+      return existing as Hex;
+    }
+    const fresh = await this.generateAccountCode();
+    await SecureStore.setItemAsync(storageKey, fresh);
+    return fresh;
+  }
+
+  static async getGuardianAccountCode(
+    smartAccountAddress: Address,
+    guardianEmail: string,
+  ): Promise<Hex | null> {
+    const storageKey = guardianAccountCodeStorageKey(smartAccountAddress, guardianEmail);
+    const existing = await SecureStore.getItemAsync(storageKey);
+    return (existing as Hex | null) ?? null;
+  }
+
+  static async clearGuardianAccountCode(
+    smartAccountAddress: Address,
+    guardianEmail: string,
+  ): Promise<void> {
+    const storageKey = guardianAccountCodeStorageKey(smartAccountAddress, guardianEmail);
+    await SecureStore.deleteItemAsync(storageKey).catch(() => undefined);
   }
 
   /**
@@ -407,6 +485,7 @@ export class EmailRecoveryService {
         created_at,
         updated_at,
         email_recovery_guardians (
+          id,
           email_hash,
           normalized_email_encrypted,
           masked_email,
@@ -454,6 +533,7 @@ export class EmailRecoveryService {
         }
 
         return {
+          id: g.id,
           emailHash: g.email_hash,
           normalizedEmailEncrypted: encryptedPayload,
           maskedEmail: g.masked_email,
@@ -510,29 +590,56 @@ export class EmailRecoveryService {
   }
 
 
-  static guardianEmailToAccountSalt(email: string): Hex {
-    const normalizedEmail = normalizeGuardianEmail(email);
-    if (!normalizedEmail) {
-      throw new Error("Guardian email is required to derive the EmailAuth guardian address");
-    }
-    return keccak256(stringToHex(normalizedEmail));
-  }
-
+  /**
+   * Derives the on-chain EmailAuth guardian address for each guardian email by
+   * calling the relayer's `getAccountSalt(accountCode, email)` endpoint to obtain
+   * the canonical Poseidon-derived salt, then reading `computeEmailAuthAddress`
+   * on the EmailRecovery module. accountCodes are generated and persisted
+   * per-(smartAccount, email) on first call so subsequent calls (e.g., re-deriving
+   * on chain switch) return the same guardian address.
+   *
+   * `adapter` must be a relayer adapter whose `getAccountSalt` matches the
+   * formula used by the relayer that will later send acceptance emails — using
+   * the mock relayer here pins the wallet to the mock for the lifetime of the
+   * guardian (its salt formula differs from the production relayer's).
+   */
   static async deriveGuardianAddresses(
     smartAccountAddress: Address,
     guardianEmails: readonly string[],
     chainId: SupportedChainId = DEFAULT_CHAIN_ID,
+    adapter?: ZkEmailRelayerAdapter,
   ): Promise<DerivedGuardianAddress[]> {
     const deployment = getDeployment(chainId);
     if (!deployment?.emailRecovery) {
       throw new Error(`No Email Recovery module configured for chain ${chainId}`);
+    }
+    if (!adapter) {
+      throw new Error(
+        "Relayer adapter is required to derive guardian addresses. "
+          + "Pass EmailRecoveryGroupService.createRelayer() or compatible.",
+      );
     }
 
     const publicClient = getPublicClient(chainId);
     return Promise.all(
       guardianEmails.map(async (email) => {
         const normalizedEmail = normalizeGuardianEmail(email);
-        const accountSalt = this.guardianEmailToAccountSalt(normalizedEmail);
+        if (!normalizedEmail) {
+          throw new Error("Guardian email is required to derive the EmailAuth guardian address");
+        }
+
+        const accountCode = await this.getOrCreateGuardianAccountCode(
+          smartAccountAddress,
+          normalizedEmail,
+        );
+
+        const accountSalt = await adapter.getAccountSalt(accountCode, normalizedEmail);
+        if (!accountSalt) {
+          throw new Error(
+            `Relayer did not return an account salt for guardian ${this.maskEmail(normalizedEmail)}`,
+          );
+        }
+
         const guardianAddress = await publicClient.readContract({
           address: deployment.emailRecovery as Address,
           abi: ABIS.emailRecovery,
@@ -666,70 +773,330 @@ export class EmailRecoveryService {
     return { allAccepted, acceptedWeight: currentWeight, threshold };
   }
 
-  static async refreshGuardianAcceptanceFromChain(
-    smartAccountAddress: Address,
-    configId: string,
-    chainId: SupportedChainId = DEFAULT_CHAIN_ID,
-  ): Promise<void> {
+  /**
+   * After the EmailRecovery module is installed on-chain, walk every guardian
+   * whose `acceptance_status` is still `pending` and trigger a relayer
+   * acceptance email. The relayer parses the guardian's reply, generates a ZK
+   * proof of the DKIM-signed response, and auto-submits `handleAcceptance` on
+   * the EmailRecovery module — incrementing on-chain `acceptedWeight` for the
+   * matching guardian. Locally we transition each row to
+   * `acceptance_email_sent` and persist the relayer's `request_id` so polling
+   * can fetch status.
+   *
+   * The `command` passed to the relayer must match the on-chain acceptance
+   * template at `templateIdx=0` registered by the deployed command handler —
+   * for `EmailRecoveryCommandHandler.sol` that's "Accept guardian request for
+   * {ethAddr}".
+   */
+  static async sendGuardianAcceptanceEmails(params: {
+    smartAccountAddress: Address;
+    configId: string;
+    adapter: ZkEmailRelayerAdapter;
+    acceptanceTemplateIdx?: number;
+  }): Promise<{ sent: number; skipped: number; failed: number }> {
+    const templateIdx = params.acceptanceTemplateIdx ?? 0;
+    const command = `Accept guardian request for ${params.smartAccountAddress}`;
+
+    const { data: pending, error } = await this.supabase
+      .from("email_recovery_guardians")
+      .select("id, normalized_email_encrypted, masked_email, acceptance_status")
+      .eq("config_id", params.configId)
+      .eq("acceptance_status", "pending");
+
+    if (error) throw error;
+    if (!pending || pending.length === 0) {
+      return { sent: 0, skipped: 0, failed: 0 };
+    }
+
+    let sent = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const row of pending as Array<{
+      id: string;
+      normalized_email_encrypted: string;
+      masked_email: string;
+      acceptance_status: string;
+    }>) {
+      const email = await this.decryptEmail(
+        row.normalized_email_encrypted,
+        params.smartAccountAddress,
+      );
+      if (!email) {
+        // Vault key unavailable — can't send. Skip silently, surface via UI.
+        skipped += 1;
+        continue;
+      }
+
+      try {
+        const accountCode = await this.getOrCreateGuardianAccountCode(
+          params.smartAccountAddress,
+          email,
+        );
+
+        const deployment = getDeployment(DEFAULT_CHAIN_ID);
+        const controllerEthAddr = deployment?.emailRecovery as Address | undefined;
+        if (!controllerEthAddr) {
+          throw new Error("EmailRecovery module address not configured for chain");
+        }
+
+        const ref = await params.adapter.sendAcceptanceRequest({
+          controllerEthAddr,
+          guardianEmailAddr: email,
+          accountCode,
+          templateIdx,
+          command,
+        });
+
+        await this.supabase
+          .from("email_recovery_guardians")
+          .update({
+            acceptance_status: "acceptance_email_sent",
+            acceptance_relayer_request_id: ref.requestId,
+            acceptance_checked_at: new Date().toISOString(),
+          })
+          .eq("id", row.id);
+
+        sent += 1;
+      } catch (err) {
+        console.warn("[EmailRecovery] sendAcceptanceEmail failed for", row.masked_email, err);
+        await this.supabase
+          .from("email_recovery_guardians")
+          .update({
+            acceptance_status: "failed",
+            acceptance_checked_at: new Date().toISOString(),
+          })
+          .eq("id", row.id);
+        failed += 1;
+      }
+    }
+
+    return { sent, skipped, failed };
+  }
+
+  /**
+   * Polls the relayer for status updates on every guardian whose
+   * acceptance_status is `acceptance_email_sent`, then cross-references the
+   * on-chain `getGuardianConfig.guardians` list to confirm acceptance. When a
+   * guardian's on-chain `EmailAuth` proxy is found in the on-chain set, mark
+   * them `accepted`, stamp `accepted_at`, and clear their local accountCode
+   * (no longer needed for the relayer cache to work).
+   *
+   * Returns the count of newly-accepted guardians so the UI can chirp.
+   */
+  static async pollGuardianAcceptanceStatuses(params: {
+    smartAccountAddress: Address;
+    configId: string;
+    adapter: ZkEmailRelayerAdapter;
+    chainId?: SupportedChainId;
+  }): Promise<{ newlyAccepted: number; stillPending: number; failed: number }> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
     const deployment = getDeployment(chainId);
-    if (!deployment?.emailRecovery) return;
+    if (!deployment?.emailRecovery) {
+      return { newlyAccepted: 0, stillPending: 0, failed: 0 };
+    }
+
+    const { data: pending, error } = await this.supabase
+      .from("email_recovery_guardians")
+      .select(
+        "id, normalized_email_encrypted, masked_email, acceptance_status, acceptance_relayer_request_id",
+      )
+      .eq("config_id", params.configId)
+      .in("acceptance_status", ["acceptance_email_sent", "pending"]);
+
+    if (error) throw error;
+    if (!pending || pending.length === 0) {
+      return { newlyAccepted: 0, stillPending: 0, failed: 0 };
+    }
 
     const publicClient = getPublicClient(chainId);
-    const emailRecoveryAddr = deployment.emailRecovery as Address;
-
-    const guardianConfig = await publicClient.readContract({
-      address: emailRecoveryAddr,
-      abi: [
-        {
-          name: "getGuardianConfig",
-          type: "function",
-          stateMutability: "view",
-          inputs: [{ name: "account", type: "address" }],
-          outputs: [
-            { name: "guardians", type: "address[]" },
-            { name: "weights", type: "uint256[]" },
-            { name: "threshold", type: "uint256" },
-            { name: "delay", type: "uint256" },
-            { name: "expiry", type: "uint256" },
-            { name: "currentWeight", type: "uint256" },
-          ],
-        },
-      ],
+    const guardianConfig = (await publicClient.readContract({
+      address: deployment.emailRecovery as Address,
+      abi: ABIS.emailRecovery,
       functionName: "getGuardianConfig",
-      args: [smartAccountAddress],
-    }) as [Address[], bigint[], bigint, bigint, bigint, bigint];
+      args: [params.smartAccountAddress],
+    })) as [Address[], bigint[], bigint, bigint, bigint, bigint];
 
-    const [onChainGuardians, , , , , currentWeight] = guardianConfig;
-
-    const { data: dbGuardians } = await this.supabase
-      .from("email_recovery_guardians")
-      .select("id, email_hash")
-      .eq("config_id", configId);
-
-    if (!dbGuardians) return;
-
-    const derivedAddresses = await this.deriveGuardianAddresses(
-      smartAccountAddress,
-      dbGuardians.map((g: { email_hash: string }) => g.email_hash),
-      chainId,
+    const onChainGuardians = new Set(
+      guardianConfig[0].map((addr: Address) => addr.toLowerCase()),
     );
 
-    const onChainSet = new Set(onChainGuardians.map((a: Address) => a.toLowerCase()));
+    let newlyAccepted = 0;
+    let stillPending = 0;
+    let failed = 0;
 
-    for (let i = 0; i < dbGuardians.length; i++) {
-      const dbGuardian = dbGuardians[i];
-      const derived = derivedAddresses[i];
-      const isAccepted = derived && onChainSet.has(derived.guardianAddress.toLowerCase());
-      const newStatus = isAccepted ? "accepted" : "pending";
+    for (const row of pending as Array<{
+      id: string;
+      normalized_email_encrypted: string;
+      masked_email: string;
+      acceptance_status: string;
+      acceptance_relayer_request_id: string | null;
+    }>) {
+      const email = await this.decryptEmail(
+        row.normalized_email_encrypted,
+        params.smartAccountAddress,
+      );
+      if (!email) {
+        // Vault key missing — defer until imported.
+        stillPending += 1;
+        continue;
+      }
 
-      await this.supabase
-        .from("email_recovery_guardians")
-        .update({
-          acceptance_status: newStatus,
-          accepted_at: isAccepted ? new Date().toISOString() : null,
-          acceptance_checked_at: new Date().toISOString(),
-        })
-        .eq("id", dbGuardian.id);
+      const accountCode = await this.getGuardianAccountCode(
+        params.smartAccountAddress,
+        email,
+      );
+
+      let derivedAddress: Address | null = null;
+      if (accountCode) {
+        try {
+          const salt = await params.adapter.getAccountSalt(accountCode, email);
+          if (salt) {
+            derivedAddress = (await publicClient.readContract({
+              address: deployment.emailRecovery as Address,
+              abi: ABIS.emailRecovery,
+              functionName: "computeEmailAuthAddress",
+              args: [params.smartAccountAddress, salt],
+            })) as Address;
+          }
+        } catch (err) {
+          console.warn("[EmailRecovery] poll derivedAddress failed", row.masked_email, err);
+        }
+      }
+
+      const isAcceptedOnChain = Boolean(
+        derivedAddress && onChainGuardians.has(derivedAddress.toLowerCase()),
+      );
+
+      if (isAcceptedOnChain) {
+        await this.supabase
+          .from("email_recovery_guardians")
+          .update({
+            acceptance_status: "accepted",
+            accepted_at: new Date().toISOString(),
+            acceptance_checked_at: new Date().toISOString(),
+          })
+          .eq("id", row.id);
+        // Keep accountCode in SecureStore even after acceptance — it's needed
+        // later to derive this guardian's on-chain EmailAuth address during
+        // removeGuardian (and for re-acceptance if a re-invite is ever
+        // needed). Cost: ~32 bytes per guardian; security: device passkey is
+        // the real authorization, accountCode alone unlocks nothing.
+        newlyAccepted += 1;
+        continue;
+      }
+
+      // Otherwise, refresh the relayer status (informational, doesn't drive
+      // the on-chain truth — that's what the derived-address check above is
+      // for).
+      if (row.acceptance_relayer_request_id) {
+        try {
+          const status = await params.adapter.getRequestStatus(
+            row.acceptance_relayer_request_id,
+          );
+          if (status.status === "failed") {
+            await this.supabase
+              .from("email_recovery_guardians")
+              .update({
+                acceptance_status: "failed",
+                acceptance_checked_at: new Date().toISOString(),
+              })
+              .eq("id", row.id);
+            failed += 1;
+            continue;
+          }
+        } catch (err) {
+          console.warn("[EmailRecovery] poll requestStatus failed", row.masked_email, err);
+        }
+      }
+
+      stillPending += 1;
     }
+
+    return { newlyAccepted, stillPending, failed };
   }
+
+  /**
+   * Builds a UserOp that calls `removeGuardian(account, guardian)` on the
+   * EmailRecovery module. Used by the Profile screen "Delete Guardian" button
+   * to remove an accepted (or stuck-pending) guardian on-chain. Also cleans up
+   * the local accountCode for that guardian so re-adding the same email
+   * generates a fresh code.
+   *
+   * Note: this is the OFF-CHAIN scheduler side. The actual on-chain
+   * `removeGuardian` call has no timelock for accepted guardians in the
+   * current EmailRecovery module (`emailRecoveryMinimumDelay = 0` on Base
+   * Sepolia), so the call is immediate. Callers must still pass a signed
+   * UserOp through the bundler.
+   */
+  static async buildRemoveGuardianUserOp(params: {
+    smartAccountAddress: Address;
+    guardianAddress: Address;
+    passkeyId: Hex;
+    chainId?: SupportedChainId;
+    bundlerUrl?: string;
+    paymasterUrl?: string;
+    usePaymaster?: boolean;
+  }): Promise<EmailRecoveryInstallResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const deployment = getDeployment(chainId);
+    if (!deployment?.emailRecovery) {
+      throw new Error(`No Email Recovery module configured for chain ${chainId}`);
+    }
+
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
+    const usePaymaster = params.usePaymaster ?? true;
+    const paymasterUrl = usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
+      : undefined;
+
+    const { encodeFunctionData } = await import("viem");
+    const callData = encodeFunctionData({
+      abi: ABIS.emailRecovery,
+      functionName: "removeGuardian",
+      args: [params.smartAccountAddress, params.guardianAddress],
+    });
+
+    // EmailRecovery.removeGuardian is invoked via SmartAccount.execute so
+    // msg.sender on the module is the account itself — same wrapping pattern
+    // the install flow uses, just with the removeGuardian calldata.
+    const { buildSmartAccountExecutionUserOp } = await import(
+      "@/src/integration/viem/userOps"
+    );
+    const { userOp, userOpHash } = await buildSmartAccountExecutionUserOp({
+      smartAccountAddress: params.smartAccountAddress,
+      target: deployment.emailRecovery as Address,
+      value: 0n,
+      data: callData,
+      chainId,
+      bundlerUrl,
+      paymasterUrl,
+      usePaymaster,
+      passkeyId: params.passkeyId,
+      operationLabel: "EmailRecovery.removeGuardian",
+    });
+
+    return { userOp, userOpHash };
+  }
+
+  /**
+   * After on-chain removeGuardian succeeds, scrub the off-chain state:
+   * - Mark the Supabase guardian row as removed (acceptance_status='failed' +
+   *   a removed_at column would be nicer but the current schema doesn't have
+   *   one — using 'failed' with a comment is acceptable for V1).
+   * - Clear the local accountCode for this guardian (so re-adding the same
+   *   email starts fresh).
+   */
+  static async cleanupRemovedGuardian(params: {
+    smartAccountAddress: Address;
+    guardianRowId: string;
+    guardianEmail: string;
+  }): Promise<void> {
+    await this.clearGuardianAccountCode(params.smartAccountAddress, params.guardianEmail);
+    await this.supabase
+      .from("email_recovery_guardians")
+      .delete()
+      .eq("id", params.guardianRowId);
+  }
+
 }

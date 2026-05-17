@@ -229,6 +229,20 @@ const EmailRecoveryGroupStatusScreen: React.FC = () => {
     }
   }, [groupId, loadState]);
 
+  const [executing, setExecuting] = useState(false);
+  const handleExecuteRecovery = useCallback(async () => {
+    setExecuting(true);
+    setError(null);
+    try {
+      await EmailRecoveryGroupService.executeReadyChains(groupId);
+      await loadState();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to execute recovery.");
+    } finally {
+      setExecuting(false);
+    }
+  }, [groupId, loadState]);
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -458,9 +472,21 @@ const EmailRecoveryGroupStatusScreen: React.FC = () => {
             <View style={styles.partialBanner}>
               <Feather name="clock" size={20} color={theme.colors.accentAlt} />
               <Text style={styles.partialText}>
-                Recovery is approved and ready to execute. On testnet, the ZK Email relayer will submit the on-chain transaction automatically. On local Anvil, run `make mock-complete-email-recovery-local` with the required env vars.
+                {`Recovery is approved on ${readyChains.length} chain${readyChains.length === 1 ? "" : "s"}. Tap below to submit the on-chain transaction via the ZK Email relayer.`}
               </Text>
             </View>
+            <TouchableOpacity
+              style={[styles.primaryButton, executing && styles.primaryButtonDisabled]}
+              onPress={() => void handleExecuteRecovery()}
+              activeOpacity={0.85}
+              disabled={executing}
+            >
+              {executing ? (
+                <ActivityIndicator color={theme.colors.surface} />
+              ) : (
+                <Text style={styles.primaryButtonText}>Execute Recovery</Text>
+              )}
+            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -726,6 +752,10 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 16,
       alignItems: "center",
       justifyContent: "center",
+      marginTop: 12,
+    },
+    primaryButtonDisabled: {
+      opacity: 0.6,
     },
     disabledButton: {
       opacity: 0.6,

@@ -16,7 +16,7 @@ import type {
 type RelayerAcceptanceRequestBody = {
   controller_eth_addr: string;
   guardian_email_addr: string;
-  account_code?: string;
+  account_code: string;
   template_idx: number;
   command: string;
 };
@@ -83,6 +83,7 @@ export class ZkEmailGenericRelayer implements ZkEmailRelayerAdapter {
     const body: RelayerAcceptanceRequestBody = {
       controller_eth_addr: params.controllerEthAddr,
       guardian_email_addr: params.guardianEmailAddr,
+      account_code: params.accountCode,
       template_idx: Number(params.templateIdx),
       command: params.command,
     };
@@ -193,16 +194,18 @@ export class ZkEmailGenericRelayer implements ZkEmailRelayerAdapter {
   }
 
   async getAccountSalt(
-    accountCode: string,
+    accountCode: Hex,
     guardianEmailAddr: string,
-  ): Promise<string | null> {
+  ): Promise<Hex | null> {
     const body: RelayerAccountSaltRequestBody = {
       account_code: accountCode,
       email_addr: guardianEmailAddr,
     };
 
     const resp = await this.post<RelayerSaltResponse>("getAccountSalt", body);
-    return resp.account_salt ?? null;
+    const salt = resp.account_salt ?? null;
+    if (salt === null) return null;
+    return (salt.startsWith("0x") ? salt : `0x${salt}`) as Hex;
   }
 
   async echo(): Promise<boolean> {

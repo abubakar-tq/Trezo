@@ -3,6 +3,7 @@ import type { Address, Hex } from "viem";
 export type AcceptanceRequestParams = {
   controllerEthAddr: Address;
   guardianEmailAddr: string;
+  accountCode: Hex;
   templateIdx: number | bigint;
   command: string;
 };
@@ -94,4 +95,5 @@ export interface ZkEmailRelayerAdapter {
   getRequestStatus(requestId: string): Promise<RelayerRequestStatus>;
   submitProofToChain(params: SubmitProofToChainParams): Promise<ChainSubmissionResult>;
   completeRecovery(params: CompleteRecoveryRequestParams): Promise<CompleteRecoveryResult>;
+  getAccountSalt(accountCode: Hex, guardianEmailAddr: string): Promise<Hex | null>;
 }

@@ -17,6 +17,7 @@ import {
   type EmailRecoverySecurityMode,
   type LoadedEmailRecoveryMetadata,
 } from "@/src/features/wallet/services/EmailRecoveryService";
+import { EmailRecoveryGroupService } from "@/src/features/wallet/services/EmailRecoveryGroupService";
 import LocalSignerService from "@/src/features/wallet/services/LocalSignerService";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
@@ -357,6 +358,49 @@ const EmailRecoveryScreen: React.FC = () => {
     };
   }, [smartAccountAddress, user?.id]);
 
+  // Periodically poll for guardian acceptance once the module is installed
+  // and at least one guardian is still pending. Stops polling when all
+  // guardians are accepted or after the screen unmounts.
+  useEffect(() => {
+    if (!storedMetadata?.config?.id || !smartAccountAddress) return;
+    const hasPending = storedMetadata.guardians.some(
+      (g) => g.acceptanceStatus === "pending" || g.acceptanceStatus === "acceptance_email_sent",
+    );
+    if (!hasPending || !moduleInstalledState) return;
+
+    const configId = storedMetadata.config.id;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const adapter = EmailRecoveryGroupService.createRelayer();
+        await EmailRecoveryService.pollGuardianAcceptanceStatuses({
+          smartAccountAddress,
+          configId,
+          adapter,
+          chainId: resolvedChainId,
+        });
+        if (cancelled) return;
+        const next = await EmailRecoveryService.loadMetadata({ smartAccountAddress });
+        if (!cancelled) setStoredMetadata(next);
+      } catch (err) {
+        console.warn("[EmailRecovery] poll acceptance failed", err);
+      }
+    };
+
+    void poll();
+    const handle = setInterval(() => void poll(), 12_000);
+    return () => {
+      cancelled = true;
+      clearInterval(handle);
+    };
+  }, [
+    storedMetadata?.config?.id,
+    storedMetadata?.guardians,
+    smartAccountAddress,
+    moduleInstalledState,
+    resolvedChainId,
+  ]);
+
   useEffect(() => {
     if (
       !storedMetadata ||
@@ -450,6 +494,118 @@ const EmailRecoveryScreen: React.FC = () => {
     });
     setDerivedGuardians([]);
   }, []);
+
+  const [removingGuardianId, setRemovingGuardianId] = useState<string | null>(null);
+
+  /**
+   * Builds + signs + submits an on-chain removeGuardian UserOp via the
+   * SmartAccount, then deletes the Supabase row and clears the local
+   * accountCode. Used by the "Remove" button next to an accepted guardian.
+   *
+   * Note: this REDUCES the guardian set. If `acceptedWeight` was at the
+   * threshold, removal can drop the wallet below recoverable state — the
+   * confirmation dialog warns the user explicitly.
+   */
+  const handleRemoveInstalledGuardian = useCallback(
+    async (guardianRowId: string, guardianMaskedEmail: string, encryptedEmail: string) => {
+      if (!user?.id || !smartAccountAddress || !storedMetadata?.config?.id) return;
+
+      const passkey = await PasskeyService.getPasskey(user.id);
+      if (!passkey) {
+        Alert.alert("Passkey required", "Cannot find a passkey on this device.");
+        return;
+      }
+
+      const email = await EmailRecoveryService.decryptEmail(
+        encryptedEmail,
+        smartAccountAddress,
+      );
+      if (!email) {
+        Alert.alert(
+          "Locked",
+          "This guardian's email is locked on this device. Import your Recovery Kit before removing.",
+        );
+        return;
+      }
+
+      setRemovingGuardianId(guardianRowId);
+      setModuleError(null);
+      try {
+        const adapter = EmailRecoveryGroupService.createRelayer();
+        const derived = await EmailRecoveryService.deriveGuardianAddresses(
+          smartAccountAddress,
+          [email],
+          resolvedChainId,
+          adapter,
+        );
+        const guardianAddress = derived[0]?.guardianAddress;
+        if (!guardianAddress) {
+          throw new Error("Could not derive guardian address — accountCode may have been lost.");
+        }
+
+        const { userOp, userOpHash } = await EmailRecoveryService.buildRemoveGuardianUserOp({
+          smartAccountAddress,
+          guardianAddress,
+          passkeyId: passkey.credentialIdRaw as Hex,
+          chainId: resolvedChainId,
+          usePaymaster: true,
+        });
+
+        const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
+        const encodedSignature = PasskeyService.encodeSignatureForContract(signature) as Hex;
+        const signedUserOp = { ...userOp, signature: encodedSignature };
+
+        await EmailRecoveryService.submitInstallModuleUserOp({
+          signedUserOp,
+          chainId: resolvedChainId,
+        });
+
+        await EmailRecoveryService.cleanupRemovedGuardian({
+          smartAccountAddress,
+          guardianRowId,
+          guardianEmail: email,
+        });
+
+        const refreshed = await EmailRecoveryService.loadMetadata({ smartAccountAddress });
+        setStoredMetadata(refreshed);
+        Alert.alert("Guardian Removed", `${guardianMaskedEmail} has been removed.`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to remove guardian.";
+        setModuleError(msg);
+        Alert.alert("Remove Failed", msg);
+      } finally {
+        setRemovingGuardianId(null);
+      }
+    },
+    [user?.id, smartAccountAddress, storedMetadata?.config?.id, resolvedChainId],
+  );
+
+  const confirmRemoveInstalledGuardian = useCallback(
+    (guardianRowId: string, guardianMaskedEmail: string, encryptedEmail: string) => {
+      const acceptedCount = storedMetadata?.guardians.filter(
+        (g) => g.acceptanceStatus === "accepted",
+      ).length ?? 0;
+      const threshold = storedMetadata?.config.threshold ?? 0;
+      const willDropBelowThreshold = acceptedCount <= threshold;
+
+      Alert.alert(
+        "Remove Guardian?",
+        willDropBelowThreshold
+          ? `${guardianMaskedEmail} is needed to meet your threshold of ${threshold}. Removing them means you cannot trigger an email recovery until you add another guardian. Continue?`
+          : `Remove ${guardianMaskedEmail} from your guardian set? This submits an on-chain transaction.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: () =>
+              void handleRemoveInstalledGuardian(guardianRowId, guardianMaskedEmail, encryptedEmail),
+          },
+        ],
+      );
+    },
+    [storedMetadata, handleRemoveInstalledGuardian],
+  );
 
   const handleGuardianEmailChange = useCallback(
     (index: number, value: string) => {
@@ -610,11 +766,13 @@ const EmailRecoveryScreen: React.FC = () => {
         );
       }
 
+      const relayerAdapter = EmailRecoveryGroupService.createRelayer();
       const derivedGuardians =
         await EmailRecoveryService.deriveGuardianAddresses(
           smartAccountAddress,
           trimmedGuardians,
           resolvedChainId,
+          relayerAdapter,
         );
       setDerivedGuardians(
         derivedGuardians.map(({ email, guardianAddress }) => ({
@@ -677,10 +835,62 @@ const EmailRecoveryScreen: React.FC = () => {
       setLastOperationHash(operationHash);
       setLastInstallPayload(signedUserOp);
       setModuleInstalledState(true);
-      Alert.alert(
-        "Email Recovery Activated",
-        "Email recovery module installation was submitted.",
-      );
+
+      // Fire-and-forget acceptance emails. Guardians whose addresses are now
+      // registered on-chain (post bundler confirmation) will receive an email
+      // with a one-tap accept link from the ZK Email relayer. If the install
+      // UserOp hasn't landed yet when the guardian replies, `handleAcceptance`
+      // reverts and the relayer surfaces the failure via requestStatus — we
+      // can retry from the per-guardian UI later.
+      if (refreshedMetadata?.config?.id) {
+        const configIdForInvites = refreshedMetadata.config.id;
+        void (async () => {
+          try {
+            const inviteAdapter = EmailRecoveryGroupService.createRelayer();
+            const result = await EmailRecoveryService.sendGuardianAcceptanceEmails({
+              smartAccountAddress,
+              configId: configIdForInvites,
+              adapter: inviteAdapter,
+            });
+            if (result.sent > 0) {
+              // Refresh metadata so per-guardian acceptance_status renders.
+              const next = await EmailRecoveryService.loadMetadata({
+                smartAccountAddress,
+              });
+              setStoredMetadata(next);
+            }
+          } catch (err) {
+            console.warn("[EmailRecovery] acceptance email send failed", err);
+          }
+        })();
+      }
+
+      // Nudge the user to back up their Recovery Kit when extra-security mode
+      // is on. After a guardian recovery to a new device, the new device's
+      // SecureStore will not have the vault key — without the printed/saved
+      // Recovery Kit, guardian emails (and accountCodes) appear locked. See
+      // CONTEXT.md guidance on Email Recovery + vault key UX.
+      if (securityMode === "extra") {
+        Alert.alert(
+          "Email Recovery Activated",
+          "Acceptance emails will be sent to your guardians. Before continuing, back up your Recovery Kit — without it, after a guardian recovery you'd have to re-enter guardian emails manually.",
+          [
+            {
+              text: "Back up later",
+              style: "cancel",
+            },
+            {
+              text: "Open Recovery Kit",
+              onPress: () => void handleExportRecoveryKit(),
+            },
+          ],
+        );
+      } else {
+        Alert.alert(
+          "Email Recovery Activated",
+          "The module is installing on-chain. Acceptance emails will be sent to your guardians shortly — they need to reply to confirm.",
+        );
+      }
     } catch (error) {
       const message =
         error instanceof Error
@@ -1322,7 +1532,7 @@ const EmailRecoveryScreen: React.FC = () => {
               </Text>
               {storedMetadata ? (
                 <>
-                  {storedMetadata.guardians.map((guardian, index) => (
+                  {storedMetadata.guardians.map((guardian) => (
                     <View key={guardian.emailHash} style={styles.guardianStatusRow}>
                       <View style={styles.guardianInfo}>
                         <Text style={styles.guardianEmailText}>
@@ -1346,6 +1556,26 @@ const EmailRecoveryScreen: React.FC = () => {
                           {guardian.acceptanceStatus === "accepted" ? "Accepted" : "Awaiting Approval"}
                         </Text>
                       </View>
+                      {!guardian.isLocked && (
+                        <TouchableOpacity
+                          style={styles.removeGuardianButton}
+                          onPress={() =>
+                            confirmRemoveInstalledGuardian(
+                              guardian.id,
+                              guardian.maskedEmail,
+                              guardian.normalizedEmailEncrypted,
+                            )
+                          }
+                          disabled={removingGuardianId === guardian.id}
+                          accessibilityLabel={`Remove guardian ${guardian.maskedEmail}`}
+                        >
+                          {removingGuardianId === guardian.id ? (
+                            <ActivityIndicator size="small" color={theme.colors.danger} />
+                          ) : (
+                            <Feather name="trash-2" size={18} color={theme.colors.danger} />
+                          )}
+                        </TouchableOpacity>
+                      )}
                     </View>
                   ))}
                   <View style={styles.acceptanceSummaryRow}>
@@ -1700,6 +1930,15 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 10,
       paddingVertical: 4,
       borderRadius: 10,
+    },
+    removeGuardianButton: {
+      marginLeft: 8,
+      width: 32,
+      height: 32,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 16,
+      backgroundColor: `${colors.danger}12`,
     },
     acceptanceBadgeAccepted: {
       backgroundColor: `${colors.success}1F`,

@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useUserStore } from '@store/useUserStore';
 import { useAppTheme } from '@theme';
 import { isContractDeployed } from '../../../integration/viem';
-import { DEFAULT_CHAIN_ID } from '@/src/integration/chains';
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from '@/src/integration/chains';
 import PasskeyService from '../services/PasskeyService';
 import { AccountDeploymentService, deriveDefaultWalletId } from '../services/AccountDeploymentService';
 import { useWalletStore } from '../store/useWalletStore';
@@ -27,7 +27,7 @@ export const SmartAccountCard = () => {
       if (!userId) return;
 
       try {
-        const chainId = aaAccount?.chainId || activeChainId || DEFAULT_CHAIN_ID;
+        const chainId = (aaAccount?.chainId || activeChainId || DEFAULT_CHAIN_ID) as SupportedChainId;
         const walletId = deriveDefaultWalletId(userId);
         const passkey = await PasskeyService.getPasskey(userId);
         if (!passkey) return;

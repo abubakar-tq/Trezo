@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 
-import { DEFAULT_CHAIN_ID } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import DevicePairingService, {
   type DevicePairingRequest,
   type WalletDevice,
@@ -112,8 +112,8 @@ const DevicesPasskeysScreen: React.FC = () => {
   // so we can render a spinner on that specific button instead of a global one.
   const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
 
-  const resolvedChainId = useMemo(
-    () => aaAccount?.chainId || activeChainId || DEFAULT_CHAIN_ID,
+  const resolvedChainId = useMemo<SupportedChainId>(
+    () => (aaAccount?.chainId || activeChainId || DEFAULT_CHAIN_ID) as SupportedChainId,
     [aaAccount?.chainId, activeChainId],
   );
 

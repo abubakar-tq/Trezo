@@ -152,8 +152,13 @@ export type CreateGroupResult = {
 };
 
 const DEFAULT_DEADLINE_SECONDS = 7 * 24 * 60 * 60;
+// Template format must match the on-chain EmailRecoveryCommandHandler at the
+// pinned template index. The canonical handler registers a single template per
+// type at idx=0 — see contracts/lib/email-recovery/src/handlers/EmailRecoveryCommandHandler.sol.
+// Recovery hash is sent as a lowercase 0x-prefixed hex string per the {string}
+// slot in the on-chain template (decoded via StringUtils.hexToBytes32).
 const RECOVERY_COMMAND_TEMPLATE = "Recover account {ethAddr} using recovery hash {recoveryHash}";
-const DEFAULT_RECOVERY_TEMPLATE_IDX = 1;
+const DEFAULT_RECOVERY_TEMPLATE_IDX = 0;
 const DEFAULT_ACCEPTANCE_TEMPLATE_IDX = 0;
 const MOCK_RELAYER_URL = "mock://local";
 
@@ -170,7 +175,8 @@ const parseTemplateIdx = (value: string | undefined, fallback: number): number =
 
 const parseProofMode = (value: string | undefined): ZkEmailRelayerConfig["proofMode"] => {
   if (value === "reusable") return "reusable";
-  if (value === "per_chain_hosted" || value === "per_chain") return "per_chain";
+  if (value === "per_chain_hosted") return "per_chain_hosted";
+  if (value === "per_chain") return "per_chain";
   return "per_chain";
 };
 
@@ -380,8 +386,8 @@ export class EmailRecoveryGroupService {
     });
 
     const command = RECOVERY_COMMAND_TEMPLATE
-      .replace("{ethAddr}", group.smart_account_address)
-      .replace("{recoveryHash}", group.multichain_recovery_data_hash);
+      .replace("{ethAddr}", group.smart_account_address.toLowerCase())
+      .replace("{recoveryHash}", group.multichain_recovery_data_hash.toLowerCase());
 
     for (const approval of approvals ?? []) {
       if (approval.status !== "pending" && approval.status !== "failed") continue;
@@ -488,8 +494,8 @@ export class EmailRecoveryGroupService {
     }
 
     const command = RECOVERY_COMMAND_TEMPLATE
-      .replace("{ethAddr}", group.smart_account_address)
-      .replace("{recoveryHash}", group.multichain_recovery_data_hash);
+      .replace("{ethAddr}", group.smart_account_address.toLowerCase())
+      .replace("{recoveryHash}", group.multichain_recovery_data_hash.toLowerCase());
 
     await this.sendRelayerRequestsForApproval({
       adapter,
