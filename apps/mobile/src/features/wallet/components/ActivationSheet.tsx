@@ -11,7 +11,7 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { TrezoBottomSheet } from "@shared/components/sheets/TrezoBottomSheet";
 import { DeployAccountSheetBody } from "./DeployAccountSheetBody";
 import type { DeployStep } from "@features/wallet/types/deploy";
-import { getChainConfig, getEnabledChains, isPortableChain, type SupportedChainId } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, getChainConfig, getEnabledChains, isPortableChain, type SupportedChainId } from "@/src/integration/chains";
 import { useAppTheme } from "@theme";
 import { useAccountState } from "@features/wallet/hooks/useAccountState";
 import {
@@ -71,7 +71,7 @@ export const ActivationSheet = forwardRef<ActivationSheetHandle>((_, ref) => {
     dismiss: () => sheetRef.current?.dismiss(),
   }));
 
-  const resolvedChainId = (chainId ?? activeChainId ?? 31337) as SupportedChainId;
+  const resolvedChainId = (chainId ?? activeChainId ?? DEFAULT_CHAIN_ID) as SupportedChainId;
   const chainName = getChainConfig(resolvedChainId)?.name ?? "this chain";
 
   const runActivation = useCallback(async () => {

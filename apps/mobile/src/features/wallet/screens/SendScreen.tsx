@@ -90,6 +90,8 @@ const resolveCandidate = (
 const CHAIN_EMOJI: Record<number, string> = {
   31337: "⬡",
   11155111: "Ξ",
+  84532: "🔵",
+  421614: "🔷",
   1: "Ξ",
   324: "⧫",
   300: "⧫",

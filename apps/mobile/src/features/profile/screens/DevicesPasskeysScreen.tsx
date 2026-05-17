@@ -133,7 +133,7 @@ const DevicesPasskeysScreen: React.FC = () => {
         const signerStatus = await LocalSignerService.getWalletSignerStatus({
           userId: user.id,
           smartAccountAddress: (walletAddress ?? walletFromStore ?? null) as `0x${string}` | null,
-          chainId: DEFAULT_CHAIN_ID,
+          chainId: resolvedChainId,
         });
         if (active) { setCanSignForWallet(signerStatus.canSignForWallet); setCheckingLocalSigner(false); }
       };
@@ -141,7 +141,7 @@ const DevicesPasskeysScreen: React.FC = () => {
       setCheckingLocalSigner(true);
       void loadSignerStatus();
       return () => { active = false; };
-    }, [user?.id, walletAddress, walletFromStore]),
+    }, [user?.id, walletAddress, walletFromStore, resolvedChainId]),
   );
 
   const loadData = useCallback(async () => {
@@ -151,7 +151,7 @@ const DevicesPasskeysScreen: React.FC = () => {
     if (!address) {
       const hydratedWallet = await WalletSyncService.hydrateWalletForUser({
         userId: user.id,
-        preferredChainId: DEFAULT_CHAIN_ID,
+        preferredChainId: resolvedChainId,
       }).catch(() => null);
       address = hydratedWallet?.predictedAddress ?? null;
       if (!address) {
@@ -189,17 +189,17 @@ const DevicesPasskeysScreen: React.FC = () => {
       console.error("Failed to load passkeys:", err);
     }
 
-    await DevicePairingService.ensureLocalDeviceSynced({ userId: user.id, walletAddress: address, chainId: DEFAULT_CHAIN_ID });
-    await DevicePairingService.syncWalletDevicesFromChain({ userId: user.id, walletAddress: address, chainId: DEFAULT_CHAIN_ID });
+    await DevicePairingService.ensureLocalDeviceSynced({ userId: user.id, walletAddress: address, chainId: resolvedChainId });
+    await DevicePairingService.syncWalletDevicesFromChain({ userId: user.id, walletAddress: address, chainId: resolvedChainId });
 
     const [pendingRequests, walletDevices] = await Promise.all([
       DevicePairingService.listPendingApprovals(user.id),
-      DevicePairingService.listWalletDevices({ userId: user.id, walletAddress: address, chainId: DEFAULT_CHAIN_ID }),
+      DevicePairingService.listWalletDevices({ userId: user.id, walletAddress: address, chainId: resolvedChainId }),
     ]);
 
     setRequests(pendingRequests);
     setDevices(walletDevices);
-  }, [user?.id, walletAddress]);
+  }, [user?.id, walletAddress, resolvedChainId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -392,7 +392,7 @@ const DevicesPasskeysScreen: React.FC = () => {
     setBusy(true);
     setError(null);
     try {
-      const created = await DevicePairingService.createPairingRequest({ userId: user.id, walletAddress, chainId: DEFAULT_CHAIN_ID });
+      const created = await DevicePairingService.createPairingRequest({ userId: user.id, walletAddress, chainId: resolvedChainId });
       setActiveLink(created.deepLink);
       await loadData();
     } catch (err) {
@@ -400,7 +400,7 @@ const DevicesPasskeysScreen: React.FC = () => {
     } finally {
       setBusy(false);
     }
-  }, [loadData, user?.id, walletAddress]);
+  }, [loadData, user?.id, walletAddress, resolvedChainId]);
 
   const signAndSubmit = useCallback(
     async (userOpHash: `0x${string}`, userOp: any) => {
@@ -436,11 +436,11 @@ const DevicesPasskeysScreen: React.FC = () => {
             createdAt: request.created_at,
           },
           signingPasskeyId: currentPasskey.credentialIdRaw as `0x${string}`,
-          chainId: DEFAULT_CHAIN_ID,
+          chainId: resolvedChainId,
           usePaymaster: true,
         });
         const submittedHash = await signAndSubmit(built.userOpHash, built.userOp);
-        const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, DEFAULT_CHAIN_ID);
+        const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, resolvedChainId);
         const success = Boolean((receipt as { success?: boolean }).success);
         if (!success) {
           await DevicePairingService.markFailed(request.id, user.id, "UserOperation reverted", submittedHash);
@@ -451,7 +451,7 @@ const DevicesPasskeysScreen: React.FC = () => {
           userId: user.id,
           operationHash: submittedHash,
           walletAddress,
-          chainId: DEFAULT_CHAIN_ID,
+          chainId: resolvedChainId,
           passkeyId: request.new_passkey_id,
           credentialId: request.new_credential_id,
           deviceName: request.new_device_name,
@@ -464,7 +464,7 @@ const DevicesPasskeysScreen: React.FC = () => {
         setBusy(false);
       }
     },
-    [loadData, signAndSubmit, user?.id, walletAddress],
+    [loadData, signAndSubmit, user?.id, walletAddress, resolvedChainId],
   );
 
   const handleRejectRequest = useCallback(
@@ -493,11 +493,11 @@ const DevicesPasskeysScreen: React.FC = () => {
         smartAccountAddress: walletAddress as `0x${string}`,
         targetPasskeyId,
         signingPasskeyId: passkey.credentialIdRaw as `0x${string}`,
-        chainId: DEFAULT_CHAIN_ID,
+        chainId: resolvedChainId,
         usePaymaster: true,
       };
     },
-    [user?.id, walletAddress],
+    [user?.id, walletAddress, resolvedChainId],
   );
 
   const signAndSubmitRemovalUserOp = useCallback(
@@ -507,13 +507,13 @@ const DevicesPasskeysScreen: React.FC = () => {
       const encoded = PasskeyService.encodeSignatureForContract(signature) as `0x${string}`;
       const submittedHash = await PasskeyAccountService.submitAddPasskeyUserOp(
         { ...built.userOp, signature: encoded },
-        DEFAULT_CHAIN_ID,
+        resolvedChainId,
       );
-      const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, DEFAULT_CHAIN_ID);
+      const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, resolvedChainId);
       if (!Boolean((receipt as { success?: boolean }).success)) throw new Error(`${errorLabel} reverted on-chain`);
-      await DevicePairingService.syncWalletDevicesFromChain({ userId: user.id, walletAddress, chainId: DEFAULT_CHAIN_ID });
+      await DevicePairingService.syncWalletDevicesFromChain({ userId: user.id, walletAddress, chainId: resolvedChainId });
     },
-    [user?.id, walletAddress],
+    [user?.id, walletAddress, resolvedChainId],
   );
 
   const submitRemovalAction = useCallback(

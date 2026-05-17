@@ -2,6 +2,7 @@ import type WebView from "react-native-webview";
 import { respondToRPC } from "./injectedProvider";
 import { useDAppSessionsStore } from "@features/browser/store/useDAppSessionsStore";
 import type { DAppSession } from "@features/browser/store/useDAppSessionsStore";
+import { DEFAULT_CHAIN_ID } from "@/src/integration/chains";
 
 export type RPCContext = {
   webview: WebView | null;
@@ -35,7 +36,7 @@ export async function handleRPC(ctx: RPCContext, msg: RPCMessage): Promise<void>
           respondToRPC(webview, msg.id, [session.accountAddress]);
           return;
         }
-        const approved = await ctx.requestApproval(origin, 11155111);
+        const approved = await ctx.requestApproval(origin, DEFAULT_CHAIN_ID);
         if (!approved) {
           respondToRPC(webview, msg.id, undefined, { code: 4001, message: "User rejected" });
           return;
@@ -53,7 +54,7 @@ export async function handleRPC(ctx: RPCContext, msg: RPCMessage): Promise<void>
         respondToRPC(
           webview,
           msg.id,
-          `0x${(session?.chainId ?? 11155111).toString(16)}`,
+          `0x${(session?.chainId ?? DEFAULT_CHAIN_ID).toString(16)}`,
         );
         return;
       }

@@ -42,7 +42,7 @@ const forkProviders: readonly SwapRouteProvider[] = [
 // ─── Network-key-aware API ─────────────────────────────────────────────────────
 
 export const getSwapProvidersForNetwork = (networkKey: NetworkKey): SwapRouteProvider[] => {
-  if (networkKey === "base-mainnet-fork" || networkKey === "base-mainnet") {
+  if (networkKey === "base-mainnet-fork" || networkKey === "base-mainnet" || networkKey === "base-sepolia") {
     return [...forkProviders];
   }
   // Fallback to legacy for anvil-local and other networks

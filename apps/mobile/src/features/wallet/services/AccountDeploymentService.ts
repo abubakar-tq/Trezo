@@ -145,7 +145,7 @@ export class AccountDeploymentService {
     }
 
     let fundingTxHash: Hex | undefined;
-    if ((params.autoFundEntryPointDeposit ?? !usePaymaster) && !usePaymaster) {
+    if ((params.autoFundEntryPointDeposit ?? !usePaymaster) && !usePaymaster && chainId === 31337) {
       const { hash } = await fundEntryPointDeposit({
         chainId,
         account: sender,

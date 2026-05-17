@@ -4,8 +4,10 @@ import { Feather } from '@expo/vector-icons';
 import { useUserStore } from '@store/useUserStore';
 import { useAppTheme } from '@theme';
 import { isContractDeployed } from '../../../integration/viem';
+import { DEFAULT_CHAIN_ID } from '@/src/integration/chains';
 import PasskeyService from '../services/PasskeyService';
 import { AccountDeploymentService, deriveDefaultWalletId } from '../services/AccountDeploymentService';
+import { useWalletStore } from '../store/useWalletStore';
 import type { Hex } from 'viem';
 
 export const SmartAccountCard = () => {
@@ -17,14 +19,15 @@ export const SmartAccountCard = () => {
   const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   const setSmartAccountAddress = useUserStore((state) => state.setSmartAccountAddress);
   const setSmartAccountDeployed = useUserStore((state) => state.setSmartAccountDeployed);
+  const aaAccount = useWalletStore((state) => state.aaAccount);
+  const activeChainId = useWalletStore((state) => state.activeChainId);
 
-  // Check deployment status on mount if we have an address but don't know if it's deployed
   useEffect(() => {
     const checkStatus = async () => {
       if (!userId) return;
-      
+
       try {
-        const chainId = 31337;
+        const chainId = aaAccount?.chainId || activeChainId || DEFAULT_CHAIN_ID;
         const walletId = deriveDefaultWalletId(userId);
         const passkey = await PasskeyService.getPasskey(userId);
         if (!passkey) return;
@@ -54,7 +57,7 @@ export const SmartAccountCard = () => {
     };
 
     checkStatus();
-  }, [userId]);
+  }, [userId, aaAccount?.chainId, activeChainId]);
 
   const handleCopyAddress = async () => {
     if (!smartAccountAddress) return;
