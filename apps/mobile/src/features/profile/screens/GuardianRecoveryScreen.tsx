@@ -26,6 +26,7 @@ import { GuardianSyncService } from "../services/GuardianSyncService";
 import { useUserStore } from "@store/useUserStore";
 import { isAddress, type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
+import { GuardianUpdateModal } from "./GuardianUpdateModal";
 
 const shortenHex = (value: string | null | undefined, chars = 6) => {
   if (!value) return "—";
@@ -97,6 +98,9 @@ const GuardianRecoveryScreen: React.FC = () => {
   const [moduleStatusNonce, setModuleStatusNonce] = useState(0);
   const [checkingModule, setCheckingModule] = useState(false);
   const [moduleInstalledState, setModuleInstalledState] = useState<boolean | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [onChainGuardians, setOnChainGuardians] = useState<readonly Address[]>([]);
+  const [onChainThreshold, setOnChainThreshold] = useState<bigint>(0n);
   const [installingModule, setInstallingModule] = useState(false);
   const [moduleError, setModuleError] = useState<string | null>(null);
   const [lastUserOpHash, setLastUserOpHash] = useState<Hex | null>(null);
@@ -185,6 +189,27 @@ const GuardianRecoveryScreen: React.FC = () => {
       cancelled = true;
     };
   }, [smartAccountReady, smartAccountAddress, resolvedChainId, moduleStatusNonce]);
+
+  useEffect(() => {
+    if (!moduleInstalledState || !smartAccountAddress) {
+      setOnChainGuardians([]);
+      setOnChainThreshold(0n);
+      return;
+    }
+    let cancelled = false;
+    SocialRecoveryService.getRecoveryDetails(smartAccountAddress, resolvedChainId)
+      .then((details) => {
+        if (cancelled) return;
+        setOnChainGuardians(details.guardians);
+        setOnChainThreshold(details.threshold);
+      })
+      .catch((err) => {
+        console.warn("[GuardianRecovery] getRecoveryDetails failed:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [moduleInstalledState, smartAccountAddress, resolvedChainId, moduleStatusNonce]);
 
   useEffect(() => {
     if (!syncStatus) {
@@ -391,10 +416,26 @@ const GuardianRecoveryScreen: React.FC = () => {
         "Guardian recovery module installation confirmed on-chain.",
       );
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to install the social recovery module. Please try again.";
-      setModuleError(message);
-      Alert.alert("Installation Failed", message);
+      const raw = error instanceof Error ? error.message : String(error);
+      // The SmartAccount's ModuleManager reverts "MM: EXECUTOR_EXISTS" when
+      // re-installing an already-installed executor. Convert that into a
+      // helpful message + refresh the local state instead of showing the
+      // raw viem RPC blob.
+      const alreadyInstalled =
+        raw.includes("MM: EXECUTOR_EXISTS") ||
+        raw.includes("4d4d3a204558454355544f525f4558495354"); // hex of the string above
+      if (alreadyInstalled) {
+        setModuleInstalledState(true);
+        setModuleStatusNonce((nonce) => nonce + 1);
+        setModuleError(null);
+        Alert.alert(
+          "Module Already Installed",
+          "The social recovery module is already active on this wallet. No need to install it again — open Backup & Recovery → Guardian Recovery to view or update guardians.",
+        );
+      } else {
+        setModuleError(raw);
+        Alert.alert("Installation Failed", raw);
+      }
     } finally {
       setInstallingModule(false);
     }
@@ -749,6 +790,28 @@ const GuardianRecoveryScreen: React.FC = () => {
               Guardian edits are locked here after installation so the app cannot drift away from the on-chain policy enforced by the module.
             </Text>
           )}
+          {moduleInstalledState && onChainGuardians.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setUpdateModalOpen(true)}
+              style={{
+                marginTop: 12,
+                marginBottom: 4,
+                backgroundColor: colors.accent,
+                borderRadius: 16,
+                paddingVertical: 14,
+                paddingHorizontal: 16,
+                flexDirection: "row",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Feather name="zap" size={16} color={colors.textOnAccent} />
+              <Text style={{ color: colors.textOnAccent, fontWeight: "800", fontSize: 15 }}>
+                Update Guardians On-Chain
+              </Text>
+            </TouchableOpacity>
+          )}
           {syncStatus && (
             <View
               style={[
@@ -909,6 +972,20 @@ const GuardianRecoveryScreen: React.FC = () => {
           <ActivityIndicator size="large" color={colors.accentAlt} />
           <Text style={styles.loadingText}>Saving guardians…</Text>
         </View>
+      )}
+      {updateModalOpen && smartAccountAddress && onChainGuardians.length > 0 && (
+        <GuardianUpdateModal
+          visible={updateModalOpen}
+          onClose={() => setUpdateModalOpen(false)}
+          onSuccess={() => {
+            setUpdateModalOpen(false);
+            setModuleStatusNonce((n) => n + 1);
+          }}
+          smartAccountAddress={smartAccountAddress as Address}
+          currentGuardians={onChainGuardians}
+          currentThreshold={onChainThreshold}
+          chainId={resolvedChainId}
+        />
       )}
     </View>
   );
