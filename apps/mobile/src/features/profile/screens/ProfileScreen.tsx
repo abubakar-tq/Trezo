@@ -19,6 +19,13 @@ import { useTabContentBottomInset } from "@hooks";
 import { getSupabaseClient } from "@lib/supabase";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import { getDeployment, getPublicClient } from "@/src/integration/viem";
+import { ABIS } from "@/src/integration/viem/abis";
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import { Alert } from "react-native";
+import type { Address, Hex } from "viem";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 
@@ -45,11 +52,125 @@ const ProfileScreen: React.FC = () => {
 
   const user = useUserStore((state) => state.user);
   const profile = useUserStore((state) => state.profile);
+  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   const resetUser = useUserStore((state) => state.reset);
   const setGuardNavigation = useAuthFlowStore((state) => state.setGuardNavigation);
 
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [checkingPasskey, setCheckingPasskey] = useState(false);
+
+  // DEV: paths used by Check Passkey Authority button.
+  const smartAccountAddress = useUserStore((s) => s.smartAccountAddress) as Address | null;
+  const activeChainId = useWalletStore((s) => s.activeChainId) as SupportedChainId | undefined;
+
+  const handleCheckPasskeyAuthority = useCallback(async () => {
+    if (checkingPasskey) return;
+    setCheckingPasskey(true);
+    try {
+      if (!user?.id) throw new Error("No signed-in user");
+      if (!smartAccountAddress) throw new Error("No smart account on record");
+
+      const chainId = (activeChainId ?? DEFAULT_CHAIN_ID) as SupportedChainId;
+      const local = await PasskeyService.getPasskey(user.id);
+      const deployment = getDeployment(chainId);
+      const validatorAddr = deployment?.passkeyValidator as Address | undefined;
+      if (!validatorAddr) throw new Error("No PasskeyValidator address in deployment");
+
+      const client = getPublicClient(chainId);
+
+      const lines: string[] = [];
+      lines.push(`Chain: ${chainId}`);
+      lines.push(`Wallet: ${smartAccountAddress.slice(0, 10)}…${smartAccountAddress.slice(-6)}`);
+      lines.push(`Validator: ${validatorAddr.slice(0, 10)}…${validatorAddr.slice(-6)}`);
+
+      // 1) Local passkey snapshot
+      if (!local) {
+        lines.push("");
+        lines.push("❌ No local passkey for this user on this device.");
+        lines.push("→ You cannot sign UserOps until a passkey is provisioned (or recovered).");
+        Alert.alert("Passkey Authority Check", lines.join("\n"));
+        return;
+      }
+      const credentialIdRaw = local.credentialIdRaw as Hex;
+      lines.push("");
+      lines.push("Local passkey:");
+      lines.push(`  credentialId: ${credentialIdRaw.slice(0, 14)}…${credentialIdRaw.slice(-10)}`);
+      lines.push(`  X: ${(local.publicKeyX ?? "0x").slice(0, 14)}…`);
+      lines.push(`  Y: ${(local.publicKeyY ?? "0x").slice(0, 14)}…`);
+
+      // 2) On-chain validator state
+      const [count, isInit, hasIt] = await Promise.all([
+        client.readContract({
+          address: validatorAddr,
+          abi: ABIS.passkeyValidator,
+          functionName: "passkeyCount",
+          args: [smartAccountAddress],
+        }).catch(() => 0n) as Promise<bigint>,
+        client.readContract({
+          address: validatorAddr,
+          abi: ABIS.passkeyValidator,
+          functionName: "isInitialized",
+          args: [smartAccountAddress],
+        }).catch(() => false) as Promise<boolean>,
+        client.readContract({
+          address: validatorAddr,
+          abi: ABIS.passkeyValidator,
+          functionName: "hasPasskey",
+          args: [smartAccountAddress, credentialIdRaw],
+        }).catch(() => false) as Promise<boolean>,
+      ]);
+
+      lines.push("");
+      lines.push("On-chain validator state:");
+      lines.push(`  isInitialized:    ${isInit}`);
+      lines.push(`  passkeyCount:     ${count.toString()}`);
+      lines.push(`  hasPasskey(local): ${hasIt}`);
+
+      // 3) If hasPasskey, fetch the record to verify px/py match
+      let matchPx: boolean | null = null;
+      let matchPy: boolean | null = null;
+      if (hasIt) {
+        try {
+          // getPasskeyRecord returns (px, py, signCounter, counterInitialized).
+          // 4 outputs, not 5 — no leading id field.
+          const record = (await client.readContract({
+            address: validatorAddr,
+            abi: ABIS.passkeyValidator,
+            functionName: "getPasskeyRecord",
+            args: [smartAccountAddress, credentialIdRaw],
+          })) as readonly [bigint, bigint, number, boolean];
+          const [onchainPx, onchainPy] = record;
+          const localPxBig = BigInt(local.publicKeyX ?? "0x0");
+          const localPyBig = BigInt(local.publicKeyY ?? "0x0");
+          matchPx = localPxBig === onchainPx;
+          matchPy = localPyBig === onchainPy;
+          lines.push(`  px match:          ${matchPx ? "✅" : "❌"}`);
+          lines.push(`  py match:          ${matchPy ? "✅" : "❌"}`);
+        } catch (recErr) {
+          lines.push(`  getPasskeyRecord error: ${(recErr as Error).message}`);
+        }
+      }
+
+      // 4) Verdict
+      lines.push("");
+      if (hasIt && matchPx && matchPy) {
+        lines.push("✅ AUTHORITATIVE — this passkey can sign UserOps for this wallet.");
+      } else if (hasIt) {
+        lines.push("⚠️  Credential ID is registered but public-key bytes differ. This shouldn't happen — possible data corruption.");
+      } else {
+        lines.push("❌ NOT authoritative — this credentialId is NOT registered on-chain.");
+        lines.push("→ Trying to sign a UserOp will be rejected by the validator.");
+        lines.push("→ Run guardian recovery to register the current passkey.");
+      }
+
+      Alert.alert("Passkey Authority Check", lines.join("\n"));
+    } catch (err: any) {
+      Alert.alert("Check Failed", err?.message ?? String(err));
+    } finally {
+      setCheckingPasskey(false);
+    }
+  }, [user?.id, smartAccountAddress, activeChainId, checkingPasskey]);
 
   const displayName =
     profile?.username ??
@@ -151,14 +272,18 @@ const ProfileScreen: React.FC = () => {
           </Text>
 
           <View style={styles.pillRow}>
-            <View style={[styles.pill, { backgroundColor: `${colors.success}1A`, borderColor: `${colors.success}33` }]}>
-              <Feather name="check-circle" size={11} color={colors.success} />
-              <Text style={[styles.pillText, { color: colors.success }]}>Verified</Text>
-            </View>
-            <View style={[styles.pill, { backgroundColor: `${colors.accent}1A`, borderColor: `${colors.accent}33` }]}>
-              <Feather name="shield" size={11} color={colors.accent} />
-              <Text style={[styles.pillText, { color: colors.accent }]}>Protected</Text>
-            </View>
+            {user?.email_confirmed_at ? (
+              <View style={[styles.pill, { backgroundColor: `${colors.success}1A`, borderColor: `${colors.success}33` }]}>
+                <Feather name="check-circle" size={11} color={colors.success} />
+                <Text style={[styles.pillText, { color: colors.success }]}>Verified</Text>
+              </View>
+            ) : null}
+            {smartAccountDeployed ? (
+              <View style={[styles.pill, { backgroundColor: `${colors.accent}1A`, borderColor: `${colors.accent}33` }]}>
+                <Feather name="shield" size={11} color={colors.accent} />
+                <Text style={[styles.pillText, { color: colors.accent }]}>Protected</Text>
+              </View>
+            ) : null}
           </View>
         </LinearGradient>
 
@@ -193,6 +318,32 @@ const ProfileScreen: React.FC = () => {
               </View>
             </View>
           ))}
+
+          {/* ── DEV: Check Passkey Authority ──────────── */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={[
+                styles.signOutBtn,
+                { backgroundColor: `${colors.accent}1A`, borderColor: `${colors.accent}40` },
+              ]}
+              onPress={() => void handleCheckPasskeyAuthority()}
+              disabled={checkingPasskey}
+              activeOpacity={0.8}
+            >
+              {checkingPasskey ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <>
+                  <View style={[styles.signOutIconWrap, { backgroundColor: `${colors.accent}1A` }]}>
+                    <Feather name="key" size={16} color={colors.accent} />
+                  </View>
+                  <Text style={[styles.signOutLabel, { color: colors.accent }]}>
+                    Check Passkey Authority
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
 
           {/* ── My wallet is compromised ──────────────── */}
           <TouchableOpacity

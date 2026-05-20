@@ -83,8 +83,8 @@ const EmailRecoveryScreen: React.FC = () => {
   const [guardianWeights, setGuardianWeights] = useState<string[]>(() =>
     Array(defaultGuardianCount).fill("1"),
   );
-  const [delayDays, setDelayDays] = useState("1");
-  const [expiryDays, setExpiryDays] = useState("3");
+  const [delayMinutes, setDelayMinutes] = useState("5");
+  const [expiryMinutes, setExpiryMinutes] = useState("60");
   const [securityMode, setSecurityMode] =
     useState<EmailRecoverySecurityMode>("none");
   const [vaultKeyInput, setVaultKeyInput] = useState("");
@@ -144,13 +144,13 @@ const EmailRecoveryScreen: React.FC = () => {
     () => Math.max(parseInt(thresholdValue, 10) || 0, 0),
     [thresholdValue],
   );
-  const parsedDelayDays = useMemo(
-    () => Math.max(parseInt(delayDays, 10) || 0, 0),
-    [delayDays],
+  const parsedDelayMinutes = useMemo(
+    () => Math.max(parseInt(delayMinutes, 10) || 0, 0),
+    [delayMinutes],
   );
-  const parsedExpiryDays = useMemo(
-    () => Math.max(parseInt(expiryDays, 10) || 0, 0),
-    [expiryDays],
+  const parsedExpiryMinutes = useMemo(
+    () => Math.max(parseInt(expiryMinutes, 10) || 0, 0),
+    [expiryMinutes],
   );
   const hasDuplicateGuardians = useMemo(() => {
     const normalized = trimmedGuardians.map((email) => email.toLowerCase());
@@ -194,10 +194,10 @@ const EmailRecoveryScreen: React.FC = () => {
     if (invalidWeightIndex >= 0) {
       return `Guardian weight at slot ${invalidWeightIndex + 1} must be greater than zero.`;
     }
-    if (parsedDelayDays < 1 || parsedExpiryDays < 1) {
-      return "Delay and expiry must both be at least 1 day.";
+    if (parsedDelayMinutes < 1 || parsedExpiryMinutes < 1) {
+      return "Delay and expiry must both be at least 1 minute.";
     }
-    if (parsedExpiryDays < parsedDelayDays) {
+    if (parsedExpiryMinutes < parsedDelayMinutes) {
       return "Expiry must be greater than or equal to the delay.";
     }
     return null;
@@ -206,8 +206,8 @@ const EmailRecoveryScreen: React.FC = () => {
     hasDuplicateGuardians,
     invalidGuardian,
     invalidWeightIndex,
-    parsedDelayDays,
-    parsedExpiryDays,
+    parsedDelayMinutes,
+    parsedExpiryMinutes,
     parsedThreshold,
     totalGuardianWeight,
     trimmedGuardians.length,
@@ -313,12 +313,12 @@ const EmailRecoveryScreen: React.FC = () => {
         const guardianCount = Math.max(metadata.guardians.length, 1);
         setGuardianCountValue(String(guardianCount));
         setThresholdValue(String(metadata.config.threshold));
-        setDelayDays(
-          String(Math.max(Math.floor(metadata.config.delaySeconds / 86400), 1)),
+        setDelayMinutes(
+          String(Math.max(Math.floor(metadata.config.delaySeconds / 60), 1)),
         );
-        setExpiryDays(
+        setExpiryMinutes(
           String(
-            Math.max(Math.floor(metadata.config.expirySeconds / 86400), 1),
+            Math.max(Math.floor(metadata.config.expirySeconds / 60), 1),
           ),
         );
         setSecurityMode(metadata.config.securityMode ?? "none");
@@ -688,8 +688,8 @@ const EmailRecoveryScreen: React.FC = () => {
         guardianEmails: trimmedGuardians,
         guardianWeights: parsedWeights,
         threshold: BigInt(parsedThreshold),
-        delaySeconds: BigInt(parsedDelayDays) * 86400n,
-        expirySeconds: BigInt(parsedExpiryDays) * 86400n,
+        delaySeconds: BigInt(parsedDelayMinutes) * 60n,
+        expirySeconds: BigInt(parsedExpiryMinutes) * 60n,
         securityMode,
         installStatus: moduleInstalledState ? "installed" : "pending",
         installUserOpHash:
@@ -719,8 +719,8 @@ const EmailRecoveryScreen: React.FC = () => {
     resolvedChainId,
     guardianValidationError,
     parseGuardianWeights,
-    parsedDelayDays,
-    parsedExpiryDays,
+    parsedDelayMinutes,
+    parsedExpiryMinutes,
     parsedThreshold,
     securityMode,
     moduleInstalledState,
@@ -794,8 +794,8 @@ const EmailRecoveryScreen: React.FC = () => {
           ),
           weights: parsedWeights,
           threshold: BigInt(parsedThreshold),
-          delay: BigInt(parsedDelayDays) * 86400n,
-          expiry: BigInt(parsedExpiryDays) * 86400n,
+          delay: BigInt(parsedDelayMinutes) * 60n,
+          expiry: BigInt(parsedExpiryMinutes) * 60n,
           passkeyId: passkey.credentialIdRaw as Hex,
           chainId: resolvedChainId,
           usePaymaster: true,
@@ -825,8 +825,8 @@ const EmailRecoveryScreen: React.FC = () => {
         guardianEmails: trimmedGuardians,
         guardianWeights: parsedWeights,
         threshold: BigInt(parsedThreshold),
-        delaySeconds: BigInt(parsedDelayDays) * 86400n,
-        expirySeconds: BigInt(parsedExpiryDays) * 86400n,
+        delaySeconds: BigInt(parsedDelayMinutes) * 60n,
+        expirySeconds: BigInt(parsedExpiryMinutes) * 60n,
         securityMode,
         installStatus: "pending",
         installUserOpHash: operationHash,
@@ -909,8 +909,8 @@ const EmailRecoveryScreen: React.FC = () => {
   }, [
     guardianValidationError,
     parseGuardianWeights,
-    parsedDelayDays,
-    parsedExpiryDays,
+    parsedDelayMinutes,
+    parsedExpiryMinutes,
     parsedThreshold,
     resolvedChainId,
     smartAccountAddress,
@@ -1096,10 +1096,10 @@ const EmailRecoveryScreen: React.FC = () => {
                 </Text>
               </View>
               <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Delay / Expiry (days)</Text>
+                <Text style={styles.payloadLabel}>Delay / Expiry (min)</Text>
                 <Text style={styles.payloadValue}>
-                  {Math.floor(storedMetadata.config.delaySeconds / 86400)} /{" "}
-                  {Math.floor(storedMetadata.config.expirySeconds / 86400)}
+                  {Math.floor(storedMetadata.config.delaySeconds / 60)} /{" "}
+                  {Math.floor(storedMetadata.config.expirySeconds / 60)}
                 </Text>
               </View>
               <View style={styles.payloadRow}>
@@ -1350,26 +1350,26 @@ const EmailRecoveryScreen: React.FC = () => {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Recovery Timing</Text>
           <Text style={styles.cardDesc}>
-            Delay and expiry are expressed in days. Recovery can be executed
-            after the delay and before the expiry.
+            Delay and expiry are expressed in minutes (testing mode). Recovery
+            can be executed after the delay and before the expiry.
           </Text>
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Delay (days)</Text>
+              <Text style={styles.inputLabel}>Delay (minutes)</Text>
               <TextInput
                 style={styles.numberInput}
-                value={delayDays}
-                onChangeText={setDelayDays}
+                value={delayMinutes}
+                onChangeText={setDelayMinutes}
                 keyboardType="number-pad"
                 placeholderTextColor={colors.textMuted}
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Expiry (days)</Text>
+              <Text style={styles.inputLabel}>Expiry (minutes)</Text>
               <TextInput
                 style={styles.numberInput}
-                value={expiryDays}
-                onChangeText={setExpiryDays}
+                value={expiryMinutes}
+                onChangeText={setExpiryMinutes}
                 keyboardType="number-pad"
                 placeholderTextColor={colors.textMuted}
               />
