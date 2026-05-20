@@ -22,7 +22,9 @@ export class TransakProvider implements IRampProvider {
       this.baseUrl = "https://global.transak.com";
       this.apiGatewayUrl = "https://api-gateway.transak.com";
     } else {
-      this.baseUrl = "https://global-stg.transak.com";
+      // staging-global.transak.com is the correct staging widget domain.
+      // global-stg.transak.com is the API gateway pattern, not the widget.
+      this.baseUrl = "https://staging-global.transak.com";
       this.apiGatewayUrl = "https://api-gateway-stg.transak.com";
     }
   }
@@ -49,32 +51,29 @@ export class TransakProvider implements IRampProvider {
 
     const network = this.mapChainIdToNetwork(params.chainId);
 
-    // 2. Build widget params
+    // 2. Build widget params — only documented Transak widget query parameters.
+    // `environment` is NOT a widget URL param; it is inferred from the domain
+    // (global-stg.transak.com = staging, global.transak.com = production).
+    // Passing it as a URL param causes Transak to return "Something went wrong".
     const widgetParams: Record<string, unknown> = {
       apiKey: this.apiKey,
-      environment: this.transakEnv,
       walletAddress: params.walletAddress,
-      walletAddressesData: JSON.stringify({
-        networks: {
-          ethereum: { address: params.walletAddress },
-          base: { address: params.walletAddress },
-          arbitrum: { address: params.walletAddress },
-        },
-      }),
       disableWalletAddressForm: true,
       fiatCurrency: params.fiatCurrency,
       fiatAmount: params.fiatAmount,
-      cryptoCurrencyCode: params.cryptoCurrency,
+      // defaultCryptoCurrency lets Transak validate availability server-side
+      // without hard-locking to a combo that might not be enabled for this key.
+      defaultCryptoCurrency: params.cryptoCurrency,
       network,
       partnerOrderId: order.id,
       partnerCustomerId: params.userId,
       themeColor: "8B5CF6",
-      colorMode: "DARK",
-      productsAvailed: "BUY",
-      hideMenu: true,
+      colorMode: "dark",
     };
 
-    // 3. Try Create Widget URL API (signed one-time URL, preferred approach)
+    // 3. Try Create Widget URL API (signed one-time URL, preferred approach).
+    // Transak docs: POST body must include top-level `apiKey` in addition to
+    // `widgetParams`. Response shape: { widgetUrl: "...", sessionId: "..." }.
     let widgetUrl: string | null = null;
     try {
       const sessionResp = await fetch(`${this.apiGatewayUrl}/api/v2/auth/session`, {
@@ -83,17 +82,27 @@ export class TransakProvider implements IRampProvider {
           "access-token": this.apiKey,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ widgetParams }),
+        body: JSON.stringify({ apiKey: this.apiKey, widgetParams }),
       });
 
       if (sessionResp.ok) {
         const sessionData = await sessionResp.json();
-        widgetUrl = sessionData?.data?.url ||
+        // Transak returns { widgetUrl, sessionId } at the top level.
+        // Older versions wrapped it in data: { url } or data: { accessId }.
+        widgetUrl =
+          sessionData?.widgetUrl ||
+          sessionData?.data?.widgetUrl ||
+          sessionData?.data?.url ||
           (sessionData?.data?.accessId
             ? `${this.baseUrl}?at=${sessionData.data.accessId}`
+            : null) ||
+          (sessionData?.accessId
+            ? `${this.baseUrl}?at=${sessionData.accessId}`
             : null);
         if (widgetUrl) {
-          console.log("[TransakProvider] Got signed widget URL from API");
+          console.log("[TransakProvider] Got signed widget URL from session API");
+        } else {
+          console.warn("[TransakProvider] Session API ok but no widgetUrl in response:", JSON.stringify(sessionData).slice(0, 300));
         }
       } else {
         const errText = await sessionResp.text();
@@ -112,7 +121,7 @@ export class TransakProvider implements IRampProvider {
         }
       }
       widgetUrl = `${this.baseUrl}?${qp.toString()}`;
-      console.log("[TransakProvider] Using raw query param widget URL");
+      console.log("[TransakProvider] Using raw query param fallback URL:", widgetUrl);
     }
 
     return {
