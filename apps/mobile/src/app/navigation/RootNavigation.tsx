@@ -33,6 +33,7 @@ import RecoveryEntryScreen from "@features/recovery/screens/RecoveryEntryScreen"
 import RecoveryProgressScreen from "@features/recovery/screens/RecoveryProgressScreen";
 import SecurityCenterScreen from "@features/recovery/screens/SecurityCenterScreen";
 import ShareRecoveryScreen from "@features/recovery/screens/ShareRecoveryScreen";
+import IncomingRecoveryApprovalsScreen from "@features/recovery/screens/IncomingRecoveryApprovalsScreen";
 import ThresholdConfigurationScreen from "@features/recovery/screens/ThresholdConfigurationScreen";
 import SettingsScreen from "@features/settings/screens/SettingsScreen";
 import TransactionDetailScreen from "@features/transactions/screens/TransactionDetailScreen";
@@ -295,6 +296,14 @@ const RootNavigation = () => {
         <Stack.Screen
           name="RecoveryComplete"
           component={RecoveryCompleteScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="IncomingRecoveryApprovals"
+          component={IncomingRecoveryApprovalsScreen}
           options={{
             headerShown: false,
             animation: "slide_from_right",

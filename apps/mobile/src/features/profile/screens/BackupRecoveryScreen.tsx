@@ -88,6 +88,35 @@ const BackupRecoveryScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.section}>
+          <Text style={styles.sectionHeader}>ACT AS A GUARDIAN</Text>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={() => navigation.navigate("IncomingRecoveryApprovals")}
+              activeOpacity={0.85}
+            >
+              <View style={styles.optionInfo}>
+                <View
+                  style={[
+                    styles.iconBadge,
+                    { backgroundColor: `${colors.accent}26` },
+                  ]}
+                >
+                  <Feather name="inbox" size={20} color={colors.accent} />
+                </View>
+                <View style={styles.optionText}>
+                  <Text style={styles.optionLabel}>Guardian Inbox</Text>
+                  <Text style={styles.optionDesc}>
+                    Review and approve recovery requests where you are a guardian
+                  </Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionHeader}>ONCHAIN RECOVERY</Text>
           <View style={styles.card}>
             <TouchableOpacity

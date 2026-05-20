@@ -74,6 +74,7 @@ export type RootStackParamList = {
   GuardianManagement: undefined;
   SecurityCenter: undefined;
   ThresholdConfiguration: undefined;
+  IncomingRecoveryApprovals: undefined;
   Buy: undefined;
   Receive: undefined;
   ReceiveChain: { chainId: number };
