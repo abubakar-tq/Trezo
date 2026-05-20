@@ -16,6 +16,23 @@ export type RecoveryRequestStatus =
 
 export type RecoveryApprovalStatus = "pending" | "valid" | "invalid";
 
+export type IncomingApprovalRequest = {
+  id: string;
+  wallet_address: string;
+  guardian_addresses: string[];
+  threshold: number;
+  approval_count: number;
+  deadline: string;
+  status: RecoveryRequestStatus;
+  digest: string;
+  requester_note: string | null;
+  target_chain_ids: number[];
+  recovery_intent_json: Record<string, unknown>;
+  chain_scopes_json: unknown[];
+  created_at: string;
+  already_approved: boolean;
+};
+
 export type RecoveryRequestRecord = {
   id: string;
   user_id: string;
@@ -372,6 +389,162 @@ export class RecoveryRequestService {
 
   async listApprovals(requestId: string): Promise<RecoveryApprovalRecord[]> {
     return this.listGuardianApprovals(requestId);
+  }
+
+  /**
+   * Returns recovery requests where the given address is listed as a guardian
+   * and the request is still open (collecting approvals or threshold reached,
+   * deadline not yet passed). Used by the in-app guardian approval inbox.
+   */
+  async listIncomingApprovalRequests(
+    guardianAddress: string,
+  ): Promise<IncomingApprovalRequest[]> {
+    const { data, error } = await supabase.rpc("list_recovery_requests_for_guardian", {
+      p_guardian_address: normalizeAddress(guardianAddress),
+    });
+    if (error) {
+      throw new Error(`Failed to list incoming approval requests: ${error.message}`);
+    }
+    return (data ?? []) as IncomingApprovalRequest[];
+  }
+
+  /**
+   * Ask the backend to prepare the encoded SocialRecovery.scheduleRecovery
+   * calldata. The backend reads all guardian signatures (which the client does
+   * not have access to via RLS) and returns the calldata + target address.
+   * Caller wraps this in a paymaster-sponsored UserOp from their smart account.
+   */
+  async prepareScheduleRecovery(input: {
+    requestId: string;
+    chainId: number;
+  }): Promise<{
+    socialRecoveryAddress: string;
+    walletAddress: string;
+    calldata?: string;
+    /** When true, recovery is already scheduled on-chain; caller should call
+     *  syncRecoveryStateFromChain instead of submitting a new UserOp. */
+    alreadyScheduled?: boolean;
+    recoveryIdOnchain?: string;
+    executeAfter?: string;
+  }> {
+    const { data, error } = await supabase.functions.invoke("submit-recovery-operation", {
+      body: {
+        requestId: input.requestId,
+        chainId: input.chainId,
+        action: "prepare-schedule",
+      },
+    });
+    if (error) throw new Error(error.message ?? "prepare-schedule failed");
+    if (!data?.success) throw new Error((data as any)?.error ?? "prepare-schedule returned no calldata");
+    return {
+      socialRecoveryAddress: data.socialRecoveryAddress,
+      walletAddress: data.walletAddress,
+      calldata: data.calldata,
+      alreadyScheduled: data.alreadyScheduled,
+      recoveryIdOnchain: data.recoveryIdOnchain,
+      executeAfter: data.executeAfter,
+    };
+  }
+
+  /**
+   * Force-sync the recovery_chain_statuses table from on-chain truth.
+   * Useful when a record-tx call failed previously and Supabase is now out
+   * of sync with the actual chain state.
+   */
+  async syncRecoveryStateFromChain(input: {
+    requestId: string;
+    chainId: number;
+  }): Promise<{ chainStatus: unknown; requestStatus: RecoveryRequestStatus }> {
+    const { data, error } = await supabase.functions.invoke("submit-recovery-operation", {
+      body: {
+        requestId: input.requestId,
+        chainId: input.chainId,
+        action: "sync-from-chain",
+      },
+    });
+    if (error) throw new Error(error.message ?? "sync-from-chain failed");
+    if (!data?.success) throw new Error((data as any)?.error ?? "sync-from-chain failed");
+    return { chainStatus: data.chainStatus, requestStatus: data.requestStatus };
+  }
+
+  /**
+   * Same shape as prepareScheduleRecovery but for executeRecovery (timelock
+   * already elapsed).
+   */
+  async prepareExecuteRecovery(input: {
+    requestId: string;
+    chainId: number;
+  }): Promise<{ socialRecoveryAddress: string; walletAddress: string; calldata: string }> {
+    const { data, error } = await supabase.functions.invoke("submit-recovery-operation", {
+      body: {
+        requestId: input.requestId,
+        chainId: input.chainId,
+        action: "prepare-execute",
+      },
+    });
+    if (error) throw new Error(error.message ?? "prepare-execute failed");
+    if (!data?.success) throw new Error((data as any)?.error ?? "prepare-execute returned no calldata");
+    return {
+      socialRecoveryAddress: data.socialRecoveryAddress,
+      walletAddress: data.walletAddress,
+      calldata: data.calldata,
+    };
+  }
+
+  /**
+   * After the client submits the schedule/execute UserOp and gets a tx hash,
+   * tell the backend to record it. The backend will wait for the receipt,
+   * read on-chain state, and update recovery_chain_statuses.
+   */
+  async recordRecoveryTx(input: {
+    requestId: string;
+    chainId: number;
+    recordAction: "schedule" | "execute";
+    txHash: string;
+  }): Promise<{ chainStatus: unknown; requestStatus: RecoveryRequestStatus }> {
+    const { data, error } = await supabase.functions.invoke("submit-recovery-operation", {
+      body: {
+        requestId: input.requestId,
+        chainId: input.chainId,
+        action: "record-tx",
+        recordAction: input.recordAction,
+        txHash: input.txHash,
+      },
+    });
+    if (error) throw new Error(error.message ?? "record-tx failed");
+    if (!data?.success) throw new Error((data as any)?.error ?? "record-tx failed");
+    return { chainStatus: data.chainStatus, requestStatus: data.requestStatus };
+  }
+
+  /**
+   * Submit a guardian approval to the edge function. Used by the in-app inbox
+   * after the guardian's smart account has called approveHash on-chain (the
+   * tx hash is passed through as approvalTxHash).
+   */
+  async submitGuardianApproval(input: {
+    requestId: string;
+    guardianAddress: string;
+    guardianIndex: number;
+    sigKind: "EOA_ECDSA" | "ERC1271" | "APPROVE_HASH";
+    signature: string;
+    approvalTxHash?: string;
+    chainId?: number;
+  }): Promise<{ success: boolean; approvalId?: string; thresholdReached?: boolean; alreadyApproved?: boolean; error?: string }> {
+    const { data, error } = await supabase.functions.invoke("submit-guardian-approval", {
+      body: {
+        requestId: input.requestId,
+        guardianAddress: normalizeAddress(input.guardianAddress),
+        guardianIndex: input.guardianIndex,
+        sigKind: input.sigKind,
+        signature: input.signature,
+        approvalTxHash: input.approvalTxHash,
+        chainId: input.chainId,
+      },
+    });
+    if (error) {
+      return { success: false, error: error.message ?? "submit-guardian-approval failed" };
+    }
+    return data as { success: boolean; approvalId?: string; thresholdReached?: boolean; alreadyApproved?: boolean };
   }
 
   async listChainStatuses(requestId: string): Promise<RecoveryChainStatusRecord[]> {

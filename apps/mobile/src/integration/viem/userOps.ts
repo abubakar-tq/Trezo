@@ -237,6 +237,26 @@ export type InstallRecoveryModuleUserOpParams = {
   operationLabel?: string;
 };
 
+export type GuardianUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  socialRecoveryAddress: Address;
+  guardians: readonly Address[];
+  threshold: bigint;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+  operationLabel?: string;
+};
+
 export type AddPasskeyUserOpParams = {
   chainId: SupportedChainId;
   bundlerUrl: string;
@@ -1098,6 +1118,179 @@ export async function buildInstallRecoveryModuleUserOp(params: InstallRecoveryMo
     verificationGasLimit: params.verificationGasLimit ?? 1_000_000n,
     preVerificationGas: params.preVerificationGas ?? 100_000n,
     operationLabel: params.operationLabel ?? "buildInstallRecoveryModuleUserOp",
+  });
+}
+
+export async function buildAddGuardiansUserOp(params: GuardianUserOpParams) {
+  if (!params.socialRecoveryAddress || params.socialRecoveryAddress === ZERO_ADDRESS) {
+    throw new Error("Social recovery address is required to build addGuardians UserOp");
+  }
+  const addCalldata = encodeFunctionData({
+    abi: ABIS.socialRecovery,
+    functionName: "addGuardians",
+    args: [params.smartAccountAddress, params.guardians as Address[], params.threshold],
+  });
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.socialRecoveryAddress, 0n, addCalldata],
+  });
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 600_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 800_000n,
+    preVerificationGas: params.preVerificationGas ?? 100_000n,
+    operationLabel: params.operationLabel ?? "buildAddGuardiansUserOp",
+  });
+}
+
+export async function buildRemoveGuardiansUserOp(params: GuardianUserOpParams) {
+  if (!params.socialRecoveryAddress || params.socialRecoveryAddress === ZERO_ADDRESS) {
+    throw new Error("Social recovery address is required to build removeGuardians UserOp");
+  }
+  const removeCalldata = encodeFunctionData({
+    abi: ABIS.socialRecovery,
+    functionName: "removeGuardians",
+    args: [params.smartAccountAddress, params.guardians as Address[], params.threshold],
+  });
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.socialRecoveryAddress, 0n, removeCalldata],
+  });
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 600_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 800_000n,
+    preVerificationGas: params.preVerificationGas ?? 100_000n,
+    operationLabel: params.operationLabel ?? "buildRemoveGuardiansUserOp",
+  });
+}
+
+export type ApproveHashUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  socialRecoveryAddress: Address;
+  digest: Hex;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+  operationLabel?: string;
+};
+
+export async function buildApproveHashUserOp(params: ApproveHashUserOpParams) {
+  if (!params.socialRecoveryAddress || params.socialRecoveryAddress === ZERO_ADDRESS) {
+    throw new Error("Social recovery address is required to build approveHash UserOp");
+  }
+  const innerCalldata = encodeFunctionData({
+    abi: ABIS.socialRecovery,
+    functionName: "approveHash",
+    args: [params.digest],
+  });
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.socialRecoveryAddress, 0n, innerCalldata],
+  });
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 400_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 800_000n,
+    preVerificationGas: params.preVerificationGas ?? 100_000n,
+    operationLabel: params.operationLabel ?? "buildApproveHashUserOp",
+  });
+}
+
+export type RawCallUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  target: Address;
+  innerCalldata: Hex;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+  operationLabel?: string;
+};
+
+/**
+ * Build a UserOp that wraps an arbitrary contract call in smartAccount.execute().
+ * Used by recovery-schedule and recovery-execute flows where the caller is a
+ * guardian whose smart account is making a permissionless call to SocialRecovery.
+ * The inner calldata is supplied pre-encoded by the backend (which has access
+ * to all guardian signatures), avoiding the need to expose every guardian's
+ * signature to the client.
+ */
+export async function buildRawCallUserOp(params: RawCallUserOpParams) {
+  if (!params.target || params.target === ZERO_ADDRESS) {
+    throw new Error("Target address is required for buildRawCallUserOp");
+  }
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.target, 0n, params.innerCalldata],
+  });
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 1_500_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 1_000_000n,
+    preVerificationGas: params.preVerificationGas ?? 120_000n,
+    operationLabel: params.operationLabel ?? "buildRawCallUserOp",
   });
 }
 
