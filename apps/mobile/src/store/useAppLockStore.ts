@@ -6,9 +6,14 @@ const LOCK_ENABLED_KEY = "trezo-lock-enabled";
 
 const DEFAULT_PROMPT = "Unlock Trezo Wallet";
 
+// Same defaults the passkey/deploy flow uses (PasskeyService): trust the OS
+// BiometricPrompt to handle device-credential fallback when biometric is not
+// enrolled. On the rare OEMs where that prompt misbehaves, the LockScreen
+// surfaces a manual "Use app PIN instead" escape — but we don't force an
+// app PIN just because biometric isn't enrolled.
 const FALLBACK_OPTIONS: LocalAuthentication.LocalAuthenticationOptions = {
   promptMessage: DEFAULT_PROMPT,
-  fallbackLabel: "Use PIN or Password",
+  fallbackLabel: "Use device PIN",
   cancelLabel: "Cancel",
   disableDeviceFallback: false,
 };
@@ -96,14 +101,14 @@ export const useAppLockStore = create<AppLockState>((set, get) => ({
       return false;
     }
 
-    // Nothing to authenticate against — don't fire the native prompt (it will
-    // reject instantly and cause the lock screen to "blink"). Caller is expected
-    // to surface the device-setup prompt UI instead.
+    // Nothing to authenticate against — caller is expected to drive the user
+    // through the app PIN setup flow instead. Without this guard, the native
+    // prompt opens and immediately rejects, flickering the screen.
     if (securityLevel === LocalAuthentication.SecurityLevel.NONE) {
       set({
         isLocked: true,
         isAuthenticating: false,
-        lastError: "Set up a screen lock (PIN, pattern, or biometric) in your device settings to unlock Trezo.",
+        lastError: null,
       });
       return false;
     }

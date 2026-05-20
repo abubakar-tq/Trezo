@@ -32,6 +32,16 @@ import { useAuthFlowStore } from "../../../store/useAuthFlowStore";
 import { useUserStore } from "../../../store/useUserStore";
 import { useAppTheme } from "@theme";
 
+// Policy (matches the passkey/deploy flow):
+//   - When the OS has ANY security (biometric or device PIN/password/pattern),
+//     we use the native BiometricPrompt — it transparently falls back to
+//     device credentials when biometric isn't enrolled. We auto-fire it only
+//     when biometric is actually enrolled, to avoid the empty-prompt flicker
+//     on a handful of Android OEMs.
+//   - We force an app PIN only when the device has no OS-level security at
+//     all, or when the user already opted into an app PIN previously.
+//   - An "Unlock with app PIN" escape is always one tap away, so users on
+//     OEMs where the native prompt misbehaves are never trapped.
 type UnlockMode = "biometric" | "pin-entry" | "pin-setup";
 
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -70,21 +80,28 @@ const LockScreen: React.FC = () => {
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
 
-  // Decide the default mode once everything is initialized. If the user has set up
-  // a PIN, prefer it (most reliable cross-Android path). Otherwise, fall back to
-  // the biometric flow. If neither is possible, force PIN setup.
+  // Mode-decision matrix:
+  //   hasPin  bio    →  biometric          (auto-fire; PIN as escape)
+  //   hasPin  !bio   →  pin-entry          (PIN is more reliable than the
+  //                                         OEM device-credential prompt)
+  //   !hasPin bio    →  biometric          (auto-fire; user can opt into app PIN)
+  //   !hasPin !bio,
+  //   device has lock → biometric          (NO auto-fire; user taps "Unlock"
+  //                                         to anchor the native prompt to a
+  //                                         user gesture — avoids flicker)
+  //   no security    →  pin-setup          (app PIN is the only option left)
   useEffect(() => {
     if (!hasInitialized || !hasPinInitialized || !isLocked) return;
     if (hasPin) {
-      setUnlockMode("pin-entry");
-    } else if (!isBiometricAvailable && !hasNoScreenLock) {
-      setUnlockMode("pin-setup");
-    } else {
+      setUnlockMode(isBiometricAvailable ? "biometric" : "pin-entry");
+    } else if (!hasNoScreenLock) {
       setUnlockMode("biometric");
+    } else {
+      setUnlockMode("pin-setup");
     }
   }, [hasInitialized, hasNoScreenLock, hasPin, hasPinInitialized, isBiometricAvailable, isLocked]);
 
-  // Reset PIN entry state any time we re-enter PIN mode or the screen unlocks.
+  // Reset PIN state when leaving a PIN mode or once the screen unlocks.
   useEffect(() => {
     if (unlockMode !== "pin-entry" && unlockMode !== "pin-setup") {
       setEnteredPin("");
@@ -139,20 +156,18 @@ const LockScreen: React.FC = () => {
     opacity: interpolate(pulse.value, [0, 1], [0.6, 0]),
   }));
 
+  // Auto-fire the native biometric prompt only when biometric is actually
+  // enrolled AND we are in biometric mode. Every other state is handled by
+  // the app PIN keypad — no native prompt fires, so there's nothing to flicker.
   useEffect(() => {
     if (!hasInitialized) return;
-    if (!isLocked) { autoAttemptedRef.current = false; cancelPendingAutoAttempt(); return; }
+    if (!isLocked) {
+      autoAttemptedRef.current = false;
+      cancelPendingAutoAttempt();
+      return;
+    }
     if (isAuthenticating || autoAttemptedRef.current) return;
-    // Device has no biometric and no PIN/passcode — firing authenticateAsync
-    // would resolve instantly with an error and visually blink the screen.
-    if (hasNoScreenLock) return;
-    // No biometric enrolled. Auto-firing authenticateAsync races with a user
-    // tap and Expo silently cancels the second call — leave it to the user to
-    // press the unlock button so the OS device-credential prompt is reliably
-    // anchored to a user gesture.
     if (!isBiometricAvailable) return;
-    // We're not in biometric mode (user is in PIN entry/setup) — don't pop the
-    // native prompt over the keypad.
     if (unlockMode !== "biometric") return;
 
     const now = Date.now();
@@ -164,7 +179,7 @@ const LockScreen: React.FC = () => {
       autoAttemptTimeoutRef.current = null;
       authenticate();
     }, 300);
-  }, [authenticate, cancelPendingAutoAttempt, hasInitialized, hasNoScreenLock, isAuthenticating, isBiometricAvailable, isLocked, unlockMode]);
+  }, [authenticate, cancelPendingAutoAttempt, hasInitialized, isAuthenticating, isBiometricAvailable, isLocked, unlockMode]);
 
   const handleRetry = useCallback(() => {
     cancelPendingAutoAttempt();
@@ -183,13 +198,8 @@ const LockScreen: React.FC = () => {
   }, []);
 
   const handleRecheckSecurityLevel = useCallback(async () => {
-    const level = await refreshSecurityLevel();
-    if (level !== LocalAuthentication.SecurityLevel.NONE) {
-      autoAttemptedRef.current = false;
-      lastAuthAttemptRef.current = 0;
-      authenticate();
-    }
-  }, [authenticate, refreshSecurityLevel]);
+    await refreshSecurityLevel();
+  }, [refreshSecurityLevel]);
 
   const handleSwitchToPin = useCallback(() => {
     cancelPendingAutoAttempt();
@@ -198,9 +208,18 @@ const LockScreen: React.FC = () => {
   }, [cancelPendingAutoAttempt, hasPin]);
 
   const handleSwitchToBiometric = useCallback(() => {
+    if (!isBiometricAvailable) return;
     setPinError(null);
     setEnteredPin("");
+    autoAttemptedRef.current = false;
     setUnlockMode("biometric");
+  }, [isBiometricAvailable]);
+
+  const handleStartOverSetup = useCallback(() => {
+    setPinError(null);
+    setEnteredPin("");
+    setSetupStep("first");
+    setSetupFirstPin(null);
   }, []);
 
   const handlePinDigit = useCallback(
@@ -318,36 +337,47 @@ const LockScreen: React.FC = () => {
 
   const biometricType = Platform.OS === "ios" ? "Face ID" : "Fingerprint";
   const inPinMode = unlockMode === "pin-entry" || unlockMode === "pin-setup";
-  const iconName = hasNoScreenLock
-    ? "shield-alert-outline"
-    : inPinMode
-      ? "lock-outline"
-      : isBiometricAvailable
-        ? Platform.OS === "ios" ? "face-recognition" : "fingerprint"
-        : "lock";
-  const title = hasNoScreenLock
-    ? "Set up a device screen lock"
-    : unlockMode === "pin-setup"
-      ? setupStep === "first" ? "Create your Trezo PIN" : "Confirm your Trezo PIN"
+
+  const iconName: keyof typeof MaterialCommunityIcons.glyphMap =
+    unlockMode === "pin-setup"
+      ? "shield-key-outline"
+      : unlockMode === "pin-entry"
+        ? "lock-outline"
+        : isBiometricAvailable
+          ? Platform.OS === "ios"
+            ? "face-recognition"
+            : "fingerprint"
+          : "shield-lock-outline";
+
+  const title =
+    unlockMode === "pin-setup"
+      ? setupStep === "first"
+        ? "Create your Trezo PIN"
+        : "Confirm your Trezo PIN"
       : unlockMode === "pin-entry"
         ? "Enter your Trezo PIN"
         : "Unlock Trezo Wallet";
-  const supportingText = hasNoScreenLock
-    ? `Trezo needs a device PIN, pattern, password, or ${biometricType} to keep your wallet safe. Add one in ${Platform.OS === "ios" ? "iOS Settings" : "Android Settings"}, then return here.`
-    : unlockMode === "pin-setup"
+
+  const supportingText =
+    unlockMode === "pin-setup"
       ? setupStep === "first"
-        ? `Pick a ${APP_PIN_LENGTH}-digit PIN. You'll use it to unlock Trezo when biometrics aren't available.`
-        : "Enter the same PIN again to confirm."
+        ? `Pick a ${APP_PIN_LENGTH}-digit PIN. Trezo will ask for this PIN every time the app locks.`
+        : "Enter the same PIN again to confirm it."
       : unlockMode === "pin-entry"
-        ? `Enter the ${APP_PIN_LENGTH}-digit PIN you set when first locking Trezo.`
+        ? `Enter your ${APP_PIN_LENGTH}-digit Trezo PIN to continue.`
         : isBiometricAvailable
-          ? `Use ${biometricType} or your device credentials to unlock.`
-          : "Use your device passcode to unlock Trezo.";
+          ? `Use ${biometricType} to unlock your wallet.`
+          : "Unlock with your device PIN, pattern or password.";
 
   const badgeBackground = mode === "dark" ? `${colors.surfaceElevated}C7` : `${colors.surfaceElevated}EB`;
   const badgeBorder = mode === "dark" ? `${colors.accent}80` : `${colors.accent}52`;
   const secondaryBorder = mode === "dark" ? `${colors.border}73` : `${colors.border}52`;
   const secondaryBackground = mode === "dark" ? `${colors.surfaceMuted}8C` : `${colors.surfaceMuted}D1`;
+
+  // Soft non-blocking banner: show when the device has no screen lock at all.
+  // We don't block the user from setting an app PIN — but we do strongly
+  // recommend they also add a device PIN/biometric.
+  const showNoDeviceLockBanner = hasNoScreenLock && unlockMode === "pin-setup";
 
   return (
     <>
@@ -357,7 +387,7 @@ const LockScreen: React.FC = () => {
           style={[styles.root, { backgroundColor: colors.background }]}
         >
           <View style={styles.centerContent}>
-            {/* Animated biometric icon */}
+            {/* Animated icon */}
             <View style={[styles.haloContainer, { shadowColor: colors.accent }]}>
               <AnimatedView
                 style={[styles.halo, haloStyle, { backgroundColor: colors.accent }]}
@@ -383,7 +413,29 @@ const LockScreen: React.FC = () => {
               {supportingText}
             </Text>
 
-            {lastError && !hasNoScreenLock && !inPinMode ? (
+            {/* Setup progress indicator */}
+            {unlockMode === "pin-setup" ? (
+              <View style={styles.stepRow}>
+                <View
+                  style={[
+                    styles.stepDot,
+                    {
+                      backgroundColor: setupStep === "first" ? colors.accent : `${colors.accent}66`,
+                    },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.stepDot,
+                    {
+                      backgroundColor: setupStep === "confirm" ? colors.accent : `${colors.border}99`,
+                    },
+                  ]}
+                />
+              </View>
+            ) : null}
+
+            {lastError && !inPinMode ? (
               <Text style={[styles.errorText, { color: colors.danger }]}>
                 {lastError}
               </Text>
@@ -418,70 +470,98 @@ const LockScreen: React.FC = () => {
                     </Text>
                   </TouchableOpacity>
                 ) : null}
-              </>
-            ) : null}
 
-            {/* Primary + secondary auth buttons */}
-            {!inPinMode && (
-            <View style={styles.actions}>
-              {hasNoScreenLock ? (
-                <>
+                {unlockMode === "pin-setup" && setupStep === "confirm" ? (
                   <TouchableOpacity
-                    activeOpacity={0.85}
-                    style={[styles.primaryButton, { backgroundColor: colors.accent }]}
-                    onPress={handleOpenDeviceSettings}
+                    activeOpacity={0.7}
+                    style={styles.startOverBtn}
+                    onPress={handleStartOverSetup}
+                    disabled={pinBusy}
                   >
-                    <Text style={[styles.primaryLabel, { color: colors.textOnAccent }]}>
-                      Open device settings
+                    <MaterialCommunityIcons
+                      name="arrow-u-left-top"
+                      size={16}
+                      color={colors.accent}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={[styles.startOverLabel, { color: colors.accent }]}>
+                      Start over and re-enter first PIN
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.85}
+                ) : null}
+
+                {showNoDeviceLockBanner ? (
+                  <View
                     style={[
-                      styles.secondaryButton,
-                      { borderColor: secondaryBorder, backgroundColor: secondaryBackground },
+                      styles.advisoryBanner,
+                      {
+                        backgroundColor: `${colors.warning}1F`,
+                        borderColor: `${colors.warning}66`,
+                      },
                     ]}
-                    onPress={handleRecheckSecurityLevel}
-                    disabled={isAuthenticating}
                   >
-                    <Text style={[styles.secondaryLabel, { color: colors.textPrimary }]}>
-                      I've set it up — try again
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    style={[styles.primaryButton, { backgroundColor: colors.accent }]}
-                    onPress={handleRetry}
-                    disabled={isAuthenticating}
-                  >
-                    {isAuthenticating ? (
-                      <ActivityIndicator size="small" color={colors.textOnAccent} />
-                    ) : (
-                      <Text style={[styles.primaryLabel, { color: colors.textOnAccent }]}>
-                        {isBiometricAvailable ? "Try again" : "Unlock with device credentials"}
+                    <MaterialCommunityIcons
+                      name="shield-alert-outline"
+                      size={18}
+                      color={colors.warning}
+                      style={{ marginRight: 8 }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.advisoryTitle, { color: colors.textPrimary }]}>
+                        Add a device screen lock too
                       </Text>
-                    )}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    style={[
-                      styles.secondaryButton,
-                      { borderColor: secondaryBorder, backgroundColor: secondaryBackground },
-                    ]}
-                    onPress={handleSwitchToPin}
-                    disabled={isAuthenticating}
-                  >
-                    <Text style={[styles.secondaryLabel, { color: colors.textPrimary }]}>
-                      {hasPin ? "Unlock with PIN" : "Set up app PIN"}
+                      <Text style={[styles.advisoryBody, { color: colors.textSecondary }]}>
+                        Your phone has no PIN, pattern, or biometric. Adding one
+                        in {Platform.OS === "ios" ? "iOS Settings" : "Android Settings"} makes Trezo more secure.
+                      </Text>
+                      <View style={styles.advisoryActions}>
+                        <TouchableOpacity onPress={handleOpenDeviceSettings} activeOpacity={0.7}>
+                          <Text style={[styles.advisoryLink, { color: colors.accent }]}>
+                            Open settings
+                          </Text>
+                        </TouchableOpacity>
+                        <Text style={[styles.advisoryDot, { color: colors.textMuted }]}>·</Text>
+                        <TouchableOpacity onPress={handleRecheckSecurityLevel} activeOpacity={0.7}>
+                          <Text style={[styles.advisoryLink, { color: colors.accent }]}>
+                            I've set one
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[styles.primaryButton, { backgroundColor: colors.accent }]}
+                  onPress={handleRetry}
+                  disabled={isAuthenticating}
+                >
+                  {isAuthenticating ? (
+                    <ActivityIndicator size="small" color={colors.textOnAccent} />
+                  ) : (
+                    <Text style={[styles.primaryLabel, { color: colors.textOnAccent }]}>
+                      {isBiometricAvailable ? `Use ${biometricType}` : "Unlock with device PIN"}
                     </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[
+                    styles.secondaryButton,
+                    { borderColor: secondaryBorder, backgroundColor: secondaryBackground },
+                  ]}
+                  onPress={handleSwitchToPin}
+                  disabled={isAuthenticating}
+                >
+                  <Text style={[styles.secondaryLabel, { color: colors.textPrimary }]}>
+                    {hasPin ? "Unlock with app PIN" : "Use app PIN instead"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
 
             {/* Tertiary re-login link */}
@@ -626,6 +706,16 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     opacity: 0.85,
   },
+  stepRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: -8,
+  },
+  stepDot: {
+    width: 28,
+    height: 4,
+    borderRadius: 2,
+  },
   errorText: {
     fontSize: 12,
     textAlign: "center",
@@ -661,6 +751,48 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     textDecorationLine: "underline",
+  },
+  startOverBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  startOverLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  advisoryBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    width: "100%",
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginTop: 4,
+  },
+  advisoryTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  advisoryBody: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  advisoryActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+  },
+  advisoryLink: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  advisoryDot: {
+    fontSize: 12,
   },
   // Confirm modal
   modalOverlay: {
