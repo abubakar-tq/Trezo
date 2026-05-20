@@ -8,6 +8,7 @@ import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
 import React from "react";
 import {
+  ActivityIndicator,
   Image,
   StyleSheet,
   Text,
@@ -27,6 +28,9 @@ interface Props {
   onAmountChange: (v: string) => void;
   onAssetPress: () => void;
   onAccountPress: () => void;
+  quickAmounts?: string[];
+  onQuickAmount?: (v: string) => void;
+  assetLoading?: boolean;
 }
 
 export const BuyAmountForm: React.FC<Props> = ({
@@ -38,6 +42,9 @@ export const BuyAmountForm: React.FC<Props> = ({
   onAmountChange,
   onAssetPress,
   onAccountPress,
+  quickAmounts,
+  onQuickAmount,
+  assetLoading,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
@@ -102,8 +109,11 @@ export const BuyAmountForm: React.FC<Props> = ({
       <TouchableOpacity
         style={[styles.assetChip, { backgroundColor: `${colors.accent}1A` }]}
         onPress={onAssetPress}
+        disabled={assetLoading}
       >
-        {selectedAsset.logo ? (
+        {assetLoading ? (
+          <ActivityIndicator size="small" color={colors.accent} />
+        ) : selectedAsset.logo ? (
           <Image source={{ uri: selectedAsset.logo }} style={styles.assetLogo} />
         ) : (
           <View style={[styles.assetLogoFallback, { backgroundColor: `${colors.accent}33` }]}>
@@ -115,6 +125,43 @@ export const BuyAmountForm: React.FC<Props> = ({
         <Text style={[styles.assetSymbol, { color: colors.accent }]}>{selectedAsset.symbol}</Text>
         <Feather name="chevron-down" size={14} color={colors.accent} />
       </TouchableOpacity>
+
+      {/* Quick amount chips */}
+      {quickAmounts && quickAmounts.length > 0 && (
+        <View style={styles.quickRow}>
+          {quickAmounts.map((q) => {
+            const isActive = amount === q;
+            return (
+              <TouchableOpacity
+                key={q}
+                onPress={() => onQuickAmount?.(q)}
+                style={[
+                  styles.quickChip,
+                  {
+                    backgroundColor: isActive ? `${colors.accent}22` : colors.surfaceCard,
+                    borderColor: isActive ? colors.accent : colors.border,
+                  },
+                ]}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.quickChipText,
+                    { color: isActive ? colors.accent : colors.textPrimary },
+                  ]}
+                >
+                  ${q}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      {/* Provider disclosure */}
+      <Text style={[styles.disclosure, { color: colors.textMuted }]}>
+        Powered by Transak · KYC may be required · Fees and exchange rate shown before payment
+      </Text>
     </View>
   );
 };
@@ -160,4 +207,28 @@ const styles = StyleSheet.create({
   },
   assetLogoFallbackText: { fontSize: 12, fontWeight: "800" },
   assetSymbol: { fontSize: 16, fontWeight: "800" },
+  quickRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 20,
+  },
+  quickChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    minWidth: 64,
+    alignItems: "center",
+  },
+  quickChipText: { fontSize: 14, fontWeight: "700" },
+  disclosure: {
+    fontSize: 11,
+    fontWeight: "500",
+    textAlign: "center",
+    lineHeight: 16,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
 });

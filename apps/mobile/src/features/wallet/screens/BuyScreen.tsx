@@ -41,7 +41,6 @@ import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal
 import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
 import { NetworkPickerModal, type Network } from "@shared/components/modals/NetworkPickerModal";
 
-import { useWalletData } from "@hooks/useWalletData";
 import { useUserStore } from "@/src/store/useUserStore";
 import { useWalletStore } from "../store/useWalletStore";
 import { RampService } from "@/src/services/RampService";
@@ -93,7 +92,6 @@ export const BuyScreen: React.FC = () => {
   const accounts = useWalletStore((s) => s.accounts);
   const activeAccountId = useWalletStore((s) => s.activeAccountId);
   const setActiveAccount = useWalletStore((s) => s.setActiveAccount);
-  const { tokens } = useWalletData();
 
   const activeAccount = accounts.find((a) => a.id === activeAccountId) ?? accounts[0];
 
@@ -103,9 +101,16 @@ export const BuyScreen: React.FC = () => {
   // ── Ramp mode: read from env, default to "auto" ───────────────────────────
   const rampMode = process.env.EXPO_PUBLIC_RAMP_MODE ?? "auto";
 
-  // ── Network selection — defaults to current CHAIN_CONFIG chain ────────────
+  // ── Network selection — defaults to the active wallet chain ──────────────
+  // We read from walletStore.activeChainId (canonical wallet state) rather than
+  // CHAIN_CONFIG.chainId (which reads EXPO_PUBLIC_DEFAULT_CHAIN_ID — inlined at
+  // bundle time, so stale after .env changes until a full Metro restart).
+  const walletActiveChainId = useWalletStore((s) => s.activeChainId);
   const enabledChains = useMemo(() => getEnabledChains(), []);
-  const defaultChainId = CHAIN_CONFIG.chainId;
+  const defaultChainId =
+    walletActiveChainId && enabledChains.some((c) => c.id === walletActiveChainId)
+      ? walletActiveChainId
+      : CHAIN_CONFIG.chainId;
   const [selectedChainId, setSelectedChainId] = useState<number>(defaultChainId);
   const [isNetworkPickerOpen, setIsNetworkPickerOpen] = useState(false);
 
@@ -137,6 +142,42 @@ export const BuyScreen: React.FC = () => {
       .find(([, cfg]) => cfg.chainId === selectedChainId);
     return entry ? entry[0] : "ethereum";
   }, [selectedChainId]);
+
+  // Transak-supported crypto assets for the active network — replaces the user's
+  // owned-tokens list so the Buy picker offers what's actually buyable.
+  const [transakAssets, setTransakAssets] = useState<Asset[]>([]);
+  const [transakAssetsLoading, setTransakAssetsLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTransakAssetsLoading(true);
+    void RampService.fetchTransakCryptoCurrencies({
+      network: transakNetwork,
+      isTestnet: selectedChain?.environment !== "mainnet",
+    })
+      .then((list) => {
+        if (cancelled) return;
+        const mapped: Asset[] = list.map((a) => ({
+          symbol: a.symbol,
+          name: a.name,
+          logo: a.image,
+          chainId: a.chainId ?? selectedChainId,
+        }));
+        setTransakAssets(mapped);
+        // If currently-selected asset isn't in the list, default to first (usually ETH).
+        if (mapped.length > 0 && !mapped.some((m) => m.symbol === selectedAsset.symbol)) {
+          setSelectedAsset(mapped[0]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTransakAssetsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [transakNetwork, selectedChain?.environment, selectedChainId, selectedAsset.symbol]);
+
+  const QUICK_AMOUNTS = useMemo(() => ["30", "50", "100", "200"], []);
 
   // Derived
   const fiatAmount = parseFloat(amount || "0");
@@ -244,10 +285,29 @@ export const BuyScreen: React.FC = () => {
       } catch (err) {
         console.error("[BuyScreen] notifyWebhook error:", err);
       }
-    } else if (eventId === "TRANSAK_ORDER_FAILED") {
+    } else if (
+      eventId === "TRANSAK_ORDER_FAILED" ||
+      eventId === "TRANSAK_ORDER_CANCELLED"
+    ) {
       setTransakUrl(null);
+      stopPolling();
+      setActiveOrder(null);
     }
-  }, [activeOrder?.id]);
+  }, [activeOrder?.id, stopPolling]);
+
+  // When user closes the Transak WebView via the X button (not via a Transak event),
+  // bail out cleanly: stop polling and clear the order if it never reached a terminal
+  // state. Without this, the order spinner runs forever on a stuck 'created' status.
+  const handleTransakClose = useCallback(() => {
+    setTransakUrl(null);
+    if (
+      activeOrder &&
+      !TERMINAL_STATUSES.includes(activeOrder.internalStatus as any)
+    ) {
+      stopPolling();
+      setActiveOrder(null);
+    }
+  }, [activeOrder, stopPolling]);
 
   const handleCompleteMock = async () => {
     if (!activeOrder) return;
@@ -330,6 +390,9 @@ export const BuyScreen: React.FC = () => {
               onAmountChange={handleAmountChange}
               onAssetPress={() => setIsAssetPickerOpen(true)}
               onAccountPress={() => setIsAccountPickerOpen(true)}
+              quickAmounts={QUICK_AMOUNTS}
+              onQuickAmount={(v) => setAmount(v)}
+              assetLoading={transakAssetsLoading}
             />
           ) : (
             <OrderStatusCard
@@ -389,7 +452,8 @@ export const BuyScreen: React.FC = () => {
           setSelectedAsset(asset);
           setIsAssetPickerOpen(false);
         }}
-        assets={tokens}
+        assets={transakAssets}
+        title="Select crypto to buy"
       />
       <NetworkPickerModal
         isVisible={isNetworkPickerOpen}
@@ -402,7 +466,7 @@ export const BuyScreen: React.FC = () => {
         <TransakWebViewModal
           visible
           url={transakUrl}
-          onClose={() => setTransakUrl(null)}
+          onClose={handleTransakClose}
           onOrderEvent={handleTransakEvent}
         />
       )}

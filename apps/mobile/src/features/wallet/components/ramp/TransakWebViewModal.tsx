@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Platform,
   StyleSheet,
@@ -11,7 +12,17 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { WebView, type WebViewMessageEvent } from "react-native-webview";
+import {
+  WebView,
+  type WebViewMessageEvent,
+  type WebViewNavigation,
+} from "react-native-webview";
+
+// A real-browser desktop-ish UA — Transak gates some payment-form features behind
+// its mobile/desktop detection and refuses to render inside lean RN WebView UAs.
+const USER_AGENT = Platform.OS === "android"
+  ? "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+  : "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
 
 // All Transak widget postMessage event names (verified from official SDK source)
 const TRANSAK_EVENTS = {
@@ -61,6 +72,43 @@ export const TransakWebViewModal: React.FC<Props> = ({
   const { colors } = theme;
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const webViewRef = useRef<WebView>(null);
+
+  useEffect(() => {
+    if (visible && url) {
+      console.log("[TransakWebView] opening URL:", url);
+      setLoading(true);
+      setLoadError(false);
+    }
+  }, [visible, url]);
+
+  const handleNavStateChange = (nav: WebViewNavigation) => {
+    setCanGoBack(nav.canGoBack);
+  };
+
+  const handleBack = () => {
+    if (canGoBack) {
+      webViewRef.current?.goBack();
+    } else {
+      onClose();
+    }
+  };
+
+  const handleReload = () => {
+    setLoadError(false);
+    setLoading(true);
+    webViewRef.current?.reload();
+  };
+
+  const openExternally = async () => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) await Linking.openURL(url);
+    } catch (err) {
+      console.warn("[TransakWebView] external open failed:", err);
+    }
+  };
 
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
@@ -112,13 +160,24 @@ export const TransakWebViewModal: React.FC<Props> = ({
             { borderBottomColor: colors.border, backgroundColor: colors.background },
           ]}
         >
-          <View style={styles.headerLeft} />
+          <TouchableOpacity onPress={handleBack} style={styles.iconBtn} hitSlop={8}>
+            <Feather
+              name={canGoBack ? "chevron-left" : "x"}
+              size={22}
+              color={colors.textPrimary}
+            />
+          </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
             Buy Crypto
           </Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={8}>
-            <Feather name="x" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={handleReload} style={styles.iconBtn} hitSlop={8}>
+              <Feather name="rotate-cw" size={18} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={openExternally} style={styles.iconBtn} hitSlop={8}>
+              <Feather name="external-link" size={18} color={colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Staging notice */}
@@ -128,20 +187,38 @@ export const TransakWebViewModal: React.FC<Props> = ({
           </Text>
         </View>
 
-        {/* WebView — stays fully in-app */}
+        {/* WebView — stays fully in-app. All these props are required for the
+            Transak payment flow: third-party cookies (session), user-agent
+            (Transak gates features on UA), multi-window (3DS card auth opens
+            popups), camera/geolocation (KYC), file upload (KYC docs). */}
         <WebView
+          ref={webViewRef}
           source={{ uri: url }}
           onMessage={handleMessage}
           onLoadEnd={handleLoadEnd}
           onError={handleError}
+          onHttpError={handleError}
+          onNavigationStateChange={handleNavStateChange}
           injectedJavaScript={INJECTED_JS}
+          userAgent={USER_AGENT}
           javaScriptEnabled
           domStorageEnabled
+          thirdPartyCookiesEnabled
+          sharedCookiesEnabled
+          cacheEnabled
           originWhitelist={["*"]}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
+          allowsBackForwardNavigationGestures
+          allowsFullscreenVideo
+          allowFileAccess
+          allowFileAccessFromFileURLs
+          allowUniversalAccessFromFileURLs
+          geolocationEnabled
           mixedContentMode={Platform.OS === "android" ? "always" : undefined}
-          style={[styles.webview, { backgroundColor: colors.background }]}
+          setSupportMultipleWindows={false}
+          javaScriptCanOpenWindowsAutomatically
+          style={[styles.webview, { backgroundColor: "#FFFFFF" }]}
           startInLoadingState={false}
         />
 
@@ -168,14 +245,30 @@ export const TransakWebViewModal: React.FC<Props> = ({
               Failed to load
             </Text>
             <Text style={[styles.errorSub, { color: colors.textMuted }]}>
-              Check your internet connection and try again.
+              Check your internet connection or open Transak in your browser.
             </Text>
             <TouchableOpacity
               style={[styles.retryBtn, { backgroundColor: colors.accent }]}
-              onPress={onClose}
+              onPress={handleReload}
             >
               <Text style={[styles.retryText, { color: colors.textOnAccent }]}>
-                Close
+                Retry
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.retryBtn, { backgroundColor: colors.surfaceMuted, marginTop: 8 }]}
+              onPress={openExternally}
+            >
+              <Text style={[styles.retryText, { color: colors.textPrimary }]}>
+                Open in browser
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.retryBtn, { backgroundColor: "transparent", marginTop: 4 }]}
+              onPress={onClose}
+            >
+              <Text style={[styles.retryText, { color: colors.textMuted }]}>
+                Cancel
               </Text>
             </TouchableOpacity>
           </View>
@@ -195,9 +288,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerLeft: { width: 44 },
   headerTitle: { fontSize: 16, fontWeight: "700" },
-  closeBtn: { width: 44, height: 44, justifyContent: "center", alignItems: "flex-end" },
+  iconBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
   stagingBanner: {
     paddingHorizontal: 16,
     paddingVertical: 6,
@@ -225,4 +317,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   retryText: { fontSize: 15, fontWeight: "700" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
 });

@@ -190,6 +190,55 @@ export class RampService {
   }
 
   /**
+   * Fetch Transak-supported crypto assets for a given network. Network slug must match
+   * Transak's naming (e.g. "base", "ethereum", "arbitrum"). Returns the curated list a
+   * Buy screen should offer the user — NOT the user's owned tokens.
+   *
+   * Fails soft: returns a small hardcoded fallback on network/parse error so the UI
+   * never gets stuck on an empty picker.
+   */
+  static async fetchTransakCryptoCurrencies(opts: {
+    network: string;
+    isTestnet?: boolean;
+  }): Promise<Array<{ symbol: string; name: string; image?: string; chainId?: number; address?: string | null }>> {
+    const FALLBACK = [
+      { symbol: 'ETH', name: 'Ethereum', image: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png' },
+      { symbol: 'USDC', name: 'USD Coin', image: 'https://assets.coingecko.com/coins/images/6319/small/usd-coin.png' },
+      { symbol: 'USDT', name: 'Tether', image: 'https://assets.coingecko.com/coins/images/325/small/Tether.png' },
+    ];
+
+    try {
+      const res = await fetch('https://api.transak.com/api/v2/currencies/crypto-currencies');
+      if (!res.ok) throw new Error(`Transak API ${res.status}`);
+      const json = await res.json();
+      const all: any[] = Array.isArray(json?.response) ? json.response : [];
+
+      const filtered = all.filter((c) => {
+        const networkName = String(c?.network?.name ?? '').toLowerCase();
+        if (networkName !== opts.network.toLowerCase()) return false;
+        if (opts.isTestnet !== undefined) {
+          const isTest = Boolean(c?.isTestNetwork ?? c?.isTestnet ?? c?.network?.isTestnet);
+          if (isTest !== opts.isTestnet) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) return FALLBACK;
+
+      return filtered.map((c) => ({
+        symbol: String(c.symbol ?? '').toUpperCase(),
+        name: String(c.name ?? c.symbol ?? ''),
+        image: c.image?.thumb ?? c.image?.small ?? undefined,
+        chainId: c.network?.chainId,
+        address: c.address ?? null,
+      }));
+    } catch (err) {
+      console.warn('[RampService] fetchTransakCryptoCurrencies failed, using fallback:', err);
+      return FALLBACK;
+    }
+  }
+
+  /**
    * List orders for a specific wallet address.
    */
   static async getOrdersByWallet(walletAddress: string, limit = 20): Promise<RampOrder[]> {
