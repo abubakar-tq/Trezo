@@ -213,9 +213,10 @@ export class AccountDeploymentService {
     // on-chain wallet. Non-fatal: a Supabase failure here must not block deployment.
     try {
       const localPasskey = await PasskeyService.getPasskey(userId);
-      const walletId = (params as { walletId?: string }).walletId;
-      if (localPasskey?.credentialId && walletId) {
-        await PasskeyService.syncPasskeyToCloud(userId, walletId, {
+      if (localPasskey?.credentialId) {
+        // aa_wallet_id will be filled by useLazyPasskeyBackfill once the Supabase
+        // wallet record is persisted (we don't have the UUID here, only the hex walletId).
+        await PasskeyService.syncPasskeyToCloud(userId, null, {
           credentialId: localPasskey.credentialId,
           credentialIdRaw: localPasskey.credentialIdRaw ?? "0x",
           publicKeyX: localPasskey.publicKeyX ?? "0x",

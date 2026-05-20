@@ -52,15 +52,8 @@ const P256_HALF_N = P256_N / 2n;
  *   - /.well-known/assetlinks.json (Android)
  *   - /.well-known/apple-app-site-association (iOS)
  * - Configure via EXPO_PUBLIC_PASSKEY_RP_ID (default: abubakar-tq.github.io)
- * - When passkeys are not available, returns a fallback RP ID for biometric auth
  */
 function getRpId(): string {
-  // If we're in Expo Go or passkeys are not available, use a fallback RP ID for biometric authentication
-  if (isExpoGo || !Passkey) {
-    console.warn('Using fallback RP ID for biometric authentication');
-    return 'trezo.wallet'; // Fallback for biometric auth
-  }
-
   const rpId = String(CONFIGURED_RP_ID).trim().toLowerCase();
 
   // Android/iOS require a real domain that is linked via Digital Asset Links / AASA
@@ -143,7 +136,6 @@ export interface PasskeyMetadata {
   deviceName: string;         // Device identifier
   deviceType: 'ios' | 'android';
   createdAt: string;          // ISO timestamp
-  source?: 'passkey' | 'biometric-fallback';
 }
 
 /**
@@ -267,25 +259,6 @@ export class PasskeyService {
     return this.base64UrlToUint8Array(normalized);
   }
 
-  private static buildMockCredentialId(): string {
-    const mockId = new Uint8Array(32);
-    crypto.getRandomValues(mockId);
-    return this.base64UrlEncode(this.uint8ArrayToBase64(mockId));
-  }
-
-  private static buildMockPublicKeyBase64Url(): string {
-    const x = new Uint8Array(32);
-    const y = new Uint8Array(32);
-    crypto.getRandomValues(x);
-    crypto.getRandomValues(y);
-
-    const rawPublicKey = new Uint8Array(64);
-    rawPublicKey.set(x, 0);
-    rawPublicKey.set(y, 32);
-
-    return this.base64UrlEncode(this.uint8ArrayToBase64(rawPublicKey));
-  }
-  
   // ==================== PUBLIC API ====================
   
   /**
@@ -372,31 +345,25 @@ export class PasskeyService {
       debugLog('⚠️ [PasskeyService] Replacing existing passkey on this device');
     }
     
-    // 1. Check if passkeys or biometric authentication are supported
+    // 1. Verify passkey support — biometric-only fallback is NOT acceptable
+    //    because it cannot produce contract-valid P-256 signatures, which
+    //    would silently brick the smart account.
+    if (!Passkey) {
+      throw new Error(
+        'Passkeys are not available in this build. Use a development build or release APK — not Expo Go.',
+      );
+    }
+
     let isSupported = false;
-    if (Passkey) {
-      try {
-        isSupported = await Passkey.isSupported();
-        debugLog('✅ [PasskeyService] Passkey support verified');
-      } catch (e) {
-        console.warn('Passkey support check failed:', e);
-      }
-    }
-
-    // Fallback to biometric authentication
-    if (!isSupported) {
-      try {
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-        isSupported = hasHardware && isEnrolled;
-        debugLog('✅ [PasskeyService] Biometric fallback support verified');
-      } catch (e) {
-        console.warn('Biometric support check failed:', e);
-      }
+    try {
+      isSupported = await Passkey.isSupported();
+      debugLog('✅ [PasskeyService] Passkey support verified');
+    } catch (e) {
+      console.warn('Passkey support check failed:', e);
     }
 
     if (!isSupported) {
-      throw new Error('Neither passkeys nor biometric authentication are supported on this device.');
+      throw new Error('Passkeys are not supported on this device.');
     }
     
     // 2. Generate challenge (in production, get from server)
@@ -451,75 +418,26 @@ export class PasskeyService {
       authenticatorSelection: registrationOptions.authenticatorSelection,
     }, null, 2));
     
-    // 5. Create passkey or use biometric authentication
+    // 5. Create passkey via WebAuthn — must succeed; no fallback path exists
+    //    because only a real P-256 keypair can sign for PasskeyValidator.sol.
     let result;
-    if (Passkey) {
-      try {
-        debugLog('🔐 [PasskeyService] Attempting to create passkey...');
-        result = await Passkey.create(registrationOptions);
-        debugLog('✅ [PasskeyService] Passkey created in secure enclave');
-      } catch (passkeyError: any) {
-        console.warn('❌ [PasskeyService] Passkey creation failed, trying fallback:', passkeyError);
-        // Try biometric fallback
-        try {
-          const authResult = await LocalAuthentication.authenticateAsync({
-            promptMessage: 'Authenticate to create your wallet',
-            fallbackLabel: 'Use PIN',
-            disableDeviceFallback: false,
-          });
-
-          if (authResult.success) {
-            // Mock passkey result for biometric authentication
-            const credentialId = this.buildMockCredentialId();
-            result = {
-              id: credentialId,
-              rawId: credentialId,
-              response: {
-                clientDataJSON: 'biometric-auth',
-                attestationObject: 'biometric-attestation',
-                publicKey: this.buildMockPublicKeyBase64Url(),
-              },
-              type: 'biometric',
-            };
-            debugLog('✅ [PasskeyService] Biometric authentication successful');
-          } else {
-            throw new Error('Biometric authentication failed');
-          }
-        } catch (biometricError) {
-          console.error('❌ [PasskeyService] Both passkey and biometric authentication failed');
-          throw biometricError;
-        }
+    try {
+      debugLog('🔐 [PasskeyService] Attempting to create passkey...');
+      result = await Passkey.create(registrationOptions);
+      debugLog('✅ [PasskeyService] Passkey created in secure enclave');
+    } catch (passkeyError: any) {
+      const message = passkeyError?.message ?? String(passkeyError);
+      console.error('❌ [PasskeyService] Passkey creation failed:', passkeyError);
+      // "folsom activity" appears on Samsung devices when Samsung Pass is the
+      // default credential provider and fails internally. Surface the hint.
+      if (Platform.OS === 'android' && /folsom|NotAllowedError/i.test(message)) {
+        throw new Error(
+          'Passkey creation failed. On Samsung devices, open Settings → General management → ' +
+            'Passwords, passkeys and autofill services → Preferred service, and set it to Google. ' +
+            `Underlying error: ${message}`,
+        );
       }
-    } else {
-      // Direct biometric fallback for Expo Go
-      try {
-        const authResult = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Authenticate to create your wallet',
-          fallbackLabel: 'Use PIN',
-          disableDeviceFallback: false,
-        });
-
-        if (authResult.success) {
-          // Mock passkey result for biometric authentication
-          const credentialId = this.buildMockCredentialId();
-          result = {
-            id: credentialId,
-            rawId: credentialId,
-            response: {
-              clientDataJSON: 'biometric-auth',
-              attestationObject: 'biometric-attestation',
-              publicKey: this.buildMockPublicKeyBase64Url(),
-            },
-            type: 'biometric',
-          };
-          debugLog('✅ [PasskeyService] Biometric authentication successful');
-        } else {
-          throw new Error('Biometric authentication failed');
-        }
-      } catch (error: any) {
-        console.error('❌ [PasskeyService] Biometric authentication failed:', error);
-        throw error;
-      }
+      throw new Error(`Passkey creation failed: ${message}`);
     }
 
     if (!result) {
@@ -542,7 +460,6 @@ export class PasskeyService {
       deviceName: this.getCurrentDeviceLabel(),
       deviceType: Platform.OS as 'ios' | 'android',
       createdAt: new Date().toISOString(),
-      source: result.type === 'biometric' ? 'biometric-fallback' : 'passkey',
     };
 
     // 9. Save metadata to AsyncStorage (replaces old passkey if exists)
@@ -595,76 +512,33 @@ export class PasskeyService {
       ],
     };
 
-    let authResult;
-    if (Passkey) {
-      try {
-        debugLog('🔐 [PasskeyService] Attempting passkey authentication...');
-        authResult = await Passkey.get(authOptions);
-        debugLog('✅ [PasskeyService] Passkey authentication successful');
-      } catch (passkeyError: any) {
-        console.warn('❌ [PasskeyService] Passkey authentication failed, trying fallback:', passkeyError);
-        // Try biometric fallback
-        try {
-          const biometricResult = await LocalAuthentication.authenticateAsync({
-            promptMessage: 'Authenticate to sign transaction',
-            fallbackLabel: 'Use PIN',
-            disableDeviceFallback: false,
-          });
-
-          if (biometricResult.success) {
-            // Mock authentication result for biometric
-            authResult = {
-              id: passkey.credentialId,
-              rawId: this.base64UrlToUint8Array(passkey.credentialId),
-              response: {
-                authenticatorData: 'biometric-auth-data',
-                clientDataJSON: 'biometric-client-data',
-                signature: 'biometric-signature',
-                userHandle: 'biometric-user-handle'
-              },
-              type: 'biometric'
-            };
-            debugLog('✅ [PasskeyService] Biometric authentication successful');
-          } else {
-            throw new Error('Biometric authentication failed');
-          }
-        } catch (biometricError) {
-          console.error('❌ [PasskeyService] Both passkey and biometric authentication failed');
-          throw biometricError;
-        }
-      }
-    } else {
-      // Direct biometric fallback for Expo Go
-      try {
-        const biometricResult = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Authenticate to sign transaction',
-          fallbackLabel: 'Use PIN',
-          disableDeviceFallback: false,
-        });
-
-        if (biometricResult.success) {
-          // Mock authentication result for biometric
-          authResult = {
-            id: passkey.credentialId,
-            rawId: this.base64UrlToUint8Array(passkey.credentialId),
-            response: {
-              authenticatorData: 'biometric-auth-data',
-              clientDataJSON: 'biometric-client-data',
-              signature: 'biometric-signature',
-              userHandle: 'biometric-user-handle'
-            },
-            type: 'biometric'
-          };
-          debugLog('✅ [PasskeyService] Biometric authentication successful');
-        } else {
-          throw new Error('Biometric authentication failed');
-        }
-      } catch (error: any) {
-        console.error('❌ [PasskeyService] Biometric authentication failed:', error);
-        throw error;
-      }
+    // Authenticate via WebAuthn — no biometric fallback. A mock signature
+    // cannot satisfy the on-chain PasskeyValidator, so we must fail loudly
+    // and let the caller surface the real reason to the user.
+    if (!Passkey) {
+      throw new Error(
+        'Passkeys are not available in this build. Use a development build or release APK — not Expo Go.',
+      );
     }
-    
+
+    let authResult;
+    try {
+      debugLog('🔐 [PasskeyService] Attempting passkey authentication...');
+      authResult = await Passkey.get(authOptions);
+      debugLog('✅ [PasskeyService] Passkey authentication successful');
+    } catch (passkeyError: any) {
+      const message = passkeyError?.message ?? String(passkeyError);
+      console.error('❌ [PasskeyService] Passkey authentication failed:', passkeyError);
+      if (Platform.OS === 'android' && /folsom|NotAllowedError/i.test(message)) {
+        throw new Error(
+          'Passkey signing failed. On Samsung devices, open Settings → General management → ' +
+            'Passwords, passkeys and autofill services → Preferred service, and set it to Google. ' +
+            `Underlying error: ${message}`,
+        );
+      }
+      throw new Error(`Passkey signing failed: ${message}`);
+    }
+
     if (!authResult) {
       throw new Error('Authentication returned null result');
     }
@@ -1193,7 +1067,7 @@ export class PasskeyService {
 
   static async syncPasskeyToCloud(
     userId: string,
-    walletId: string,
+    walletId: string | null | undefined,
     passkey: {
       credentialId: string;
       credentialIdRaw: string;
@@ -1205,13 +1079,18 @@ export class PasskeyService {
       rpId: string;
     },
   ): Promise<void> {
+    // aa_wallet_id is a UUID FK — only set it when walletId is a valid UUID.
+    // Hex bytes32 wallet IDs (from deriveDefaultWalletId) must not be passed here.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const aaWalletId = walletId && UUID_RE.test(walletId) ? walletId : undefined;
+
     try {
       const { getSupabaseClient } = require('@lib/supabase') as typeof import('@lib/supabase');
       const client = getSupabaseClient();
       const { error } = await client.from('passkeys').upsert(
         {
           user_id: userId,
-          aa_wallet_id: walletId,
+          ...(aaWalletId !== undefined && { aa_wallet_id: aaWalletId }),
           credential_id: passkey.credentialId,
           credential_id_raw: passkey.credentialIdRaw,
           public_key: JSON.stringify({
