@@ -12,7 +12,14 @@ import {
 } from "npm:viem@2.41.2";
 import { privateKeyToAccount } from "npm:viem@2.41.2/accounts";
 
-type RecoveryAction = "schedule" | "execute";
+type RecoveryAction =
+  | "schedule"
+  | "execute"
+  | "whoami"
+  | "prepare-schedule"
+  | "prepare-execute"
+  | "record-tx"
+  | "sync-from-chain";
 type SigKind = "EOA_ECDSA" | "ERC1271" | "APPROVE_HASH";
 
 type RecoveryOperationRequest = {
@@ -220,14 +227,29 @@ const normalizeSigKind = (sigKind: SigKind): number => {
 
 const localHostAliases = new Set(["localhost", "127.0.0.1", "0.0.0.0", "10.0.2.2"]);
 
+// Built-in public RPC fallbacks per supported chain. Used so the function
+// works out of the box for the paymaster-sponsored flow without requiring an
+// RECOVERY_RPC_URL_<chainId> secret to be configured. Env vars still take
+// precedence if set.
+const PUBLIC_RPC_FALLBACKS: Record<number, string> = {
+  84532: "https://sepolia.base.org",        // Base Sepolia
+  8453: "https://mainnet.base.org",         // Base mainnet
+  11155111: "https://rpc.sepolia.org",      // Ethereum Sepolia
+  421614: "https://sepolia-rollup.arbitrum.io/rpc", // Arbitrum Sepolia
+};
+
 const resolveRpcUrl = (chainId: number, suppliedRpcUrl: string): string => {
-  const chainSpecificEnv = Deno.env.get(`RECOVERY_RPC_URL_${chainId}`);
-  const defaultEnv = Deno.env.get("RECOVERY_RPC_URL");
-  const selected = (chainSpecificEnv ?? defaultEnv ?? suppliedRpcUrl ?? "").trim();
+  const chainSpecificEnv = Deno.env.get(`RECOVERY_RPC_URL_${chainId}`)?.trim();
+  const defaultEnv = Deno.env.get("RECOVERY_RPC_URL")?.trim();
+  const supplied = (suppliedRpcUrl ?? "").trim();
+  const fallback = PUBLIC_RPC_FALLBACKS[chainId];
+  // Use `||` not `??` here: caller often passes "" rather than undefined, and
+  // an empty string must NOT short-circuit a usable fallback further down.
+  const selected = chainSpecificEnv || defaultEnv || supplied || fallback || "";
 
   if (!selected) {
     throw new Error(
-      `RPC URL is missing for chain ${chainId}. Set RECOVERY_RPC_URL_${chainId} or provide a request rpcUrl.`,
+      `RPC URL is missing for chain ${chainId}. No env var, no request rpcUrl, and no public fallback known.`,
     );
   }
 
@@ -301,6 +323,380 @@ const activeRecoveryToStatus = (executeAfter: bigint): RecoveryChainStatus => {
   return executeAfter <= now ? "ready_to_execute" : "timelock_pending";
 };
 
+// ─── New paymaster-sponsored flow ────────────────────────────────────────────
+// The mobile guardian submits the schedule/execute UserOp themselves; this
+// function only builds calldata and records the result. No EOA relayer key
+// is touched on these paths.
+
+async function handleNewSponsoredFlow(body: any): Promise<Response> {
+  const supabase = getSupabaseAdmin();
+
+  if (body.action === "prepare-schedule") {
+    const { data: request, error: requestError } = await supabase
+      .from("recovery_requests")
+      .select("id, wallet_address, threshold, status, deadline, recovery_intent_json, chain_scopes_json, new_passkey_json")
+      .eq("id", body.requestId)
+      .single();
+    if (requestError || !request) {
+      return json({ error: requestError?.message ?? "Recovery request not found" }, { status: 404 });
+    }
+    const recoveryRequest = request as RecoveryRequestRow;
+    if (new Date(recoveryRequest.deadline).getTime() < Date.now()) {
+      return json({ error: "Recovery request has expired." }, { status: 409 });
+    }
+    const scope = recoveryRequest.chain_scopes_json.find(
+      (candidate) => Number(candidate.chainId) === Number(body.chainId),
+    );
+    if (!scope) {
+      return json({ error: "Requested chain is not present in the recovery scope." }, { status: 400 });
+    }
+
+    // Check if recovery is already scheduled on-chain. If yes, don't return
+    // calldata — instead instruct the mobile client to sync state to Supabase
+    // and skip the UserOp. This makes the flow idempotent.
+    try {
+      const rpcUrl = resolveRpcUrl(body.chainId, body.rpcUrl ?? "");
+      const chain = toChain(body.chainId, rpcUrl);
+      const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+      const moduleAddress = asAddress(scope.socialRecovery, "scope.socialRecovery");
+      const walletAddress = asAddress(recoveryRequest.wallet_address, "wallet_address");
+      const active = (await publicClient.readContract({
+        address: moduleAddress,
+        abi: STATUS_ABI,
+        functionName: "getActiveRecovery",
+        args: [walletAddress],
+      })) as [Hex, bigint];
+      if (active[0] !== ZERO_BYTES32) {
+        return json({
+          success: true,
+          alreadyScheduled: true,
+          recoveryIdOnchain: active[0],
+          executeAfter: new Date(Number(active[1]) * 1000).toISOString(),
+          socialRecoveryAddress: moduleAddress,
+          walletAddress,
+        });
+      }
+    } catch (err) {
+      console.warn("[prepare-schedule] could not check on-chain state, continuing:", err);
+    }
+
+    const { data: approvals, error: approvalsError } = await supabase
+      .from("recovery_approvals")
+      .select("guardian_index, sig_kind, signature")
+      .eq("request_id", body.requestId)
+      .eq("verification_status", "valid")
+      .order("guardian_index", { ascending: true });
+    if (approvalsError) {
+      return json({ error: approvalsError.message }, { status: 500 });
+    }
+    const validApprovals = (approvals ?? []) as RecoveryApprovalRow[];
+    if (validApprovals.length < Number(recoveryRequest.threshold)) {
+      return json({ error: "Approval threshold has not been reached." }, { status: 409 });
+    }
+    const seen = new Set<number>();
+    for (const a of validApprovals) {
+      if (seen.has(a.guardian_index)) {
+        return json({ error: `Duplicate guardian index ${a.guardian_index}.` }, { status: 409 });
+      }
+      seen.add(a.guardian_index);
+    }
+
+    const sortedScopes = [...recoveryRequest.chain_scopes_json]
+      .sort((a, b) => Number(a.chainId) - Number(b.chainId))
+      .map((candidate) => ({
+        chainId: asBigInt(candidate.chainId, "chainScope.chainId"),
+        wallet: asAddress(candidate.wallet, "chainScope.wallet"),
+        socialRecovery: asAddress(candidate.socialRecovery, "chainScope.socialRecovery"),
+        nonce: asBigInt(candidate.nonce, "chainScope.nonce"),
+        guardianSetHash: asBytes32(candidate.guardianSetHash, "chainScope.guardianSetHash"),
+        policyHash: asBytes32(candidate.policyHash, "chainScope.policyHash"),
+      }));
+
+    const calldata = encodeFunctionData({
+      abi: SCHEDULE_ABI,
+      functionName: "scheduleRecovery",
+      args: [
+        asAddress(recoveryRequest.wallet_address, "wallet_address"),
+        {
+          idRaw: asBytes32(recoveryRequest.new_passkey_json.idRaw, "newPasskey.idRaw"),
+          px: asBigInt(recoveryRequest.new_passkey_json.px, "newPasskey.px"),
+          py: asBigInt(recoveryRequest.new_passkey_json.py, "newPasskey.py"),
+        },
+        {
+          requestId: asBytes32(recoveryRequest.recovery_intent_json.requestId, "intent.requestId"),
+          newPasskeyHash: asBytes32(recoveryRequest.recovery_intent_json.newPasskeyHash, "intent.newPasskeyHash"),
+          chainScopeHash: asBytes32(recoveryRequest.recovery_intent_json.chainScopeHash, "intent.chainScopeHash"),
+          validAfter: Number(asBigInt(recoveryRequest.recovery_intent_json.validAfter, "intent.validAfter")),
+          deadline: Number(asBigInt(recoveryRequest.recovery_intent_json.deadline, "intent.deadline")),
+          metadataHash: asBytes32(recoveryRequest.recovery_intent_json.metadataHash, "intent.metadataHash"),
+        },
+        sortedScopes,
+        validApprovals.map((approval) => ({
+          index: approval.guardian_index,
+          kind: normalizeSigKind(approval.sig_kind),
+          sig: asHex(approval.signature || "0x", "approval.signature"),
+        })),
+      ],
+    });
+
+    return json({
+      success: true,
+      socialRecoveryAddress: asAddress(scope.socialRecovery, "scope.socialRecovery"),
+      walletAddress: asAddress(recoveryRequest.wallet_address, "wallet_address"),
+      calldata,
+    });
+  }
+
+  if (body.action === "prepare-execute") {
+    const { data: request, error: requestError } = await supabase
+      .from("recovery_requests")
+      .select("id, wallet_address, chain_scopes_json")
+      .eq("id", body.requestId)
+      .single();
+    if (requestError || !request) {
+      return json({ error: requestError?.message ?? "Recovery request not found" }, { status: 404 });
+    }
+    const scope = (request.chain_scopes_json as any[]).find(
+      (candidate) => Number(candidate.chainId) === Number(body.chainId),
+    );
+    if (!scope) {
+      return json({ error: "Requested chain is not present in the recovery scope." }, { status: 400 });
+    }
+    const calldata = encodeFunctionData({
+      abi: EXECUTE_ABI,
+      functionName: "executeRecovery",
+      args: [asAddress(request.wallet_address as string, "wallet_address")],
+    });
+    return json({
+      success: true,
+      socialRecoveryAddress: asAddress(scope.socialRecovery, "scope.socialRecovery"),
+      walletAddress: asAddress(request.wallet_address as string, "wallet_address"),
+      calldata,
+    });
+  }
+
+  if (body.action === "sync-from-chain") {
+    // Read on-chain state and update Supabase. Used when a recovery is already
+    // scheduled or executed on-chain but Supabase status is stale (e.g., a
+    // previous record-tx call failed). No tx hash required — we read truth
+    // directly from the contract.
+    const rpcUrl = resolveRpcUrl(body.chainId, body.rpcUrl ?? "");
+    const chain = toChain(body.chainId, rpcUrl);
+    const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+
+    const { data: request, error: requestError } = await supabase
+      .from("recovery_requests")
+      .select("id, wallet_address, status, chain_scopes_json")
+      .eq("id", body.requestId)
+      .single();
+    if (requestError || !request) {
+      return json({ error: requestError?.message ?? "Recovery request not found" }, { status: 404 });
+    }
+    const scope = (request.chain_scopes_json as any[]).find(
+      (candidate) => Number(candidate.chainId) === Number(body.chainId),
+    );
+    if (!scope) {
+      return json({ error: "Requested chain is not in scope." }, { status: 400 });
+    }
+    const moduleAddress = asAddress(scope.socialRecovery, "scope.socialRecovery");
+    const walletAddress = asAddress(request.wallet_address as string, "wallet_address");
+
+    const [active, nonce] = await Promise.all([
+      publicClient.readContract({
+        address: moduleAddress,
+        abi: STATUS_ABI,
+        functionName: "getActiveRecovery",
+        args: [walletAddress],
+      }) as Promise<[Hex, bigint]>,
+      publicClient.readContract({
+        address: moduleAddress,
+        abi: parseAbi(["function getRecoveryNonce(address) view returns (uint256)"]),
+        functionName: "getRecoveryNonce",
+        args: [walletAddress],
+      }) as Promise<bigint>,
+    ]);
+
+    const { data: existingChainStatus } = await supabase
+      .from("recovery_chain_statuses")
+      .select("*")
+      .eq("request_id", body.requestId)
+      .eq("chain_id", body.chainId)
+      .maybeSingle();
+    const chainStatusRow = existingChainStatus as RecoveryChainStatusRow | null;
+
+    let nextChainStatus: RecoveryChainStatus;
+    let executeAfter: string | null = chainStatusRow?.execute_after ?? null;
+    let recoveryIdOnchain: string | null = chainStatusRow?.recovery_id_onchain ?? null;
+
+    if (active[0] !== ZERO_BYTES32) {
+      // Currently scheduled (waiting or ready to execute)
+      nextChainStatus = activeRecoveryToStatus(active[1]);
+      executeAfter = new Date(Number(active[1]) * 1000).toISOString();
+      recoveryIdOnchain = active[0];
+    } else if (nonce > 0n) {
+      // Executed (active was cleared, nonce incremented)
+      nextChainStatus = "executed";
+    } else {
+      nextChainStatus = chainStatusRow?.status ?? "pending";
+    }
+
+    const { data: updatedChainStatus, error: chainStatusError } = await supabase
+      .from("recovery_chain_statuses")
+      .upsert(
+        {
+          request_id: body.requestId,
+          chain_id: body.chainId,
+          status: nextChainStatus,
+          schedule_tx_hash: chainStatusRow?.schedule_tx_hash ?? null,
+          execute_tx_hash: chainStatusRow?.execute_tx_hash ?? null,
+          recovery_id_onchain: recoveryIdOnchain,
+          execute_after: executeAfter,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "request_id,chain_id" },
+      )
+      .select("*")
+      .single();
+    if (chainStatusError) return json({ error: chainStatusError.message }, { status: 500 });
+
+    const { data: allStatuses } = await supabase
+      .from("recovery_chain_statuses")
+      .select("status")
+      .eq("request_id", body.requestId);
+    const nextRequestStatus = deriveRequestStatus(
+      (allStatuses ?? []).map((item) => item.status as RecoveryChainStatus),
+      (request.status as RecoveryRequestStatus) ?? "scheduling",
+    );
+    await supabase
+      .from("recovery_requests")
+      .update({ status: nextRequestStatus, updated_at: new Date().toISOString() })
+      .eq("id", body.requestId);
+
+    return json({
+      success: true,
+      chainStatus: updatedChainStatus,
+      requestStatus: nextRequestStatus,
+      synced: true,
+    });
+  }
+
+  if (body.action === "record-tx") {
+    if (!body.txHash || !body.recordAction) {
+      return json({ error: "record-tx requires txHash and recordAction" }, { status: 400 });
+    }
+    const rpcUrl = resolveRpcUrl(body.chainId, body.rpcUrl ?? "");
+    const chain = toChain(body.chainId, rpcUrl);
+    const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+
+    const { data: request, error: requestError } = await supabase
+      .from("recovery_requests")
+      .select("id, wallet_address, status, chain_scopes_json")
+      .eq("id", body.requestId)
+      .single();
+    if (requestError || !request) {
+      return json({ error: requestError?.message ?? "Recovery request not found" }, { status: 404 });
+    }
+    const scope = (request.chain_scopes_json as any[]).find(
+      (candidate) => Number(candidate.chainId) === Number(body.chainId),
+    );
+    if (!scope) {
+      return json({ error: "Requested chain is not in scope." }, { status: 400 });
+    }
+
+    // Confirm the tx happened (and didn't revert) before recording.
+    try {
+      await publicClient.waitForTransactionReceipt({ hash: body.txHash as Hex, timeout: 60_000 });
+    } catch (err) {
+      return json(
+        { error: `Could not confirm tx ${body.txHash}: ${extractErrorMessage(err)}` },
+        { status: 502 },
+      );
+    }
+
+    const moduleAddress = asAddress(scope.socialRecovery, "scope.socialRecovery");
+    const walletAddress = asAddress(request.wallet_address as string, "wallet_address");
+
+    const active = (await publicClient.readContract({
+      address: moduleAddress,
+      abi: STATUS_ABI,
+      functionName: "getActiveRecovery",
+      args: [walletAddress],
+    })) as [Hex, bigint];
+
+    const { data: existingChainStatus } = await supabase
+      .from("recovery_chain_statuses")
+      .select("*")
+      .eq("request_id", body.requestId)
+      .eq("chain_id", body.chainId)
+      .maybeSingle();
+    const chainStatusRow = existingChainStatus as RecoveryChainStatusRow | null;
+
+    let nextChainStatus: RecoveryChainStatus;
+    let executeAfter: string | null = chainStatusRow?.execute_after ?? null;
+    let recoveryIdOnchain: string | null = chainStatusRow?.recovery_id_onchain ?? null;
+
+    if (body.recordAction === "schedule") {
+      if (active[0] === ZERO_BYTES32) {
+        return json(
+          { error: "Schedule recorded but contract shows no active recovery. Tx may have reverted." },
+          { status: 502 },
+        );
+      }
+      recoveryIdOnchain = active[0];
+      executeAfter = new Date(Number(active[1]) * 1000).toISOString();
+      nextChainStatus = activeRecoveryToStatus(active[1]);
+    } else if (body.recordAction === "execute") {
+      nextChainStatus = "executed";
+    } else {
+      return json({ error: "recordAction must be 'schedule' or 'execute'" }, { status: 400 });
+    }
+
+    const { data: updatedChainStatus, error: chainStatusError } = await supabase
+      .from("recovery_chain_statuses")
+      .upsert(
+        {
+          request_id: body.requestId,
+          chain_id: body.chainId,
+          status: nextChainStatus,
+          schedule_tx_hash:
+            body.recordAction === "schedule" ? body.txHash : chainStatusRow?.schedule_tx_hash ?? null,
+          execute_tx_hash:
+            body.recordAction === "execute" ? body.txHash : chainStatusRow?.execute_tx_hash ?? null,
+          recovery_id_onchain: recoveryIdOnchain,
+          execute_after: executeAfter,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "request_id,chain_id" },
+      )
+      .select("*")
+      .single();
+    if (chainStatusError) {
+      return json({ error: chainStatusError.message }, { status: 500 });
+    }
+
+    const { data: allStatuses } = await supabase
+      .from("recovery_chain_statuses")
+      .select("status")
+      .eq("request_id", body.requestId);
+    const nextRequestStatus = deriveRequestStatus(
+      (allStatuses ?? []).map((item) => item.status as RecoveryChainStatus),
+      (request.status as RecoveryRequestStatus) ?? "scheduling",
+    );
+    await supabase
+      .from("recovery_requests")
+      .update({ status: nextRequestStatus, updated_at: new Date().toISOString() })
+      .eq("id", body.requestId);
+
+    return json({
+      success: true,
+      chainStatus: updatedChainStatus,
+      requestStatus: nextRequestStatus,
+    });
+  }
+
+  return json({ error: "Unknown new-flow action" }, { status: 400 });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -310,15 +706,45 @@ serve(async (req) => {
     return json({ error: "Method not allowed" }, { status: 405 });
   }
 
-  let body: RecoveryOperationRequest;
+  let body: RecoveryOperationRequest & { action?: string };
   try {
     body = await req.json();
   } catch {
     return json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  // Diagnostic mode: return the relayer EOA address derived from the secret.
+  // Used by operators to verify which address needs Base Sepolia ETH funding.
+  // Does NOT expose the private key.
+  if (body.action === "whoami") {
+    try {
+      const relayer = getRelayerAccount();
+      return json({ relayerAddress: relayer.address });
+    } catch (err) {
+      return json({ error: err instanceof Error ? err.message : "whoami failed" }, { status: 500 });
+    }
+  }
+
   if (!body.requestId || !body.chainId || !body.action) {
     return json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  // ── New paymaster-sponsored path: prepare calldata, mobile submits UserOp ──
+  // These actions return the calldata the mobile must send via the user's
+  // smart account, and a follow-up record-tx call updates Supabase state.
+  // sync-from-chain is the recovery escape hatch: read truth from the contract
+  // and force Supabase state to match (no tx submitted).
+  if (
+    body.action === "prepare-schedule" ||
+    body.action === "prepare-execute" ||
+    body.action === "record-tx" ||
+    body.action === "sync-from-chain"
+  ) {
+    try {
+      return await handleNewSponsoredFlow(body);
+    } catch (error) {
+      return json({ error: extractErrorMessage(error) }, { status: 500 });
+    }
   }
 
   try {
