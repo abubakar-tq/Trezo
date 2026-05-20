@@ -141,6 +141,17 @@ const RecoveryProgressScreen: React.FC = () => {
     setRequest(loadedRequest);
     setApprovals(loadedApprovals);
     setChainStatuses(loadedStatuses);
+
+    // Best-effort: also sync Supabase from on-chain truth for each chain.
+    // This recovers from cases where a guardian's schedule/execute tx
+    // succeeded on-chain but Supabase status was never updated (e.g., a
+    // previous record-tx call failed). Ignored on error — polling will still
+    // try again 6s later.
+    void Promise.all(
+      loadedStatuses.map((s) =>
+        service.syncRecoveryStateFromChain({ requestId, chainId: s.chain_id }).catch(() => null),
+      ),
+    );
   }, [requestId]);
 
   useEffect(() => {
@@ -215,17 +226,17 @@ const RecoveryProgressScreen: React.FC = () => {
       setSubmittingAction(action);
       setError(null);
       try {
+        // The recovering device has no on-chain authority to sign schedule /
+        // execute UserOps — only the guardian (whose passkey is registered on
+        // the wallet) can. Instead of trying the broken relayer-EOA path, we
+        // sync Supabase state from on-chain truth. If a guardian already
+        // submitted the tx via their inbox, this will pick it up. If not, the
+        // status won't change and the user will see a clear "ask guardian"
+        // hint in the UI.
         for (const status of targetChains) {
-          const chainConfig = CHAINS[status.chain_id as SupportedChainId];
-          if (!chainConfig?.rpcUrl) {
-            throw new Error(`Missing RPC URL for chain ${status.chain_id}.`);
-          }
-
-          await serviceRef.current.submitRecoveryOperation({
+          await serviceRef.current.syncRecoveryStateFromChain({
             requestId,
             chainId: status.chain_id,
-            action,
-            rpcUrl: chainConfig.rpcUrl,
           });
         }
 
@@ -388,29 +399,39 @@ const RecoveryProgressScreen: React.FC = () => {
           })
         )}
 
-        <TouchableOpacity
-          style={[
-            styles.primaryButton,
-            (!thresholdReached || schedulableChains.length === 0 || submittingAction !== null) && styles.disabledButton,
-          ]}
-          disabled={!thresholdReached || schedulableChains.length === 0 || submittingAction !== null}
-          onPress={() => void handleSubmitAction("schedule")}
-        >
-          <Text style={styles.primaryButtonText}>
-            {submittingAction === "schedule" ? "Scheduling..." : "Schedule Recovery"}
-          </Text>
-        </TouchableOpacity>
+        {/* Recovery actions happen on the guardian's device, not here. This
+            device (the recovering one) has no on-chain signing authority
+            until executeRecovery completes. Show clear guidance instead of a
+            broken button. */}
+        {thresholdReached && schedulableChains.length > 0 && (
+          <View style={[styles.statusBanner, { backgroundColor: theme.colors.warning + '14', borderColor: theme.colors.warning + '40', marginTop: 16 }]}>
+            <Text style={[styles.statusBannerText, { color: theme.colors.warning }]}>
+              👉 Ready to schedule
+            </Text>
+            <Text style={[styles.rowMeta, { marginTop: 4 }]}>
+              Ask your guardian to open their app → Profile → Backup &amp; Recovery → Guardian Inbox → tap <Text style={{ fontWeight: "700" }}>Submit Schedule On-Chain</Text>. Pimlico pays the gas.
+            </Text>
+          </View>
+        )}
+
+        {executableChains.length > 0 && (
+          <View style={[styles.statusBanner, { backgroundColor: theme.colors.success + '14', borderColor: theme.colors.success + '40', marginTop: 12 }]}>
+            <Text style={[styles.statusBannerText, { color: theme.colors.success }]}>
+              👉 Timelock expired — ready to execute
+            </Text>
+            <Text style={[styles.rowMeta, { marginTop: 4 }]}>
+              Ask your guardian to open Guardian Inbox and tap <Text style={{ fontWeight: "700" }}>Execute Recovery</Text>. Once that runs, your new passkey becomes active on this wallet and the shield turns green.
+            </Text>
+          </View>
+        )}
 
         <TouchableOpacity
-          style={[
-            styles.primaryButton,
-            (executableChains.length === 0 || submittingAction !== null) && styles.disabledButton,
-          ]}
-          disabled={executableChains.length === 0 || submittingAction !== null}
+          style={[styles.secondaryButton, { marginTop: 12 }]}
+          disabled={submittingAction !== null}
           onPress={() => void handleSubmitAction("execute")}
         >
-          <Text style={styles.primaryButtonText}>
-            {submittingAction === "execute" ? "Executing..." : "Execute Recovery"}
+          <Text style={styles.secondaryButtonText}>
+            {submittingAction !== null ? "Refreshing…" : "Refresh status from chain"}
           </Text>
         </TouchableOpacity>
 

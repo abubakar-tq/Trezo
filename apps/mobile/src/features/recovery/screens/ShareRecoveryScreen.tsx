@@ -1,6 +1,7 @@
 import { NavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Clipboard, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import * as ExpoClipboard from 'expo-clipboard';
 
 import { RootStackParamList } from "@/src/types/navigation";
 import { useAppTheme } from "@theme";
@@ -112,7 +113,7 @@ const ShareRecoveryScreen: React.FC = () => {
   }, [request?.deadline]);
 
   const handleCopy = () => {
-    Clipboard.setString(link);
+    ExpoClipboard.setStringAsync(link);
     Alert.alert("Link copied", "Share the guardian approval link with your configured guardians.");
   };
 
