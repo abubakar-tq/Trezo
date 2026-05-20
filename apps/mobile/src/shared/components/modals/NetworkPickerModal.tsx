@@ -6,6 +6,7 @@ import {
   FlatList,
   StyleSheet,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { useAppTheme } from '@theme';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -90,8 +91,6 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
     [],
   );
 
-  if (!isVisible) return null;
-
   const renderItem = ({ item }: { item: Network }) => {
     const isSelected = item.id === selectedNetworkId;
     
@@ -136,41 +135,47 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
   };
 
   return (
-    <View style={styles.overlay}>
-      <TouchableOpacity 
-        style={styles.backdrop} 
-        activeOpacity={1} 
-        onPress={onClose} 
-      />
-      <View style={[styles.content, { backgroundColor: colors.surfaceCard, borderTopColor: colors.border }]}>
-        <View style={[styles.handle, { backgroundColor: colors.border }]} />
-        
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Select Network</Text>
-          <TouchableOpacity onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.surfaceMuted }]}>
-            <Feather name="x" size={18} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-
-        <FlatList
-          data={networks}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          ListHeaderComponent={
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>AVAILABLE NETWORKS</Text>
-          }
+    <Modal
+      visible={isVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
         />
+        <View style={[styles.content, { backgroundColor: colors.surfaceCard, borderTopColor: colors.border }]}>
+          <View style={[styles.handle, { backgroundColor: colors.border }]} />
+
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>Select Network</Text>
+            <TouchableOpacity onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.surfaceMuted }]}>
+              <Feather name="x" size={18} color={colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={networks}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.list}
+            ListHeaderComponent={
+              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>AVAILABLE NETWORKS</Text>
+            }
+          />
+        </View>
       </View>
-    </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     justifyContent: 'flex-end',
-    zIndex: 1000,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -182,6 +187,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     maxHeight: SCREEN_HEIGHT * 0.8,
     borderTopWidth: 1,
+    elevation: 16,
   },
   handle: {
     width: 40,

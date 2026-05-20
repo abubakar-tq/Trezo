@@ -12,7 +12,14 @@ import { useNavigation } from "@react-navigation/native";
 import TabScreenContainer from "@shared/components/TabScreenContainer";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import type { Address } from "viem";
+import { SocialRecoveryService } from "@features/wallet/services/SocialRecoveryService";
+import {
+  describePasskeyAuthority,
+  usePasskeyAuthority,
+} from "@features/wallet/hooks/usePasskeyAuthority";
+import type { SupportedChainId } from "@/src/integration/chains";
 import {
   Pressable,
   ScrollView,
@@ -48,6 +55,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
 
   const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
+  const userId = useUserStore((state) => state.user?.id);
   useNotificationsBootstrap();
   const unreadCount = useNotificationStore((state) => state.unreadCount);
 
@@ -78,9 +86,64 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   const { isHydrating, hasLocalPasskey } = useAccountManagement();
   const contentBottomInset = useTabContentBottomInset();
 
+  // On-chain authority — the truth source. The shield color and security
+  // tooltip both follow this; we no longer trust hasLocalPasskey alone.
+  const passkeyAuthority = usePasskeyAuthority({
+    userId,
+    smartAccountAddress: smartAccountAddress as Address | null,
+    chainId: activeChainId as SupportedChainId | null | undefined,
+  });
+
   const [selectedToken, setSelectedToken] = React.useState<TokenBalance | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [securityTooltipVisible, setSecurityTooltipVisible] = useState(false);
+
+  // Live on-chain recovery state shown when the user taps the shield. Loaded
+  // each time the tooltip opens so it always reflects the current chain state
+  // (no caching pitfalls).
+  type RecoverySnapshot = {
+    guardians: readonly Address[];
+    threshold: bigint;
+    timelockSeconds: bigint;
+    nonce: bigint;
+    activeRecoveryId: string;
+    executeAfter: bigint;
+  };
+  const [recoverySnap, setRecoverySnap] = useState<RecoverySnapshot | null>(null);
+  const [recoverySnapErr, setRecoverySnapErr] = useState<string | null>(null);
+  const [recoverySnapLoading, setRecoverySnapLoading] = useState(false);
+
+  useEffect(() => {
+    if (!securityTooltipVisible || !smartAccountAddress || !activeChainId) return;
+    let cancelled = false;
+    setRecoverySnapLoading(true);
+    setRecoverySnapErr(null);
+    Promise.all([
+      SocialRecoveryService.getRecoveryDetails(smartAccountAddress as Address, activeChainId as SupportedChainId),
+      SocialRecoveryService.getRecoveryNonce(smartAccountAddress as Address, activeChainId as SupportedChainId),
+      SocialRecoveryService.getActiveRecovery(smartAccountAddress as Address, activeChainId as SupportedChainId),
+    ])
+      .then(([details, nonce, active]) => {
+        if (cancelled) return;
+        setRecoverySnap({
+          guardians: details.guardians,
+          threshold: details.threshold,
+          timelockSeconds: details.timelockSeconds,
+          nonce,
+          activeRecoveryId: active?.recoveryId ?? "0x0000000000000000000000000000000000000000000000000000000000000000",
+          executeAfter: active?.executeAfter ?? 0n,
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) setRecoverySnapErr(err?.message ?? "Failed to read on-chain state");
+      })
+      .finally(() => {
+        if (!cancelled) setRecoverySnapLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [securityTooltipVisible, smartAccountAddress, activeChainId]);
 
   const handleAssetPress = (token: TokenBalance) => {
     setSelectedToken(token);
@@ -89,8 +152,29 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
 
   const getSecurityStatus = () => {
     if (!smartAccountDeployed) return { color: colors.warning, message: "Account not deployed" };
-    if (!hasLocalPasskey) return { color: colors.accentAlt, message: "Passkey not enabled" };
-    return { color: colors.success, message: "Fully secured" };
+    if (passkeyAuthority.loading) {
+      // While checking, keep the previous green/amber from local presence as a
+      // gentle placeholder — never lie green after the check has returned.
+      return hasLocalPasskey
+        ? { color: colors.textMuted, message: "Verifying passkey authority…" }
+        : { color: colors.accentAlt, message: "Passkey not enabled" };
+    }
+    if (passkeyAuthority.status === "authoritative") {
+      return { color: colors.success, message: "Fully secured" };
+    }
+    if (passkeyAuthority.status === "no_local") {
+      return { color: colors.accentAlt, message: "Passkey not enabled on this device" };
+    }
+    if (passkeyAuthority.status === "not_registered" || passkeyAuthority.status === "stale_keys") {
+      return {
+        color: colors.danger,
+        message: "Local passkey not authoritative on-chain — recovery needed",
+      };
+    }
+    if (passkeyAuthority.status === "wallet_undeployed") {
+      return { color: colors.warning, message: "Wallet not deployed on this chain" };
+    }
+    return { color: colors.textMuted, message: "Security status unavailable" };
   };
 
   const securityStatus = getSecurityStatus();
@@ -193,7 +277,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
       <ActivationSheet ref={activationSheetRef} />
       <SetUpWalletSheet ref={setUpRef} />
 
-      {/* Security Tooltip */}
+      {/* Security Tooltip — live on-chain recovery state */}
       {securityTooltipVisible && (
         <View style={styles.tooltipOverlay}>
           <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setSecurityTooltipVisible(false)} />
@@ -202,9 +286,113 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
               <Ionicons name="shield-checkmark" size={22} color={securityStatus.color} />
               <Text style={[styles.tooltipTitle, { color: colors.textPrimary }]}>Security Status</Text>
             </View>
-            <Text style={[styles.tooltipMessage, { color: colors.textSecondary }]}>
+
+            <Text style={[styles.tooltipMessage, { color: colors.textSecondary, marginBottom: 12 }]}>
               {securityStatus.message}
             </Text>
+
+            {/* Passkey authority — the actual sign-ability check */}
+            {!passkeyAuthority.loading && (() => {
+              const desc = describePasskeyAuthority(passkeyAuthority.status);
+              const bg =
+                desc.severity === "ok" ? `${colors.success}1A`
+                : desc.severity === "error" ? `${colors.danger}1A`
+                : desc.severity === "warn" ? `${colors.warning}1A`
+                : `${colors.accent}1A`;
+              const fg =
+                desc.severity === "ok" ? colors.success
+                : desc.severity === "error" ? colors.danger
+                : desc.severity === "warn" ? colors.warning
+                : colors.accent;
+              return (
+                <View style={{ backgroundColor: bg, padding: 10, borderRadius: 10, marginBottom: 12 }}>
+                  <Text style={[styles.tooltipMessage, { color: fg, fontWeight: "700", marginBottom: 4 }]}>
+                    {desc.title}
+                  </Text>
+                  <Text style={[styles.tooltipMessage, { color: fg, fontSize: 12 }]}>
+                    {desc.body}
+                  </Text>
+                </View>
+              );
+            })()}
+
+            {/* Live on-chain readout */}
+            {recoverySnapLoading && (
+              <Text style={[styles.tooltipMessage, { color: colors.textMuted, fontStyle: "italic" }]}>
+                Reading on-chain state…
+              </Text>
+            )}
+            {recoverySnapErr && !recoverySnapLoading && (
+              <Text style={[styles.tooltipMessage, { color: colors.danger }]}>
+                Could not read on-chain state: {recoverySnapErr}
+              </Text>
+            )}
+            {recoverySnap && !recoverySnapLoading && (
+              <View style={{ gap: 6, marginBottom: 12 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={[styles.tooltipMessage, { color: colors.textMuted }]}>Guardians</Text>
+                  <Text style={[styles.tooltipMessage, { color: colors.textPrimary, fontWeight: "700" }]}>
+                    {recoverySnap.guardians.length === 0
+                      ? "none on-chain"
+                      : `${recoverySnap.threshold.toString()}-of-${recoverySnap.guardians.length}`}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={[styles.tooltipMessage, { color: colors.textMuted }]}>Timelock</Text>
+                  <Text style={[styles.tooltipMessage, { color: colors.textPrimary, fontWeight: "700" }]}>
+                    {recoverySnap.timelockSeconds === 0n
+                      ? "—"
+                      : recoverySnap.timelockSeconds >= 86400n
+                      ? `${Number(recoverySnap.timelockSeconds / 86400n)}d`
+                      : recoverySnap.timelockSeconds >= 3600n
+                      ? `${Number(recoverySnap.timelockSeconds / 3600n)}h`
+                      : `${Number(recoverySnap.timelockSeconds / 60n)}min`}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={[styles.tooltipMessage, { color: colors.textMuted }]}>Recoveries executed</Text>
+                  <Text style={[styles.tooltipMessage, { color: colors.textPrimary, fontWeight: "700" }]}>
+                    {recoverySnap.nonce.toString()}
+                  </Text>
+                </View>
+                {recoverySnap.executeAfter > 0n && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      backgroundColor: `${colors.warning}1A`,
+                      padding: 8,
+                      borderRadius: 8,
+                      marginTop: 4,
+                    }}
+                  >
+                    <Text style={[styles.tooltipMessage, { color: colors.warning, fontWeight: "700" }]}>
+                      Recovery pending
+                    </Text>
+                    <Text style={[styles.tooltipMessage, { color: colors.warning }]}>
+                      executes {new Date(Number(recoverySnap.executeAfter) * 1000).toLocaleString()}
+                    </Text>
+                  </View>
+                )}
+                {recoverySnap.nonce > 0n && recoverySnap.executeAfter === 0n && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "center",
+                      backgroundColor: `${colors.success}1A`,
+                      padding: 8,
+                      borderRadius: 8,
+                      marginTop: 4,
+                    }}
+                  >
+                    <Text style={[styles.tooltipMessage, { color: colors.success, fontWeight: "700" }]}>
+                      ✓ Recovery completed — passkey rotated
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
             <Pressable
               style={[styles.tooltipBtn, { backgroundColor: colors.accent }]}
               onPress={() => setSecurityTooltipVisible(false)}

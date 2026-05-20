@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Clipboard } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import * as ExpoClipboard from 'expo-clipboard';
 import { Feather } from '@expo/vector-icons';
 import { useUserStore } from '@store/useUserStore';
 import { useAppTheme } from '@theme';
@@ -62,7 +63,7 @@ export const SmartAccountCard = () => {
   const handleCopyAddress = async () => {
     if (!smartAccountAddress) return;
     
-    Clipboard.setString(smartAccountAddress);
+    await ExpoClipboard.setStringAsync(smartAccountAddress);
     Alert.alert('Copied!', 'Smart account address copied to clipboard', [{ text: 'OK' }]);
   };
 

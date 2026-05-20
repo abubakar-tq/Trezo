@@ -1,9 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Clipboard from 'expo-clipboard';
 import { Badge } from '@shared/components/Tier1/Badge';
 import { useAppTheme } from '@theme';
 import type { ThemeColors } from '@theme';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface BalanceCardProps {
@@ -32,6 +33,14 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!address) return;
+    await Clipboard.setStringAsync(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const formattedBalance = loading
     ? "---"
@@ -48,16 +57,23 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
     if (isDeployed) {
       if (hasLocalPasskey === false) {
         return (
-          <TouchableOpacity onPress={onEnablePasskey} activeOpacity={0.8}>
-            <Badge status="accent" label="Enable Passkey" icon={<Feather name="key" size={10} color={colors.accent} />} />
+          <TouchableOpacity onPress={onEnablePasskey} activeOpacity={0.85} style={styles.ctaPill}>
+            <Feather name="key" size={11} color={colors.accentAlt} />
+            <Text style={[styles.ctaPillText, { color: colors.accentAlt }]}>Enable Passkey</Text>
           </TouchableOpacity>
         );
       }
-      return <Badge status="success" label="+4.2%" icon={<Feather name="trending-up" size={10} color={colors.success} />} />;
+      return (
+        <View style={styles.ctaPill}>
+          <Feather name="trending-up" size={11} color={colors.success} />
+          <Text style={[styles.ctaPillText, { color: colors.success }]}>+4.2%</Text>
+        </View>
+      );
     }
     return (
-      <TouchableOpacity onPress={onDeploy} activeOpacity={0.8}>
-        <Badge status="warning" label="Activate Wallet" icon={<Feather name="zap" size={10} color={colors.warning} />} />
+      <TouchableOpacity onPress={onDeploy} activeOpacity={0.85} style={styles.ctaPill}>
+        <Feather name="zap" size={11} color={colors.warning} />
+        <Text style={[styles.ctaPillText, { color: colors.warning }]}>Activate Wallet</Text>
       </TouchableOpacity>
     );
   };
@@ -98,21 +114,21 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
           <Feather
             name={isDeployed ? "shield" : "alert-circle"}
             size={12}
-            color={isDeployed ? "rgba(255,255,255,0.8)" : "#F59E0B"}
+            color={isDeployed ? "rgba(255,255,255,0.8)" : colors.warning}
           />
           <Text style={styles.addressText}>
             {isDeployed ? shortAddress : `${shortAddress} · Not deployed`}
           </Text>
         </View>
-        <TouchableOpacity style={styles.copyBtn} activeOpacity={0.7}>
-          <Feather name="copy" size={14} color="rgba(255,255,255,0.7)" />
+        <TouchableOpacity style={styles.copyBtn} activeOpacity={0.7} onPress={handleCopy} disabled={!address}>
+          <Feather name={copied ? "check" : "copy"} size={14} color={copied ? colors.success : "rgba(255,255,255,0.7)"} />
         </TouchableOpacity>
       </View>
     </LinearGradient>
   );
 };
 
-const createStyles = (_colors: ThemeColors) =>
+const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: {
       borderRadius: 28,
@@ -195,5 +211,27 @@ const createStyles = (_colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: "rgba(255,255,255,0.12)",
+    },
+    ctaPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: "rgba(26, 24, 20, 0.06)",
+      backgroundColor: colors.textOnAccent,
+      shadowColor: "#000",
+      shadowOpacity: 0.18,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    ctaPillText: {
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.6,
+      textTransform: "uppercase",
     },
   });
