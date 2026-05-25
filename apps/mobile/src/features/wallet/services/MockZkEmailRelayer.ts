@@ -43,7 +43,9 @@ export class MockZkEmailRelayer implements ZkEmailRelayerAdapter {
       baseUrl: "mock://local",
       proofMode: config?.proofMode ?? "per_chain",
       acceptanceTemplateIdx: config?.acceptanceTemplateIdx ?? 0,
-      recoveryTemplateIdx: config?.recoveryTemplateIdx ?? 1,
+      // Both templates must be 0 — EmailRecoveryCommandHandler reverts otherwise
+      // (see contracts/lib/email-recovery/src/handlers/EmailRecoveryCommandHandler.sol).
+      recoveryTemplateIdx: config?.recoveryTemplateIdx ?? 0,
     };
   }
 
