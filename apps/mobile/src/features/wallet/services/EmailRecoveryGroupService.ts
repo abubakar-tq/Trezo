@@ -167,6 +167,23 @@ const env = (name: string): string | undefined => {
   return vars[`EXPO_PUBLIC_${name}`] ?? vars[name];
 };
 
+const isMockOptIn = (): boolean => {
+  const raw = env("ZK_EMAIL_USE_MOCK");
+  return raw === "true" || raw === "1";
+};
+
+// Surface as a module-level helper so tests can spy on the guard without
+// going through the full createGroup flow.
+export function resolveRelayerBaseUrl(): string {
+  const explicit = env("ZK_EMAIL_RELAYER_URL");
+  if (explicit) return explicit;
+  if (isMockOptIn()) return MOCK_RELAYER_URL;
+  throw new Error(
+    "ZK Email relayer is not configured. Set EXPO_PUBLIC_ZK_EMAIL_RELAYER_URL to the hosted relayer (e.g. https://auth-base-sepolia-staging.prove.email/api), " +
+      "or set EXPO_PUBLIC_ZK_EMAIL_USE_MOCK=true for local Anvil dev. Refusing to silently fall back to MockZkEmailRelayer.",
+  );
+}
+
 const parseTemplateIdx = (value: string | undefined, fallback: number): number => {
   if (!value) return fallback;
   const parsed = Number(value);
@@ -676,7 +693,7 @@ export class EmailRecoveryGroupService {
 
   private static resolveRelayerConfig(config?: Partial<ZkEmailRelayerConfig>): ZkEmailRelayerConfig {
     return {
-      baseUrl: config?.baseUrl ?? env("ZK_EMAIL_RELAYER_URL") ?? MOCK_RELAYER_URL,
+      baseUrl: config?.baseUrl ?? resolveRelayerBaseUrl(),
       apiKey: config?.apiKey ?? env("ZK_EMAIL_RELAYER_API_KEY"),
       acceptanceTemplateIdx: config?.acceptanceTemplateIdx
         ?? parseTemplateIdx(env("ZK_EMAIL_ACCEPTANCE_TEMPLATE_IDX"), DEFAULT_ACCEPTANCE_TEMPLATE_IDX),
