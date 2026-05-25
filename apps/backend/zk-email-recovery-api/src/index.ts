@@ -1,9 +1,7 @@
 import "dotenv/config";
-import express from "express";
-import cors from "cors";
 import { RecoveryStore } from "./recovery-store.js";
-import { createRecoveryRouter } from "./recovery-router.js";
 import type { ZkEmailRelayerConfig } from "./zk-email-relayer-client.js";
+import { createApp } from "./app.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -36,21 +34,7 @@ async function main() {
     serviceRoleKey: supabaseServiceKey,
   });
 
-  const app = express();
-
-  app.use(cors());
-  app.use(express.json());
-
-  app.get("/health", (_req, res) => {
-    res.json({
-      status: "ok",
-      version: "0.1.0",
-      relayer: relayerConfig.baseUrl,
-      proofMode: relayerConfig.proofMode,
-    });
-  });
-
-  app.use("/", createRecoveryRouter(store, relayerConfig));
+  const app = createApp({ store, relayerConfig });
 
   app.listen(PORT, () => {
     console.log(`ZK Email Recovery API listening on port ${PORT}`);
