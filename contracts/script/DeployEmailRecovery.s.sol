@@ -243,6 +243,7 @@ contract DeployEmailRecovery is Script {
             _trySerializeExistingAddress(root, "accountFactory", existingJson, ".accountFactory");
             _trySerializeExistingAddress(root, "passkeyValidator", existingJson, ".passkeyValidator");
             _trySerializeExistingAddress(root, "socialRecovery", existingJson, ".socialRecovery");
+            _trySerializeExistingAddress(root, "crossChainExecutor", existingJson, ".crossChainExecutor");
             _trySerializeExistingBool(root, "success", existingJson, ".success");
         } catch {}
     }
