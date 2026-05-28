@@ -275,28 +275,27 @@ export class BridgePreparationService {
       inputToken,
       outputToken,
       inputAmountRaw,
+      destSwapSlippageBps: intent.slippageBps,
     });
 
-    if (quote.destSwapRequired) {
-      // Cross-chain swap requires querying the destination chain's V3 quoter
-      // to compute a real minOut. Not in this iteration.
-      throw new Error(
-        "Cross-chain swap (different token on destination) is not yet supported. " +
-          "Bridge the canonical paired token, then swap on the destination chain.",
-      );
+    if (quote.destSwapRequired && !quote.destSwap) {
+      // BridgeQuoteService should always attach destSwap when destSwapRequired.
+      // Defensive guard against the service returning inconsistent state —
+      // surface it loudly rather than encoding zeros into BridgeMessage.
+      throw new Error("Bridge quote marked destSwapRequired but produced no destination-side swap quote.");
     }
 
     // ── 6. Encode BridgeMessage + depositV3 calldata ──────────────────────────
     // Same-asset bridge: recipient is the user wallet itself, message is empty.
-    // Cross-chain swap (gated above): recipient is the executor and message
-    // carries (recipient, buyToken, minOut, feeTier, deadline) for it to decode.
+    // Cross-chain swap: recipient is the executor and message carries
+    // (recipient, buyToken, minOut, feeTier, deadline) for it to decode.
     const bridgeMessage: Hex = quote.destSwapRequired
       ? encodeBridgeMessage({
           recipient: intent.walletAddress,
           buyToken: outputToken.address as Address,
-          minOut: 0n, // TODO: dest-side quote
-          feeTier: 0, // TODO: dest-side quote
-          deadline: quote.fillDeadline,
+          minOut: quote.destSwap!.minOutRaw,
+          feeTier: quote.destSwap!.feeTier,
+          deadline: quote.destSwap!.deadlineSec,
         })
       : "0x";
 
@@ -350,6 +349,18 @@ export class BridgePreparationService {
       });
     }
 
+    const destSwapMetadata = quote.destSwap
+      ? {
+          canonicalToken: quote.destSwap.canonicalToken.address,
+          expectedOutRaw: quote.destSwap.expectedOutRaw.toString(),
+          minOutRaw: quote.destSwap.minOutRaw.toString(),
+          feeTier: quote.destSwap.feeTier,
+          poolAddress: quote.destSwap.poolAddress,
+          slippageBps: quote.destSwap.slippageBps,
+          deadlineSec: quote.destSwap.deadlineSec,
+        }
+      : null;
+
     const bridgeExecution = {
       chainId: intent.sourceChainId,
       networkKey: intent.sourceNetworkKey,
@@ -367,6 +378,7 @@ export class BridgePreparationService {
         destRecipient: quote.destRecipient,
         destExecutor: quote.destExecutor ?? null,
         destSwapRequired: quote.destSwapRequired,
+        destSwap: destSwapMetadata,
         inputToken: inputToken.address,
         outputToken: outputToken.address,
         inputAmountRaw: quote.inputAmountRaw.toString(),
@@ -395,6 +407,7 @@ export class BridgePreparationService {
         destRecipient: quote.destRecipient,
         destExecutor: quote.destExecutor ?? null,
         destSwapRequired: quote.destSwapRequired,
+        destSwap: destSwapMetadata,
         fillDeadline: quote.fillDeadline,
         quoteTimestamp: quote.quoteTimestamp,
       },
@@ -409,11 +422,17 @@ export class BridgePreparationService {
       });
     }
 
-    if (quote.destSwapRequired) {
+    if (quote.destSwap) {
+      const expectedOutDisplay = formatUnits(quote.destSwap.expectedOutRaw, outputToken.decimals);
+      const minOutDisplay = formatUnits(quote.destSwap.minOutRaw, outputToken.decimals);
       warnings.push({
         code: "destination_swap",
         level: "warning",
-        message: `Destination-side swap to ${outputToken.symbol} required — extra slippage risk.`,
+        message:
+          `Destination-side swap will run on ${intent.destNetworkKey}: expected `
+          + `~${expectedOutDisplay} ${outputToken.symbol} `
+          + `(min ${minOutDisplay} @ ${quote.destSwap.slippageBps} bps slippage). `
+          + `If the swap reverts on destination, the executor refunds the canonical bridged token to your wallet.`,
       });
     }
 

@@ -1,16 +1,17 @@
 /**
  * BridgeQuoteService.ts
  *
- * Computes a BridgeQuote for an Across V3 deposit. Quote is a pure local
- * computation: we use a flat per-route fee (BRIDGE_FLAT_FEE_BPS) because
- * Trezo runs the only relayer that watches testnets (see ADR 0008), so we
- * do not need to consult Across's hosted suggested-fees API.
+ * Computes a BridgeQuote for an Across V3 deposit. The bridge fee itself is
+ * a flat per-route compute (BRIDGE_FLAT_FEE_BPS) because Trezo runs the only
+ * relayer that watches testnets — no Across hosted-fees-API call needed.
  *
- * For cross-chain swap intents (outputToken != bridged canonical pair), the
- * destination-side Uniswap V3 swap is enforced by `BridgeMessage.minOut` —
- * see ADR 0007. This service does not call the destination chain's quoter.
+ * When the user picks an outputToken that differs from the route's canonical
+ * pair, this service ALSO calls BridgeDestQuoteService to query the
+ * destination chain's Uniswap V3 quoter and produce the (minOut, feeTier,
+ * deadline) the CrossChainExecutor will enforce.
  */
 
+import { TokenRegistryService } from "@/src/features/assets/services/TokenRegistryService";
 import {
   BRIDGE_FILL_DEADLINE_SECONDS,
   BRIDGE_FLAT_FEE_BPS,
@@ -18,8 +19,9 @@ import {
   findBridgeOutputToken,
   getBridgeConfig,
 } from "@/src/features/swaps/config/bridgeRegistry";
+import { BridgeDestQuoteService } from "@/src/features/swaps/services/BridgeDestQuoteService";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
-import type { BridgeQuote } from "@/src/features/swaps/types/bridge";
+import type { BridgeDestSwap, BridgeQuote } from "@/src/features/swaps/types/bridge";
 import type { SupportedChainId } from "@/src/integration/chains";
 import type { NetworkKey } from "@/src/integration/networks";
 import { type Address, zeroAddress } from "viem";
@@ -33,6 +35,11 @@ export type BridgeQuoteRequest = {
   inputToken: TokenMetadata;
   outputToken: TokenMetadata;
   inputAmountRaw: bigint;
+  /**
+   * Slippage tolerance for the destination-side swap when destSwapRequired.
+   * Ignored for same-asset bridges.
+   */
+  destSwapSlippageBps?: number;
 };
 
 const applyFee = (amount: bigint, feeBps: number): bigint =>
@@ -104,6 +111,45 @@ export class BridgeQuoteService {
 
     const expiresAt = new Date((nowSec + BRIDGE_QUOTE_VALIDITY_SECONDS) * 1000).toISOString();
 
+    // ── Destination-side swap quote (only when output token differs) ───────────
+    let destSwap: BridgeDestSwap | undefined;
+    if (destSwapRequired) {
+      const canonicalDestTokenMeta = TokenRegistryService.getTokenForNetwork(
+        request.destNetworkKey,
+        canonicalDestToken,
+      );
+      if (!canonicalDestTokenMeta) {
+        throw new Error(
+          `Canonical destination token ${canonicalDestToken} for ${request.inputToken.symbol} `
+            + `is not registered on ${request.destNetworkKey}. Add it to tokenRegistry.`,
+        );
+      }
+
+      const slippageBps = request.destSwapSlippageBps ?? 100; // default 1% if caller didn't pass one
+      const destQuote = await BridgeDestQuoteService.getQuote({
+        destNetworkKey: request.destNetworkKey,
+        canonicalToken: canonicalDestTokenMeta,
+        outputToken: request.outputToken,
+        // The executor receives `outputAmountRaw` of the canonical token from the SpokePool;
+        // that is what gets swapped on the destination side.
+        inputAmountRaw: outputAmountRaw,
+        slippageBps,
+        // Swap deadline matches the Across fill deadline so the dest swap window
+        // covers the relayer's fill window. If the relayer misses fillDeadline,
+        // the deposit refunds on source — no dest swap will ever run.
+        deadlineSec: fillDeadline,
+      });
+      destSwap = {
+        canonicalToken: canonicalDestTokenMeta,
+        expectedOutRaw: destQuote.expectedOutRaw,
+        minOutRaw: destQuote.minOutRaw,
+        feeTier: destQuote.feeTier,
+        poolAddress: destQuote.poolAddress,
+        slippageBps: destQuote.slippageBps,
+        deadlineSec: destQuote.deadlineSec,
+      };
+    }
+
     return {
       quoteId: `across-v3-${request.sourceNetworkKey}-${request.destNetworkKey}-${request.inputToken.symbol}-${nowSec}`,
       sourceNetworkKey: request.sourceNetworkKey,
@@ -123,6 +169,7 @@ export class BridgeQuoteService {
       destExecutor: destConfig?.crossChainExecutor,
       destRecipient,
       destSwapRequired,
+      destSwap,
       expiresAt,
       routeMetadata: {
         bridgeId: "across_v3",

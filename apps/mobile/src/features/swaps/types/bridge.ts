@@ -49,6 +49,28 @@ export type BridgeIntent = {
   slippageBps: number;
 };
 
+/**
+ * Quote for the destination-side Uniswap V3 swap that CrossChainExecutor runs
+ * after Across V3 delivers the canonical bridged token. Only present when the
+ * user picks an outputToken that differs from the route's canonical pair.
+ */
+export type BridgeDestSwap = {
+  /** Canonical destination-chain token the SpokePool will deliver to the executor. */
+  canonicalToken: TokenMetadata;
+  /** Estimated outputToken amount the executor will produce, before slippage. */
+  expectedOutRaw: bigint;
+  /** Minimum outputToken amount enforced by the executor (BridgeMessage.minOut). */
+  minOutRaw: bigint;
+  /** Uniswap V3 pool fee tier passed to the dest-side exactInputSingle. */
+  feeTier: number;
+  /** Pool address — informational, surfaced in metadata. */
+  poolAddress: Address;
+  /** Slippage tolerance applied to expectedOutRaw to compute minOutRaw. */
+  slippageBps: number;
+  /** Unix-seconds deadline carried in BridgeMessage.deadline. */
+  deadlineSec: number;
+};
+
 export type BridgeQuote = {
   quoteId: string;
   sourceNetworkKey: NetworkKey;
@@ -61,9 +83,14 @@ export type BridgeQuote = {
 
   /** What the depositor sends. */
   inputAmountRaw: bigint;
-  /** What the recipient receives on the destination chain (after relayer + LP fee). */
+  /**
+   * What the SpokePool delivers to the destination recipient (after relayer + LP fee).
+   * For same-asset bridges this is what the user receives.
+   * For cross-chain swaps this is the canonical-token amount handed to the executor
+   * BEFORE the dest-side swap — the user's final outputToken amount is `destSwap.expectedOutRaw`.
+   */
   outputAmountRaw: bigint;
-  /** Total fee in basis points, applied to inputAmountRaw. */
+  /** Total bridge fee in basis points, applied to inputAmountRaw. */
   feeBps: number;
 
   /** Across-protocol-mandated fields for the depositV3 call. */
@@ -81,6 +108,12 @@ export type BridgeQuote = {
 
   /** True when outputToken differs from the canonical bridged token — executor performs a dest-side swap. */
   destSwapRequired: boolean;
+
+  /**
+   * Destination-side swap quote — only set when destSwapRequired is true.
+   * Carries the (minOut, feeTier, deadline) packed into the Across BridgeMessage.
+   */
+  destSwap?: BridgeDestSwap;
 
   expiresAt: string;
   routeMetadata?: Record<string, unknown>;

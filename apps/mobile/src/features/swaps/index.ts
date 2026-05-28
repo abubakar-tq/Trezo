@@ -9,5 +9,6 @@ export * from "./services/SwapQuoteService";
 export * from "./services/SwapPreparationService";
 export * from "./services/SwapExecutionService";
 export * from "./services/BridgeQuoteService";
+export * from "./services/BridgeDestQuoteService";
 export * from "./services/BridgePreparationService";
 export * from "./services/BridgeExecutionService";
