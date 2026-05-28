@@ -37,6 +37,7 @@ import { resolveNetworkKey, getNetworkConfig } from "@/src/integration/networks"
 import {
   getBridgeConfig,
   isCrossChainBridgeReady,
+  isCrossChainSwapReady,
   getCrossChainDestinations,
 } from "@/src/features/swaps/config/bridgeRegistry";
 import { useUserStore } from "@/src/store/useUserStore";
@@ -125,13 +126,15 @@ export const DexScreen: React.FC = () => {
   const [retryNonce, setRetryNonce] = useState<number>(0);
 
   const [isAssetPickerVisible, setIsAssetPickerVisible] = useState(false);
-  const [assetPickerSide, setAssetPickerSide] = useState<"sell" | "buy">("sell");
+  const [assetPickerSide, setAssetPickerSide] = useState<"sell" | "buy" | "bridgeOutput">("sell");
 
   // ── Bridge tab state ───────────────────────────────────────────────────────
   const [bridgeDestNetworkKey, setBridgeDestNetworkKey] = useState<string | null>(null);
   const [bridgeQuote, setBridgeQuote] = useState<BridgeQuote | null>(null);
   const [bridgePlan, setBridgePlan] = useState<BridgePlan | null>(null);
   const [bridgeBusy, setBridgeBusy] = useState<boolean>(false);
+  // null = use canonical same-symbol token; set = user has explicitly picked a different output.
+  const [bridgeDestOutputToken, setBridgeDestOutputToken] = useState<TokenMetadata | null>(null);
 
   const networkKey = useMemo(() => resolveNetworkKey(selectedChainId), [selectedChainId]);
 
@@ -144,6 +147,51 @@ export const DexScreen: React.FC = () => {
   const bridgeReady = useMemo(() => isCrossChainBridgeReady(networkKey), [networkKey]);
   const bridgeConfig = useMemo(() => getBridgeConfig(networkKey), [networkKey]);
   const bridgeDestinations = useMemo(() => getCrossChainDestinations(networkKey), [networkKey]);
+
+  // Cross-chain swap (different output token on destination) requires a
+  // CrossChainExecutor on the destination. Same-asset bridge does not.
+  const crossChainSwapReadyOnDest = useMemo(
+    () => (bridgeDestNetworkKey ? isCrossChainSwapReady(bridgeDestNetworkKey as never) : false),
+    [bridgeDestNetworkKey],
+  );
+
+  // Destination-chain token list - used for the bridge-tab output picker.
+  const bridgeDestTokens = useMemo(
+    () =>
+      bridgeDestNetworkKey
+        ? TokenRegistryService.listSwapTokensForNetwork(bridgeDestNetworkKey as never)
+        : [],
+    [bridgeDestNetworkKey],
+  );
+
+  // The "canonical" same-symbol destination token for the currently selected
+  // source sellToken. Used as the default output when the user hasn't picked
+  // explicitly, and rendered as the fallback when cross-chain swap isn't ready.
+  const canonicalBridgeOutputToken = useMemo(() => {
+    if (!sellToken || !bridgeDestTokens.length) return null;
+    return bridgeDestTokens.find(
+      (t) => t.symbol.toLowerCase() === sellToken.symbol.toLowerCase(),
+    ) ?? null;
+  }, [sellToken, bridgeDestTokens]);
+
+  // Effective bridge output token: user pick when present + valid on dest, else canonical.
+  const effectiveBridgeOutputToken = useMemo<TokenMetadata | null>(() => {
+    if (!bridgeDestOutputToken) return canonicalBridgeOutputToken;
+    // Validate that the picked token is still on the active destination chain.
+    const stillValid = bridgeDestTokens.some(
+      (t) => t.address.toLowerCase() === bridgeDestOutputToken.address.toLowerCase()
+        && t.chainId === bridgeDestOutputToken.chainId,
+    );
+    return stillValid ? bridgeDestOutputToken : canonicalBridgeOutputToken;
+  }, [bridgeDestOutputToken, canonicalBridgeOutputToken, bridgeDestTokens]);
+
+  // Reset the user's explicit pick when the source token or destination changes -
+  // a USDC->WETH route on Base Sepolia does not make sense if the user just switched
+  // source to a token with no WETH pool on the new destination.
+  useEffect(() => {
+    setBridgeDestOutputToken(null);
+  }, [sellToken?.symbol, sellToken?.chainId, bridgeDestNetworkKey]);
+
 
   const swapTokens = useMemo(
     () => TokenRegistryService.listSwapTokensForNetwork(networkKey),
@@ -167,10 +215,16 @@ export const DexScreen: React.FC = () => {
 
   const effectiveSlippageBps = slippageBpsOverride ?? defaultBps;
 
-  const assetPickerList = useMemo(
-    () => swapTokens.map((token) => toAsset(token, tokenBalances[toTokenKey(token) ?? "native"] ?? 0n)),
-    [swapTokens, tokenBalances],
-  );
+  const assetPickerList = useMemo(() => {
+    // The bridge-output picker draws from the destination chain's token list
+    // (balances on destination aren't loaded in this screen, so render as 0).
+    if (assetPickerSide === "bridgeOutput") {
+      return bridgeDestTokens
+        .filter((token) => token.type === "erc20")
+        .map((token) => toAsset(token, 0n));
+    }
+    return swapTokens.map((token) => toAsset(token, tokenBalances[toTokenKey(token) ?? "native"] ?? 0n));
+  }, [assetPickerSide, swapTokens, tokenBalances, bridgeDestTokens]);
 
   useEffect(() => {
     if (route.params?.initialTab) {
@@ -412,12 +466,7 @@ export const DexScreen: React.FC = () => {
 
       try {
         const destNetworkConfig = getNetworkConfig(bridgeDestNetworkKey as never);
-        // Find the canonical output token on destination via the registry.
-        // Mirror to the same symbol as the source input token by default.
-        const destTokens = TokenRegistryService.listSwapTokensForNetwork(bridgeDestNetworkKey as never);
-        const destOutputToken = destTokens.find(
-          (t) => t.symbol.toLowerCase() === sellToken.symbol.toLowerCase(),
-        );
+        const destOutputToken = effectiveBridgeOutputToken;
         if (!destOutputToken) {
           throw new Error(`No matching ${sellToken.symbol} on destination network.`);
         }
@@ -436,6 +485,7 @@ export const DexScreen: React.FC = () => {
           inputToken: sellToken,
           outputToken: destOutputToken,
           inputAmountRaw,
+          destSwapSlippageBps: effectiveSlippageBps,
         });
 
         if (cancelled) return;
@@ -459,6 +509,7 @@ export const DexScreen: React.FC = () => {
   }, [
     activeTab, bridgeReady, walletAddress, sellToken, sellAmountDecimal,
     bridgeDestNetworkKey, networkKey, selectedChainId, retryNonce,
+    effectiveBridgeOutputToken, effectiveSlippageBps,
   ]);
 
   const buildBridgeIntent = (): BridgeIntent | null => {
@@ -472,10 +523,7 @@ export const DexScreen: React.FC = () => {
     })();
     if (!destNetworkConfig) return null;
 
-    const destTokens = TokenRegistryService.listSwapTokensForNetwork(bridgeDestNetworkKey as never);
-    const destOutputToken = destTokens.find(
-      (t) => t.symbol.toLowerCase() === sellToken.symbol.toLowerCase(),
-    );
+    const destOutputToken = effectiveBridgeOutputToken;
     if (!destOutputToken) return null;
 
     return {
@@ -574,6 +622,18 @@ export const DexScreen: React.FC = () => {
   };
 
   const handleTokenSelect = (asset: Asset) => {
+    if (assetPickerSide === "bridgeOutput") {
+      const next = bridgeDestTokens.find(
+        (token) =>
+          token.symbol === asset.symbol
+          && (asset.chainId === undefined || token.chainId === asset.chainId),
+      );
+      if (!next) return;
+      setBridgeDestOutputToken(next);
+      setBridgePlan(null);
+      return;
+    }
+
     const next = swapTokens.find((token) => token.symbol === asset.symbol);
     if (!next) return;
 
@@ -864,19 +924,96 @@ export const DexScreen: React.FC = () => {
                       })}
                     </View>
                   </View>
+
+                  {/* Destination output token picker - only meaningful when cross-chain swap is wired on dest */}
+                  {bridgeDestNetworkKey && (
+                    <View style={styles.swapSide}>
+                      <View style={styles.swapSideTopRow}>
+                        <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You receive</Text>
+                        {!crossChainSwapReadyOnDest && (
+                          <Text style={[styles.swapSideLabel, { color: colors.textMuted, fontSize: 11 }]}>
+                            same-asset only on this dest
+                          </Text>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        disabled={!crossChainSwapReadyOnDest}
+                        onPress={() => {
+                          setAssetPickerSide("bridgeOutput");
+                          setIsAssetPickerVisible(true);
+                        }}
+                        style={[
+                          styles.tokenBtn,
+                          {
+                            backgroundColor: colors.glass,
+                            borderColor: colors.border,
+                            opacity: crossChainSwapReadyOnDest ? 1 : 0.6,
+                          },
+                        ]}
+                      >
+                        {effectiveBridgeOutputToken ? (
+                          <>
+                            <TokenIcon symbol={effectiveBridgeOutputToken.symbol} size={20} />
+                            <Text style={[styles.tokenBtnSymbol, { color: colors.textPrimary }]}>
+                              {effectiveBridgeOutputToken.symbol}
+                            </Text>
+                          </>
+                        ) : (
+                          <Text style={[styles.tokenBtnSymbol, { color: colors.textMuted }]}>
+                            No matching token on destination
+                          </Text>
+                        )}
+                        {crossChainSwapReadyOnDest && (
+                          <Feather name="chevron-down" size={13} color={colors.textSecondary} />
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
 
                 {/* Bridge details card */}
                 <View style={[styles.detailsCard, { backgroundColor: colors.glass, borderColor: colors.border }]}>
                   {bridgeQuote ? (
                     <>
-                      <View style={styles.detailRow}>
-                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>You receive</Text>
-                        <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
-                          {formatUnits(bridgeQuote.outputAmountRaw, bridgeQuote.outputToken.decimals)}{" "}
-                          {bridgeQuote.outputToken.symbol}
-                        </Text>
-                      </View>
+                      {bridgeQuote.destSwap ? (
+                        <>
+                          <View style={styles.detailRow}>
+                            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>You receive (est.)</Text>
+                            <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
+                              ~{formatUnits(bridgeQuote.destSwap.expectedOutRaw, bridgeQuote.outputToken.decimals)}{" "}
+                              {bridgeQuote.outputToken.symbol}
+                            </Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Minimum out</Text>
+                            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
+                              {formatUnits(bridgeQuote.destSwap.minOutRaw, bridgeQuote.outputToken.decimals)}{" "}
+                              {bridgeQuote.outputToken.symbol} ({bridgeQuote.destSwap.slippageBps} bps slip)
+                            </Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Bridged via</Text>
+                            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
+                              {formatUnits(bridgeQuote.outputAmountRaw, bridgeQuote.destSwap.canonicalToken.decimals)}{" "}
+                              {bridgeQuote.destSwap.canonicalToken.symbol} (canonical)
+                            </Text>
+                          </View>
+                          <View style={styles.detailRow}>
+                            <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Dest pool fee</Text>
+                            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
+                              {(bridgeQuote.destSwap.feeTier / 10_000).toFixed(2)}%
+                            </Text>
+                          </View>
+                        </>
+                      ) : (
+                        <View style={styles.detailRow}>
+                          <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>You receive</Text>
+                          <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
+                            {formatUnits(bridgeQuote.outputAmountRaw, bridgeQuote.outputToken.decimals)}{" "}
+                            {bridgeQuote.outputToken.symbol}
+                          </Text>
+                        </View>
+                      )}
                       <View style={styles.detailRow}>
                         <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Relayer fee</Text>
                         <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
@@ -1251,7 +1388,13 @@ export const DexScreen: React.FC = () => {
           setIsAssetPickerVisible(false);
         }}
         assets={assetPickerList}
-        title={assetPickerSide === "sell" ? "Select Sell Token" : "Select Buy Token"}
+        title={
+          assetPickerSide === "sell"
+            ? "Select Sell Token"
+            : assetPickerSide === "buy"
+              ? "Select Buy Token"
+              : "Select Destination Token"
+        }
       />
     </TabScreenContainer>
   );
