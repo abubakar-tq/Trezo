@@ -82,6 +82,19 @@ const ROUTER_V2_ABI = [
     ],
     outputs: [{ name: "amounts", type: "uint256[]" }],
   },
+  {
+    name: "swapExactTokensForETH",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "path", type: "address[]" },
+      { name: "to", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
 ] as const;
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
@@ -101,9 +114,8 @@ export class UniswapV2BaseProvider implements SwapRouteProvider {
   async supportsPair(request: SwapQuoteRequest): Promise<boolean> {
     if (!this.supportsNetwork(request.networkKey)) return false;
     if (!V2_CONFIGS[request.networkKey]) return false;
-    // ERC20 → native ETH not yet supported (requires unwrap step)
-    if (request.buyToken.type !== "erc20") return false;
-    // Sell token can be native ETH or ERC20
+    // Reject native→native (no swap needed)
+    if (request.sellToken.type === "native" && request.buyToken.type === "native") return false;
     return true;
   }
 
@@ -114,23 +126,27 @@ export class UniswapV2BaseProvider implements SwapRouteProvider {
     if (!config) {
       throw new Error(`UniswapV2BaseProvider: no config for network ${networkKey}.`);
     }
-    if (buyToken.type !== "erc20") {
-      throw new Error("UniswapV2BaseProvider does not support ERC20 → native ETH swaps yet.");
-    }
     if (sellAmountRaw <= 0n) {
       throw new Error("Sell amount must be greater than zero.");
     }
 
     const { routerAddress, wethAddress } = config;
     const isNativeETHSell = sellToken.type === "native";
+    const isNativeETHBuy = buyToken.type === "native";
 
-    // For native ETH: path = [WETH, buyToken]
-    // For ERC20: path = [sellToken, buyToken]  (direct pair — extend for multi-hop if needed)
+    if (isNativeETHSell && isNativeETHBuy) {
+      throw new Error("UniswapV2BaseProvider cannot swap native ETH to native ETH.");
+    }
+
+    // For native ETH on either side, substitute WETH in the path
     const effectiveSellAddress: Address = isNativeETHSell
       ? wethAddress
       : (sellToken.address as Address);
+    const effectiveBuyAddress: Address = isNativeETHBuy
+      ? wethAddress
+      : (buyToken.address as Address);
 
-    const path: readonly Address[] = [effectiveSellAddress, buyToken.address as Address];
+    const path: readonly Address[] = [effectiveSellAddress, effectiveBuyAddress];
 
     const client = getPublicClientForNetwork(networkKey);
 
@@ -180,6 +196,13 @@ export class UniswapV2BaseProvider implements SwapRouteProvider {
         functionName: "swapExactETHForTokens",
         args: [minimumBuyAmountRaw, path, account, deadline],
       }) as Hex;
+    } else if (isNativeETHBuy) {
+      // ERC20 → native ETH: router unwraps WETH to ETH and sends to recipient
+      calldata = encodeFunctionData({
+        abi: ROUTER_V2_ABI,
+        functionName: "swapExactTokensForETH",
+        args: [sellAmountRaw, minimumBuyAmountRaw, path, account, deadline],
+      }) as Hex;
     } else {
       calldata = encodeFunctionData({
         abi: ROUTER_V2_ABI,
@@ -211,7 +234,11 @@ export class UniswapV2BaseProvider implements SwapRouteProvider {
         dexLabel: this.label,
         routerAddress,
         path: path.join(" → "),
-        routeKind: isNativeETHSell ? "v2_exact_eth_for_tokens" : "v2_exact_tokens_for_tokens",
+        routeKind: isNativeETHSell
+          ? "v2_exact_eth_for_tokens"
+          : isNativeETHBuy
+            ? "v2_exact_tokens_for_eth"
+            : "v2_exact_tokens_for_tokens",
       },
     };
   }

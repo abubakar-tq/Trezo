@@ -25,11 +25,20 @@ import { classify, type ClassifiedError } from "@/src/features/swaps/services/Sw
 import { SwapExecutionService } from "@/src/features/swaps/services/SwapExecutionService";
 import { SwapPreparationService } from "@/src/features/swaps/services/SwapPreparationService";
 import { SwapQuoteService } from "@/src/features/swaps/services/SwapQuoteService";
+import { BridgeQuoteService } from "@/src/features/swaps/services/BridgeQuoteService";
+import { BridgeExecutionService } from "@/src/features/swaps/services/BridgeExecutionService";
+import { BridgePreparationService } from "@/src/features/swaps/services/BridgePreparationService";
 import type { SwapIntent, SwapPlan, SwapQuote } from "@/src/features/swaps/types/swap";
+import type { BridgeIntent, BridgePlan, BridgeQuote } from "@/src/features/swaps/types/bridge";
 import WalletPersistenceService from "@/src/features/wallet/services/SupabaseWalletService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import { resolveNetworkKey, getNetworkConfig } from "@/src/integration/networks";
+import {
+  getBridgeConfig,
+  isCrossChainBridgeReady,
+  getCrossChainDestinations,
+} from "@/src/features/swaps/config/bridgeRegistry";
 import { useUserStore } from "@/src/store/useUserStore";
 import { defaultSlippageBps } from "@/src/features/dex/utils/slippage";
 import { TabScreenContainer, TokenIcon, AssetPickerModal, type Asset } from "@shared/components";
@@ -118,11 +127,23 @@ export const DexScreen: React.FC = () => {
   const [isAssetPickerVisible, setIsAssetPickerVisible] = useState(false);
   const [assetPickerSide, setAssetPickerSide] = useState<"sell" | "buy">("sell");
 
+  // ── Bridge tab state ───────────────────────────────────────────────────────
+  const [bridgeDestNetworkKey, setBridgeDestNetworkKey] = useState<string | null>(null);
+  const [bridgeQuote, setBridgeQuote] = useState<BridgeQuote | null>(null);
+  const [bridgePlan, setBridgePlan] = useState<BridgePlan | null>(null);
+  const [bridgeBusy, setBridgeBusy] = useState<boolean>(false);
+
   const networkKey = useMemo(() => resolveNetworkKey(selectedChainId), [selectedChainId]);
 
   const networkConfig = useMemo(() => {
     try { return getNetworkConfig(networkKey); } catch { return null; }
   }, [networkKey]);
+
+  const swapSupported = networkConfig?.swapSupported ?? false;
+
+  const bridgeReady = useMemo(() => isCrossChainBridgeReady(networkKey), [networkKey]);
+  const bridgeConfig = useMemo(() => getBridgeConfig(networkKey), [networkKey]);
+  const bridgeDestinations = useMemo(() => getCrossChainDestinations(networkKey), [networkKey]);
 
   const swapTokens = useMemo(
     () => TokenRegistryService.listSwapTokensForNetwork(networkKey),
@@ -269,6 +290,15 @@ export const DexScreen: React.FC = () => {
       };
     }
 
+    if (!swapSupported) {
+      setQuote(null);
+      setApprovalRequired(false);
+      setUiState("idle");
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (!sellAmountDecimal.trim()) {
       setQuote(null);
       setApprovalRequired(false);
@@ -282,15 +312,6 @@ export const DexScreen: React.FC = () => {
       setQuote(null);
       setApprovalRequired(false);
       setErrorState(classify(new Error("Sell and buy tokens must be different.")));
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (sellToken.chainId !== buyToken.chainId) {
-      setQuote(null);
-      setApprovalRequired(false);
-      setUiState("idle");
       return () => {
         cancelled = true;
       };
@@ -350,7 +371,189 @@ export const DexScreen: React.FC = () => {
       cancelled = true;
       clearTimeout(debounce);
     };
-  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, effectiveSlippageBps, walletAddress, retryNonce]);
+  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, effectiveSlippageBps, walletAddress, retryNonce, swapSupported]);
+
+  // ── Bridge: auto-pick first available destination when source changes ──────
+  useEffect(() => {
+    if (activeTab !== "bridge") return;
+    if (!bridgeDestNetworkKey || !bridgeDestinations.includes(bridgeDestNetworkKey as never)) {
+      setBridgeDestNetworkKey(bridgeDestinations[0] ?? null);
+    }
+  }, [activeTab, bridgeDestNetworkKey, bridgeDestinations]);
+
+  // ── Bridge: fetch quote when bridge inputs are ready ───────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    setBridgePlan(null);
+
+    if (activeTab !== "bridge") {
+      setBridgeQuote(null);
+      return () => { cancelled = true; };
+    }
+
+    if (!bridgeReady || !walletAddress || !sellToken || !bridgeDestNetworkKey) {
+      setBridgeQuote(null);
+      return () => { cancelled = true; };
+    }
+
+    if (sellToken.type !== "erc20") {
+      setBridgeQuote(null);
+      return () => { cancelled = true; };
+    }
+
+    if (!sellAmountDecimal.trim()) {
+      setBridgeQuote(null);
+      return () => { cancelled = true; };
+    }
+
+    const debounce = setTimeout(async () => {
+      if (cancelled) return;
+      setErrorState(null);
+
+      try {
+        const destNetworkConfig = getNetworkConfig(bridgeDestNetworkKey as never);
+        // Find the canonical output token on destination via the registry.
+        // Mirror to the same symbol as the source input token by default.
+        const destTokens = TokenRegistryService.listSwapTokensForNetwork(bridgeDestNetworkKey as never);
+        const destOutputToken = destTokens.find(
+          (t) => t.symbol.toLowerCase() === sellToken.symbol.toLowerCase(),
+        );
+        if (!destOutputToken) {
+          throw new Error(`No matching ${sellToken.symbol} on destination network.`);
+        }
+
+        const inputAmountRaw = parseUnits(sellAmountDecimal, sellToken.decimals);
+        if (inputAmountRaw <= 0n) {
+          throw new Error("Bridge amount must be greater than zero.");
+        }
+
+        const q = await BridgeQuoteService.getQuote({
+          sourceNetworkKey: networkKey,
+          sourceChainId: selectedChainId,
+          destNetworkKey: bridgeDestNetworkKey as never,
+          destChainId: destNetworkConfig.chainId,
+          account: walletAddress,
+          inputToken: sellToken,
+          outputToken: destOutputToken,
+          inputAmountRaw,
+        });
+
+        if (cancelled) return;
+        setBridgeQuote(q);
+      } catch (error) {
+        if (cancelled) return;
+        setBridgeQuote(null);
+        const c = classify(error);
+        if (c.kind === "network") {
+          setToast({ message: c.userMessage, severity: c.severity });
+        } else {
+          setErrorState(c);
+        }
+      }
+    }, DEFAULT_QUOTE_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(debounce);
+    };
+  }, [
+    activeTab, bridgeReady, walletAddress, sellToken, sellAmountDecimal,
+    bridgeDestNetworkKey, networkKey, selectedChainId, retryNonce,
+  ]);
+
+  const buildBridgeIntent = (): BridgeIntent | null => {
+    if (!user?.id || !walletId || !walletAddress || !sellToken || !bridgeDestNetworkKey) {
+      return null;
+    }
+    if (sellToken.type !== "erc20") return null;
+
+    const destNetworkConfig = (() => {
+      try { return getNetworkConfig(bridgeDestNetworkKey as never); } catch { return null; }
+    })();
+    if (!destNetworkConfig) return null;
+
+    const destTokens = TokenRegistryService.listSwapTokensForNetwork(bridgeDestNetworkKey as never);
+    const destOutputToken = destTokens.find(
+      (t) => t.symbol.toLowerCase() === sellToken.symbol.toLowerCase(),
+    );
+    if (!destOutputToken) return null;
+
+    return {
+      userId: user.id,
+      aaWalletId: walletId,
+      walletAddress,
+      sourceNetworkKey: networkKey,
+      sourceChainId: selectedChainId,
+      destNetworkKey: bridgeDestNetworkKey as never,
+      destChainId: destNetworkConfig.chainId,
+      inputToken: sellToken,
+      inputAmountDecimal: sellAmountDecimal.trim(),
+      outputToken: destOutputToken,
+      slippageBps: effectiveSlippageBps,
+    };
+  };
+
+  const handleReviewBridge = async () => {
+    const intent = buildBridgeIntent();
+    if (!intent) {
+      setErrorState(classify(new Error("Missing user, wallet, or token context for bridge.")));
+      return;
+    }
+    setErrorState(null);
+    setBridgeBusy(true);
+    try {
+      const plan = await BridgePreparationService.prepareBridge(intent);
+      setBridgePlan(plan);
+    } catch (error) {
+      setBridgePlan(null);
+      const c = classify(error);
+      if (c.kind === "network") {
+        setToast({ message: c.userMessage, severity: c.severity });
+      } else {
+        setErrorState(c);
+      }
+    } finally {
+      setBridgeBusy(false);
+    }
+  };
+
+  const handleExecuteBridge = async () => {
+    const intent = buildBridgeIntent();
+    if (!intent) {
+      setErrorState(classify(new Error("Missing user, wallet, or token context for bridge.")));
+      return;
+    }
+    setErrorState(null);
+    setBridgeBusy(true);
+    try {
+      const result = await BridgeExecutionService.executeBridge(intent, {
+        waitForReceipt: true,
+        receiptTimeoutMs: 60_000,
+        receiptPollIntervalMs: 2_000,
+      });
+
+      if (result.status === "cancelled") {
+        setErrorState(classify(new Error("User cancelled passkey prompt")));
+      } else if (result.status === "failed" && result.error) {
+        setErrorState(classify(new Error(result.error)));
+      } else {
+        setErrorState(null);
+        const transactionId = result.bridgeTransactionId ?? result.approvalTransactionId ?? "";
+        if (transactionId) {
+          navigation.navigate("TransactionStatus", { transactionId });
+        }
+      }
+    } catch (error) {
+      const c = classify(error);
+      if (c.kind === "network") {
+        setToast({ message: c.userMessage, severity: c.severity });
+      } else {
+        setErrorState(c);
+      }
+    } finally {
+      setBridgeBusy(false);
+    }
+  };
 
   const buildIntent = (): SwapIntent | null => {
     if (!user?.id || !walletId || !walletAddress || !sellToken || !buyToken) {
@@ -473,10 +676,28 @@ export const DexScreen: React.FC = () => {
       && walletAddress
       && sellToken
       && buyToken
+      && swapSupported
       && sellAmountDecimal.trim().length > 0
       && quoteReady,
   );
   const canExecute = Boolean(preparedPlan);
+
+  // ── Quote freshness countdown ─────────────────────────────────────────────
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+  useEffect(() => {
+    if (!quote?.expiresAt) return;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [quote?.expiresAt]);
+
+  const quoteSecondsRemaining = useMemo(() => {
+    if (!quote?.expiresAt) return null;
+    const expiresAtMs = new Date(quote.expiresAt).getTime();
+    if (!Number.isFinite(expiresAtMs)) return null;
+    return Math.max(0, Math.ceil((expiresAtMs - nowMs) / 1000));
+  }, [quote?.expiresAt, nowMs]);
+
+  const quoteIsExpired = quoteSecondsRemaining !== null && quoteSecondsRemaining === 0;
 
   const envColor = (() => {
     const env = networkConfig?.environment ?? "local";
@@ -538,11 +759,218 @@ export const DexScreen: React.FC = () => {
               Swap
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity disabled style={[styles.tabBtn, { opacity: 0.35 }]}>
-            <Text style={[styles.tabBtnText, { color: colors.textSecondary }]}>Bridge (soon)</Text>
+          <TouchableOpacity
+            onPress={() => setActiveTab("bridge")}
+            style={[styles.tabBtn, activeTab === "bridge" && { backgroundColor: colors.accent }]}
+          >
+            <Text style={[styles.tabBtnText, { color: activeTab === "bridge" ? colors.textOnAccent : colors.textSecondary }]}>
+              Bridge
+            </Text>
           </TouchableOpacity>
         </View>
 
+        {activeTab === "bridge" && (
+          <>
+            {!bridgeReady && (
+              <View style={[styles.detailsCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                <Text style={[styles.detailLabel, { color: colors.textPrimary, fontSize: 15 }]}>
+                  Cross-chain bridge (Across V3)
+                </Text>
+                <View style={[styles.infoPill, { backgroundColor: `${colors.warning}1F`, borderColor: `${colors.warning}66` }]}>
+                  <Text style={[styles.infoPillText, { color: colors.warning }]}>
+                    No Across SpokePool configured for {networkConfig?.displayName ?? networkKey}. Switch to a network with bridge support.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {bridgeReady && (
+              <>
+                {/* Bridge: source side */}
+                <View style={[styles.swapCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                  <View style={styles.swapSide}>
+                    <View style={styles.swapSideTopRow}>
+                      <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You send</Text>
+                      <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
+                        {"Bal: "}
+                        <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+                          {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
+                        </Text>
+                      </Text>
+                    </View>
+                    <View style={styles.swapSideRow}>
+                      <TouchableOpacity
+                        style={[styles.tokenBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
+                        onPress={() => { setAssetPickerSide("sell"); setIsAssetPickerVisible(true); }}
+                      >
+                        <TokenIcon symbol={sellToken?.symbol ?? "?"} size={26} />
+                        <Text style={[styles.tokenBtnSymbol, { color: colors.textPrimary }]}>
+                          {sellToken?.symbol ?? "Select"}
+                        </Text>
+                        <Feather name="chevron-down" size={13} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                      <TextInput
+                        style={[styles.amountInput, { color: colors.textPrimary }]}
+                        placeholder="0.00"
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType="decimal-pad"
+                        value={sellAmountDecimal}
+                        onChangeText={setSellAmountDecimal}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Destination chain selector row */}
+                  <View style={[styles.swapDivider]}>
+                    <View style={[styles.dividerLine, { backgroundColor: colors.borderMuted }]} />
+                    <View style={[styles.swapDirBtn, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                      <Ionicons name="arrow-down" size={14} color={colors.accent} />
+                    </View>
+                    <View style={[styles.dividerLine, { backgroundColor: colors.borderMuted }]} />
+                  </View>
+
+                  <View style={styles.swapSide}>
+                    <View style={styles.swapSideTopRow}>
+                      <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>To chain</Text>
+                    </View>
+                    <View style={styles.destChainRow}>
+                      {bridgeDestinations.map((dest) => {
+                        const isSelected = dest === bridgeDestNetworkKey;
+                        const destName = (() => {
+                          try { return getNetworkConfig(dest).displayName; } catch { return dest; }
+                        })();
+                        return (
+                          <TouchableOpacity
+                            key={dest}
+                            onPress={() => setBridgeDestNetworkKey(dest)}
+                            style={[
+                              styles.destChainChip,
+                              {
+                                backgroundColor: isSelected ? colors.accent : colors.glass,
+                                borderColor: isSelected ? colors.accent : colors.border,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.destChainChipText,
+                                { color: isSelected ? colors.textOnAccent : colors.textPrimary },
+                              ]}
+                            >
+                              {destName}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </View>
+
+                {/* Bridge details card */}
+                <View style={[styles.detailsCard, { backgroundColor: colors.glass, borderColor: colors.border }]}>
+                  {bridgeQuote ? (
+                    <>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>You receive</Text>
+                        <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
+                          {formatUnits(bridgeQuote.outputAmountRaw, bridgeQuote.outputToken.decimals)}{" "}
+                          {bridgeQuote.outputToken.symbol}
+                        </Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Relayer fee</Text>
+                        <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
+                          {(bridgeQuote.feeBps / 100).toFixed(2)}%
+                        </Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Fill deadline</Text>
+                        <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
+                          {Math.round((bridgeQuote.fillDeadline * 1000 - Date.now()) / 60_000)}m
+                        </Text>
+                      </View>
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Delivered to</Text>
+                        <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
+                          {bridgeQuote.destSwapRequired
+                            ? `${shorten(bridgeQuote.destExecutor ?? "")} (executor)`
+                            : `${shorten(bridgeQuote.destRecipient)} (your wallet)`}
+                        </Text>
+                      </View>
+                    </>
+                  ) : (
+                    <Text style={[styles.detailLabel, { color: colors.textMuted }]}>
+                      {sellAmountDecimal.trim() ? "Calculating bridge quote…" : "Enter an amount to see the bridge quote."}
+                    </Text>
+                  )}
+
+                  {/* Error */}
+                  {errorState ? (
+                    <View
+                      style={[
+                        styles.errorBanner,
+                        {
+                          backgroundColor: errorState.severity === "warning" ? colors.warningSoft : colors.dangerSoft,
+                          borderColor: errorState.severity === "warning" ? `${colors.warning}66` : `${colors.danger}66`,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.errorBannerText,
+                          { color: errorState.severity === "warning" ? colors.warning : colors.danger },
+                        ]}
+                      >
+                        {errorState.userMessage}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Bridge CTA buttons */}
+                {!bridgePlan && (
+                  <TouchableOpacity
+                    style={[
+                      styles.primaryBtn,
+                      { backgroundColor: colors.accent, opacity: bridgeQuote && !bridgeBusy ? 1 : 0.38 },
+                    ]}
+                    onPress={handleReviewBridge}
+                    disabled={!bridgeQuote || bridgeBusy}
+                  >
+                    {bridgeBusy ? (
+                      <ActivityIndicator size="small" color={colors.textOnAccent} />
+                    ) : (
+                      <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>Review Bridge</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {bridgePlan && (
+                  <TouchableOpacity
+                    style={[
+                      styles.secondaryBtn,
+                      { backgroundColor: colors.glass, borderColor: colors.border, opacity: bridgeBusy ? 0.38 : 1 },
+                    ]}
+                    onPress={handleExecuteBridge}
+                    disabled={bridgeBusy}
+                  >
+                    {bridgeBusy ? (
+                      <ActivityIndicator size="small" color={colors.textPrimary} />
+                    ) : (
+                      <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>
+                        Confirm & Bridge
+                        {bridgePlan.approvalRequired ? " (approve + deposit)" : ""}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {activeTab === "swap" && (
+        <>
         {/* Main swap card */}
         <View style={[styles.swapCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           {/* Sell side */}
@@ -634,15 +1062,17 @@ export const DexScreen: React.FC = () => {
 
         {/* Details card */}
         <View style={[styles.detailsCard, { backgroundColor: colors.glass, borderColor: colors.border }]}>
-          {/* Cross-chain refusal */}
-          {sellToken && buyToken && sellToken.chainId !== buyToken.chainId && (
-            <Text style={[styles.detailLabel, { color: colors.warning, textAlign: "center" }]}>
-              Cross-chain swap not supported.
-            </Text>
+          {/* Swap not supported on this network */}
+          {!swapSupported && (
+            <View style={[styles.errorBanner, { backgroundColor: colors.warningSoft, borderColor: `${colors.warning}66` }]}>
+              <Text style={[styles.errorBannerText, { color: colors.warning }]}>
+                Swap is not available on {networkConfig?.displayName ?? networkKey}. Switch to a network where the Uniswap V3 pool has been healthchecked.
+              </Text>
+            </View>
           )}
 
           {/* Quote details */}
-          {quote && sellToken && buyToken && sellToken.chainId === buyToken.chainId && (
+          {quote && sellToken && buyToken && (
             <>
               <View style={styles.detailRow}>
                 <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Estimated receive</Text>
@@ -669,6 +1099,28 @@ export const DexScreen: React.FC = () => {
                   <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Token approval</Text>
                   <View style={[styles.statusPill, { backgroundColor: colors.warningSoft, borderColor: `${colors.warning}59` }]}>
                     <Text style={[styles.statusPillText, { color: colors.warning }]}>Required</Text>
+                  </View>
+                </View>
+              )}
+              {quoteSecondsRemaining !== null && (
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Quote freshness</Text>
+                  <View style={styles.quoteFreshRow}>
+                    <Text
+                      style={[
+                        styles.detailValue,
+                        { color: quoteIsExpired ? colors.warning : colors.textSecondary, textAlign: "right" },
+                      ]}
+                    >
+                      {quoteIsExpired ? "Expired" : `${quoteSecondsRemaining}s`}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setRetryNonce((n) => n + 1)}
+                      hitSlop={8}
+                      style={styles.refreshBtn}
+                    >
+                      <Feather name="refresh-ccw" size={12} color={colors.accent} />
+                    </TouchableOpacity>
                   </View>
                 </View>
               )}
@@ -786,6 +1238,8 @@ export const DexScreen: React.FC = () => {
           >
             <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Confirm & Execute</Text>
           </TouchableOpacity>
+        )}
+        </>
         )}
       </ScrollView>
 
@@ -1050,6 +1504,29 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       paddingHorizontal: 8,
       paddingVertical: 3,
+    },
+    quoteFreshRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    refreshBtn: {
+      padding: 4,
+    },
+    destChainRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    destChainChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+      borderWidth: 1,
+    },
+    destChainChipText: {
+      fontSize: 13,
+      fontWeight: "700",
     },
     statusPillText: {
       fontSize: 11,
