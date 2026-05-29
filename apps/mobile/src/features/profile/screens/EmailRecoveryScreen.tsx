@@ -36,6 +36,9 @@ import { type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
 import { CardSkeleton, EmptyState, Skeleton, TextLineSkeleton } from "@shared/components/ui";
 
+// Flip to true to reveal diagnostics, vault key, and extra-security UI during development.
+const SHOW_ADVANCED_RECOVERY_UI = false;
+
 const shortenHex = (value: string | null | undefined, chars = 6) => {
   if (!value) return "-";
   if (value.length <= chars * 2 + 2) return value;
@@ -90,9 +93,9 @@ const EmailRecoveryScreen: React.FC = () => {
   const [expiryMinutes, setExpiryMinutes] = useState("2940");
   const [securityMode, setSecurityMode] =
     useState<EmailRecoverySecurityMode>("none");
-  // In production builds force "none" so the storage path stays valid
-  // regardless of any stale loaded value. Extra Security UI is __DEV__ only.
-  const effectiveSecurityMode: EmailRecoverySecurityMode = __DEV__ ? securityMode : "none";
+  // Force "none" unless the advanced UI flag is on, so the storage path
+  // stays valid and extra-security code paths can't fire in normal use.
+  const effectiveSecurityMode: EmailRecoverySecurityMode = SHOW_ADVANCED_RECOVERY_UI ? securityMode : "none";
   const [overflowVisible, setOverflowVisible] = useState(false);
   const [vaultKeyInput, setVaultKeyInput] = useState("");
   const [hasVaultKey, setHasVaultKey] = useState(false);
@@ -1246,7 +1249,7 @@ const EmailRecoveryScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {__DEV__ && (
+        {SHOW_ADVANCED_RECOVERY_UI && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Saved Recovery Metadata</Text>
           <Text style={styles.cardDesc}>
@@ -1330,7 +1333,7 @@ const EmailRecoveryScreen: React.FC = () => {
         </View>
         )}
 
-        {__DEV__ && (
+        {SHOW_ADVANCED_RECOVERY_UI && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Privacy & Recovery Kit</Text>
           <Text style={styles.cardDesc}>
@@ -1503,7 +1506,7 @@ const EmailRecoveryScreen: React.FC = () => {
               )}
             </View>
           ))}
-          {__DEV__ && derivedGuardians.length > 0 && (
+          {SHOW_ADVANCED_RECOVERY_UI && derivedGuardians.length > 0 && (
             <View style={styles.payloadBox}>
               <Text style={styles.payloadTitle}>
                 Derived Guardian Contracts
@@ -1624,19 +1627,19 @@ const EmailRecoveryScreen: React.FC = () => {
           {guardianValidationError ? (
             <Text style={styles.moduleError}>{guardianValidationError}</Text>
           ) : null}
-          {__DEV__ && lastUserOpHash && (
+          {SHOW_ADVANCED_RECOVERY_UI && lastUserOpHash && (
             <View style={styles.hashRow}>
               <Text style={styles.hashLabel}>UserOp Hash</Text>
               <Text style={styles.hashValue}>{lastUserOpHash}</Text>
             </View>
           )}
-          {__DEV__ && lastOperationHash && (
+          {SHOW_ADVANCED_RECOVERY_UI && lastOperationHash && (
             <View style={styles.hashRow}>
               <Text style={styles.hashLabel}>Bundler Operation Hash</Text>
               <Text style={styles.hashValue}>{lastOperationHash}</Text>
             </View>
           )}
-          {__DEV__ && lastInstallPayload && (
+          {SHOW_ADVANCED_RECOVERY_UI && lastInstallPayload && (
             <View style={styles.payloadBox}>
               <Text style={styles.payloadTitle}>Latest Install Payload</Text>
               <View style={styles.payloadRow}>
@@ -1698,7 +1701,7 @@ const EmailRecoveryScreen: React.FC = () => {
             )}
           </TouchableOpacity>
 
-          {__DEV__ && (
+          {SHOW_ADVANCED_RECOVERY_UI && (
           <TouchableOpacity
             style={[
               styles.installButton,
@@ -1720,7 +1723,7 @@ const EmailRecoveryScreen: React.FC = () => {
           </TouchableOpacity>
           )}
 
-          {__DEV__ && moduleInstalledState
+          {SHOW_ADVANCED_RECOVERY_UI && moduleInstalledState
             && smartAccountReady
             && effectiveSecurityMode === "extra"
             && recoveryKitAcked === false ? (
