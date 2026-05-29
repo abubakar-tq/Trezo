@@ -339,9 +339,9 @@ Where the new code intersects with concepts in CONTEXT.md or one of the three ne
 - Relayer EOA address on Base Sepolia: `0x6a5a55046e7C5B16945d7178DCCc22aBF2cF7282` (also the `emailRecoveryKillSwitchAuthorizer` in deployment.base-sepolia.json)
 - Relayer EOA Base Sepolia balance at start of work: **0 ETH** — fund from faucet before testing Phase 3.2
 - Vitest pre-existing pass count: **30**
-- Post-work pass count: _(should be 30 + new tests)_
-- Baseline screenshots saved to: `docs/plans/2026-05-29-email-recovery-polish/baseline/`
-- After screenshots saved to: `docs/plans/2026-05-29-email-recovery-polish/after/`
+- Post-work pass count: **30** (Deno edge-function tests deferred — no Deno test runner available in this environment; curl verification of all 3 branches documented in RECOVERY_RUNBOOK.md section 4)
+- Baseline screenshots saved to: `docs/plans/2026-05-29-email-recovery-polish/baseline/` — README with instructions; actual screenshots require running simulator manually (Metro + iOS Sim or Expo Go)
+- After screenshots saved to: `docs/plans/2026-05-29-email-recovery-polish/after/` — capture after manual E2E (Phase 5.4)
 
 ## Out of scope, captured for v2 backlog
 
