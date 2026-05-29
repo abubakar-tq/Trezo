@@ -72,6 +72,16 @@ const RELAYER_TIMEOUT_MS = 30_000;
 
 const normalizeBaseUrl = (baseUrl: string): string => baseUrl.replace(/\/+$/, "");
 
+// Hermes (RN 0.81) doesn't ship the static AbortSignal.timeout() factory even
+// though it has AbortController. Roll our own using setTimeout + abort. The
+// timer is harmless to leak if fetch finishes early — it just calls abort()
+// on an already-settled controller.
+const timeoutSignal = (ms: number): AbortSignal => {
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
+};
+
 export class ZkEmailGenericRelayer implements ZkEmailRelayerAdapter {
   private config: ZkEmailRelayerConfig;
 
@@ -197,22 +207,59 @@ export class ZkEmailGenericRelayer implements ZkEmailRelayerAdapter {
     accountCode: Hex,
     guardianEmailAddr: string,
   ): Promise<Hex | null> {
+    // The relayer returns this one endpoint as Content-Type: text/plain with
+    // the raw hex salt as the body (e.g. "0x2106…"). It is NOT wrapped in JSON
+    // like every other endpoint, so we cannot route through post<T>() — that
+    // would JSON.parse the hex string and crash on the leading "0x".
+    const url = `${normalizeBaseUrl(this.config.baseUrl)}/getAccountSalt`;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.config.apiKey) {
+      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+    }
+
     const body: RelayerAccountSaltRequestBody = {
       account_code: accountCode,
       email_addr: guardianEmailAddr,
     };
 
-    const resp = await this.post<RelayerSaltResponse>("getAccountSalt", body);
-    const salt = resp.account_salt ?? null;
-    if (salt === null) return null;
-    return (salt.startsWith("0x") ? salt : `0x${salt}`) as Hex;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: timeoutSignal(RELAYER_TIMEOUT_MS),
+    });
+
+    const text = (await resp.text().catch(() => "")).trim();
+
+    if (!resp.ok) {
+      throw new Error(
+        `Relayer getAccountSalt returned ${resp.status}: ${text || resp.statusText}`,
+      );
+    }
+
+    if (!text) return null;
+
+    // Older deployments wrap the salt in JSON; new ones return raw hex.
+    // Handle both for forward/backward compatibility.
+    if (text.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(text) as RelayerSaltResponse;
+        const salt = parsed.account_salt ?? null;
+        if (!salt) return null;
+        return (salt.startsWith("0x") ? salt : `0x${salt}`) as Hex;
+      } catch {
+        return null;
+      }
+    }
+
+    return (text.startsWith("0x") ? text : `0x${text}`) as Hex;
   }
 
   async echo(): Promise<boolean> {
     try {
       const resp = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/echo`, {
         method: "GET",
-        signal: AbortSignal.timeout(RELAYER_TIMEOUT_MS),
+        signal: timeoutSignal(RELAYER_TIMEOUT_MS),
       });
       return resp.ok;
     } catch {
@@ -234,17 +281,29 @@ export class ZkEmailGenericRelayer implements ZkEmailRelayerAdapter {
       method: "POST",
       headers,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(RELAYER_TIMEOUT_MS),
+      signal: timeoutSignal(RELAYER_TIMEOUT_MS),
     });
 
+    const text = await resp.text().catch(() => "");
+
     if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
       throw new Error(
         `Relayer ${endpoint} returned ${resp.status}: ${text || resp.statusText}`,
       );
     }
 
-    return (await resp.json()) as T;
+    if (!text) {
+      throw new Error(`Relayer ${endpoint} returned 200 with empty body`);
+    }
+
+    try {
+      return JSON.parse(text) as T;
+    } catch (err) {
+      const preview = text.length > 200 ? `${text.slice(0, 200)}…` : text;
+      throw new Error(
+        `Relayer ${endpoint} returned non-JSON body (status ${resp.status}, ${text.length} bytes): ${preview}`,
+      );
+    }
   }
 
   private mapRelayerStatus(
