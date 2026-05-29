@@ -2,6 +2,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useNotificationsBootstrap } from "@features/notifications/hooks/useNotificationsBootstrap";
 import { useNotificationStore } from "@features/notifications/store/useNotificationStore";
 import { ActivationSheet } from "@features/wallet/components/ActivationSheet";
+import { ChainSwitcherChip } from "@features/wallet/components/ChainSwitcherChip";
 import { SetUpWalletSheet } from "@features/wallet/components/SetUpWalletSheet";
 import { useAccountState } from "@features/wallet/hooks/useAccountState";
 import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
@@ -21,6 +22,7 @@ import {
 } from "@features/wallet/hooks/usePasskeyAuthority";
 import type { SupportedChainId } from "@/src/integration/chains";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -188,9 +190,14 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerLeft}>
             <Text style={styles.headerKicker}>WALLET</Text>
             <Text style={styles.headerBrand}>TREZO</Text>
+            <View style={styles.headerChainRow}>
+              <ChainSwitcherChip
+                onError={(message) => Alert.alert("Could not switch chain", message)}
+              />
+            </View>
           </View>
 
           <View style={styles.headerRight}>
@@ -434,6 +441,14 @@ const createStyles = (colors: ThemeColors) =>
       letterSpacing: -0.5,
       color: colors.textPrimary,
       lineHeight: 30,
+    },
+    headerLeft: {
+      flex: 1,
+      gap: 4,
+    },
+    headerChainRow: {
+      flexDirection: "row",
+      marginTop: 8,
     },
     headerRight: {
       flexDirection: "row",
