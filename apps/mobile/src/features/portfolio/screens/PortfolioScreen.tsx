@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   ScrollView,
   StyleSheet,
@@ -21,6 +22,7 @@ import { useTabContentBottomInset } from "@hooks";
 import { useUserStore } from "../../../store/useUserStore";
 import { useNavigation } from "@react-navigation/native";
 import { ActivationSheet } from "@features/wallet/components/ActivationSheet";
+import { ChainSwitcherChip } from "@features/wallet/components/ChainSwitcherChip";
 import { SetUpWalletSheet } from "@features/wallet/components/SetUpWalletSheet";
 import { useAccountState } from "@features/wallet/hooks/useAccountState";
 import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
@@ -110,9 +112,14 @@ const PortfolioScreen: React.FC = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerLeft}>
             <Text style={styles.headerKicker}>MY VAULT</Text>
             <Text style={styles.headerBrand}>PERFORMANCE</Text>
+            <View style={styles.headerChainRow}>
+              <ChainSwitcherChip
+                onError={(message) => Alert.alert("Could not switch chain", message)}
+              />
+            </View>
           </View>
         </View>
 
@@ -371,6 +378,14 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "900",
       letterSpacing: 2,
       color: colors.textPrimary,
+    },
+    headerLeft: {
+      flex: 1,
+      gap: 4,
+    },
+    headerChainRow: {
+      flexDirection: "row",
+      marginTop: 8,
     },
     sectionWrapper: {
       marginHorizontal: 20,
