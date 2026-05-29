@@ -1,51 +1,27 @@
 import { useTabContentBottomInset } from "@hooks";
 import { Feather } from "@expo/vector-icons";
 import { TabScreenContainer } from "@shared/components";
-import {
-  isUrl,
-  toDestination,
-  useBrowserStore,
-  type BrowserTab,
-} from "@store/useBrowserStore";
+import { toDestination, useBrowserStore, type BrowserTab } from "@store/useBrowserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
+import { useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { WebView } from "react-native-webview";
 import { hashMessage, hashTypedData, type Hex } from "viem";
 import { DiscoverHome } from "../components/discover/DiscoverHome";
+import { BrowserTopBar } from "../components/BrowserTopBar";
+import { BrowserMenuSheet, type BrowserMenuHandle } from "../components/BrowserMenuSheet";
+import { getHostname } from "../utils/url";
 import { INJECTED_PROVIDER_SCRIPT } from "@features/browser/web/injectedProvider.template";
 import { handleRPC } from "@features/browser/web/rpcRouter";
 import { useDAppSessionsStore } from "@features/browser/store/useDAppSessionsStore";
-import {
-  ApproveConnectionSheet,
-  type ApproveHandle,
-} from "@features/browser/components/dapp/ApproveConnectionSheet";
-import {
-  SignMessageSheet,
-  type SignMessageHandle,
-} from "@features/browser/components/dapp/SignMessageSheet";
-import {
-  SignTypedDataSheet,
-  type SignTypedDataHandle,
-} from "@features/browser/components/dapp/SignTypedDataSheet";
-import {
-  SendTransactionSheet,
-  type SendTransactionHandle,
-} from "@features/browser/components/dapp/SendTransactionSheet";
-import {
-  SwitchChainSheet,
-  type SwitchChainHandle,
-} from "@features/browser/components/dapp/SwitchChainSheet";
+import { ApproveConnectionSheet, type ApproveHandle } from "@features/browser/components/dapp/ApproveConnectionSheet";
+import { SignMessageSheet, type SignMessageHandle } from "@features/browser/components/dapp/SignMessageSheet";
+import { SignTypedDataSheet, type SignTypedDataHandle } from "@features/browser/components/dapp/SignTypedDataSheet";
+import { SendTransactionSheet, type SendTransactionHandle } from "@features/browser/components/dapp/SendTransactionSheet";
+import { SwitchChainSheet, type SwitchChainHandle } from "@features/browser/components/dapp/SwitchChainSheet";
 import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { useUserStore } from "@store/useUserStore";
 import PasskeyService from "@features/wallet/services/PasskeyService";
@@ -55,11 +31,34 @@ import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
 import { ActivationSheet } from "@features/wallet/components/ActivationSheet";
 import { DEFAULT_CHAIN_ID, getChainConfig, SUPPORTED_CHAIN_IDS, type SupportedChainId } from "@/src/integration/chains";
 
+// Best-effort prefers-color-scheme hint so theme-aware sites follow the app theme.
+// The guaranteed win is the themed container/WebView background (kills the white flash);
+// this is layered on top. Injected before content loads and re-injected on theme toggle.
+function buildColorSchemeScript(mode: "light" | "dark"): string {
+  return `
+(function () {
+  try {
+    var scheme = ${JSON.stringify(mode)};
+    document.documentElement.style.colorScheme = scheme;
+    var m = document.querySelector('meta[name="color-scheme"]');
+    if (!m) {
+      m = document.createElement("meta");
+      m.setAttribute("name", "color-scheme");
+      if (document.head) document.head.appendChild(m);
+    }
+    m.setAttribute("content", scheme === "dark" ? "dark light" : "light dark");
+  } catch (e) {}
+})();
+true;
+`;
+}
+
 export default function BrowserScreen() {
-  const { theme } = useAppTheme();
+  const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
   const bottomInset = useTabContentBottomInset(-28);
+  const navigation = useNavigation<any>();
 
   // EIP-1193 approval sheet refs
   const approveRef = useRef<ApproveHandle>(null);
@@ -67,6 +66,7 @@ export default function BrowserScreen() {
   const signTypedDataRef = useRef<SignTypedDataHandle>(null);
   const sendTxRef = useRef<SendTransactionHandle>(null);
   const switchChainRef = useRef<SwitchChainHandle>(null);
+  const menuRef = useRef<BrowserMenuHandle>(null);
 
   // Source the smart-account address for dApp sessions
   const aaAccount = useWalletStore((s) => s.aaAccount);
@@ -84,9 +84,11 @@ export default function BrowserScreen() {
   const updateTab = useBrowserStore((state) => state.updateTab);
   const setActiveTab = useBrowserStore((state) => state.setActiveTab);
   const addToHistory = useBrowserStore((state) => state.addToHistory);
+  const sessions = useDAppSessionsStore((state) => state.sessions);
 
   const webRefs = useRef<Map<string, WebView>>(new Map());
   const [text, setText] = useState<string>("");
+  const [editing, setEditing] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -95,6 +97,22 @@ export default function BrowserScreen() {
   const [showHome, setShowHome] = useState(false);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
+
+  const colorSchemeScript = useMemo(() => buildColorSchemeScript(resolvedMode), [resolvedMode]);
+
+  const activeOrigin = useMemo(() => {
+    if (!activeTab?.url) return "";
+    try {
+      return new URL(activeTab.url).origin;
+    } catch {
+      return activeTab.url;
+    }
+  }, [activeTab?.url]);
+
+  const connected = useMemo(
+    () => sessions.some((s) => s.origin === activeOrigin),
+    [sessions, activeOrigin],
+  );
 
   useEffect(() => {
     if (tabs.length === 0) {
@@ -108,12 +126,24 @@ export default function BrowserScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.id, activeTab?.url]);
 
+  // Re-inject the color-scheme hint into all live WebViews when the app theme toggles.
+  useEffect(() => {
+    webRefs.current.forEach((wv) => {
+      try {
+        wv.injectJavaScript(colorSchemeScript);
+      } catch {
+        // webview not ready / detached — ignore
+      }
+    });
+  }, [colorSchemeScript]);
+
   const onSubmit = useCallback(() => {
     if (!text.trim() || !activeTabId) return;
     const dest = toDestination(text, settings.searchEngine);
     updateTab(activeTabId, { url: dest, title: dest });
     setText(dest);
     setShowHome(false);
+    setEditing(false);
   }, [text, activeTabId, settings.searchEngine, updateTab]);
 
   const goBack = useCallback(() => {
@@ -173,96 +203,62 @@ export default function BrowserScreen() {
     [activeTabId, addTab, updateTab],
   );
 
+  const beginEdit = useCallback(() => {
+    setEditing(true);
+    if (activeTab) setText(activeTab.url);
+  }, [activeTab]);
+
+  const handleCopyLink = useCallback(() => {
+    if (activeTab?.url) Clipboard.setStringAsync(activeTab.url);
+  }, [activeTab?.url]);
+
+  const handleShare = useCallback(() => {
+    if (activeTab?.url) Share.share({ message: activeTab.url }).catch(() => {});
+  }, [activeTab?.url]);
+
+  const handleDisconnect = useCallback(() => {
+    if (activeOrigin) useDAppSessionsStore.getState().removeSession(activeOrigin);
+  }, [activeOrigin]);
+
+  const handleOpenSettings = useCallback(() => {
+    navigation.navigate("BrowserSettings");
+  }, [navigation]);
+
   return (
     <TabScreenContainer style={styles.safeArea}>
-      {/* ── Header ──────────────────────────────────── */}
-      <View style={[styles.header, { borderBottomColor: colors.borderMuted }]}>
-        {/* Tab strip */}
-        {tabs.length > 0 && (
-          <View style={styles.tabStrip}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.tabStripContent}
-              style={styles.tabStripScroll}
-            >
-              {tabs.map((tab) => (
-                <TabPill
-                  key={tab.id}
-                  tab={tab}
-                  isActive={tab.id === activeTabId}
-                  onPress={() => handleSwitchTab(tab.id)}
-                  onClose={() => handleCloseTab(tab.id)}
-                  colors={colors}
-                />
-              ))}
-            </ScrollView>
-            <View style={styles.tabActions}>
-              <TouchableOpacity
-                style={[styles.tabAction, { backgroundColor: `${colors.accent}1A`, borderColor: `${colors.accent}33` }]}
-                onPress={handleNewTab}
-                activeOpacity={0.7}
-              >
-                <Feather name="plus" size={15} color={colors.accent} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tabAction, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
-                onPress={() => setShowTabSwitcher(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.tabCount, { color: colors.textPrimary }]}>{tabs.length}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+      {/* ── Slim top bar (browsing only; home uses DiscoverHome's own search) ── */}
+      {!showHome && (
+        <BrowserTopBar
+          url={activeTab?.url ?? ""}
+          text={text}
+          onChangeText={setText}
+          onSubmit={onSubmit}
+          editing={editing}
+          onBeginEdit={beginEdit}
+          onEndEdit={() => setEditing(false)}
+          canGoBack={canGoBack}
+          onBack={goBack}
+          tabCount={tabs.length}
+          onOpenTabs={() => setShowTabSwitcher(true)}
+          onOpenMenu={() => menuRef.current?.present()}
+          colors={colors}
+        />
+      )}
 
-        {/* URL Bar */}
-        <View style={[styles.urlBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-          <Feather
-            name={showHome ? "compass" : isUrl(text) ? "lock" : "search"}
-            size={15}
-            color={isUrl(text) ? colors.success : colors.textMuted}
+      {/* Progress */}
+      {loading && !showHome && (
+        <View style={[styles.progressTrack, { backgroundColor: colors.borderMuted }]}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${Math.min(progress, 1) * 100}%`, backgroundColor: colors.accent },
+            ]}
           />
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            onSubmitEditing={onSubmit}
-            onFocus={() => setShowHome(false)}
-            placeholder="Search or enter URL..."
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType={Platform.select({ ios: "url", default: "default" })}
-            returnKeyType="go"
-            style={[styles.urlInput, { color: colors.textPrimary }]}
-          />
-          <View style={styles.navBtns}>
-            <NavBtn icon="chevron-left" onPress={goBack} disabled={!canGoBack} colors={colors} />
-            <NavBtn icon="chevron-right" onPress={goForward} disabled={!canGoForward} colors={colors} />
-            <NavBtn icon={loading ? "x" : "rotate-cw"} onPress={reload} colors={colors} />
-          </View>
         </View>
+      )}
 
-        {/* Progress */}
-        {loading && (
-          <View style={[styles.progressTrack, { backgroundColor: colors.borderMuted }]}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${Math.min(progress, 1) * 100}%`, backgroundColor: colors.accent },
-              ]}
-            />
-          </View>
-        )}
-      </View>
-
-      {/* ── Content ─────────────────────────────────── */}
-      <View
-        style={[
-          styles.webShell,
-          { borderColor: colors.border, backgroundColor: colors.surfaceCard, marginBottom: bottomInset },
-        ]}
-      >
+      {/* ── Content (full-bleed, themed background) ─────────────── */}
+      <View style={[styles.webShell, { backgroundColor: colors.background, marginBottom: bottomInset }]}>
         {showHome ? (
           <DiscoverHome
             onSubmitSearch={(intent) => {
@@ -282,12 +278,17 @@ export default function BrowserScreen() {
           tabs.map((tab) => (
             <View
               key={tab.id}
-              style={[styles.webViewContainer, { display: tab.id === activeTabId ? "flex" : "none" }]}
+              style={[
+                styles.webViewContainer,
+                { backgroundColor: colors.background, display: tab.id === activeTabId ? "flex" : "none" },
+              ]}
             >
               <WebView
-                ref={(ref) => { if (ref) webRefs.current.set(tab.id, ref); }}
+                ref={(ref) => {
+                  if (ref) webRefs.current.set(tab.id, ref);
+                }}
                 source={{ uri: tab.url }}
-                injectedJavaScriptBeforeContentLoaded={INJECTED_PROVIDER_SCRIPT}
+                injectedJavaScriptBeforeContentLoaded={INJECTED_PROVIDER_SCRIPT + colorSchemeScript}
                 onMessage={(event) => {
                   if (tab.id !== activeTabId) return;
                   let msg: { type?: string; id?: string; method?: string; params?: unknown[] };
@@ -436,7 +437,7 @@ export default function BrowserScreen() {
                 }}
                 applicationNameForUserAgent="TrezoBrowser/1.0"
                 startInLoadingState
-                style={styles.webView}
+                style={[styles.webView, { backgroundColor: colors.background }]}
               />
             </View>
           ))
@@ -454,6 +455,23 @@ export default function BrowserScreen() {
         colors={colors}
       />
 
+      {/* ⋯ menu */}
+      <BrowserMenuSheet
+        ref={menuRef}
+        title={activeTab?.title ?? ""}
+        hostname={getHostname(activeTab?.url ?? "")}
+        connected={connected}
+        canGoForward={canGoForward}
+        onReload={reload}
+        onForward={goForward}
+        onCopyLink={handleCopyLink}
+        onShare={handleShare}
+        onNewTab={handleNewTab}
+        onDisconnect={handleDisconnect}
+        onOpenSettings={handleOpenSettings}
+        colors={colors}
+      />
+
       {/* EIP-1193 dApp approval sheets */}
       <ApproveConnectionSheet ref={approveRef} />
       <SignMessageSheet ref={signMessageRef} />
@@ -464,85 +482,6 @@ export default function BrowserScreen() {
       {/* Activation gate for eth_sendTransaction when not Active on session chain */}
       <ActivationSheet ref={activationSheetRef} />
     </TabScreenContainer>
-  );
-}
-
-// ── Tab Pill ──────────────────────────────────────────────────────────────────
-
-function TabPill({
-  tab,
-  isActive,
-  onPress,
-  onClose,
-  colors,
-}: {
-  tab: BrowserTab;
-  isActive: boolean;
-  onPress: () => void;
-  onClose: () => void;
-  colors: ThemeColors;
-}) {
-  return (
-    <TouchableOpacity
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 11,
-        paddingVertical: 7,
-        borderRadius: 10,
-        borderWidth: 1,
-        gap: 7,
-        minWidth: 90,
-        maxWidth: 160,
-        backgroundColor: isActive ? `${colors.accent}1A` : colors.surfaceElevated,
-        borderColor: isActive ? `${colors.accent}66` : colors.border,
-      }}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <Text
-        style={{
-          fontSize: 12,
-          fontWeight: "600",
-          flex: 1,
-          color: isActive ? colors.accent : colors.textSecondary,
-        }}
-        numberOfLines={1}
-      >
-        {tab.title.length > 16 ? `${tab.title.substring(0, 16)}…` : tab.title}
-      </Text>
-      <TouchableOpacity
-        onPress={(e) => { e.stopPropagation(); onClose(); }}
-        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-      >
-        <Feather name="x" size={12} color={isActive ? colors.accent : colors.textMuted} />
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
-}
-
-// ── Nav Button ────────────────────────────────────────────────────────────────
-
-function NavBtn({
-  icon,
-  onPress,
-  colors,
-  disabled,
-}: {
-  icon: React.ComponentProps<typeof Feather>["name"];
-  onPress: () => void;
-  colors: ThemeColors;
-  disabled?: boolean;
-}) {
-  return (
-    <TouchableOpacity
-      style={{ width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.3 : 1 }}
-      onPress={onPress}
-      disabled={disabled}
-      activeOpacity={0.7}
-    >
-      <Feather name={icon} size={16} color={colors.textSecondary} />
-    </TouchableOpacity>
   );
 }
 
@@ -611,7 +550,10 @@ function TabSwitcherModal({
                   {tab.title}
                 </Text>
                 <TouchableOpacity
-                  onPress={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onCloseTab(tab.id);
+                  }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <Feather name="x" size={16} color={colors.textMuted} />
@@ -625,7 +567,10 @@ function TabSwitcherModal({
 
           <TouchableOpacity
             style={[s.newTabCard, { backgroundColor: `${colors.accent}0D`, borderColor: `${colors.accent}26` }]}
-            onPress={() => { onNewTab(); onClose(); }}
+            onPress={() => {
+              onNewTab();
+              onClose();
+            }}
             activeOpacity={0.7}
           >
             <View style={[s.newTabIcon, { backgroundColor: colors.accent }]}>
@@ -641,49 +586,9 @@ function TabSwitcherModal({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-function createStyles(colors: ThemeColors) {
+function createStyles(_colors: ThemeColors) {
   return StyleSheet.create({
     safeArea: { flex: 1 },
-    header: {
-      paddingHorizontal: 12,
-      paddingTop: 10,
-      paddingBottom: 8,
-      gap: 8,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-    },
-    tabStrip: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-    },
-    tabStripScroll: { flex: 1 },
-    tabStripContent: { gap: 6, paddingRight: 4 },
-    tabActions: { flexDirection: "row", gap: 6 },
-    tabAction: {
-      width: 30,
-      height: 30,
-      borderRadius: 9,
-      borderWidth: 1,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    tabCount: { fontSize: 13, fontWeight: "700" },
-    urlBar: {
-      flexDirection: "row",
-      alignItems: "center",
-      borderRadius: 14,
-      borderWidth: 1,
-      paddingLeft: 12,
-      paddingRight: 4,
-      paddingVertical: Platform.select({ ios: 10, default: 8 }),
-      gap: 8,
-    },
-    urlInput: {
-      flex: 1,
-      fontSize: 14,
-      fontWeight: "500",
-    },
-    navBtns: { flexDirection: "row", alignItems: "center" },
     progressTrack: {
       height: 2,
       width: "100%",
@@ -691,19 +596,13 @@ function createStyles(colors: ThemeColors) {
       overflow: "hidden",
     },
     progressFill: { height: "100%", borderRadius: 1 },
-    webShell: {
-      flex: 1,
-      marginHorizontal: 10,
-      borderRadius: 20,
-      overflow: "hidden",
-      borderWidth: 1,
-    },
+    webShell: { flex: 1 },
     webViewContainer: { flex: 1 },
     webView: { flex: 1 },
   });
 }
 
-function createModalStyles(colors: ThemeColors) {
+function createModalStyles(_colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1 },
     header: {
