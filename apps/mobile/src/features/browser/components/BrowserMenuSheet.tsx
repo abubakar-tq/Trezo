@@ -71,7 +71,7 @@ export const BrowserMenuSheet = forwardRef<BrowserMenuHandle, BrowserMenuSheetPr
     ];
 
     return (
-      <TrezoBottomSheet ref={sheetRef} enableDynamicSizing>
+      <TrezoBottomSheet ref={sheetRef} enableDynamicSizing backgroundColor={colors.background}>
         <View style={styles.body}>
           {/* Site header */}
           <View style={[styles.header, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
