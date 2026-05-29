@@ -160,6 +160,10 @@ export const DexScreen: React.FC = () => {
   const [bridgeQuote, setBridgeQuote] = useState<BridgeQuote | null>(null);
   const [bridgePlan, setBridgePlan] = useState<BridgePlan | null>(null);
   const [bridgeBusy, setBridgeBusy] = useState<boolean>(false);
+  // Resolved destination-chain wallet address (predicted CREATE2 from that
+  // chain's passkey). null = not yet resolved or no row exists on destination.
+  const [destWalletAddress, setDestWalletAddress] = useState<Address | null>(null);
+  const [destWalletLookupError, setDestWalletLookupError] = useState<string | null>(null);
 
   const networkKey = useMemo(() => resolveNetworkKey(selectedChainId), [selectedChainId]);
 
@@ -528,6 +532,12 @@ export const DexScreen: React.FC = () => {
           destNetworkKey: bridgeDestNetworkKey as never,
           destChainId: destNetworkConfig.chainId,
           account: walletAddress,
+          // Pass the resolved dest wallet so the quote's destRecipient and the
+          // "Delivered to" UI reflect the per-chain address, not the source.
+          // If unresolved (lookup still pending or row missing), the quote
+          // falls back to the source address — buildBridgeIntent then refuses
+          // to proceed via the destWalletLookupError gate.
+          destAccount: destWalletAddress ?? undefined,
           inputToken: sellToken,
           outputToken: destOutputToken,
           inputAmountRaw,
@@ -555,8 +565,51 @@ export const DexScreen: React.FC = () => {
   }, [
     activeTab, bridgeReady, walletAddress, sellToken, sellAmountDecimal,
     bridgeDestNetworkKey, networkKey, selectedChainId, retryNonce,
-    effectiveBridgeOutputToken, effectiveSlippageBps,
+    effectiveBridgeOutputToken, effectiveSlippageBps, destWalletAddress,
   ]);
+
+  // Eagerly resolve the destination-chain wallet address so the bridge UI
+  // shows where funds will land BEFORE the user clicks Review/Confirm.
+  // This is the same lookup buildBridgeIntent does — running it here lets the
+  // "Delivered to" row reflect the real per-chain address (which can differ
+  // from the source address after a recovery rotation).
+  useEffect(() => {
+    let cancelled = false;
+    setDestWalletAddress(null);
+    setDestWalletLookupError(null);
+
+    if (!user?.id || !bridgeDestNetworkKey) return () => { cancelled = true; };
+
+    const destNetworkConfig = (() => {
+      try { return getNetworkConfig(bridgeDestNetworkKey as never); } catch { return null; }
+    })();
+    if (!destNetworkConfig) return () => { cancelled = true; };
+
+    (async () => {
+      const walletService = new WalletPersistenceService();
+      try {
+        const destWallet =
+          (await walletService.getAAWalletForNetwork?.(user.id, bridgeDestNetworkKey as never))
+          ?? (await walletService.getAAWalletForChain(user.id, destNetworkConfig.chainId, bridgeDestNetworkKey as never));
+        if (cancelled) return;
+        if (destWallet?.predicted_address) {
+          setDestWalletAddress(destWallet.predicted_address as Address);
+        } else {
+          setDestWalletLookupError(
+            `No Trezo smart account on ${destNetworkConfig.displayName} yet. Switch to that chain and deploy first.`,
+          );
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setDestWalletLookupError(
+          `Could not look up your ${destNetworkConfig.displayName} wallet: `
+            + (err instanceof Error ? err.message : String(err)),
+        );
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [user?.id, bridgeDestNetworkKey]);
 
   // Async because we look up the user's destination-chain wallet so
   // bridged funds arrive at the right address even when the user has
@@ -575,21 +628,19 @@ export const DexScreen: React.FC = () => {
     const destOutputToken = effectiveBridgeOutputToken;
     if (!destOutputToken) return null;
 
-    // Look up the destination-chain smart-account row. If it exists, use
-    // its predicted_address as the recipient. If not, fall back to the
-    // source wallet address - this is the right default for portable
-    // deterministic deploys with the same passkey on both chains.
-    const walletService = new WalletPersistenceService();
-    let destWalletAddress: Address = walletAddress;
-    try {
-      const destWallet =
-        await walletService.getAAWalletForNetwork?.(user.id, bridgeDestNetworkKey as never)
-        ?? await walletService.getAAWalletForChain(user.id, destNetworkConfig.chainId, bridgeDestNetworkKey as never);
-      if (destWallet?.predicted_address) {
-        destWalletAddress = destWallet.predicted_address as Address;
-      }
-    } catch (err) {
-      console.warn("[DexScreen] dest wallet lookup failed; falling back to source address", err);
+    // We MUST have a resolved destination address before bridging. The
+    // resolver effect above caches it into destWalletAddress; if it failed
+    // it surfaces via destWalletLookupError. Silently falling back to the
+    // source address loses funds when recovery has rotated the user's
+    // passkey on one chain but not the other, because the deterministic
+    // CREATE2 address diverges between chains.
+    if (destWalletLookupError) {
+      throw new Error(destWalletLookupError);
+    }
+    if (!destWalletAddress) {
+      throw new Error(
+        `Still resolving your ${destNetworkConfig.displayName} wallet address — try again in a moment.`,
+      );
     }
 
     return {
@@ -1092,10 +1143,38 @@ export const DexScreen: React.FC = () => {
                         <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Delivered to</Text>
                         <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
                           {bridgeQuote.destSwapRequired
-                            ? `${shorten(bridgeQuote.destExecutor ?? "")} (executor)`
-                            : `${shorten(bridgeQuote.destRecipient)} (your wallet)`}
+                            ? `${shorten(bridgeQuote.destExecutor ?? "")} (executor → your dest wallet)`
+                            : `${shorten(destWalletAddress ?? bridgeQuote.destRecipient)} (your dest wallet)`}
                         </Text>
                       </View>
+                      {destWalletAddress
+                        && walletAddress
+                        && destWalletAddress.toLowerCase() !== walletAddress.toLowerCase() && (
+                        <View
+                          style={[
+                            styles.errorBanner,
+                            { backgroundColor: colors.warningSoft, borderColor: `${colors.warning}66` },
+                          ]}
+                        >
+                          <Text style={[styles.errorBannerText, { color: colors.warning }]}>
+                            Heads up — your destination address ({shorten(destWalletAddress)}) differs
+                            from your source address ({shorten(walletAddress)}). This usually means a
+                            recovery rotation. Funds will go to the destination address.
+                          </Text>
+                        </View>
+                      )}
+                      {destWalletLookupError && (
+                        <View
+                          style={[
+                            styles.errorBanner,
+                            { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}66` },
+                          ]}
+                        >
+                          <Text style={[styles.errorBannerText, { color: colors.danger }]}>
+                            {destWalletLookupError}
+                          </Text>
+                        </View>
+                      )}
                     </>
                   ) : (
                     <Text style={[styles.detailLabel, { color: colors.textMuted }]}>
@@ -1131,10 +1210,16 @@ export const DexScreen: React.FC = () => {
                   <TouchableOpacity
                     style={[
                       styles.primaryBtn,
-                      { backgroundColor: colors.accent, opacity: bridgeQuote && !bridgeBusy ? 1 : 0.38 },
+                      {
+                        backgroundColor: colors.accent,
+                        opacity:
+                          bridgeQuote && !bridgeBusy && destWalletAddress && !destWalletLookupError
+                            ? 1
+                            : 0.38,
+                      },
                     ]}
                     onPress={handleReviewBridge}
-                    disabled={!bridgeQuote || bridgeBusy}
+                    disabled={!bridgeQuote || bridgeBusy || !destWalletAddress || !!destWalletLookupError}
                   >
                     {bridgeBusy ? (
                       <ActivityIndicator size="small" color={colors.textOnAccent} />
