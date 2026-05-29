@@ -25,6 +25,7 @@ import {
   DEFAULT_CHAIN_ID,
   type SupportedChainId,
 } from "@/src/integration/chains";
+import { getDefaultNetworkForChain } from "@/src/integration/networks";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
@@ -901,6 +902,19 @@ const EmailRecoveryScreen: React.FC = () => {
   ]);
 
   const handleInstallModule = useCallback(async () => {
+    // ADR-0006: email recovery UI is gated to chains where the ZK Email
+    // hosted relayer runs. Block immediately on tap so the user isn't
+    // surprised after filling in guardian emails.
+    const networkConfig = getDefaultNetworkForChain(resolvedChainId);
+    if (!networkConfig?.emailRecoverySupported) {
+      const chainName = networkConfig?.name ?? `chain ${resolvedChainId}`;
+      Alert.alert(
+        "Not available on this chain",
+        `Email recovery is only available on Base Sepolia right now. Switch chains and try again.\n\nYou're currently on ${chainName}.`,
+      );
+      return;
+    }
+
     if (!smartAccountReady || !smartAccountAddress) {
       Alert.alert(
         "Wallet Required",
@@ -1073,6 +1087,7 @@ const EmailRecoveryScreen: React.FC = () => {
     trimmedGuardians,
     user?.id,
     effectiveSecurityMode,
+    // networkConfig is derived from resolvedChainId; no need to list separately
   ]);
 
   const handleAcknowledgeRecoveryKit = useCallback(async () => {
