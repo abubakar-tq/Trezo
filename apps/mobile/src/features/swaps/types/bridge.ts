@@ -22,8 +22,19 @@ import type { Address, Hex } from "viem";
 export type BridgeIntent = {
   userId: string;
   aaWalletId: string;
-  /** Same on every chain — smart account is deployed deterministically. */
+  /**
+   * The user's smart-account address on the SOURCE chain (depositor).
+   * Same as destWalletAddress on portable chains with matching passkeys.
+   */
   walletAddress: Address;
+  /**
+   * The user's smart-account address on the DESTINATION chain (recipient).
+   * For portable deterministic deploys with the same passkey this matches
+   * walletAddress; when recovery has rotated keys or the user activated
+   * with different passkeys on different chains, this can differ.
+   * Falls back to walletAddress when no destination wallet row exists.
+   */
+  destWalletAddress: Address;
 
   /** Source chain (where deposit happens). */
   sourceNetworkKey: NetworkKey;

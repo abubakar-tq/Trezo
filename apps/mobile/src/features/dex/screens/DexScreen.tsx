@@ -511,7 +511,10 @@ export const DexScreen: React.FC = () => {
     effectiveBridgeOutputToken, effectiveSlippageBps,
   ]);
 
-  const buildBridgeIntent = (): BridgeIntent | null => {
+  // Async because we look up the user's destination-chain wallet so
+  // bridged funds arrive at the right address even when the user has
+  // different addresses across chains (e.g. after a recovery rotation).
+  const buildBridgeIntent = async (): Promise<BridgeIntent | null> => {
     if (!user?.id || !walletId || !walletAddress || !sellToken || !bridgeDestNetworkKey) {
       return null;
     }
@@ -525,10 +528,28 @@ export const DexScreen: React.FC = () => {
     const destOutputToken = effectiveBridgeOutputToken;
     if (!destOutputToken) return null;
 
+    // Look up the destination-chain smart-account row. If it exists, use
+    // its predicted_address as the recipient. If not, fall back to the
+    // source wallet address - this is the right default for portable
+    // deterministic deploys with the same passkey on both chains.
+    const walletService = new WalletPersistenceService();
+    let destWalletAddress: Address = walletAddress;
+    try {
+      const destWallet =
+        await walletService.getAAWalletForNetwork?.(user.id, bridgeDestNetworkKey as never)
+        ?? await walletService.getAAWalletForChain(user.id, destNetworkConfig.chainId, bridgeDestNetworkKey as never);
+      if (destWallet?.predicted_address) {
+        destWalletAddress = destWallet.predicted_address as Address;
+      }
+    } catch (err) {
+      console.warn("[DexScreen] dest wallet lookup failed; falling back to source address", err);
+    }
+
     return {
       userId: user.id,
       aaWalletId: walletId,
       walletAddress,
+      destWalletAddress,
       sourceNetworkKey: networkKey,
       sourceChainId: selectedChainId,
       destNetworkKey: bridgeDestNetworkKey as never,
@@ -541,7 +562,7 @@ export const DexScreen: React.FC = () => {
   };
 
   const handleReviewBridge = async () => {
-    const intent = buildBridgeIntent();
+    const intent = await buildBridgeIntent();
     if (!intent) {
       setErrorState(classify(new Error("Missing user, wallet, or token context for bridge.")));
       return;
@@ -565,7 +586,7 @@ export const DexScreen: React.FC = () => {
   };
 
   const handleExecuteBridge = async () => {
-    const intent = buildBridgeIntent();
+    const intent = await buildBridgeIntent();
     if (!intent) {
       setErrorState(classify(new Error("Missing user, wallet, or token context for bridge.")));
       return;

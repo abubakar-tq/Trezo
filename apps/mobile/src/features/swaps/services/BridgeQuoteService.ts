@@ -31,7 +31,15 @@ export type BridgeQuoteRequest = {
   sourceChainId: SupportedChainId;
   destNetworkKey: NetworkKey;
   destChainId: SupportedChainId;
+  /** Source-chain depositor address (the wallet that signs depositV3). */
   account: Address;
+  /**
+   * Destination-chain recipient address. For same-asset bridges this is
+   * exactly where the SpokePool delivers funds. For cross-chain swaps it's
+   * carried inside the BridgeMessage and used by the executor to forward
+   * swapped tokens. Defaults to `account` if the caller does not pass one.
+   */
+  destAccount?: Address;
   inputToken: TokenMetadata;
   outputToken: TokenMetadata;
   inputAmountRaw: bigint;
@@ -93,9 +101,10 @@ export class BridgeQuoteService {
       );
     }
 
+    const effectiveDestAccount: Address = request.destAccount ?? request.account;
     const destRecipient: Address = destSwapRequired
       ? (destConfig!.crossChainExecutor as Address)
-      : request.account;
+      : effectiveDestAccount;
 
     // Flat fee on the input amount. The Across V3 outputAmount is what the
     // recipient receives BEFORE any destination-side swap. The relayer fills

@@ -272,6 +272,7 @@ export class BridgePreparationService {
       destNetworkKey: intent.destNetworkKey,
       destChainId: intent.destChainId,
       account: intent.walletAddress,
+      destAccount: intent.destWalletAddress,
       inputToken,
       outputToken,
       inputAmountRaw,
@@ -291,7 +292,10 @@ export class BridgePreparationService {
     // (recipient, buyToken, minOut, feeTier, deadline) for it to decode.
     const bridgeMessage: Hex = quote.destSwapRequired
       ? encodeBridgeMessage({
-          recipient: intent.walletAddress,
+          // Recipient on the DESTINATION chain - the wallet that should
+          // receive the executor's swapped tokens. Falls back to source
+          // address (deterministic match on portable chains).
+          recipient: intent.destWalletAddress,
           buyToken: outputToken.address as Address,
           minOut: quote.destSwap!.minOutRaw,
           feeTier: quote.destSwap!.feeTier,
