@@ -53,7 +53,7 @@ import { SmartAccountExecutionService } from "@features/wallet/services/SmartAcc
 import { useAccountState } from "@features/wallet/hooks/useAccountState";
 import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
 import { ActivationSheet } from "@features/wallet/components/ActivationSheet";
-import { getChainConfig, SUPPORTED_CHAIN_IDS, type SupportedChainId } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, getChainConfig, SUPPORTED_CHAIN_IDS, type SupportedChainId } from "@/src/integration/chains";
 
 export default function BrowserScreen() {
   const { theme } = useAppTheme();
@@ -311,6 +311,9 @@ export default function BrowserScreen() {
                     {
                       webview,
                       origin,
+                      defaultChainId: DEFAULT_CHAIN_ID,
+                      findSession: (o) => useDAppSessionsStore.getState().findSession(o),
+                      touchSession: (o) => useDAppSessionsStore.getState().touchSession(o),
                       requestApproval: async (o, chainId) => {
                         const ok = await approveRef.current?.ask(o);
                         if (!ok) return null;
