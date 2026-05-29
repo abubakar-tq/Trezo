@@ -322,6 +322,37 @@ type BundlerGasEstimate = RpcEstimateUserOperationGasReturnType<typeof ENTRY_POI
   maxPriorityFeePerGas?: Hex;
 };
 
+/**
+ * Pimlico's pimlico_getUserOperationGasPrice — returns slow/standard/fast tiers
+ * the bundler will accept right now. Non-Pimlico bundlers (e.g. Alto on Anvil)
+ * don't implement this method; we silently fall back so the caller can use a
+ * sane default.
+ *
+ * Why this matters: Pimlico enforces a minimum maxFeePerGas that varies with
+ * network conditions. Sending below that minimum gets rejected with
+ * "max feePerGas must be at least <X>". Calling this method first guarantees
+ * the values we submit are above the floor.
+ */
+const fetchPimlicoGasPrice = async (
+  bundler: RpcRequestClient,
+): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } | null> => {
+  try {
+    const res = (await bundler.request({
+      method: "pimlico_getUserOperationGasPrice",
+      params: [],
+    })) as
+      | { standard?: { maxFeePerGas: Hex; maxPriorityFeePerGas: Hex } }
+      | null;
+    if (!res?.standard) return null;
+    return {
+      maxFeePerGas: toBigInt(res.standard.maxFeePerGas),
+      maxPriorityFeePerGas: toBigInt(res.standard.maxPriorityFeePerGas),
+    };
+  } catch {
+    return null;
+  }
+};
+
 const toBigInt = (value: bigint | number | string): bigint =>
   typeof value === "bigint" ? value : BigInt(value);
 
@@ -645,6 +676,12 @@ const buildSmartAccountExecuteUserOp = async ({
     nonceKey,
   });
 
+  // Fetch the bundler's currently-acceptable gas price BEFORE constructing the
+  // userOp. Pimlico rejects userOps whose maxFeePerGas falls below its current
+  // minimum; this avoids the "max feePerGas must be at least X" failure.
+  const bundler = getBundlerClient(bundlerUrl, chainId);
+  const pimlicoGas = await fetchPimlicoGasPrice(bundler);
+
   const userOp: UserOperation<typeof ENTRY_POINT_VERSION> = {
     sender: smartAccountAddress,
     nonce: resolvedNonce,
@@ -652,12 +689,11 @@ const buildSmartAccountExecuteUserOp = async ({
     callGasLimit,
     verificationGasLimit,
     preVerificationGas,
-    maxFeePerGas: maxFeePerGas ?? 1_000_000_000n,
-    maxPriorityFeePerGas: maxPriorityFeePerGas ?? 1_000_000n,
+    maxFeePerGas: maxFeePerGas ?? pimlicoGas?.maxFeePerGas ?? 1_000_000_000n,
+    maxPriorityFeePerGas:
+      maxPriorityFeePerGas ?? pimlicoGas?.maxPriorityFeePerGas ?? 1_000_000n,
     signature: buildDummyPasskeySignature(passkeyId),
   };
-
-  const bundler = getBundlerClient(bundlerUrl, chainId);
   await ensureBundlerSupportsEntryPoint({ bundler, bundlerUrl, entryPoint, operationLabel });
 
   const userOpForEstimation = await maybeSponsorUserOp({
@@ -957,6 +993,12 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
   const dummySignature = buildDummyPasskeySignature(params.passkeyInit.idRaw);
   debugLog("[buildCreateAccountUserOp] Dummy signature bytes:", hexByteLength(dummySignature));
 
+  // Fetch Pimlico's acceptable gas price first so the create-account userOp
+  // is not rejected with "max feePerGas must be at least X" on chains where
+  // Pimlico enforces a floor above our default.
+  const bundler = getBundlerClient(params.bundlerUrl, params.chainId);
+  const pimlicoGas = await fetchPimlicoGasPrice(bundler);
+
   const userOp: UserOperation<typeof ENTRY_POINT_VERSION> = {
     sender,
     nonce: params.nonce ?? 0n,
@@ -966,13 +1008,12 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
     callGasLimit: 1_000_000n,
     verificationGasLimit: 1_000_000n,
     preVerificationGas: 200_000n,
-    // Keep gas price low so total gas stays under common bundler caps (20m)
-    maxFeePerGas: params.maxFeePerGas ?? 10_000_000n,
-    maxPriorityFeePerGas: params.maxPriorityFeePerGas ?? 1_000_000n,
+    // Pimlico's standard tier when available, else low default for local Alto.
+    maxFeePerGas: params.maxFeePerGas ?? pimlicoGas?.maxFeePerGas ?? 10_000_000n,
+    maxPriorityFeePerGas:
+      params.maxPriorityFeePerGas ?? pimlicoGas?.maxPriorityFeePerGas ?? 1_000_000n,
     signature: dummySignature,
   };
-
-  const bundler = getBundlerClient(params.bundlerUrl, params.chainId);
 
   await ensureBundlerSupportsEntryPoint({
     bundler,
