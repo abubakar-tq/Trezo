@@ -1,6 +1,7 @@
 import type { Address, PublicClient } from "viem";
 
 import type { SupportedChainId } from "@/src/integration/chains";
+import { resolveNetworkKey } from "@/src/integration/networks";
 import { TokenRegistryService } from "@/src/features/assets/services/TokenRegistryService";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 
@@ -32,8 +33,19 @@ const ERC20_BALANCE_OF_ABI = [
 
 type TokenLister = (chainId: SupportedChainId) => TokenMetadata[];
 
-const defaultTokenLister: TokenLister = (chainId) =>
-  TokenRegistryService.listTokens(chainId);
+// Use the network-key-aware token list so builtin ERC20s registered via
+// BUILTIN_TOKENS_BY_NETWORK (Sepolia USDC/WETH, Base Sepolia USDC/WETH/LINK
+// etc.) are included in the portfolio discovery. The legacy chain-id list
+// only returned native + deployment-manifest tokens and silently skipped
+// the builtins, so user balances of those tokens did not show in the
+// BalanceCard.
+const defaultTokenLister: TokenLister = (chainId) => {
+  try {
+    return TokenRegistryService.listTokensForNetwork(resolveNetworkKey(chainId));
+  } catch {
+    return TokenRegistryService.listTokens(chainId);
+  }
+};
 
 export class RegistryDiscoveryProvider implements TokenDiscoveryProvider {
   constructor(private readonly tokenLister: TokenLister = defaultTokenLister) {}

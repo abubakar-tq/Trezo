@@ -52,10 +52,36 @@ const getIcon = (tx: WalletTransaction): keyof typeof Feather.glyphMap => {
   return "activity";
 };
 
+// Pull a (decimals, symbol, rawAmount) tuple from a swap row's metadata
+// so the activity feed can show what was BOUGHT next to what was SENT.
+// Falls back gracefully when the metadata isn't shaped as expected.
+const formatBuySide = (tx: WalletTransaction): string | null => {
+  if (tx.type !== "swap" && tx.type !== "cross_chain_swap") return null;
+  const meta = (tx.metadata ?? {}) as Record<string, unknown>;
+  const buyToken = meta.buyToken as { symbol?: string; decimals?: number } | undefined;
+  const rawStr = (meta.estimatedBuyAmountRaw ?? meta.minimumBuyAmountRaw) as string | undefined;
+  if (!buyToken?.symbol || typeof buyToken.decimals !== "number" || !rawStr) return null;
+  let amount = 0;
+  try {
+    const raw = BigInt(rawStr);
+    // tiny manual formatUnits avoids importing viem just for this
+    const divisor = 10n ** BigInt(buyToken.decimals);
+    const whole = raw / divisor;
+    const frac = raw % divisor;
+    const fracStr = frac.toString().padStart(buyToken.decimals, "0").slice(0, 4).replace(/0+$/, "");
+    amount = parseFloat(`${whole}.${fracStr || "0"}`);
+  } catch {
+    return null;
+  }
+  return `+${amount} ${buyToken.symbol}`;
+};
+
 const getAmountText = (tx: WalletTransaction): string => {
   if (!tx.amountDisplay || !tx.tokenSymbol) return "-";
   const sign = tx.direction === "outgoing" ? "-" : tx.direction === "incoming" ? "+" : "";
-  return `${sign}${tx.amountDisplay} ${tx.tokenSymbol}`;
+  const sellSide = `${sign}${tx.amountDisplay} ${tx.tokenSymbol}`;
+  const buySide = formatBuySide(tx);
+  return buySide ? `${sellSide} → ${buySide}` : sellSide;
 };
 
 export const TransactionListItem: React.FC<{
