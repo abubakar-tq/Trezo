@@ -110,6 +110,4 @@ export default createConfig({
       },
     },
   },
-  // HealthBeat block interval only makes sense with the local Anvil chain present.
-  ...(includeAnvil ? { blocks: { HealthBeat: { chain: "anvilLocal", interval: 100, startBlock: 0 } } } : {}),
 });
