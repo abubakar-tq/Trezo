@@ -336,7 +336,7 @@ Where the new code intersects with concepts in CONTEXT.md or one of the three ne
 
 ## Operational notes (fill in during execution)
 
-- Relayer EOA address on Base Sepolia: `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`
+- Relayer EOA address on Base Sepolia: `0x6a5a55046e7C5B16945d7178DCCc22aBF2cF7282` (also the `emailRecoveryKillSwitchAuthorizer` in deployment.base-sepolia.json)
 - Relayer EOA Base Sepolia balance at start of work: **0 ETH** — fund from faucet before testing Phase 3.2
 - Vitest pre-existing pass count: **30**
 - Post-work pass count: _(should be 30 + new tests)_
