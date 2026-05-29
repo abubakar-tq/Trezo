@@ -151,9 +151,16 @@ export class RampService {
 
 
   /**
-   * Called by TransakWebViewModal when TRANSAK_ORDER_SUCCESSFUL fires.
-   * Forwards the event to onramp-webhook so the DB order status is updated
-   * without needing Transak to have our webhook URL registered.
+   * Optimistic, NON-AUTHORITATIVE nudge fired when the widget reports
+   * TRANSAK_ORDER_SUCCESSFUL. It sends an *unsigned* object payload, which
+   * onramp-webhook deliberately ignores (HTTP 202) — a client can never be
+   * trusted to complete an order or move funds.
+   *
+   * Authoritative completion comes from Transak's *signed* webhook (the data
+   * field is a JWT verified against our Partner Access Token; the webhook URL
+   * must be registered in the Transak dashboard) and is surfaced to the UI by
+   * polling ramp_orders. This call is kept only so a future revision could use
+   * it for a fast UX transition — it must stay non-authoritative.
    */
   static async notifyWebhook(orderId: string, transakData: any): Promise<void> {
     const supabase = getSupabaseClient();
@@ -169,9 +176,32 @@ export class RampService {
       },
     });
     if (error) {
-      console.error('[RampService] notifyWebhook failed:', error);
-      // Non-fatal: don't throw — polling will pick up status changes
+      // Expected to be ignored server-side; polling is the source of truth.
+      console.log('[RampService] notifyWebhook hint not applied (non-fatal):', error?.message ?? error);
     }
+  }
+
+  /**
+   * PRIMARY completion path for Transak orders. Asks the backend to pull the
+   * order's real status directly from Transak (keyed by our partnerOrderId) and,
+   * on a real completion, deliver funds — then returns the fresh order row.
+   *
+   * Safe to call repeatedly (idempotent server-side); errors are swallowed so
+   * the polling loop keeps trying. Does not depend on a registered webhook.
+   */
+  static async verifyOrder(orderId: string): Promise<RampOrder> {
+    const supabase = getSupabaseClient();
+    try {
+      const token = await this.getAuthToken();
+      await supabase.functions.invoke('verify-onramp-order', {
+        body: { orderId },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (err) {
+      console.log('[RampService] verifyOrder non-fatal:', (err as any)?.message ?? err);
+    }
+    // Always return the freshest DB state, whether or not verify advanced it.
+    return this.getOrder(orderId);
   }
 
   /**

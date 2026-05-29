@@ -183,7 +183,7 @@ export const TransakWebViewModal: React.FC<Props> = ({
         {/* Staging notice */}
         <View style={[styles.stagingBanner, { backgroundColor: `${colors.warning}22` }]}>
           <Text style={[styles.stagingText, { color: colors.warning }]}>
-            TESTNET — Test card: 4242 4242 4242 4242 · Any future date · Any CVV
+            TESTNET — Card 4242 4242 4242 4242 · Exp 10/33 · CVV 100 · 3DS: Checkout1!
           </Text>
         </View>
 

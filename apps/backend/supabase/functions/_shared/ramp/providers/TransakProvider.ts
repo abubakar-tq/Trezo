@@ -1,12 +1,22 @@
-import { IRampProvider, CreateSessionParams, OnRampSession, RampStatus } from "../types.ts";
+import { IRampProvider, CreateSessionParams, OnRampSession, WebhookResult, OrderStatusResult } from "../types.ts";
+import { mapTransakStatus } from "../status.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { jwtVerify } from "npm:jose@5";
 
 export class TransakProvider implements IRampProvider {
   private supabase;
   private apiKey: string;
+  private apiSecret: string;
   private baseUrl: string;
   private apiGatewayUrl: string;
+  /** Partner API host (refresh-token lives here, NOT on the api-gateway host). */
+  private partnerApiUrl: string;
   private transakEnv: string;
+
+  // Partner Access Token cache. Token is a JWT valid for 7 days; we re-fetch a
+  // few minutes before expiry. Used as the HMAC secret to verify webhook JWTs.
+  private accessToken: string | null = null;
+  private accessTokenExpiresAt = 0; // unix seconds
 
   constructor() {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -17,15 +27,78 @@ export class TransakProvider implements IRampProvider {
 
     this.apiKey = Deno.env.get("TRANSAK_STAGING_API_KEY") ||
       Deno.env.get("TRANSAK_API_KEY") || "";
+    this.apiSecret = Deno.env.get("TRANSAK_API_SECRET") ||
+      Deno.env.get("TRANSAK_STAGING_API_SECRET") || "";
 
     if (this.transakEnv === "PRODUCTION") {
       this.baseUrl = "https://global.transak.com";
       this.apiGatewayUrl = "https://api-gateway.transak.com";
+      this.partnerApiUrl = "https://api.transak.com";
     } else {
       // staging-global.transak.com is the correct staging widget domain.
       // global-stg.transak.com is the API gateway pattern, not the widget.
       this.baseUrl = "https://staging-global.transak.com";
       this.apiGatewayUrl = "https://api-gateway-stg.transak.com";
+      this.partnerApiUrl = "https://api-stg.transak.com";
+    }
+  }
+
+  /**
+   * Fetch (and cache) the Partner Access Token used to both call authenticated
+   * Transak endpoints and verify webhook JWTs.
+   *
+   * Transak docs — Create Partner Access Token:
+   *   POST {partnerApiUrl}/partners/api/v2/refresh-token
+   *   header: api-secret: <API_SECRET>
+   *   body:   { "apiKey": "<API_KEY>" }
+   *   resp:   { data: { accessToken: <JWT, 7d>, expiresAt: <unix sec> } }
+   *
+   * Returns null if credentials are missing or the call fails — callers must
+   * treat a null token as "cannot verify" and refuse to trust the payload.
+   */
+  private async getAccessToken(): Promise<string | null> {
+    if (!this.apiKey || !this.apiSecret) {
+      console.warn(
+        "[TransakProvider] TRANSAK_API_SECRET or api key missing — cannot fetch access token / verify webhooks"
+      );
+      return null;
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (this.accessToken && nowSec < this.accessTokenExpiresAt - 300) {
+      return this.accessToken;
+    }
+
+    try {
+      const resp = await fetch(`${this.partnerApiUrl}/partners/api/v2/refresh-token`, {
+        method: "POST",
+        headers: {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "api-secret": this.apiSecret,
+        },
+        body: JSON.stringify({ apiKey: this.apiKey }),
+      });
+
+      if (!resp.ok) {
+        console.error(
+          `[TransakProvider] refresh-token failed ${resp.status}: ${(await resp.text()).slice(0, 200)}`
+        );
+        return null;
+      }
+
+      const j = await resp.json();
+      const token = j?.data?.accessToken || j?.accessToken || null;
+      const expiresAt = Number(j?.data?.expiresAt || j?.expiresAt || nowSec + 7 * 24 * 3600);
+      if (token) {
+        this.accessToken = token;
+        this.accessTokenExpiresAt = expiresAt;
+        console.log("[TransakProvider] Fetched Partner Access Token (expires", expiresAt, ")");
+      }
+      return token;
+    } catch (e) {
+      console.error("[TransakProvider] refresh-token error:", e);
+      return null;
     }
   }
 
@@ -57,6 +130,10 @@ export class TransakProvider implements IRampProvider {
     // Passing it as a URL param causes Transak to return "Something went wrong".
     const widgetParams: Record<string, unknown> = {
       apiKey: this.apiKey,
+      // REQUIRED by the Create Widget URL API. Must be whitelisted in the Transak
+      // dashboard for PRODUCTION; staging accepts any value. Mobile has no real
+      // referrer, so we send a configured stand-in domain.
+      referrerDomain: Deno.env.get("TRANSAK_REFERRER_DOMAIN") || "trezo.app",
       walletAddress: params.walletAddress,
       disableWalletAddressForm: true,
       fiatCurrency: params.fiatCurrency,
@@ -71,48 +148,49 @@ export class TransakProvider implements IRampProvider {
       colorMode: "dark",
     };
 
-    // 3. Try Create Widget URL API (signed one-time URL, preferred approach).
-    // Transak docs: POST body must include top-level `apiKey` in addition to
-    // `widgetParams`. Response shape: { widgetUrl: "...", sessionId: "..." }.
+    // 3. Create Widget URL API (signed one-time URL — now the MANDATORY path;
+    //    raw query params are being deprecated by Transak). Per docs:
+    //      POST {apiGatewayUrl}/api/v2/auth/session
+    //      header: access-token: <Partner Access Token>   (NOT the raw api key)
+    //      body:   { widgetParams: { apiKey, ... } }
+    //      resp:   { data: { widgetUrl } }   (valid 5 min, single-use)
     let widgetUrl: string | null = null;
-    try {
-      const sessionResp = await fetch(`${this.apiGatewayUrl}/api/v2/auth/session`, {
-        method: "POST",
-        headers: {
-          "access-token": this.apiKey,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ apiKey: this.apiKey, widgetParams }),
-      });
+    const accessToken = await this.getAccessToken();
+    if (accessToken) {
+      try {
+        const sessionResp = await fetch(`${this.apiGatewayUrl}/api/v2/auth/session`, {
+          method: "POST",
+          headers: {
+            "access-token": accessToken,
+            "content-type": "application/json",
+            "accept": "application/json",
+          },
+          body: JSON.stringify({ widgetParams }),
+        });
 
-      if (sessionResp.ok) {
-        const sessionData = await sessionResp.json();
-        // Transak returns { widgetUrl, sessionId } at the top level.
-        // Older versions wrapped it in data: { url } or data: { accessId }.
-        widgetUrl =
-          sessionData?.widgetUrl ||
-          sessionData?.data?.widgetUrl ||
-          sessionData?.data?.url ||
-          (sessionData?.data?.accessId
-            ? `${this.baseUrl}?at=${sessionData.data.accessId}`
-            : null) ||
-          (sessionData?.accessId
-            ? `${this.baseUrl}?at=${sessionData.accessId}`
-            : null);
-        if (widgetUrl) {
-          console.log("[TransakProvider] Got signed widget URL from session API");
+        if (sessionResp.ok) {
+          const sessionData = await sessionResp.json();
+          widgetUrl = sessionData?.data?.widgetUrl || sessionData?.widgetUrl || null;
+          if (widgetUrl) {
+            console.log("[TransakProvider] Got signed widget URL from session API");
+          } else {
+            console.warn(
+              "[TransakProvider] Session API ok but no widgetUrl:",
+              JSON.stringify(sessionData).slice(0, 300)
+            );
+          }
         } else {
-          console.warn("[TransakProvider] Session API ok but no widgetUrl in response:", JSON.stringify(sessionData).slice(0, 300));
+          const errText = await sessionResp.text();
+          console.warn(`[TransakProvider] Create Widget URL API returned ${sessionResp.status}: ${errText.slice(0, 300)}`);
         }
-      } else {
-        const errText = await sessionResp.text();
-        console.warn(`[TransakProvider] Create Widget URL API returned ${sessionResp.status}: ${errText}`);
+      } catch (apiErr) {
+        console.warn("[TransakProvider] Create Widget URL API failed:", apiErr);
       }
-    } catch (apiErr) {
-      console.warn("[TransakProvider] Create Widget URL API failed, using raw params fallback:", apiErr);
+    } else {
+      console.warn("[TransakProvider] No access token — cannot create signed widget URL, falling back to raw params");
     }
 
-    // 4. Fallback: raw query params (still works on the widget)
+    // 4. Fallback: raw query params (DEPRECATED by Transak; last resort only).
     if (!widgetUrl) {
       const qp = new URLSearchParams();
       for (const [k, v] of Object.entries(widgetParams)) {
@@ -134,40 +212,128 @@ export class TransakProvider implements IRampProvider {
 
   async handleWebhook(
     payload: any,
-    signature?: string
-  ): Promise<{ orderId: string; status: RampStatus; rawPayload: any }> {
-    // Transak sends payload.data as a signed JWT (not a plain object).
-    // Decode it without verifying signature — we just need the claims.
-    // For production, full JWT verification using the Partner Access Token
-    // (obtained from api-stg.transak.com/partners/api/v2/refresh-token) should be added.
+    _signature?: string
+  ): Promise<WebhookResult> {
+    // Transak signs the webhook `data` field as a JWT using the Partner Access
+    // Token. We VERIFY that signature (HS256, secret = the access-token string)
+    // before trusting a single claim. `verified` gates every financial action
+    // downstream: an unsigned/forged payload returns verified=false and the
+    // webhook handler refuses to complete the order or move any funds.
     let orderData: any = {};
+    let verified = false;
 
     if (typeof payload.data === "string") {
-      const decoded = this.decodeJwtPayload(payload.data);
-      if (decoded) {
-        orderData = decoded;
+      const accessToken = await this.getAccessToken();
+      if (accessToken) {
+        try {
+          const { payload: claims } = await jwtVerify(
+            payload.data,
+            new TextEncoder().encode(accessToken),
+            { algorithms: ["HS256"] }
+          );
+          orderData = claims as Record<string, unknown>;
+          verified = true;
+          console.log("[TransakProvider] Webhook JWT signature verified ✅");
+        } catch (err) {
+          // Signature mismatch / expired token → decode-only so we can log which
+          // order it referenced, but stay UNVERIFIED (caller must not act on it).
+          console.error(
+            "[TransakProvider] Webhook JWT verification FAILED — treating as unverified:",
+            err instanceof Error ? err.message : err
+          );
+          orderData = this.decodeJwtPayload(payload.data) || {};
+        }
       } else {
-        console.warn("[TransakProvider] Could not decode JWT in payload.data — falling back");
-        // data may be at payload root or payload.data as object
-        orderData = payload.data || payload;
+        console.warn("[TransakProvider] No access token available — webhook left UNVERIFIED");
+        orderData = this.decodeJwtPayload(payload.data) || {};
       }
     } else if (payload.data && typeof payload.data === "object") {
+      // Unsigned object payload (e.g. the mobile client's optimistic nudge).
+      // Never trusted — used only as a UX hint, never to complete an order.
       orderData = payload.data;
     } else {
       orderData = payload;
     }
 
-    const eventId = payload.eventID || orderData.status || payload.status || "";
-    const internalStatus = this.mapTransakStatus(eventId);
-    const orderId = orderData.partnerOrderId || payload.partnerOrderId || orderData.id;
+    const eventId = payload.eventID || (orderData as any).status || payload.status || "";
+    const internalStatus = mapTransakStatus(eventId);
+    // Our order id is Transak's `partnerOrderId`. Do NOT fall back to Transak's
+    // own `id` here — that is a different key space and would corrupt lookups.
+    const orderId = (orderData as any).partnerOrderId || payload.partnerOrderId;
+    const providerOrderId =
+      (orderData as any).id || (orderData as any).orderId || payload.orderId || undefined;
 
-    console.log("[TransakProvider] Webhook received:", { eventId, orderId, internalStatus });
+    console.log("[TransakProvider] Webhook received:", {
+      eventId,
+      orderId,
+      providerOrderId,
+      internalStatus,
+      verified,
+    });
 
     return {
       orderId,
       status: internalStatus,
       rawPayload: payload,
+      verified,
+      providerOrderId,
+      data: orderData as Record<string, unknown>,
     };
+  }
+
+  /**
+   * Pull the authoritative order status straight from Transak, keyed by OUR
+   * partnerOrderId. No client-supplied id is trusted: we ask Transak "what is
+   * the order whose partnerOrderId is X?" and read its real status. This is the
+   * primary completion trigger — it does not depend on Transak calling us back.
+   *
+   *   GET {partnerApiUrl}/partners/api/v2/orders?partnerOrderId=<id>
+   *     header: access-token: <Partner Access Token>
+   *     resp:   { data: [ { id, status, walletAddress, cryptoAmount, transactionHash, ... } ] }
+   */
+  async fetchOrderStatus(partnerOrderId: string): Promise<OrderStatusResult> {
+    const accessToken = await this.getAccessToken();
+    if (!accessToken) {
+      console.warn("[TransakProvider] fetchOrderStatus: no access token");
+      return { found: false, status: "created" };
+    }
+    try {
+      const url =
+        `${this.partnerApiUrl}/partners/api/v2/orders?partnerOrderId=${encodeURIComponent(partnerOrderId)}`;
+      const resp = await fetch(url, {
+        headers: { "access-token": accessToken, "accept": "application/json" },
+      });
+      if (!resp.ok) {
+        console.warn(`[TransakProvider] fetchOrderStatus ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+        return { found: false, status: "created" };
+      }
+      const j = await resp.json();
+      const list: any[] = Array.isArray(j?.data)
+        ? j.data
+        : Array.isArray(j?.response)
+        ? j.response
+        : [];
+      // Defensive: only accept an order that really carries our partnerOrderId.
+      const order = list.find((o) => o?.partnerOrderId === partnerOrderId) || (list.length === 1 ? list[0] : null);
+      if (!order) {
+        return { found: false, status: "created" };
+      }
+      const statusStr = order.status || "";
+      console.log("[TransakProvider] fetchOrderStatus:", {
+        partnerOrderId,
+        providerOrderId: order.id,
+        status: statusStr,
+      });
+      return {
+        found: true,
+        status: mapTransakStatus(statusStr),
+        providerOrderId: order.id,
+        data: order,
+      };
+    } catch (e) {
+      console.error("[TransakProvider] fetchOrderStatus error:", e);
+      return { found: false, status: "created" };
+    }
   }
 
   /**
@@ -185,40 +351,6 @@ export class TransakProvider implements IRampProvider {
       return JSON.parse(atob(padded));
     } catch {
       return null;
-    }
-  }
-
-  private mapTransakStatus(status: string): RampStatus {
-    switch (status) {
-      case "ORDER_CREATED":
-      case "AWAITING_PAYMENT_FROM_USER":
-        return "created";
-      case "PAYMENT_DONE_MARKED_BY_USER":
-      case "ORDER_PAYMENT_VERIFYING":
-        return "payment_pending";
-      case "ORDER_PROCESSING":
-      case "CRYPTO_LIQUIDITY_PROVIDER_PENDING":
-      case "PROCESSING":
-      case "PENDING_DELIVERY_FROM_TRANSAK":
-        return "processing";
-      case "ORDER_COMPLETED":
-      case "COMPLETED":
-        return "completed";
-      case "ORDER_FAILED":
-      case "REFUND_REQUEST_INITIATED":
-      case "ORDER_CANCELLED":
-      case "CANCELLED":
-      case "FAILED":
-        return "failed";
-      case "ORDER_REFUNDED":
-      case "REFUNDED":
-        return "refunded";
-      case "ORDER_EXPIRED":
-      case "EXPIRED":
-        return "expired";
-      default:
-        console.warn(`[TransakProvider] Unknown status: ${status}`);
-        return "processing";
     }
   }
 

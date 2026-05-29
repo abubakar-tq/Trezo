@@ -1,4 +1,4 @@
-import { IRampProvider, CreateSessionParams, OnRampSession, RampStatus } from "../types.ts";
+import { IRampProvider, CreateSessionParams, OnRampSession, WebhookResult, OrderStatusResult } from "../types.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
 export class MockProvider implements IRampProvider {
@@ -37,12 +37,20 @@ export class MockProvider implements IRampProvider {
     };
   }
 
-  async handleWebhook(payload: any): Promise<{ orderId: string; status: RampStatus; rawPayload: any }> {
-    // For mock, we might not have a real webhook, but we use this for the dev-mock-complete endpoint
+  async handleWebhook(payload: any): Promise<WebhookResult> {
+    // The mock provider has no external webhook; this is only reachable from the
+    // dev-only mock-complete path, which is already a trusted server context.
     return {
       orderId: payload.orderId,
       status: "completed",
       rawPayload: payload,
+      verified: true,
+      data: payload,
     };
+  }
+
+  // Mock has no external order system; the mock-complete path is used instead.
+  fetchOrderStatus(_partnerOrderId: string): Promise<OrderStatusResult> {
+    return Promise.resolve({ found: false, status: "created" });
   }
 }
