@@ -2,7 +2,7 @@ import { ponder } from "ponder:registry";
 import { indexerHealth } from "ponder:schema";
 
 ponder.on("HealthBeat:block", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   const now = event.block.timestamp;
 
   await context.db

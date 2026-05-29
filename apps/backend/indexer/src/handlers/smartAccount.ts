@@ -2,7 +2,7 @@ import { ponder } from "ponder:registry";
 import { accountSecurityEvent } from "ponder:schema";
 
 ponder.on("SmartAccount:AccountInitialized", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   await context.db
     .insert(accountSecurityEvent)
     .values({
@@ -23,7 +23,7 @@ ponder.on("SmartAccount:AccountInitialized", async ({ event, context }) => {
 });
 
 ponder.on("SmartAccount:ModuleInstalled", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   await context.db
     .insert(accountSecurityEvent)
     .values({
@@ -44,7 +44,7 @@ ponder.on("SmartAccount:ModuleInstalled", async ({ event, context }) => {
 });
 
 ponder.on("SmartAccount:ModuleUninstalled", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   await context.db
     .insert(accountSecurityEvent)
     .values({
@@ -65,7 +65,7 @@ ponder.on("SmartAccount:ModuleUninstalled", async ({ event, context }) => {
 });
 
 ponder.on("SmartAccount:RecoveryModuleUpdated", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   await context.db
     .insert(accountSecurityEvent)
     .values({
@@ -86,7 +86,7 @@ ponder.on("SmartAccount:RecoveryModuleUpdated", async ({ event, context }) => {
 });
 
 ponder.on("SmartAccount:PasskeyAddedViaRecovery", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   await context.db
     .insert(accountSecurityEvent)
     .values({

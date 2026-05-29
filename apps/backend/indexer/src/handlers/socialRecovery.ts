@@ -22,7 +22,7 @@ function baseRow(
 }
 
 ponder.on("SocialRecovery:RecoveryScheduled", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   await context.db
     .insert(accountSecurityEvent)
     .values(baseRow(chainId, event, event.args.wallet, "recovery_scheduled", {
@@ -33,7 +33,7 @@ ponder.on("SocialRecovery:RecoveryScheduled", async ({ event, context }) => {
 });
 
 ponder.on("SocialRecovery:RecoveryExecuted", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   await context.db
     .insert(accountSecurityEvent)
     .values(baseRow(chainId, event, event.args.wallet, "recovery_executed", {
@@ -43,7 +43,7 @@ ponder.on("SocialRecovery:RecoveryExecuted", async ({ event, context }) => {
 });
 
 ponder.on("SocialRecovery:RecoveryCancelled", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   await context.db
     .insert(accountSecurityEvent)
     .values(baseRow(chainId, event, event.args.wallet, "recovery_cancelled", {
@@ -53,7 +53,7 @@ ponder.on("SocialRecovery:RecoveryCancelled", async ({ event, context }) => {
 });
 
 ponder.on("SocialRecovery:GuardiansUpdated", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   await context.db
     .insert(accountSecurityEvent)
     .values(baseRow(chainId, event, event.args.wallet, "guardians_updated", {
@@ -63,7 +63,7 @@ ponder.on("SocialRecovery:GuardiansUpdated", async ({ event, context }) => {
 });
 
 ponder.on("SocialRecovery:HashedApproval", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   // HashedApproval has no wallet address — set walletAddress = guardian.
   // Sync worker resolves actual wallet via Supabase recovery_requests table.
   await context.db
@@ -75,7 +75,7 @@ ponder.on("SocialRecovery:HashedApproval", async ({ event, context }) => {
 });
 
 ponder.on("SocialRecovery:RejectHash", async ({ event, context }) => {
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain.id);
   // RejectHash also has no wallet address — same guardian-as-wallet sentinel.
   await context.db
     .insert(accountSecurityEvent)
