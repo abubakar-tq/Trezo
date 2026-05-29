@@ -1249,6 +1249,11 @@ const EmailRecoveryScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Screen intro — single line sets context without repeating in every card */}
+        <Text style={styles.screenIntro}>
+          Let trusted people help you regain access if you lose your device.
+        </Text>
+
         {SHOW_ADVANCED_RECOVERY_UI && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Saved Recovery Metadata</Text>
@@ -1411,14 +1416,11 @@ const EmailRecoveryScreen: React.FC = () => {
         )}
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Guardian Configuration</Text>
-          <Text style={styles.cardDesc}>
-            Add the people you trust to help you recover this wallet.
-          </Text>
+          <Text style={styles.cardTitle}>Your Guardians</Text>
 
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Total Guardians</Text>
+              <Text style={styles.inputLabel}>Number of guardians</Text>
               <TextInput
                 style={styles.numberInput}
                 value={guardianCountValue}
@@ -1439,16 +1441,11 @@ const EmailRecoveryScreen: React.FC = () => {
             </View>
           </View>
 
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryText}>
-              Total weight: {totalGuardianWeight}
+          {hasDuplicateGuardians && (
+            <Text style={[styles.summaryText, styles.summaryWarning]}>
+              Duplicate emails detected
             </Text>
-            {hasDuplicateGuardians && (
-              <Text style={[styles.summaryText, styles.summaryWarning]}>
-                Duplicate emails detected
-              </Text>
-            )}
-          </View>
+          )}
           {guardianValidationError ? (
             <View style={styles.validationBox}>
               <Text style={styles.validationText}>{guardianValidationError}</Text>
@@ -1460,7 +1457,7 @@ const EmailRecoveryScreen: React.FC = () => {
               <View style={styles.guardianRow}>
                 <View style={styles.guardianColumn}>
                   <Text style={styles.inputLabel}>
-                    Guardian {index + 1} Email
+                    Guardian {index + 1}
                   </Text>
                   <TextInput
                     style={styles.textInput}
@@ -1478,13 +1475,13 @@ const EmailRecoveryScreen: React.FC = () => {
                   />
                 </View>
                 <View style={styles.weightColumn}>
-                  <Text style={styles.inputLabel}>Weight</Text>
                   <TextInput
-                    style={styles.numberInput}
+                    style={[styles.numberInput, styles.weightInput]}
                     value={visibleGuardianWeights[index] ?? "1"}
                     onChangeText={(value) => handleWeightChange(index, value)}
                     keyboardType="number-pad"
                     placeholderTextColor={colors.textMuted}
+                    placeholder="wt"
                   />
                 </View>
               </View>
@@ -1524,14 +1521,10 @@ const EmailRecoveryScreen: React.FC = () => {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Recovery Timing</Text>
-          <Text style={styles.cardDesc}>
-            Delay and expiry are expressed in minutes (testing mode). Recovery
-            can be executed after the delay and before the expiry.
-          </Text>
+          <Text style={styles.cardTitle}>Timing</Text>
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Delay (minutes)</Text>
+              <Text style={styles.inputLabel}>Delay (min)</Text>
               <TextInput
                 style={styles.numberInput}
                 value={delayMinutes}
@@ -1541,7 +1534,7 @@ const EmailRecoveryScreen: React.FC = () => {
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Expiry (minutes)</Text>
+              <Text style={styles.inputLabel}>Expiry (min)</Text>
               <TextInput
                 style={styles.numberInput}
                 value={expiryMinutes}
@@ -1554,75 +1547,37 @@ const EmailRecoveryScreen: React.FC = () => {
         </View>
 
         <View style={styles.moduleCard}>
+          {/* ── Header row: title + inline status (only when installed or checking) ── */}
           <View style={styles.moduleHeader}>
-            <Text style={styles.cardTitle}>Email Recovery Module</Text>
-            <TouchableOpacity
-              onPress={handleRefreshModuleStatus}
-              style={styles.refreshButton}
-              disabled={!smartAccountReady || checkingModule}
-            >
-              {checkingModule ? (
-                <ActivityIndicator size="small" color={colors.accentAlt} />
-              ) : (
-                <Feather
-                  name="refresh-ccw"
-                  size={16}
-                  color={
-                    smartAccountReady ? colors.accentAlt : colors.textMuted
-                  }
-                />
-              )}
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.cardDesc}>
-            Set up email recovery so your guardians can help you get back into your wallet.
-          </Text>
-          <View
-            style={[
-              styles.moduleStatusBadge,
-              moduleInstalledState
-                ? styles.moduleStatusInstalled
-                : styles.moduleStatusIdle,
-              !smartAccountReady && styles.moduleStatusWarning,
-            ]}
-          >
-            <Feather
-              name={
-                !smartAccountReady
-                  ? "alert-circle"
-                  : moduleInstalledState
-                    ? "check-circle"
-                    : "shield-off"
-              }
-              size={16}
-              color={
-                !smartAccountReady
-                  ? colors.warning
-                  : moduleInstalledState
-                    ? colors.success
-                    : colors.accentAlt
-              }
-            />
-            <Text style={styles.moduleStatusText}>
-              {!smartAccountReady
-                ? "Set up your wallet first"
-                : checkingModule
-                  ? "Checking…"
-                  : moduleInstalledState
-                    ? "Recovery is set up"
-                    : "Recovery is not set up yet"}
+            <Text style={styles.cardTitle}>
+              {moduleInstalledState ? "Email Recovery" : "Activate Email Recovery"}
             </Text>
+            {moduleInstalledState ? (
+              <View style={styles.statusChip}>
+                {checkingModule
+                  ? <ActivityIndicator size="small" color={colors.success} />
+                  : <Feather name="check-circle" size={14} color={colors.success} />
+                }
+                <Text style={[styles.statusChipText, { color: colors.success }]}>
+                  {checkingModule ? "Checking…" : "Active"}
+                </Text>
+              </View>
+            ) : checkingModule ? (
+              <ActivityIndicator size="small" color={colors.textMuted} />
+            ) : (
+              <TouchableOpacity
+                onPress={handleRefreshModuleStatus}
+                style={styles.refreshButton}
+                disabled={!smartAccountReady}
+              >
+                <Feather name="refresh-ccw" size={15} color={smartAccountReady ? colors.accentAlt : colors.textMuted} />
+              </TouchableOpacity>
+            )}
           </View>
+
           {moduleError && <Text style={styles.moduleError}>{moduleError}</Text>}
           {!smartAccountReady && (
-            <Text style={styles.moduleHint}>
-              Set up your wallet before enabling email recovery.
-            </Text>
-          )}
-          {smartAccountReady && !guardiansReady && (
-            <Text style={styles.moduleHint}>
-              Add guardians and weights before installing.
-            </Text>
+            <Text style={styles.moduleHint}>Set up your wallet before enabling email recovery.</Text>
           )}
           {guardianValidationError ? (
             <Text style={styles.moduleError}>{guardianValidationError}</Text>
@@ -1672,34 +1627,25 @@ const EmailRecoveryScreen: React.FC = () => {
               </Text>
             </View>
           )}
-          <TouchableOpacity
-            style={[
-              styles.installButton,
-              (!smartAccountReady ||
-                !canSubmitGuardianConfig ||
-                moduleInstalledState ||
-                installingModule) &&
-                styles.installButtonDisabled,
-            ]}
-            disabled={
-              !smartAccountReady ||
-              !canSubmitGuardianConfig ||
-              moduleInstalledState ||
-              installingModule
-            }
-            onPress={handleInstallModule}
-            activeOpacity={0.85}
-          >
-            {installingModule ? (
-              <ActivityIndicator size="small" color={colors.textOnAccent} />
-            ) : (
-              <Text style={styles.installButtonText}>
-                {moduleInstalledState
-                  ? "Recovery is set up"
-                  : "Set up Email Recovery"}
-              </Text>
-            )}
-          </TouchableOpacity>
+          {/* Only render the CTA when not yet installed — no point showing a disabled button */}
+          {!moduleInstalledState && (
+            <TouchableOpacity
+              style={[
+                styles.installButton,
+                (!smartAccountReady || !canSubmitGuardianConfig || installingModule) &&
+                  styles.installButtonDisabled,
+              ]}
+              disabled={!smartAccountReady || !canSubmitGuardianConfig || installingModule}
+              onPress={handleInstallModule}
+              activeOpacity={0.85}
+            >
+              {installingModule ? (
+                <ActivityIndicator size="small" color={colors.textOnAccent} />
+              ) : (
+                <Text style={styles.installButtonText}>Set up Email Recovery</Text>
+              )}
+            </TouchableOpacity>
+          )}
 
           {SHOW_ADVANCED_RECOVERY_UI && (
           <TouchableOpacity
@@ -1762,142 +1708,108 @@ const EmailRecoveryScreen: React.FC = () => {
 
           {moduleInstalledState && smartAccountReady && (
             <View style={styles.guardianAcceptanceSection}>
-              <Text style={styles.cardTitle}>Guardian Approval Status</Text>
-              <Text style={styles.cardDesc}>
-                Your guardians will receive an invitation email. Recovery becomes active once enough guardians confirm.
-              </Text>
-              {__DEV__ && (
-                <Text style={styles.cardDesc}>
-                  [DEV] On Anvil: `make mock-accept-guardians-local`
-                </Text>
+              {/* Summary line — counts confirmed guardians vs threshold */}
+              {storedMetadata && (
+                <View style={styles.acceptanceSummaryRow}>
+                  <Text style={styles.acceptanceSummaryText}>
+                    {storedMetadata.guardians.filter((g) => g.acceptanceStatus === "accepted").length} of {storedMetadata.guardians.length} confirmed
+                  </Text>
+                  <Text style={styles.acceptanceSummaryHint}>
+                    {storedMetadata.config.threshold} needed to recover
+                  </Text>
+                </View>
               )}
+
+              {__DEV__ && (
+                <Text style={styles.moduleHint}>[DEV] Anvil: `make mock-accept-guardians-local`</Text>
+              )}
+
               {storedMetadata ? (
                 <>
-                  {storedMetadata.guardians.map((guardian) => (
-                    <View key={guardian.emailHash} style={styles.guardianStatusRow}>
-                      <View style={styles.guardianInfo}>
-                        <Text style={styles.guardianEmailText}>
-                          {guardian.resolvedEmail ?? guardian.maskedEmail}
-                          {guardian.isLocked ? " (locked)" : ""}
-                        </Text>
-                        <Text style={styles.guardianWeightText}>weight {guardian.weight}</Text>
+                  {storedMetadata.guardians.map((guardian) => {
+                    const confirmed = guardian.acceptanceStatus === "accepted";
+                    return (
+                      <View key={guardian.emailHash} style={styles.guardianStatusRow}>
+                        <View style={styles.guardianInfo}>
+                          <Text style={styles.guardianEmailText}>
+                            {guardian.resolvedEmail ?? guardian.maskedEmail}
+                            {guardian.isLocked ? " (locked)" : ""}
+                          </Text>
+                          <Text style={[styles.guardianStatusLabel, { color: confirmed ? colors.success : colors.textMuted }]}>
+                            {confirmed ? "Confirmed" : "Invitation sent"}
+                          </Text>
+                        </View>
+                        {!confirmed && !guardian.isLocked && (
+                          <TouchableOpacity
+                            style={styles.iconBtn}
+                            onPress={() => void handleResendGuardianInvite(guardian.id, guardian.maskedEmail)}
+                            disabled={resendingGuardianId === guardian.id}
+                            accessibilityLabel={`Resend invite to ${guardian.maskedEmail}`}
+                          >
+                            {resendingGuardianId === guardian.id
+                              ? <ActivityIndicator size="small" color={colors.accentAlt} />
+                              : <Feather name="refresh-cw" size={17} color={colors.accentAlt} />
+                            }
+                          </TouchableOpacity>
+                        )}
+                        {!guardian.isLocked && (
+                          <TouchableOpacity
+                            style={styles.iconBtn}
+                            onPress={() => confirmRemoveInstalledGuardian(guardian.id, guardian.maskedEmail, guardian.normalizedEmailEncrypted)}
+                            disabled={removingGuardianId === guardian.id}
+                            accessibilityLabel={`Remove ${guardian.maskedEmail}`}
+                          >
+                            {removingGuardianId === guardian.id
+                              ? <ActivityIndicator size="small" color={colors.danger} />
+                              : <Feather name="trash-2" size={17} color={colors.danger} />
+                            }
+                          </TouchableOpacity>
+                        )}
                       </View>
-                      <View style={[
-                        styles.acceptanceBadge,
-                        guardian.acceptanceStatus === "accepted"
-                          ? styles.acceptanceBadgeAccepted
-                          : styles.acceptanceBadgePending,
-                      ]}>
-                        <Text style={[
-                          styles.acceptanceBadgeText,
-                          guardian.acceptanceStatus === "accepted"
-                            ? styles.acceptanceBadgeTextAccepted
-                            : styles.acceptanceBadgeTextPending,
-                        ]}>
-                          {guardian.acceptanceStatus === "accepted" ? "Accepted" : "Awaiting Approval"}
-                        </Text>
-                      </View>
-                      {guardian.acceptanceStatus !== "accepted" && !guardian.isLocked && (
-                        <TouchableOpacity
-                          style={styles.removeGuardianButton}
-                          onPress={() =>
-                            void handleResendGuardianInvite(
-                              guardian.id,
-                              guardian.maskedEmail,
-                            )
-                          }
-                          disabled={resendingGuardianId === guardian.id}
-                          accessibilityLabel={`Resend invite to ${guardian.maskedEmail}`}
-                        >
-                          {resendingGuardianId === guardian.id ? (
-                            <ActivityIndicator size="small" color={theme.colors.accentAlt} />
-                          ) : (
-                            <Feather name="refresh-cw" size={18} color={theme.colors.accentAlt} />
-                          )}
-                        </TouchableOpacity>
-                      )}
-                      {!guardian.isLocked && (
-                        <TouchableOpacity
-                          style={styles.removeGuardianButton}
-                          onPress={() =>
-                            confirmRemoveInstalledGuardian(
-                              guardian.id,
-                              guardian.maskedEmail,
-                              guardian.normalizedEmailEncrypted,
-                            )
-                          }
-                          disabled={removingGuardianId === guardian.id}
-                          accessibilityLabel={`Remove guardian ${guardian.maskedEmail}`}
-                        >
-                          {removingGuardianId === guardian.id ? (
-                            <ActivityIndicator size="small" color={theme.colors.danger} />
-                          ) : (
-                            <Feather name="trash-2" size={18} color={theme.colors.danger} />
-                          )}
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  ))}
-                  <View style={styles.acceptanceSummaryRow}>
-                    <Text style={styles.acceptanceSummaryText}>
-                      {storedMetadata.guardians.filter((g) => g.acceptanceStatus === "accepted").length}/{storedMetadata.guardians.length} accepted
-                      ({storedMetadata.config.threshold} needed)
-                    </Text>
-                  </View>
+                    );
+                  })}
 
-                  <View style={styles.addPostInstallSection}>
-                    <Text style={styles.addPostInstallTitle}>Add another guardian</Text>
-                    <Text style={styles.cardDesc}>
-                      Add another person to your recovery setup.
-                    </Text>
+                  {/* Add another guardian */}
+                  <View style={styles.addGuardianSection}>
                     <TextInput
                       style={styles.addPostInstallInput}
                       value={newPostInstallEmail}
                       onChangeText={setNewPostInstallEmail}
-                      placeholder="guardian@example.com"
-                      placeholderTextColor={theme.colors.textMuted}
+                      placeholder="Add guardian email…"
+                      placeholderTextColor={colors.textMuted}
                       keyboardType="email-address"
                       autoCapitalize="none"
                       autoCorrect={false}
                       editable={!addingPostInstallGuardian}
                     />
-                    <TextInput
-                      style={styles.addPostInstallInput}
-                      value={newPostInstallWeight}
-                      onChangeText={setNewPostInstallWeight}
-                      placeholder="weight (default 1)"
-                      placeholderTextColor={theme.colors.textMuted}
-                      keyboardType="number-pad"
-                      editable={!addingPostInstallGuardian}
-                    />
                     <TouchableOpacity
-                      style={[styles.installButton, styles.startRecoveryButton]}
+                      style={[styles.addGuardianBtn, (!newPostInstallEmail.trim() || addingPostInstallGuardian) && styles.installButtonDisabled]}
                       onPress={() => void handleAddPostInstallGuardian()}
                       disabled={addingPostInstallGuardian || !newPostInstallEmail.trim()}
                       activeOpacity={0.85}
                     >
-                      {addingPostInstallGuardian ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={styles.installButtonText}>Add Guardian</Text>
-                      )}
+                      {addingPostInstallGuardian
+                        ? <ActivityIndicator size="small" color={colors.accentAlt} />
+                        : <Feather name="plus" size={16} color={colors.accentAlt} />
+                      }
+                      <Text style={styles.addGuardianBtnText}>
+                        {addingPostInstallGuardian ? "Adding…" : "Add guardian"}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </>
               ) : (
-                <Text style={styles.cardDesc}>Loading guardian status...</Text>
+                <ActivityIndicator size="small" color={colors.textMuted} />
               )}
-              {/* ADR-0011: same-device "Start Email Recovery" is testing-only.
-                  Production entry is from the new-device unauthenticated screen (v2). */}
+
+              {/* ADR-0011: same-device recovery is testing-only */}
               {__DEV__ && (
                 <TouchableOpacity
                   style={[styles.installButton, styles.startRecoveryButton]}
                   onPress={() => navigation.navigate("EmailRecoveryStart")}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.installButtonText}>
-                    Start Email Recovery
-                  </Text>
+                  <Text style={styles.installButtonText}>Start Email Recovery</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1920,27 +1832,27 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: "space-between",
       paddingHorizontal: 20,
       paddingTop: 60,
-      paddingBottom: 20,
-      borderBottomWidth: 1,
+      paddingBottom: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.borderMuted,
     },
     headerTitle: {
       color: colors.textPrimary,
-      fontSize: 20,
-      fontWeight: "700",
+      fontSize: 17,
+      fontWeight: "600",
+    },
+    screenIntro: {
+      color: colors.textMuted,
+      fontSize: 14,
+      lineHeight: 20,
+      paddingHorizontal: 4,
     },
     scrollView: {
       flex: 1,
     },
     scrollContent: {
       padding: 20,
-      paddingBottom: 40,
-      gap: 16,
-    },
-    summaryRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
+      paddingBottom: 48,
       gap: 12,
     },
     summaryText: {
@@ -1967,24 +1879,24 @@ const createStyles = (colors: ThemeColors) =>
     },
     card: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 22,
-      borderWidth: 1,
+      borderRadius: 18,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      padding: 20,
-      gap: 16,
+      padding: 18,
+      gap: 14,
     },
     moduleCard: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 22,
-      borderWidth: 1,
+      borderRadius: 18,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      padding: 20,
-      gap: 16,
+      padding: 18,
+      gap: 14,
     },
     cardTitle: {
       color: colors.textPrimary,
-      fontSize: 18,
-      fontWeight: "700",
+      fontSize: 15,
+      fontWeight: "600",
     },
     cardDesc: {
       color: colors.textSecondary,
@@ -1993,15 +1905,29 @@ const createStyles = (colors: ThemeColors) =>
     },
     inputRow: {
       flexDirection: "row",
-      gap: 16,
+      gap: 12,
     },
     inputGroup: {
       flex: 1,
-      gap: 8,
+      gap: 6,
     },
     inputLabel: {
-      color: colors.textSecondary,
-      fontSize: 13,
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: "500",
+      marginLeft: 2,
+    },
+    statusChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 20,
+      backgroundColor: `${colors.success}15`,
+    },
+    statusChipText: {
+      fontSize: 12,
       fontWeight: "600",
     },
     modeButton: {
@@ -2023,22 +1949,22 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     numberInput: {
-      backgroundColor: `${colors.textPrimary}0F`,
-      borderWidth: 1,
+      backgroundColor: `${colors.textPrimary}08`,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      borderRadius: 14,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
       color: colors.textPrimary,
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: "600",
       textAlign: "center",
     },
     textInput: {
-      backgroundColor: `${colors.textPrimary}0F`,
-      borderWidth: 1,
+      backgroundColor: `${colors.textPrimary}08`,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderMuted,
-      borderRadius: 14,
+      borderRadius: 12,
       paddingHorizontal: 14,
       paddingVertical: 12,
       color: colors.textPrimary,
@@ -2046,28 +1972,32 @@ const createStyles = (colors: ThemeColors) =>
     },
     guardianRowContainer: {
       flexDirection: "row",
-      alignItems: "flex-end",
-      gap: 12,
+      alignItems: "center",
+      gap: 8,
     },
     guardianRow: {
       flex: 1,
       flexDirection: "row",
-      gap: 12,
-      alignItems: "flex-end",
+      gap: 8,
+      alignItems: "center",
     },
     deleteGuardianButton: {
-      height: 52,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
       justifyContent: "center",
       alignItems: "center",
-      paddingHorizontal: 8,
+      backgroundColor: `${colors.danger}12`,
     },
     guardianColumn: {
       flex: 1,
-      gap: 8,
     },
     weightColumn: {
-      width: 100,
-      gap: 8,
+      width: 62,
+    },
+    weightInput: {
+      paddingHorizontal: 8,
+      fontSize: 14,
     },
     moduleHeader: {
       flexDirection: "row",
@@ -2075,48 +2005,21 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: "space-between",
     },
     refreshButton: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: `${colors.accentAlt}1A`,
-    },
-    moduleStatusBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
-      borderRadius: 12,
-    },
-    moduleStatusIdle: {
-      backgroundColor: `${colors.accentAlt}1A`,
-      borderWidth: 1,
-      borderColor: `${colors.accentAlt}33`,
-    },
-    moduleStatusInstalled: {
-      backgroundColor: `${colors.success}1F`,
-      borderWidth: 1,
-      borderColor: `${colors.success}33`,
-    },
-    moduleStatusWarning: {
-      backgroundColor: `${colors.warning}1F`,
-      borderWidth: 1,
-      borderColor: `${colors.warning}33`,
-    },
-    moduleStatusText: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      flex: 1,
     },
     moduleError: {
       color: colors.danger,
-      fontSize: 12,
+      fontSize: 13,
+      lineHeight: 18,
     },
     moduleHint: {
       color: colors.textMuted,
-      fontSize: 12,
+      fontSize: 13,
+      lineHeight: 18,
     },
     hashRow: {
       flexDirection: "row",
@@ -2183,55 +2086,24 @@ const createStyles = (colors: ThemeColors) =>
     },
     installButton: {
       backgroundColor: colors.accentAlt,
-      borderRadius: 16,
+      borderRadius: 14,
       paddingVertical: 14,
       alignItems: "center",
     },
     installButtonDisabled: {
-      opacity: 0.6,
+      opacity: 0.45,
     },
     installButtonText: {
       color: colors.textOnAccent,
       fontSize: 15,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     syncButton: {
-      marginTop: 12,
+      marginTop: 8,
     },
     startRecoveryButton: {
-      marginTop: 12,
+      marginTop: 8,
       backgroundColor: colors.success,
-    },
-    addPostInstallSection: {
-      marginTop: 18,
-      paddingTop: 16,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.borderMuted,
-      gap: 8,
-    },
-    addPostInstallTitle: {
-      color: colors.textPrimary,
-      fontSize: 15,
-      fontWeight: "600",
-      marginBottom: 4,
-    },
-    addPostInstallInput: {
-      backgroundColor: colors.inputBackground,
-      borderWidth: 1,
-      borderColor: colors.inputBorder,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      color: colors.textPrimary,
-      fontSize: 14,
-    },
-    guardianAcceptanceSection: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 22,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: 20,
-      gap: 12,
     },
     recoveryKitBanner: {
       backgroundColor: `${colors.warning}1A`,
@@ -2286,64 +2158,88 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "600",
       fontSize: 13,
     },
+    guardianAcceptanceSection: {
+      gap: 2,
+    },
     guardianStatusRow: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: 8,
-      gap: 12,
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.borderMuted,
+      gap: 8,
     },
     guardianInfo: {
       flex: 1,
+      gap: 2,
     },
     guardianEmailText: {
       color: colors.textPrimary,
       fontSize: 14,
+      fontWeight: "500",
+    },
+    guardianStatusLabel: {
+      fontSize: 12,
+    },
+    iconBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    acceptanceSummaryRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      paddingBottom: 4,
+    },
+    acceptanceSummaryText: {
+      color: colors.textPrimary,
+      fontSize: 14,
       fontWeight: "600",
     },
-    guardianWeightText: {
+    acceptanceSummaryHint: {
       color: colors.textMuted,
       fontSize: 12,
     },
-    acceptanceBadge: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 10,
+    addGuardianSection: {
+      marginTop: 4,
+      paddingTop: 14,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.borderMuted,
+      gap: 10,
     },
-    removeGuardianButton: {
-      marginLeft: 8,
-      width: 32,
-      height: 32,
+    addGuardianBtn: {
+      flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 16,
-      backgroundColor: `${colors.danger}12`,
+      gap: 6,
+      paddingVertical: 11,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: `${colors.accentAlt}50`,
+      backgroundColor: `${colors.accentAlt}0E`,
+      alignSelf: "flex-start",
     },
-    acceptanceBadgeAccepted: {
-      backgroundColor: `${colors.success}1F`,
+    addGuardianBtnText: {
+      color: colors.accentAlt,
+      fontSize: 14,
+      fontWeight: "500",
     },
-    acceptanceBadgePending: {
-      backgroundColor: `${colors.warning}1F`,
+    addPostInstallInput: {
+      backgroundColor: `${colors.textPrimary}08`,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.borderMuted,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      color: colors.textPrimary,
+      fontSize: 15,
     },
-    acceptanceBadgeText: {
-      fontSize: 11,
-      fontWeight: "700",
-      textTransform: "uppercase",
-    },
-    acceptanceBadgeTextAccepted: {
-      color: colors.success,
-    },
-    acceptanceBadgeTextPending: {
-      color: colors.warning,
-    },
-    acceptanceSummaryRow: {
-      paddingTop: 4,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    acceptanceSummaryText: {
-      color: colors.textSecondary,
-      fontSize: 13,
+    addPostInstallTitle: {
+      color: colors.textPrimary,
+      fontSize: 14,
       fontWeight: "600",
     },
   });
