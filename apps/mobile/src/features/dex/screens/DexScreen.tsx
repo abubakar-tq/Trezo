@@ -91,6 +91,17 @@ const toAsset = (token: TokenMetadata, balanceRaw: bigint): Asset => ({
   chainId: token.chainId,
 });
 
+// Display helper: formatUnits gives full precision (e.g. "0.002834343434343")
+// which is noisy in the UI. Cap fractional digits at 6 and strip trailing
+// zeros so the same value renders as "0.002834".
+const formatTokenAmount = (raw: bigint, decimals: number, maxFractionDigits = 6): string => {
+  const full = formatUnits(raw, decimals);
+  const [whole, frac = ""] = full.split(".");
+  if (!frac) return whole;
+  const trimmed = frac.slice(0, maxFractionDigits).replace(/0+$/, "");
+  return trimmed ? `${whole}.${trimmed}` : whole;
+};
+
 export const DexScreen: React.FC = () => {
   const { theme } = useAppTheme();
   const { colors } = theme;
@@ -1227,7 +1238,7 @@ export const DexScreen: React.FC = () => {
                   <ActivityIndicator size="small" color={colors.accent} />
                 ) : (
                   <Text style={[styles.receiveAmount, { color: quote ? colors.textPrimary : colors.textMuted }]}>
-                    {quote ? formatUnits(quote.estimatedBuyAmountRaw, quote.buyToken.decimals) : "0.00"}
+                    {quote ? formatTokenAmount(quote.estimatedBuyAmountRaw, quote.buyToken.decimals) : "0.00"}
                   </Text>
                 )}
               </View>
@@ -1265,13 +1276,13 @@ export const DexScreen: React.FC = () => {
               <View style={styles.detailRow}>
                 <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Estimated receive</Text>
                 <Text style={[styles.detailValue, { color: colors.textPrimary }]}>
-                  {formatUnits(quote.estimatedBuyAmountRaw, quote.buyToken.decimals)} {quote.buyToken.symbol}
+                  {formatTokenAmount(quote.estimatedBuyAmountRaw, quote.buyToken.decimals)} {quote.buyToken.symbol}
                 </Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Minimum received</Text>
                 <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
-                  {formatUnits(quote.minimumBuyAmountRaw, quote.buyToken.decimals)} {quote.buyToken.symbol}
+                  {formatTokenAmount(quote.minimumBuyAmountRaw, quote.buyToken.decimals)} {quote.buyToken.symbol}
                 </Text>
               </View>
               {quote.priceImpactBps !== undefined && quote.priceImpactBps > 100 && (

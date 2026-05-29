@@ -46,10 +46,15 @@ const PortfolioScreen: React.FC = () => {
   const { ref: activationSheetRef, requireActiveOnChain } = useActivationSheet();
   const { ref: setUpRef, requireProvisioned } = useSetUpWalletSheet();
 
-  const smartAccountAddress =
-    useUserStore((state) => state.smartAccountAddress) ??
-    "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
-  const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress);
+  // Mirror HomeScreen: per-chain aa_wallets address is the source of truth.
+  // Global smartAccountAddress is the legacy fallback (also kept in sync with
+  // the active chain by useChainSwitcher). Never fall back to a random demo
+  // address - that used to query an empty wallet and cache the empty result
+  // for 30s, hiding the user's real holdings.
+  const aaAccountAddress = useWalletStore((s) => s.aaAccount?.predictedAddress);
+  const globalSmartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const smartAccountAddress = (aaAccountAddress ?? globalSmartAccountAddress) as string | null;
+  const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress ?? undefined);
   const { assets: marketAssets, loading: marketLoading, refresh: refreshMarket } = useMarketData(5);
 
   const [selectedPeriod, setSelectedPeriod] = useState("1W");
