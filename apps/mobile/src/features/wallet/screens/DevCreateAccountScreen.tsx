@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import CreateAccountDevCard from "@/src/features/wallet/components/CreateAccountDevCard";
 import { DevFundingCard } from "@/src/features/wallet/components/DevFundingCard";
 import { PasskeyVerifyCard } from "@/src/features/wallet/components/PasskeyVerifyCard";
+import { RestoreOnChainPasskeyCard } from "@/src/features/wallet/components/RestoreOnChainPasskeyCard";
 import { useAppTheme } from "@theme";
 
 const DevCreateAccountScreen = () => {
@@ -22,6 +23,9 @@ const DevCreateAccountScreen = () => {
       <DevFundingCard />
       <View style={styles.cardSpacing}>
         <PasskeyVerifyCard />
+      </View>
+      <View style={styles.cardSpacing}>
+        <RestoreOnChainPasskeyCard />
       </View>
     </ScrollView>
   );

@@ -600,6 +600,71 @@ export class PasskeyService {
   }
   
   /**
+   * RESCUE: Overwrite the local AsyncStorage passkey metadata with values
+   * known to match a passkey already registered on-chain. Used when the
+   * local SecureStore got out-of-sync with the on-chain validator (e.g. an
+   * aborted recovery flow created a new local passkey that's not registered).
+   *
+   * Caller is responsible for reading credentialIdRaw + px + py from the
+   * on-chain PasskeyValidator and passing them in.
+   *
+   * NOTE: this does NOT re-create the WebAuthn private key on the device.
+   * It assumes the original credential (matching credentialIdRaw) is still
+   * in the device's WebAuthn keystore — which is true if the user hasn't
+   * uninstalled the app or wiped the keystore. WebAuthn will find it on
+   * the next signWithPasskey call.
+   */
+  static async restorePasskeyFromOnChainValues(params: {
+    userId: string;
+    credentialIdRaw: string; // 0x... 32-byte hex (right-padded with zeros if shorter)
+    publicKeyX: string; // 0x... 32-byte hex
+    publicKeyY: string; // 0x... 32-byte hex
+    rpId: string;
+  }): Promise<PasskeyMetadata> {
+    // Trim trailing zero bytes from credentialIdRaw to recover the original
+    // WebAuthn credential ID (typical iOS/Android is 16 bytes).
+    const rawHex = params.credentialIdRaw.startsWith('0x')
+      ? params.credentialIdRaw.slice(2)
+      : params.credentialIdRaw;
+    const rawBytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) {
+      rawBytes[i] = parseInt(rawHex.slice(i * 2, i * 2 + 2), 16);
+    }
+    let realLength = 32;
+    while (realLength > 0 && rawBytes[realLength - 1] === 0) realLength -= 1;
+    if (realLength === 0) {
+      throw new Error('credentialIdRaw is all zeros — cannot reconstruct credentialId.');
+    }
+    const trimmed = rawBytes.slice(0, realLength);
+    const base64 = this.uint8ArrayToBase64(trimmed);
+    const credentialId = this.base64UrlEncode(base64);
+
+    const metadata: PasskeyMetadata = {
+      credentialId,
+      credentialIdRaw: params.credentialIdRaw.startsWith('0x')
+        ? params.credentialIdRaw
+        : `0x${params.credentialIdRaw}`,
+      publicKeyX: params.publicKeyX.startsWith('0x')
+        ? params.publicKeyX
+        : `0x${params.publicKeyX}`,
+      publicKeyY: params.publicKeyY.startsWith('0x')
+        ? params.publicKeyY
+        : `0x${params.publicKeyY}`,
+      rpId: params.rpId,
+      deviceName: this.getCurrentDeviceLabel(),
+      deviceType: Platform.OS as 'ios' | 'android',
+      createdAt: new Date().toISOString(),
+    };
+
+    await this.savePasskey(params.userId, metadata);
+    debugLog('🚑 [PasskeyService] Restored passkey metadata from on-chain values', {
+      credentialId,
+      credentialIdRaw: metadata.credentialIdRaw,
+    });
+    return metadata;
+  }
+
+  /**
    * Delete passkey from this device
    * (removes from AsyncStorage, secure enclave cleanup is automatic)
    */
