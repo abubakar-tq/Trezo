@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { storageService, StorageKeys } from './StorageService';
 
-const COINCAP_BASE_URL = 'https://api.coincap.io/v2';
-const API_KEY = process.env.EXPO_PUBLIC_COINCAP_API_KEY;
+const COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3";
+const COINGECKO_KEY = process.env.EXPO_PUBLIC_COINGECKO_API_KEY;
 
 export interface MarketAsset {
   id: string;
@@ -25,11 +25,9 @@ export interface HistoryData {
 
 class MarketService {
   private api = axios.create({
-    baseURL: COINCAP_BASE_URL,
-    headers: {
-      ...(API_KEY ? { 'Authorization': `Bearer ${API_KEY}` } : {}),
-    },
-    timeout: 20000, // Increased timeout to 20s
+    baseURL: COINGECKO_BASE_URL,
+    headers: { ...(COINGECKO_KEY ? { "x-cg-demo-api-key": COINGECKO_KEY } : {}) },
+    timeout: 20000,
   });
 
   async getTopAssets(limit = 20): Promise<MarketAsset[]> {
@@ -39,14 +37,28 @@ class MarketService {
     // We start the fetch in background (or foreground if no cache)
     const fetchTask = async () => {
       try {
-        console.log('[MarketService] Attempting to fetch top assets from CoinCap...');
-        const response = await this.api.get(`/assets?limit=${limit}`);
-        const assets = response.data.data;
+        console.log("[MarketService] Fetching top assets from CoinGecko...");
+        const response = await this.api.get(`/coins/markets`, {
+          params: { vs_currency: "usd", order: "market_cap_desc", per_page: limit, page: 1 },
+        });
+        const assets: MarketAsset[] = response.data.map((c: any) => ({
+          id: c.id,
+          rank: String(c.market_cap_rank ?? "0"),
+          symbol: String(c.symbol ?? "").toUpperCase(),
+          name: c.name,
+          supply: String(c.circulating_supply ?? "0"),
+          maxSupply: c.max_supply != null ? String(c.max_supply) : null,
+          marketCapUsd: String(c.market_cap ?? "0"),
+          volumeUsd24Hr: String(c.total_volume ?? "0"),
+          priceUsd: String(c.current_price ?? "0"),
+          changePercent24Hr: String(c.price_change_percentage_24h ?? "0"),
+          vwap24Hr: String(c.current_price ?? "0"),
+        }));
         storageService.set(StorageKeys.TOP_ASSETS, assets);
         return assets;
       } catch (error: any) {
-        const isNetworkError = error.message === 'Network Error' || !error.response;
-        console.log(`[MarketService] CoinCap ${isNetworkError ? 'Network/DNS' : 'API'} failure. Activating Binance Fallback.`);
+        const isNetworkError = error.message === "Network Error" || !error.response;
+        console.log(`[MarketService] CoinGecko ${isNetworkError ? "Network" : "API"} failure. Activating Binance Fallback.`);
         
         try {
           const { binanceService } = require('./BinanceService');
