@@ -22,6 +22,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -204,7 +205,12 @@ export const BuyScreen: React.FC = () => {
 
     pollTimerRef.current = setInterval(async () => {
       try {
-        const updated = await RampService.getOrder(activeOrder.id);
+        // For Transak, each tick pulls the real status from Transak and fulfills
+        // on completion (status can lag the widget's success event). Mock just
+        // reads the DB row.
+        const updated = activeOrder.provider === "transak"
+          ? await RampService.verifyOrder(activeOrder.id)
+          : await RampService.getOrder(activeOrder.id);
         setActiveOrder(updated);
         if (TERMINAL_STATUSES.includes(updated.internalStatus as any)) {
           stopPolling();
@@ -265,9 +271,28 @@ export const BuyScreen: React.FC = () => {
       setActiveOrder(order);
       setIsPolling(true);
 
-      // Open widget for Transak; mock shows the status card directly
+      // Open the Transak widget in an in-app Chrome Custom Tab (expo-web-browser),
+      // NOT a raw WebView: Transak's account auth (Google OAuth + captcha) cannot
+      // complete inside react-native-webview (white screen after login). Custom
+      // Tabs use Chrome's engine and handle the auth popups/redirects correctly —
+      // the same mechanism this app already uses for its own Google sign-in.
+      // Completion is detected by the pull-verify poll loop (no postMessage needed).
       if (session.provider === "transak" && session.widgetUrl) {
-        setTransakUrl(session.widgetUrl);
+        WebBrowser.openBrowserAsync(session.widgetUrl, {
+          showTitle: true,
+          enableBarCollapsing: true,
+          dismissButtonStyle: "close",
+        })
+          .then(async () => {
+            // Tab dismissed → kick an immediate verify; the poll loop also runs.
+            try {
+              const updated = await RampService.verifyOrder(session.orderId);
+              setActiveOrder(updated);
+            } catch (e) {
+              console.log("[BuyScreen] post-tab verify non-fatal:", e);
+            }
+          })
+          .catch((e) => console.log("[BuyScreen] openBrowserAsync error:", e));
       }
     } catch (err: any) {
       console.error("[BuyScreen] handleBuy error:", err);
@@ -280,10 +305,18 @@ export const BuyScreen: React.FC = () => {
   const handleTransakEvent = useCallback(async (eventId: string, data: any) => {
     if (eventId === "TRANSAK_ORDER_SUCCESSFUL") {
       setTransakUrl(null);
+      // Kick an immediate server-side verification (authoritative, pulls real
+      // status from Transak + delivers funds). The poll loop keeps verifying
+      // until Transak reports COMPLETED. notifyWebhook stays only as a harmless
+      // optimistic hint (ignored server-side unless signed by Transak).
       try {
-        if (activeOrder?.id) await RampService.notifyWebhook(activeOrder.id, data);
+        if (activeOrder?.id) {
+          void RampService.notifyWebhook(activeOrder.id, data);
+          const updated = await RampService.verifyOrder(activeOrder.id);
+          setActiveOrder(updated);
+        }
       } catch (err) {
-        console.error("[BuyScreen] notifyWebhook error:", err);
+        console.log("[BuyScreen] verifyOrder kick non-fatal:", err);
       }
     } else if (
       eventId === "TRANSAK_ORDER_FAILED" ||
