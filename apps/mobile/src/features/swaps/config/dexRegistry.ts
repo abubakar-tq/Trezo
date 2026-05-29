@@ -91,8 +91,23 @@ const DEX_CONFIGS: Partial<Record<NetworkKey, DexConfig>> = {
     wrappedNativeAddress: SEPOLIA_WETH,
     trustedSpenders: [UNISWAP_SWAP_ROUTER02_SEPOLIA],
     supportedPools: [
-      { sellToken: SEPOLIA_USDC, buyToken: SEPOLIA_WETH, feeTier: 500, enabled: true },
-      { sellToken: SEPOLIA_WETH, buyToken: SEPOLIA_USDC, feeTier: 500, enabled: true },
+      // 500-bps tier has the deepest liquidity on Sepolia by orders of
+      // magnitude (verified 2026-05-29: ~56T units vs ~872B at 3000 vs
+      // ~4.4B at 10000). Address pinned to skip the factory roundtrip.
+      {
+        sellToken: SEPOLIA_USDC,
+        buyToken: SEPOLIA_WETH,
+        feeTier: 500,
+        poolAddress: "0xfb9ce788d957e750e19c6c6f90b2956d99626d98" as Address,
+        enabled: true,
+      },
+      {
+        sellToken: SEPOLIA_WETH,
+        buyToken: SEPOLIA_USDC,
+        feeTier: 500,
+        poolAddress: "0xfb9ce788d957e750e19c6c6f90b2956d99626d98" as Address,
+        enabled: true,
+      },
     ],
   },
   "base-sepolia": {
