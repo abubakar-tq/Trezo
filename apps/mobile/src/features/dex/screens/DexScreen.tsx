@@ -40,6 +40,7 @@ import {
   isCrossChainSwapReady,
   getCrossChainDestinations,
 } from "@/src/features/swaps/config/bridgeRegistry";
+import { getDexConfig } from "@/src/features/swaps/config/dexRegistry";
 import { useUserStore } from "@/src/store/useUserStore";
 import { defaultSlippageBps } from "@/src/features/dex/utils/slippage";
 import { TabScreenContainer, TokenIcon, AssetPickerModal, type Asset } from "@shared/components";
@@ -73,7 +74,13 @@ const shorten = (value?: string | null): string => {
 
 const toTokenKey = (token: TokenMetadata | null): string | null => {
   if (!token) return null;
-  return token.type === "native" ? "native" : token.address.toLowerCase();
+  // Scope native key by chainId so the chain-switch reset effect treats
+  // "native ETH on Sepolia" and "native ETH on Base Sepolia" as distinct.
+  // Otherwise the old sellToken would falsely match the new chain's native
+  // entry and never get replaced, leaving sellToken.chainId stale.
+  return token.type === "native"
+    ? `native:${token.chainId}`
+    : token.address.toLowerCase();
 };
 
 const toAsset = (token: TokenMetadata, balanceRaw: bigint): Asset => ({
@@ -229,8 +236,30 @@ export const DexScreen: React.FC = () => {
         .filter((token) => token.type === "erc20")
         .map((token) => toAsset(token, 0n));
     }
-    return swapTokens.map((token) => toAsset(token, tokenBalances[toTokenKey(token) ?? "native"] ?? 0n));
-  }, [assetPickerSide, swapTokens, tokenBalances, bridgeDestTokens]);
+    // Hide the wrap/unwrap counterpart when picking the opposite side.
+    // ETH<->WETH isn't a V3 swap (no pool for the same asset on both sides);
+    // it's a deposit/withdraw on the WETH contract and lives in a different
+    // flow. Showing it here only sets up a confusing "no provider" error.
+    const dexConfig = getDexConfig(networkKey);
+    const wrappedNative = dexConfig?.wrappedNativeAddress?.toLowerCase();
+    const otherSide = assetPickerSide === "sell" ? buyToken : sellToken;
+    const isWrapCounterpart = (token: TokenMetadata): boolean => {
+      if (!otherSide || !wrappedNative) return false;
+      // other side native -> hide WETH; other side is WETH -> hide native
+      if (otherSide.type === "native" && token.type === "erc20") {
+        return token.address.toLowerCase() === wrappedNative;
+      }
+      if (otherSide.type === "erc20"
+          && otherSide.address.toLowerCase() === wrappedNative
+          && token.type === "native") {
+        return true;
+      }
+      return false;
+    };
+    return swapTokens
+      .filter((token) => !isWrapCounterpart(token))
+      .map((token) => toAsset(token, tokenBalances[toTokenKey(token) ?? "native"] ?? 0n));
+  }, [assetPickerSide, swapTokens, tokenBalances, bridgeDestTokens, networkKey, sellToken, buyToken]);
 
   useEffect(() => {
     if (route.params?.initialTab) {
