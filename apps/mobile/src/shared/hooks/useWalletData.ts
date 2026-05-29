@@ -47,9 +47,14 @@ const toMoralisToken = (t: TokenBalance): MoralisToken => ({
 export const useWalletData = (address?: string, _chain: string = "0x1"): WalletDataState => {
   const aaAccount = useWalletStore((s) => s.aaAccount);
   const activeChainId = useWalletStore((s) => s.activeChainId);
+  // activeChainId is the user's CURRENT chain selection from the chain
+  // switcher and must take precedence. aaAccount is persisted across
+  // sessions, so on app launch it may point to a different (stale) chain
+  // than the chip shows. Using aaAccount first caused the portfolio to
+  // query the previous session's chain while the UI displayed the new one.
   const chainId: SupportedChainId =
-    (aaAccount?.chainId as SupportedChainId | undefined) ??
     (activeChainId as SupportedChainId | undefined) ??
+    (aaAccount?.chainId as SupportedChainId | undefined) ??
     DEFAULT_CHAIN_ID;
 
   const [tokens, setTokens] = useState<MoralisToken[]>([]);

@@ -44,6 +44,17 @@ export class PortfolioService {
         default: { http: [config.rpcUrl] },
         public: { http: [config.rpcUrl] },
       },
+      contracts: {
+        // Canonical Multicall3 address - same on every chain that has it
+        // deployed (mainnet, all OP-stack, all Sepolias, Arbitrum, Polygon,
+        // Anvil forks). Without this, viem's client.multicall throws
+        // ChainDoesNotSupportContract and we silently lose ERC20 balance
+        // discovery.
+        multicall3: {
+          address: "0xcA11bde05977b3631167028862bE2a173976CA11",
+          blockCreated: 1,
+        },
+      },
       testnet: config.environment !== "mainnet",
     });
   }
@@ -63,10 +74,8 @@ export class PortfolioService {
     const cacheKey = `${chainId}:${address.toLowerCase()}`;
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
-      console.log("[DBG-PORTFOLIO-FIX] cache HIT", { chainId, address, tokenCount: cached.data.tokens.length });
       return cached.data;
     }
-    console.log("[DBG-PORTFOLIO-FIX] getPortfolio START", { chainId, address });
 
     const discovery = deps?.discovery ?? new RegistryDiscoveryProvider();
     const price = deps?.price ?? new CoinCapPriceProvider();
@@ -120,13 +129,6 @@ export class PortfolioService {
       tokens,
       missingPrices: missing,
     };
-    console.log("[DBG-PORTFOLIO-FIX] getPortfolio END", {
-      chainId,
-      address,
-      totalValue: total,
-      tokenSummary: tokens.map((tk) => ({ symbol: tk.symbol, amount: tk.amount, value: tk.value })),
-      missingPrices: missing,
-    });
     this.cache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS });
     return data;
   }
