@@ -108,51 +108,48 @@ class MarketService {
         storageService.set(cacheKey, history);
         return history;
       } catch (error: any) {
-        const isNetworkError = error.message === 'Network Error' || !error.response;
-        console.warn(`[MarketService] Failed to fetch history for ${id} from CoinCap. ${isNetworkError ? 'Network blockage.' : ''}`);
-        
-        if (isNetworkError) {
-          try {
-            const { binanceService } = require('./BinanceService');
-            const idToSymbol: Record<string, string> = {
-              'bitcoin': 'BTC',
-              'ethereum': 'ETH',
-              'solana': 'SOL',
-              'binance-coin': 'BNB',
-              'ripple': 'XRP',
-              'cardano': 'ADA',
-              'dogecoin': 'DOGE',
-              'polkadot': 'DOT',
-              'tron': 'TRX',
-              'polygon': 'MATIC',
-              'bittensor': 'TAO',
-              'chainlink': 'LINK',
-              'tether': 'USDT',
-              'usd-coin': 'USDC',
-              'staked-ether': 'ETH',
-              'dai': 'DAI',
-              'wrapped-bitcoin': 'BTC',
-              'litecoin': 'LTC',
-              'shiba-inu': 'SHIB',
-              'bitcoin-cash': 'BCH'
-            };
-            const symbol = idToSymbol[id] || id.toUpperCase();
-            const bInterval = interval === 'm15' ? '15m' : interval === 'h2' ? '2h' : interval === 'h12' ? '12h' : interval === 'd1' ? '1d' : '1h';
-            
-            console.log(`[MarketService] Attempting Binance klines fallback for ${symbol}...`);
-            const klines = await binanceService.getKlines(symbol, bInterval, 50);
-            
-            if (klines && klines.length > 0) {
-              const history = klines.map((k: any) => ({
-                priceUsd: k.close,
-                time: k.closeTime
-              }));
-              storageService.set(cacheKey, history);
-              return history;
-            }
-          } catch (e) {
-            console.error('[MarketService] History fallback failed:', e);
+        console.warn(`[MarketService] Failed to fetch history for ${id} from primary source. Attempting Binance fallback.`);
+
+        try {
+          const { binanceService } = require('./BinanceService');
+          const idToSymbol: Record<string, string> = {
+            'bitcoin': 'BTC',
+            'ethereum': 'ETH',
+            'solana': 'SOL',
+            'binance-coin': 'BNB',
+            'ripple': 'XRP',
+            'cardano': 'ADA',
+            'dogecoin': 'DOGE',
+            'polkadot': 'DOT',
+            'tron': 'TRX',
+            'polygon': 'MATIC',
+            'bittensor': 'TAO',
+            'chainlink': 'LINK',
+            'tether': 'USDT',
+            'usd-coin': 'USDC',
+            'staked-ether': 'ETH',
+            'dai': 'DAI',
+            'wrapped-bitcoin': 'BTC',
+            'litecoin': 'LTC',
+            'shiba-inu': 'SHIB',
+            'bitcoin-cash': 'BCH'
+          };
+          const symbol = idToSymbol[id] || id.toUpperCase();
+          const bInterval = interval === 'm15' ? '15m' : interval === 'h2' ? '2h' : interval === 'h12' ? '12h' : interval === 'd1' ? '1d' : '1h';
+
+          console.log(`[MarketService] Attempting Binance klines fallback for ${symbol}...`);
+          const klines = await binanceService.getKlines(symbol, bInterval, 50);
+
+          if (klines && klines.length > 0) {
+            const history = klines.map((k: any) => ({
+              priceUsd: k.close,
+              time: k.closeTime
+            }));
+            storageService.set(cacheKey, history);
+            return history;
           }
+        } catch (e) {
+          console.error('[MarketService] History fallback failed:', e);
         }
         return [];
       }
@@ -171,47 +168,44 @@ class MarketService {
       const response = await this.api.get(`/assets/${id}`);
       return response.data.data;
     } catch (error: any) {
-      const isNetworkError = error.message === 'Network Error' || !error.response;
-      if (isNetworkError) {
-        console.log(`[MarketService] Network blockage for ${id}. Attempting Binance detail fetch.`);
-        try {
-          const { binanceService } = require('./BinanceService');
-          const idToSymbol: Record<string, string> = {
-            'bitcoin': 'BTC',
-            'ethereum': 'ETH',
-            'binance-coin': 'BNB',
-            'solana': 'SOL',
-            'ripple': 'XRP',
-            'cardano': 'ADA',
-            'dogecoin': 'DOGE',
-            'polkadot': 'DOT',
-            'tron': 'TRX',
-            'polygon': 'MATIC',
-            'bittensor': 'TAO',
-            'chainlink': 'LINK',
-            'tether': 'USDT',
-            'usd-coin': 'USDC'
+      console.log(`[MarketService] Failed to fetch details for ${id}. Attempting Binance detail fetch.`);
+      try {
+        const { binanceService } = require('./BinanceService');
+        const idToSymbol: Record<string, string> = {
+          'bitcoin': 'BTC',
+          'ethereum': 'ETH',
+          'binance-coin': 'BNB',
+          'solana': 'SOL',
+          'ripple': 'XRP',
+          'cardano': 'ADA',
+          'dogecoin': 'DOGE',
+          'polkadot': 'DOT',
+          'tron': 'TRX',
+          'polygon': 'MATIC',
+          'bittensor': 'TAO',
+          'chainlink': 'LINK',
+          'tether': 'USDT',
+          'usd-coin': 'USDC'
+        };
+        const symbol = idToSymbol[id] || id.toUpperCase();
+        const ticker = await binanceService.getTicker24h(symbol);
+        if (ticker) {
+          return {
+            id,
+            rank: '0',
+            symbol,
+            name: symbol,
+            supply: '0',
+            maxSupply: null,
+            marketCapUsd: '0',
+            volumeUsd24Hr: ticker.quoteVolume,
+            priceUsd: ticker.lastPrice,
+            changePercent24Hr: ticker.priceChangePercent,
+            vwap24Hr: ticker.weightedAvgPrice
           };
-          const symbol = idToSymbol[id] || id.toUpperCase();
-          const ticker = await binanceService.getTicker24h(symbol);
-          if (ticker) {
-            return {
-              id,
-              rank: '0',
-              symbol,
-              name: symbol,
-              supply: '0',
-              maxSupply: null,
-              marketCapUsd: '0',
-              volumeUsd24Hr: ticker.quoteVolume,
-              priceUsd: ticker.lastPrice,
-              changePercent24Hr: ticker.priceChangePercent,
-              vwap24Hr: ticker.weightedAvgPrice
-            };
-          }
-        } catch (e) {
-          console.error('[MarketService] Detail fallback failed:', e);
         }
+      } catch (e) {
+        console.error('[MarketService] Detail fallback failed:', e);
       }
       return null;
     }
