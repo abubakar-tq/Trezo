@@ -22,9 +22,11 @@ export type BrowserMenuSheetProps = {
   colors: ThemeColors;
 };
 
-type RowItem = {
+type Tile = {
+  key: string;
   icon: React.ComponentProps<typeof Feather>["name"];
   label: string;
+  color: string; // decorative per-action accent (reads on both light & dark)
   onPress: () => void;
   disabled?: boolean;
 };
@@ -59,13 +61,13 @@ export const BrowserMenuSheet = forwardRef<BrowserMenuHandle, BrowserMenuSheetPr
       fn();
     };
 
-    const rows: RowItem[] = [
-      { icon: "rotate-cw", label: "Reload", onPress: run(onReload) },
-      { icon: "arrow-right", label: "Forward", onPress: run(onForward), disabled: !canGoForward },
-      { icon: "copy", label: "Copy link", onPress: run(onCopyLink) },
-      { icon: "share-2", label: "Share", onPress: run(onShare) },
-      { icon: "plus-square", label: "New tab", onPress: run(onNewTab) },
-      { icon: "settings", label: "Browser settings", onPress: run(onOpenSettings) },
+    const tiles: Tile[] = [
+      { key: "reload", icon: "rotate-cw", label: "Reload", color: "#06B6D4", onPress: run(onReload) },
+      { key: "forward", icon: "arrow-right", label: "Forward", color: "#7C3AED", onPress: run(onForward), disabled: !canGoForward },
+      { key: "copy", icon: "copy", label: "Copy link", color: "#3B82F6", onPress: run(onCopyLink) },
+      { key: "share", icon: "share-2", label: "Share", color: "#10B981", onPress: run(onShare) },
+      { key: "newtab", icon: "plus-square", label: "New tab", color: "#F59E0B", onPress: run(onNewTab) },
+      { key: "settings", icon: "settings", label: "Settings", color: "#8B8B98", onPress: run(onOpenSettings) },
     ];
 
     return (
@@ -79,7 +81,7 @@ export const BrowserMenuSheet = forwardRef<BrowserMenuHandle, BrowserMenuSheetPr
                 { backgroundColor: connected ? colors.successSoft : colors.surfaceMuted },
               ]}
             >
-              <Feather name="globe" size={19} color={connected ? colors.success : colors.textMuted} />
+              <Feather name="globe" size={20} color={connected ? colors.success : colors.textMuted} />
             </View>
             <View style={styles.headerText}>
               <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
@@ -109,13 +111,29 @@ export const BrowserMenuSheet = forwardRef<BrowserMenuHandle, BrowserMenuSheetPr
             )}
           </View>
 
-          {/* Actions */}
-          <View style={[styles.group, { backgroundColor: colors.surfaceElevated }]}>
-            {rows.map((item, i) => (
-              <View key={item.label}>
-                {i > 0 && <View style={[styles.divider, { backgroundColor: colors.borderMuted }]} />}
-                <MenuRow item={item} colors={colors} />
-              </View>
+          {/* Colorful action grid */}
+          <View style={styles.grid}>
+            {tiles.map((tile) => (
+              <Pressable
+                key={tile.key}
+                onPress={tile.onPress}
+                disabled={tile.disabled}
+                style={({ pressed }) => [
+                  styles.tile,
+                  {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.border,
+                    opacity: tile.disabled ? 0.4 : pressed ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <View style={[styles.tileChip, { backgroundColor: `${tile.color}22` }]}>
+                  <Feather name={tile.icon} size={20} color={tile.color} />
+                </View>
+                <Text style={[styles.tileLabel, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {tile.label}
+                </Text>
+              </Pressable>
             ))}
           </View>
         </View>
@@ -125,24 +143,6 @@ export const BrowserMenuSheet = forwardRef<BrowserMenuHandle, BrowserMenuSheetPr
 );
 
 BrowserMenuSheet.displayName = "BrowserMenuSheet";
-
-function MenuRow({ item, colors }: { item: RowItem; colors: ThemeColors }) {
-  return (
-    <Pressable
-      onPress={item.onPress}
-      disabled={item.disabled}
-      style={({ pressed }) => [
-        styles.row,
-        { backgroundColor: pressed ? colors.surfaceMuted : "transparent", opacity: item.disabled ? 0.4 : 1 },
-      ]}
-    >
-      <View style={[styles.chip, { backgroundColor: colors.surfaceMuted }]}>
-        <Feather name={item.icon} size={17} color={colors.textSecondary} />
-      </View>
-      <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{item.label}</Text>
-    </Pressable>
-  );
-}
 
 const styles = StyleSheet.create({
   body: { paddingBottom: 8, gap: 14 },
@@ -162,9 +162,17 @@ const styles = StyleSheet.create({
   status: { fontSize: 12, fontWeight: "500", flexShrink: 1 },
   disconnectBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
   disconnectText: { fontSize: 12, fontWeight: "700" },
-  group: { borderRadius: 16, overflow: "hidden" },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 12, minHeight: 52 },
-  chip: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  rowLabel: { fontSize: 15, fontWeight: "600", flex: 1 },
-  divider: { height: StyleSheet.hairlineWidth, marginLeft: 58 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  tile: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    gap: 9,
+  },
+  tileChip: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  tileLabel: { fontSize: 12.5, fontWeight: "600" },
 });
