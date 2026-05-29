@@ -43,6 +43,7 @@ import {
 import { useUserStore } from "@/src/store/useUserStore";
 import { defaultSlippageBps } from "@/src/features/dex/utils/slippage";
 import { TabScreenContainer, TokenIcon, AssetPickerModal, type Asset } from "@shared/components";
+import { ChainSwitcherChip } from "@features/wallet/components/ChainSwitcherChip";
 import Toast from "@/src/shared/components/feedback/Toast";
 import { useTabContentBottomInset } from "@hooks";
 
@@ -101,9 +102,15 @@ export const DexScreen: React.FC = () => {
   const [sellToken, setSellToken] = useState<TokenMetadata | null>(null);
   const [buyToken, setBuyToken] = useState<TokenMetadata | null>(null);
 
+  // Chain follows the global active-chain selection so switching chains in
+  // the Home header (or anywhere else with the ChainSwitcherChip) immediately
+  // updates the DexScreen tokens. Falling back through sellToken would lock
+  // the screen to whatever chain the current sellToken belonged to - which
+  // the user could not escape via the picker since the picker itself was
+  // filtered by the locked chain.
   const selectedChainId = useMemo<SupportedChainId>(
-    () => sellToken?.chainId ?? buyToken?.chainId ?? DEFAULT_CHAIN_ID,
-    [sellToken?.chainId, buyToken?.chainId],
+    () => (activeChainId as SupportedChainId) ?? DEFAULT_CHAIN_ID,
+    [activeChainId],
   );
   const [sellAmountDecimal, setSellAmountDecimal] = useState<string>("");
   const [slippageBpsOverride, setSlippageBpsOverride] = useState<number | null>(null);
@@ -815,12 +822,7 @@ export const DexScreen: React.FC = () => {
             <Text style={styles.headerTitle}>Exchange</Text>
           </View>
           <View style={styles.headerMeta}>
-            <View style={[styles.networkBadge, { backgroundColor: `${envColor}1A`, borderColor: `${envColor}47` }]}>
-              <View style={[styles.networkDot, { backgroundColor: envColor }]} />
-              <Text style={[styles.networkBadgeText, { color: envColor }]}>
-                {networkConfig?.displayName ?? `Chain ${selectedChainId}`}
-              </Text>
-            </View>
+            <ChainSwitcherChip />
             {walletAddress && (
               <Text style={[styles.walletAddressText, { color: colors.textMuted }]}>
                 {shorten(walletAddress)}
