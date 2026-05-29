@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ops from "./sessionOps";
 
 export type DAppSession = {
   id: string;
@@ -26,31 +27,17 @@ export const useDAppSessionsStore = create<DAppSessionsState>()(
       sessions: [],
       addSession: (s) => {
         const now = new Date().toISOString();
-        const session: DAppSession = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          approvedAt: now,
-          lastUsedAt: now,
-          ...s,
-        };
-        // Upsert: replace any existing session for this origin
-        set({ sessions: [...get().sessions.filter((x) => x.origin !== s.origin), session] });
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const { sessions, session } = ops.upsertSession(get().sessions, s, id, now);
+        set({ sessions });
         return session;
       },
-      removeSession: (origin) =>
-        set({ sessions: get().sessions.filter((x) => x.origin !== origin) }),
+      removeSession: (origin) => set({ sessions: ops.removeSession(get().sessions, origin) }),
       touchSession: (origin) =>
-        set({
-          sessions: get().sessions.map((x) =>
-            x.origin === origin ? { ...x, lastUsedAt: new Date().toISOString() } : x
-          ),
-        }),
+        set({ sessions: ops.touchSession(get().sessions, origin, new Date().toISOString()) }),
       updateSessionChain: (origin, chainId) =>
-        set({
-          sessions: get().sessions.map((x) =>
-            x.origin === origin ? { ...x, chainId, lastUsedAt: new Date().toISOString() } : x
-          ),
-        }),
-      findSession: (origin) => get().sessions.find((x) => x.origin === origin) ?? null,
+        set({ sessions: ops.updateSessionChain(get().sessions, origin, chainId, new Date().toISOString()) }),
+      findSession: (origin) => ops.findSession(get().sessions, origin),
     }),
     {
       name: "trezo_dapp_sessions_v1",
