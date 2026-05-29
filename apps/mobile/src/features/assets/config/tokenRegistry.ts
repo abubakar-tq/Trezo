@@ -70,6 +70,19 @@ export const BUILTIN_TOKENS_BY_NETWORK: Record<NetworkKey, BuiltinTokenEntry[]> 
       isVerified: true,
       source: "builtin",
     },
+    {
+      chainId: 84532,
+      networkKey: "base-sepolia",
+      type: "erc20",
+      address: "0xE4aB69C077896252FAFBD49EFD26B5D171A32410", // Chainlink LINK Base Sepolia
+      symbol: "LINK",
+      name: "ChainLink Token",
+      decimals: 18,
+      tags: ["oracle", "base-sepolia"],
+      isSwapSupported: true,
+      isVerified: true,
+      source: "builtin",
+    },
   ],
   "arbitrum-sepolia": [
     {

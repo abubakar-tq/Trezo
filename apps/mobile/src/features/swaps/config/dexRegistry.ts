@@ -66,6 +66,7 @@ const UNISWAP_SWAP_ROUTER02_SEPOLIA = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48
 // ─── Base Sepolia Addresses ───────────────────────────────────────────────────
 const BASE_SEPOLIA_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address;
 const BASE_SEPOLIA_WETH = "0x4200000000000000000000000000000000000006" as Address;
+const BASE_SEPOLIA_LINK = "0xE4aB69C077896252FAFBD49EFD26B5D171A32410" as Address;
 const UNISWAP_V3_FACTORY_BASE_SEPOLIA = "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24" as Address;
 const UNISWAP_QUOTER_V2_BASE_SEPOLIA = "0xC5290058841028F1614F3A6F0F5816cAd0df5E27" as Address;
 const UNISWAP_SWAP_ROUTER02_BASE_SEPOLIA = "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4" as Address;
@@ -118,6 +119,23 @@ const DEX_CONFIGS: Partial<Record<NetworkKey, DexConfig>> = {
         buyToken: BASE_SEPOLIA_USDC,
         feeTier: 3000,
         poolAddress: "0x46880b404CD35c165EDdefF7421019F8dD25F4Ad" as Address,
+        enabled: true,
+      },
+      // LINK / WETH 3000 bps pool on Base Sepolia — verified on-chain to have
+      // real liquidity (probe 2026-05-29). 10000 bps tier also exists with
+      // deeper liquidity but 3000 is fine for demo-sized swaps.
+      {
+        sellToken: BASE_SEPOLIA_WETH,
+        buyToken: BASE_SEPOLIA_LINK,
+        feeTier: 3000,
+        poolAddress: "0x78c470050f092ff228329c5267feda8a03d14d93" as Address,
+        enabled: true,
+      },
+      {
+        sellToken: BASE_SEPOLIA_LINK,
+        buyToken: BASE_SEPOLIA_WETH,
+        feeTier: 3000,
+        poolAddress: "0x78c470050f092ff228329c5267feda8a03d14d93" as Address,
         enabled: true,
       },
     ],
