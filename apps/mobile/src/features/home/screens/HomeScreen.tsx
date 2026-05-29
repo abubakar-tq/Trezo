@@ -58,6 +58,9 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
 
   const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
+  const aaAccountAddress = useWalletStore((s) => s.aaAccount?.predictedAddress);
+  // Per-chain takes priority over the legacy global. Same pattern as BrowserScreen.
+  const effectiveAddress = (aaAccountAddress ?? smartAccountAddress) as string | null;
   const userId = useUserStore((state) => state.user?.id);
   useNotificationsBootstrap();
   const unreadCount = useNotificationStore((state) => state.unreadCount);
@@ -85,7 +88,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
     });
   };
 
-  const { totalBalanceUSD, isLoading: walletLoading, missingPrices } = useWalletData(smartAccountAddress ?? undefined);
+  const { totalBalanceUSD, isLoading: walletLoading, missingPrices } = useWalletData(effectiveAddress ?? undefined);
   const { isHydrating, hasLocalPasskey } = useAccountManagement();
   const contentBottomInset = useTabContentBottomInset();
 
@@ -93,7 +96,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   // tooltip both follow this; we no longer trust hasLocalPasskey alone.
   const passkeyAuthority = usePasskeyAuthority({
     userId,
-    smartAccountAddress: smartAccountAddress as Address | null,
+    smartAccountAddress: effectiveAddress as Address | null,
     chainId: activeChainId as SupportedChainId | null | undefined,
   });
 
@@ -117,14 +120,14 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   const [recoverySnapLoading, setRecoverySnapLoading] = useState(false);
 
   useEffect(() => {
-    if (!securityTooltipVisible || !smartAccountAddress || !activeChainId) return;
+    if (!securityTooltipVisible || !effectiveAddress || !activeChainId) return;
     let cancelled = false;
     setRecoverySnapLoading(true);
     setRecoverySnapErr(null);
     Promise.all([
-      SocialRecoveryService.getRecoveryDetails(smartAccountAddress as Address, activeChainId as SupportedChainId),
-      SocialRecoveryService.getRecoveryNonce(smartAccountAddress as Address, activeChainId as SupportedChainId),
-      SocialRecoveryService.getActiveRecovery(smartAccountAddress as Address, activeChainId as SupportedChainId),
+      SocialRecoveryService.getRecoveryDetails(effectiveAddress as Address, activeChainId as SupportedChainId),
+      SocialRecoveryService.getRecoveryNonce(effectiveAddress as Address, activeChainId as SupportedChainId),
+      SocialRecoveryService.getActiveRecovery(effectiveAddress as Address, activeChainId as SupportedChainId),
     ])
       .then(([details, nonce, active]) => {
         if (cancelled) return;
@@ -146,7 +149,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
     return () => {
       cancelled = true;
     };
-  }, [securityTooltipVisible, smartAccountAddress, activeChainId]);
+  }, [securityTooltipVisible, effectiveAddress, activeChainId]);
 
   const handleAssetPress = (token: TokenBalance) => {
     setSelectedToken(token);
@@ -224,14 +227,14 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
         </View>
 
         {/* Recovery Attempt banner — dismissable, Supabase-only, no RPC */}
-        <RecoveryAttemptBanner smartAccountAddress={smartAccountAddress as Address | undefined} />
+        <RecoveryAttemptBanner smartAccountAddress={effectiveAddress as Address | undefined} />
 
         {/* Balance Card */}
         <View style={styles.balanceWrapper}>
           <BalanceCard
             balance={totalBalanceUSD}
             loading={walletLoading}
-            address={smartAccountAddress ?? undefined}
+            address={effectiveAddress ?? undefined}
             isDeployed={isActiveOnChain(activeChainId)}
             isHydrating={isHydrating}
             hasLocalPasskey={hasLocalPasskey}

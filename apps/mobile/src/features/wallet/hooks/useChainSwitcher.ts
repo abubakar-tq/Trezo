@@ -53,6 +53,10 @@ export function useChainSwitcher(options?: UseChainSwitcherOptions): UseChainSwi
   const setActiveChain = useWalletStore((s) => s.setActiveChain);
   const setAAAccount = useWalletStore((s) => s.setAAAccount);
   const user = useUserStore((s) => s.user);
+  // The global smartAccountAddress/smartAccountDeployed must track the active
+  // chain or stale values from previous deploys leak into the new chain's UI.
+  const setSmartAccountAddress = useUserStore((s) => s.setSmartAccountAddress);
+  const setSmartAccountDeployed = useUserStore((s) => s.setSmartAccountDeployed);
 
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,10 +122,20 @@ export function useChainSwitcher(options?: UseChainSwitcherOptions): UseChainSwi
               createdAt: wallet.created_at,
               deployedAt: wallet.deployed_at ?? undefined,
             });
+            // Sync the global mirror so screens that read smartAccountAddress /
+            // smartAccountDeployed directly (HomeScreen.useWalletData,
+            // SocialRecoveryService calls, etc.) get this chain's truth, not the
+            // last deploy's leaked values.
+            setSmartAccountAddress(wallet.predicted_address);
+            setSmartAccountDeployed(wallet.is_deployed);
           } else {
-            // No wallet record on this chain yet - clear the store so isActiveOnChain
-            // returns false and the BalanceCard surfaces a deploy CTA.
+            // No wallet record on this chain yet - clear the per-chain record and
+            // the global deployment flag so the BalanceCard surfaces a deploy CTA.
+            // We leave smartAccountAddress alone: it's the deterministic CREATE2
+            // prediction from the current passkey and is the address that WOULD
+            // exist on this chain after deploy, which is what we want to display.
             setAAAccount(null);
+            setSmartAccountDeployed(false);
           }
         }
 
@@ -134,7 +148,7 @@ export function useChainSwitcher(options?: UseChainSwitcherOptions): UseChainSwi
         setSwitching(false);
       }
     },
-    [activeChainId, setActiveChain, setAAAccount, user?.id, options],
+    [activeChainId, setActiveChain, setAAAccount, setSmartAccountAddress, setSmartAccountDeployed, user?.id, options],
   );
 
   return {
