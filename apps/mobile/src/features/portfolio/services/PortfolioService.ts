@@ -63,8 +63,10 @@ export class PortfolioService {
     const cacheKey = `${chainId}:${address.toLowerCase()}`;
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
+      console.log("[DBG-PORTFOLIO-FIX] cache HIT", { chainId, address, tokenCount: cached.data.tokens.length });
       return cached.data;
     }
+    console.log("[DBG-PORTFOLIO-FIX] getPortfolio START", { chainId, address });
 
     const discovery = deps?.discovery ?? new RegistryDiscoveryProvider();
     const price = deps?.price ?? new CoinCapPriceProvider();
@@ -118,6 +120,13 @@ export class PortfolioService {
       tokens,
       missingPrices: missing,
     };
+    console.log("[DBG-PORTFOLIO-FIX] getPortfolio END", {
+      chainId,
+      address,
+      totalValue: total,
+      tokenSummary: tokens.map((tk) => ({ symbol: tk.symbol, amount: tk.amount, value: tk.value })),
+      missingPrices: missing,
+    });
     this.cache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS });
     return data;
   }

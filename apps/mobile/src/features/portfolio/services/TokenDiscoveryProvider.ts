@@ -57,6 +57,13 @@ export class RegistryDiscoveryProvider implements TokenDiscoveryProvider {
   ): Promise<DiscoveredToken[]> {
     const all = this.tokenLister(chainId);
     const erc20s = all.filter((t) => t.type === "erc20");
+    console.log("[DBG-PORTFOLIO-FIX] discover", {
+      chainId,
+      address,
+      tokenCount: all.length,
+      erc20Count: erc20s.length,
+      erc20s: erc20s.map((tk) => ({ symbol: tk.symbol, address: tk.address })),
+    });
 
     const nativeBalance = await client.getBalance({ address });
     const native: DiscoveredToken = {
@@ -71,15 +78,26 @@ export class RegistryDiscoveryProvider implements TokenDiscoveryProvider {
       return [native];
     }
 
-    const results = await client.multicall({
-      contracts: erc20s.map((t) => ({
-        address: t.address as Address,
-        abi: ERC20_BALANCE_OF_ABI,
-        functionName: "balanceOf" as const,
-        args: [address] as const,
-      })),
-      allowFailure: true,
-    });
+    let results;
+    try {
+      results = await client.multicall({
+        contracts: erc20s.map((t) => ({
+          address: t.address as Address,
+          abi: ERC20_BALANCE_OF_ABI,
+          functionName: "balanceOf" as const,
+          args: [address] as const,
+        })),
+        allowFailure: true,
+      });
+    } catch (err) {
+      console.warn("[DBG-PORTFOLIO-FIX] multicall threw", err);
+      throw err;
+    }
+    console.log("[DBG-PORTFOLIO-FIX] multicall results", results.map((r, i) => ({
+      symbol: erc20s[i].symbol,
+      status: r.status,
+      result: r.status === "success" ? (r.result as bigint).toString() : (r.error?.message ?? "?"),
+    })));
 
     const found: DiscoveredToken[] = [];
     results.forEach((r, i) => {
@@ -96,6 +114,10 @@ export class RegistryDiscoveryProvider implements TokenDiscoveryProvider {
       });
     });
 
+    console.log("[DBG-PORTFOLIO-FIX] discover returning", {
+      nativeBalance: nativeBalance.toString(),
+      found: found.map((f) => ({ symbol: f.symbol, amount: f.amountRaw.toString() })),
+    });
     return [native, ...found];
   }
 }
