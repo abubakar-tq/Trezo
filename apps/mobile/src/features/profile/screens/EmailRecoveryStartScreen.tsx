@@ -311,7 +311,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
           activeOpacity={0.85}
         >
           {isCreating ? (
-            <ActivityIndicator size="small" color={colors.textOnAccent} />
+            <ActivityIndicator size="small" color={theme.colors.textOnAccent} />
           ) : (
             <Text style={styles.primaryButtonText}>
               Create Recovery Request

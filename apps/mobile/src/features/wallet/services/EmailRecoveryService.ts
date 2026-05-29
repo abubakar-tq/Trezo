@@ -776,32 +776,29 @@ export class EmailRecoveryService {
     const publicClient = getPublicClient(chainId);
     const emailRecoveryAddr = deployment.emailRecovery as Address;
 
-    const guardianConfig = await publicClient.readContract({
+    // The deployed contract returns a struct
+    // {guardianCount, totalWeight, acceptedWeight, threshold}, not an array.
+    const guardianConfig = (await publicClient.readContract({
       address: emailRecoveryAddr,
-      abi: [
-        {
-          name: "getGuardianConfig",
-          type: "function",
-          stateMutability: "view",
-          inputs: [{ name: "account", type: "address" }],
-          outputs: [
-            { name: "guardians", type: "address[]" },
-            { name: "weights", type: "uint256[]" },
-            { name: "threshold", type: "uint256" },
-            { name: "delay", type: "uint256" },
-            { name: "expiry", type: "uint256" },
-            { name: "currentWeight", type: "uint256" },
-          ],
-        },
-      ],
+      abi: ABIS.emailRecovery,
       functionName: "getGuardianConfig",
       args: [smartAccountAddress],
-    }) as [Address[], bigint[], bigint, bigint, bigint, bigint];
+    })) as {
+      guardianCount: bigint;
+      totalWeight: bigint;
+      acceptedWeight: bigint;
+      threshold: bigint;
+    };
 
-    const [, , threshold, , , currentWeight] = guardianConfig;
-    const allAccepted = currentWeight >= threshold;
+    const allAccepted =
+      guardianConfig.threshold > 0n &&
+      guardianConfig.acceptedWeight >= guardianConfig.threshold;
 
-    return { allAccepted, acceptedWeight: currentWeight, threshold };
+    return {
+      allAccepted,
+      acceptedWeight: guardianConfig.acceptedWeight,
+      threshold: guardianConfig.threshold,
+    };
   }
 
   /**
@@ -819,12 +816,44 @@ export class EmailRecoveryService {
    * for `EmailRecoveryCommandHandler.sol` that's "Accept guardian request for
    * {ethAddr}".
    */
+  /**
+   * Resets a single guardian's acceptance state back to "pending" and triggers
+   * a fresh acceptance email through the relayer. Use when an earlier invite
+   * got stuck (e.g. prove.email's prover 502'd) and we want a new request_id
+   * without uninstalling/reinstalling the whole module.
+   */
+  static async resendGuardianAcceptanceInvite(params: {
+    smartAccountAddress: Address;
+    configId: string;
+    guardianRowId: string;
+    adapter: ZkEmailRelayerAdapter;
+    acceptanceTemplateIdx?: number;
+  }): Promise<{ sent: number; skipped: number; failed: number; errors: string[] }> {
+    const { error: resetError } = await this.supabase
+      .from("email_recovery_guardians")
+      .update({
+        acceptance_status: "pending",
+        acceptance_relayer_request_id: null,
+        acceptance_checked_at: null,
+      })
+      .eq("id", params.guardianRowId)
+      .eq("config_id", params.configId);
+    if (resetError) throw resetError;
+
+    return this.sendGuardianAcceptanceEmails({
+      smartAccountAddress: params.smartAccountAddress,
+      configId: params.configId,
+      adapter: params.adapter,
+      acceptanceTemplateIdx: params.acceptanceTemplateIdx,
+    });
+  }
+
   static async sendGuardianAcceptanceEmails(params: {
     smartAccountAddress: Address;
     configId: string;
     adapter: ZkEmailRelayerAdapter;
     acceptanceTemplateIdx?: number;
-  }): Promise<{ sent: number; skipped: number; failed: number }> {
+  }): Promise<{ sent: number; skipped: number; failed: number; errors: string[] }> {
     const templateIdx = params.acceptanceTemplateIdx ?? 0;
     const command = `Accept guardian request for ${params.smartAccountAddress}`;
 
@@ -836,12 +865,13 @@ export class EmailRecoveryService {
 
     if (error) throw error;
     if (!pending || pending.length === 0) {
-      return { sent: 0, skipped: 0, failed: 0 };
+      return { sent: 0, skipped: 0, failed: 0, errors: [] };
     }
 
     let sent = 0;
     let skipped = 0;
     let failed = 0;
+    const errors: string[] = [];
 
     for (const row of pending as Array<{
       id: string;
@@ -890,19 +920,22 @@ export class EmailRecoveryService {
 
         sent += 1;
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
         console.warn("[EmailRecovery] sendAcceptanceEmail failed for", row.masked_email, err);
         await this.supabase
           .from("email_recovery_guardians")
           .update({
             acceptance_status: "failed",
             acceptance_checked_at: new Date().toISOString(),
+            last_error: msg,
           })
           .eq("id", row.id);
+        errors.push(`${row.masked_email}: ${msg}`);
         failed += 1;
       }
     }
 
-    return { sent, skipped, failed };
+    return { sent, skipped, failed, errors };
   }
 
   /**
@@ -941,16 +974,11 @@ export class EmailRecoveryService {
     }
 
     const publicClient = getPublicClient(chainId);
-    const guardianConfig = (await publicClient.readContract({
-      address: deployment.emailRecovery as Address,
-      abi: ABIS.emailRecovery,
-      functionName: "getGuardianConfig",
-      args: [params.smartAccountAddress],
-    })) as [Address[], bigint[], bigint, bigint, bigint, bigint];
-
-    const onChainGuardians = new Set(
-      guardianConfig[0].map((addr: Address) => addr.toLowerCase()),
-    );
+    // Acceptance check happens per-guardian via getGuardian(account, addr).status:
+    //   0 = NONE, 1 = REQUESTED (registered, not yet accepted), 2 = ACCEPTED.
+    // Using getAllGuardians here would be wrong — guardians are registered at
+    // install time so they're always in that list regardless of acceptance.
+    const GUARDIAN_STATUS_ACCEPTED = 2;
 
     let newlyAccepted = 0;
     let stillPending = 0;
@@ -995,9 +1023,20 @@ export class EmailRecoveryService {
         }
       }
 
-      const isAcceptedOnChain = Boolean(
-        derivedAddress && onChainGuardians.has(derivedAddress.toLowerCase()),
-      );
+      let isAcceptedOnChain = false;
+      if (derivedAddress) {
+        try {
+          const guardianStorage = (await publicClient.readContract({
+            address: deployment.emailRecovery as Address,
+            abi: ABIS.emailRecovery,
+            functionName: "getGuardian",
+            args: [params.smartAccountAddress, derivedAddress],
+          })) as { status: number; weight: bigint };
+          isAcceptedOnChain = guardianStorage.status === GUARDIAN_STATUS_ACCEPTED;
+        } catch (err) {
+          console.warn("[EmailRecovery] poll getGuardian failed", row.masked_email, err);
+        }
+      }
 
       if (isAcceptedOnChain) {
         await this.supabase
@@ -1082,10 +1121,13 @@ export class EmailRecoveryService {
       : undefined;
 
     const { encodeFunctionData } = await import("viem");
+    // The deployed EmailRecovery.removeGuardian takes ONLY the guardian addr;
+    // msg.sender is the account being recovered (the smart account itself,
+    // because this is invoked via SmartAccount.execute → EmailRecovery).
     const callData = encodeFunctionData({
       abi: ABIS.emailRecovery,
       functionName: "removeGuardian",
-      args: [params.smartAccountAddress, params.guardianAddress],
+      args: [params.guardianAddress],
     });
 
     // EmailRecovery.removeGuardian is invoked via SmartAccount.execute so
@@ -1108,6 +1150,97 @@ export class EmailRecoveryService {
     });
 
     return { userOp, userOpHash };
+  }
+
+  /**
+   * Builds a UserOp that calls EmailRecovery.addGuardian(guardianAddress, weight).
+   * Used to add a guardian POST-install (separate from the install-time
+   * configureRecovery path which sets up the initial guardian set).
+   */
+  static async buildAddGuardianUserOp(params: {
+    smartAccountAddress: Address;
+    guardianAddress: Address;
+    weight: bigint;
+    passkeyId: Hex;
+    chainId?: SupportedChainId;
+    bundlerUrl?: string;
+    paymasterUrl?: string;
+    usePaymaster?: boolean;
+  }): Promise<EmailRecoveryInstallResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const deployment = getDeployment(chainId);
+    if (!deployment?.emailRecovery) {
+      throw new Error(`No Email Recovery module configured for chain ${chainId}`);
+    }
+
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
+    const usePaymaster = params.usePaymaster ?? true;
+    const paymasterUrl = usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
+      : undefined;
+
+    const { encodeFunctionData } = await import("viem");
+    const callData = encodeFunctionData({
+      abi: ABIS.emailRecovery,
+      functionName: "addGuardian",
+      args: [params.guardianAddress, params.weight],
+    });
+
+    const { buildSmartAccountExecutionUserOp } = await import(
+      "@/src/integration/viem/userOps"
+    );
+    const { userOp, userOpHash } = await buildSmartAccountExecutionUserOp({
+      smartAccountAddress: params.smartAccountAddress,
+      target: deployment.emailRecovery as Address,
+      value: 0n,
+      data: callData,
+      chainId,
+      bundlerUrl,
+      paymasterUrl,
+      usePaymaster,
+      passkeyId: params.passkeyId,
+      operationLabel: "EmailRecovery.addGuardian",
+    });
+
+    return { userOp, userOpHash };
+  }
+
+  /**
+   * Persists a single newly-added guardian into Supabase. Mirrors the
+   * guardianRow shape used by persistMetadata so loadMetadata picks it up.
+   * Caller is responsible for triggering sendGuardianAcceptanceEmails after.
+   */
+  static async persistAddedGuardian(params: {
+    smartAccountAddress: Address;
+    configId: string;
+    guardianEmail: string;
+    weight: number;
+    securityMode: EmailRecoverySecurityMode;
+  }): Promise<{ rowId: string }> {
+    const normalized = normalizeGuardianEmail(params.guardianEmail);
+    if (!normalized) {
+      throw new Error("Guardian email is required.");
+    }
+    const emailHash = keccak256(stringToHex(normalized));
+    const encrypted = await this.encryptEmailForStorage(
+      normalized,
+      params.smartAccountAddress,
+      params.securityMode,
+    );
+    const { data, error } = await this.supabase
+      .from("email_recovery_guardians")
+      .insert({
+        config_id: params.configId,
+        normalized_email_encrypted: encrypted,
+        email_hash: emailHash,
+        masked_email: this.maskEmail(normalized),
+        weight: Math.max(params.weight, 1),
+        acceptance_status: "pending",
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return { rowId: data.id as string };
   }
 
   /**

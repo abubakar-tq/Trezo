@@ -714,8 +714,16 @@ export class EmailRecoveryGroupService {
     command: string;
   }) {
     if (params.proofMode === "reusable") {
+      // controllerEthAddr is the contract prove.email calls
+      // recoveryCommandTemplates() on — it MUST be the EmailRecovery module
+      // address, NOT the smart account address. Each chain_request row
+      // carries the per-chain module address (see line 322: email_recovery_module).
+      const firstChain = params.chainRequests[0];
+      if (!firstChain?.email_recovery_module) {
+        throw new Error("Cannot send recovery request: no chain request with an EmailRecovery module address.");
+      }
       const ref = await params.adapter.sendRecoveryRequest({
-        controllerEthAddr: params.group.smart_account_address as Address,
+        controllerEthAddr: firstChain.email_recovery_module as Address,
         guardianEmailAddr: params.guardianEmail,
         templateIdx: params.recoveryTemplateIdx,
         command: params.command,
@@ -734,8 +742,11 @@ export class EmailRecoveryGroupService {
 
     const refs = [];
     for (const chainReq of params.chainRequests) {
+      if (!chainReq.email_recovery_module) {
+        throw new Error(`chain_request ${chainReq.id} is missing email_recovery_module — re-create the recovery group.`);
+      }
       const ref = await params.adapter.sendRecoveryRequest({
-        controllerEthAddr: params.group.smart_account_address as Address,
+        controllerEthAddr: chainReq.email_recovery_module as Address,
         guardianEmailAddr: params.guardianEmail,
         templateIdx: params.recoveryTemplateIdx,
         command: params.command,

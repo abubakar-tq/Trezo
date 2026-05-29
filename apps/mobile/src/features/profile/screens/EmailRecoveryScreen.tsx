@@ -83,8 +83,10 @@ const EmailRecoveryScreen: React.FC = () => {
   const [guardianWeights, setGuardianWeights] = useState<string[]>(() =>
     Array(defaultGuardianCount).fill("1"),
   );
-  const [delayMinutes, setDelayMinutes] = useState("5");
-  const [expiryMinutes, setExpiryMinutes] = useState("60");
+  // EmailRecoveryManager enforces expiry - delay >= MINIMUM_RECOVERY_WINDOW
+  // (= 2 days = 2880 minutes). Defaults give a 49-hour window above the floor.
+  const [delayMinutes, setDelayMinutes] = useState("60");
+  const [expiryMinutes, setExpiryMinutes] = useState("2940");
   const [securityMode, setSecurityMode] =
     useState<EmailRecoverySecurityMode>("none");
   const [vaultKeyInput, setVaultKeyInput] = useState("");
@@ -199,6 +201,13 @@ const EmailRecoveryScreen: React.FC = () => {
     }
     if (parsedExpiryMinutes < parsedDelayMinutes) {
       return "Expiry must be greater than or equal to the delay.";
+    }
+    // EmailRecoveryManager.configureRecovery requires
+    //   expiry - delay >= MINIMUM_RECOVERY_WINDOW (2 days = 2880 minutes).
+    // Catch this client-side instead of failing the UserOp at simulation time.
+    const MIN_RECOVERY_WINDOW_MINUTES = 2880;
+    if (parsedExpiryMinutes - parsedDelayMinutes < MIN_RECOVERY_WINDOW_MINUTES) {
+      return `Expiry must be at least ${MIN_RECOVERY_WINDOW_MINUTES} minutes (48 hours) greater than delay. Current window: ${parsedExpiryMinutes - parsedDelayMinutes} min.`;
     }
     return null;
   }, [
@@ -501,6 +510,171 @@ const EmailRecoveryScreen: React.FC = () => {
   }, []);
 
   const [removingGuardianId, setRemovingGuardianId] = useState<string | null>(null);
+  const [resendingGuardianId, setResendingGuardianId] = useState<string | null>(null);
+  const [addingPostInstallGuardian, setAddingPostInstallGuardian] = useState(false);
+  const [newPostInstallEmail, setNewPostInstallEmail] = useState("");
+  const [newPostInstallWeight, setNewPostInstallWeight] = useState("1");
+
+  /**
+   * Adds a guardian to an already-installed Email Recovery module via an
+   * on-chain addGuardian UserOp, persists the row in Supabase, and fires the
+   * acceptance email. Used to escape the "removeGuardian blocked by threshold"
+   * lockout when totalWeight=threshold=1.
+   */
+  const handleAddPostInstallGuardian = useCallback(async () => {
+    if (!user?.id || !smartAccountAddress || !storedMetadata?.config?.id) return;
+    const email = newPostInstallEmail.trim();
+    if (!isValidEmail(email)) {
+      Alert.alert("Invalid Email", "Enter a valid guardian email address.");
+      return;
+    }
+    const weight = Math.max(parseInt(newPostInstallWeight, 10) || 0, 1);
+    const alreadyConfigured = storedMetadata.guardians.some(
+      (g) => (g.resolvedEmail ?? g.maskedEmail).toLowerCase() === email.toLowerCase(),
+    );
+    if (alreadyConfigured) {
+      Alert.alert(
+        "Already Configured",
+        "This email is already a guardian on this wallet. Use a different email.",
+      );
+      return;
+    }
+    const passkey = await PasskeyService.getPasskey(user.id);
+    if (!passkey) {
+      Alert.alert("Passkey Required", "Cannot find a passkey on this device.");
+      return;
+    }
+
+    setAddingPostInstallGuardian(true);
+    setModuleError(null);
+    try {
+      const adapter = EmailRecoveryGroupService.createRelayer();
+
+      // 1. Derive on-chain guardian address (mints + persists accountCode).
+      const [derived] = await EmailRecoveryService.deriveGuardianAddresses(
+        smartAccountAddress,
+        [email],
+        resolvedChainId,
+        adapter,
+      );
+      if (!derived?.guardianAddress) {
+        throw new Error("Could not derive the new guardian's on-chain address.");
+      }
+
+      // 2. Build + sign + submit addGuardian UserOp.
+      const { userOp, userOpHash } = await EmailRecoveryService.buildAddGuardianUserOp({
+        smartAccountAddress,
+        guardianAddress: derived.guardianAddress,
+        weight: BigInt(weight),
+        passkeyId: passkey.credentialIdRaw as Hex,
+        chainId: resolvedChainId,
+        usePaymaster: true,
+      });
+      const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
+      const encodedSignature = PasskeyService.encodeSignatureForContract(signature) as Hex;
+      const signedUserOp = { ...userOp, signature: encodedSignature };
+      await EmailRecoveryService.submitInstallModuleUserOp({
+        signedUserOp,
+        chainId: resolvedChainId,
+      });
+
+      // 3. Persist Supabase row so loadMetadata + polling pick it up.
+      const { rowId } = await EmailRecoveryService.persistAddedGuardian({
+        smartAccountAddress,
+        configId: storedMetadata.config.id,
+        guardianEmail: email,
+        weight,
+        securityMode,
+      });
+
+      // 4. Fire the acceptance invite for this one guardian.
+      const result = await EmailRecoveryService.sendGuardianAcceptanceEmails({
+        smartAccountAddress,
+        configId: storedMetadata.config.id,
+        adapter,
+      });
+
+      // 5. Refresh metadata + clear inputs.
+      const next = await EmailRecoveryService.loadMetadata({ smartAccountAddress });
+      setStoredMetadata(next);
+      setNewPostInstallEmail("");
+      setNewPostInstallWeight("1");
+
+      if (result.sent > 0) {
+        Alert.alert(
+          "Guardian Added",
+          `${email} added on-chain. Acceptance invite sent — they should check their inbox (and spam).`,
+        );
+      } else {
+        Alert.alert(
+          "Guardian Added (invite send failed)",
+          `${email} is registered on-chain (row ${rowId.slice(0, 8)}…), but the acceptance email did not queue:\n${result.errors[0] ?? "unknown error"}\n\nUse the ↻ button on the row to retry.`,
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not add guardian.";
+      setModuleError(msg);
+      Alert.alert("Add Failed", msg);
+    } finally {
+      setAddingPostInstallGuardian(false);
+    }
+  }, [
+    user?.id,
+    smartAccountAddress,
+    storedMetadata?.config?.id,
+    storedMetadata?.guardians,
+    newPostInstallEmail,
+    newPostInstallWeight,
+    resolvedChainId,
+    securityMode,
+  ]);
+
+  /**
+   * Resets a guardian's acceptance row to pending and re-fires the invite
+   * through the relayer. Used when the original acceptance request got stuck
+   * (e.g. prove.email's prover 502'd or queue dropped the job).
+   */
+  const handleResendGuardianInvite = useCallback(
+    async (guardianRowId: string, maskedEmail: string) => {
+      if (!smartAccountAddress || !storedMetadata?.config?.id) return;
+      setResendingGuardianId(guardianRowId);
+      setModuleError(null);
+      try {
+        const adapter = EmailRecoveryGroupService.createRelayer();
+        const result = await EmailRecoveryService.resendGuardianAcceptanceInvite({
+          smartAccountAddress,
+          configId: storedMetadata.config.id,
+          guardianRowId,
+          adapter,
+        });
+        const next = await EmailRecoveryService.loadMetadata({ smartAccountAddress });
+        setStoredMetadata(next);
+        if (result.sent > 0) {
+          Alert.alert(
+            "Invite Re-sent",
+            `New acceptance email queued for ${maskedEmail}. Check your inbox (and spam).`,
+          );
+        } else {
+          const relayerMsg = result.errors[0] ?? "(no upstream error returned)";
+          const isAccountCodeDupe = /account code already used/i.test(relayerMsg);
+          const hint = isAccountCodeDupe
+            ? "\n\nprove.email already has a request open with this guardian's accountCode. To force a new one, tap the trash icon to remove the guardian, then add them back — that mints a fresh accountCode and starts a clean invite."
+            : "";
+          Alert.alert(
+            "Resend Failed",
+            `Relayer error:\n${relayerMsg}${hint}`,
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Could not resend invite.";
+        setModuleError(msg);
+        Alert.alert("Resend Failed", msg);
+      } finally {
+        setResendingGuardianId(null);
+      }
+    },
+    [smartAccountAddress, storedMetadata?.config?.id],
+  );
 
   /**
    * Builds + signs + submits an on-chain removeGuardian UserOp via the
@@ -1616,6 +1790,25 @@ const EmailRecoveryScreen: React.FC = () => {
                           {guardian.acceptanceStatus === "accepted" ? "Accepted" : "Awaiting Approval"}
                         </Text>
                       </View>
+                      {guardian.acceptanceStatus !== "accepted" && !guardian.isLocked && (
+                        <TouchableOpacity
+                          style={styles.removeGuardianButton}
+                          onPress={() =>
+                            void handleResendGuardianInvite(
+                              guardian.id,
+                              guardian.maskedEmail,
+                            )
+                          }
+                          disabled={resendingGuardianId === guardian.id}
+                          accessibilityLabel={`Resend invite to ${guardian.maskedEmail}`}
+                        >
+                          {resendingGuardianId === guardian.id ? (
+                            <ActivityIndicator size="small" color={theme.colors.accentAlt} />
+                          ) : (
+                            <Feather name="refresh-cw" size={18} color={theme.colors.accentAlt} />
+                          )}
+                        </TouchableOpacity>
+                      )}
                       {!guardian.isLocked && (
                         <TouchableOpacity
                           style={styles.removeGuardianButton}
@@ -1643,6 +1836,46 @@ const EmailRecoveryScreen: React.FC = () => {
                       {storedMetadata.guardians.filter((g) => g.acceptanceStatus === "accepted").length}/{storedMetadata.guardians.length} accepted
                       ({storedMetadata.config.threshold} needed)
                     </Text>
+                  </View>
+
+                  <View style={styles.addPostInstallSection}>
+                    <Text style={styles.addPostInstallTitle}>Add another guardian</Text>
+                    <Text style={styles.cardDesc}>
+                      Submits an on-chain addGuardian and fires a fresh acceptance invite.
+                      Useful when threshold blocks removal of an existing guardian.
+                    </Text>
+                    <TextInput
+                      style={styles.addPostInstallInput}
+                      value={newPostInstallEmail}
+                      onChangeText={setNewPostInstallEmail}
+                      placeholder="guardian@example.com"
+                      placeholderTextColor={theme.colors.textMuted}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!addingPostInstallGuardian}
+                    />
+                    <TextInput
+                      style={styles.addPostInstallInput}
+                      value={newPostInstallWeight}
+                      onChangeText={setNewPostInstallWeight}
+                      placeholder="weight (default 1)"
+                      placeholderTextColor={theme.colors.textMuted}
+                      keyboardType="number-pad"
+                      editable={!addingPostInstallGuardian}
+                    />
+                    <TouchableOpacity
+                      style={[styles.installButton, styles.startRecoveryButton]}
+                      onPress={() => void handleAddPostInstallGuardian()}
+                      disabled={addingPostInstallGuardian || !newPostInstallEmail.trim()}
+                      activeOpacity={0.85}
+                    >
+                      {addingPostInstallGuardian ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.installButtonText}>Add Guardian</Text>
+                      )}
+                    </TouchableOpacity>
                   </View>
                 </>
               ) : (
@@ -1958,6 +2191,29 @@ const createStyles = (colors: ThemeColors) =>
     startRecoveryButton: {
       marginTop: 12,
       backgroundColor: colors.success,
+    },
+    addPostInstallSection: {
+      marginTop: 18,
+      paddingTop: 16,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.borderMuted,
+      gap: 8,
+    },
+    addPostInstallTitle: {
+      color: colors.textPrimary,
+      fontSize: 15,
+      fontWeight: "600",
+      marginBottom: 4,
+    },
+    addPostInstallInput: {
+      backgroundColor: colors.inputBackground,
+      borderWidth: 1,
+      borderColor: colors.inputBorder,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: colors.textPrimary,
+      fontSize: 14,
     },
     guardianAcceptanceSection: {
       backgroundColor: colors.surfaceCard,
