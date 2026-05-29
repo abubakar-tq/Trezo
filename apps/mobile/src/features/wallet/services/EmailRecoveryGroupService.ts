@@ -374,11 +374,7 @@ export class EmailRecoveryGroupService {
 
     if (groupError) throw groupError;
 
-    await this.supabase
-      .from("email_recovery_groups")
-      .update({ status: "sending_approvals" })
-      .eq("id", groupId);
-
+    // ADR-0009: no status column write — on-chain reads are authoritative.
     const { data: approvals, error: approvalsError } = await this.supabase
       .from("email_recovery_approvals")
       .select("*")
@@ -402,7 +398,8 @@ export class EmailRecoveryGroupService {
       .replace("{recoveryHash}", group.multichain_recovery_data_hash.toLowerCase());
 
     for (const approval of approvals ?? []) {
-      if (approval.status !== "pending" && approval.status !== "failed") continue;
+      // Skip if already sent (relayer_request_id is the signal; status column dropped per ADR-0009).
+      if (approval.relayer_request_id) continue;
 
       const guardian = metadata?.guardians.find(
         (g) => g.emailHash === approval.guardian_email_hash,
@@ -411,13 +408,7 @@ export class EmailRecoveryGroupService {
         ? guardian?.resolvedEmail ?? guardian?.maskedEmail ?? ""
         : guardian?.resolvedEmail ?? "";
       if (!guardianEmail) {
-        await this.supabase
-          .from("email_recovery_approvals")
-          .update({
-            status: "failed",
-            last_error: "Guardian email is locked. Export or unlock the recovery kit before using the real relayer.",
-          })
-          .eq("id", approval.id);
+        // Guardian email locked — nothing to write back (status column dropped per ADR-0009).
         continue;
       }
 
@@ -433,29 +424,15 @@ export class EmailRecoveryGroupService {
           command,
         });
 
+        // Only write the prove.email correlation ID — no status mirror (ADR-0009).
         await this.supabase
           .from("email_recovery_approvals")
-          .update({
-            relayer_request_id: refs[0]?.requestId ?? null,
-            status: "email_sent",
-            last_error: null,
-          })
+          .update({ relayer_request_id: refs[0]?.requestId ?? null })
           .eq("id", approval.id);
-      } catch (err) {
-        await this.supabase
-          .from("email_recovery_approvals")
-          .update({
-            status: "failed",
-            last_error: err instanceof Error ? err.message : "Unknown error",
-          })
-          .eq("id", approval.id);
+      } catch {
+        // Error is surfaced to the caller; no status column to write back.
       }
     }
-
-    await this.supabase
-      .from("email_recovery_groups")
-      .update({ status: "collecting_approvals" })
-      .eq("id", groupId);
   }
 
   static async resendRecoveryRequest(
@@ -509,7 +486,10 @@ export class EmailRecoveryGroupService {
       .replace("{ethAddr}", group.smart_account_address.toLowerCase())
       .replace("{recoveryHash}", group.multichain_recovery_data_hash.toLowerCase());
 
-    await this.sendRelayerRequestsForApproval({
+    // Surfaces the prove.email error message directly to callers (including
+    // the "Account code already used" case — let the message propagate, the UI
+    // detects the substring and renders a friendlier copy).
+    const refs = await this.sendRelayerRequestsForApproval({
       adapter,
       proofMode: resolvedRelayerConfig.proofMode,
       recoveryTemplateIdx: resolvedRelayerConfig.recoveryTemplateIdx ?? DEFAULT_RECOVERY_TEMPLATE_IDX,
@@ -520,12 +500,17 @@ export class EmailRecoveryGroupService {
       command,
     });
 
+    // Update correlation ID only — no status column (ADR-0009).
     await this.supabase
       .from("email_recovery_approvals")
-      .update({ status: "email_sent", last_error: null })
+      .update({ relayer_request_id: refs[0]?.requestId ?? null })
       .eq("id", approvalId);
   }
 
+  // DEPRECATED: Phase 2 replaced this with useRecoveryAttemptState.triggerExecute.
+  // Auto-execute now fires from RecoveryAttemptStatusScreen when phase === 'executable'.
+  // Kept temporarily so the old EmailRecoveryGroupStatusScreen can still compile;
+  // will be deleted when that screen is replaced in Phase 4.
   static async executeReadyChains(
     groupId: string,
     relayer?: ZkEmailRelayerAdapter,
@@ -554,29 +539,13 @@ export class EmailRecoveryGroupService {
     const isMock = resolvedConfig.baseUrl.startsWith("mock://");
 
     if (isMock) {
-      for (const chainReq of chainRequests) {
-        await this.supabase
-          .from("email_recovery_chain_requests")
-          .update({
-            last_error: "On Anvil, run `make mock-vote-recovery-local` then `make mock-complete-email-recovery-local` to execute recovery. The mock relayer does not submit on-chain.",
-            last_checked_at: new Date().toISOString(),
-          })
-          .eq("id", chainReq.id);
-      }
+      // Mock relayer: no-op, instruct dev to use make targets.
       return;
     }
 
-    await this.supabase
-      .from("email_recovery_groups")
-      .update({ status: "executing", last_error: null })
-      .eq("id", groupId);
-
+    // Dropped status/last_error column writes per ADR-0009 — execution lifecycle
+    // is now tracked by useRecoveryAttemptState watching on-chain events.
     for (const chainReq of chainRequests) {
-      await this.supabase
-        .from("email_recovery_chain_requests")
-        .update({ status: "executing", last_error: null })
-        .eq("id", chainReq.id);
-
       try {
         const result = await adapter.completeRecovery({
           chainId: Number(chainReq.chain_id),
@@ -589,40 +558,26 @@ export class EmailRecoveryGroupService {
           throw new Error(result.error ?? "Relayer did not complete recovery.");
         }
 
-        const passkeyState = await getPasskeyOnchainState({
-          chainId: Number(chainReq.chain_id) as SupportedChainId,
-          smartAccountAddress: group.smart_account_address as Address,
-          passkeyId: group.new_passkey_id_raw_hash as Hex,
-        });
-
-        if (!passkeyState.exists) {
-          throw new Error("Recovery transaction submitted, but the new passkey is not visible on-chain yet.");
+        // Record the tx hash on the chain request for debug visibility.
+        if (result.txHash) {
+          await this.supabase
+            .from("email_recovery_chain_requests")
+            .update({ execute_tx_hash: result.txHash })
+            .eq("id", chainReq.id);
         }
-
-        await this.supabase
-          .from("email_recovery_chain_requests")
-          .update({
-            status: "executed",
-            execute_tx_hash: result.txHash,
-            last_checked_at: new Date().toISOString(),
-            last_error: null,
-          })
-          .eq("id", chainReq.id);
       } catch (err) {
-        await this.supabase
-          .from("email_recovery_chain_requests")
-          .update({
-            status: "failed",
-            last_checked_at: new Date().toISOString(),
-            last_error: err instanceof Error ? err.message : "Unknown recovery execution error",
-          })
-          .eq("id", chainReq.id);
+        // Rethrow: caller (deprecated status screen) catches and surfaces the error.
+        throw err;
       }
     }
 
     await this.updateGroupExecutionStatus(groupId);
   }
 
+  // DEPRECATED: Phase 2 replaced this with useRecoveryAttemptState.
+  // The hook reads prove.email and on-chain state directly; Supabase polling
+  // is no longer the mechanism for tracking Recovery Attempt execution lifecycle.
+  // Will be deleted when EmailRecoveryGroupStatusScreen is replaced in Phase 4.
   static async refreshGroupStatus(groupId: string): Promise<{
     group: EmailRecoveryGroupView;
     chainRequests: ChainRequestView[];
@@ -659,13 +614,6 @@ export class EmailRecoveryGroupService {
         .select("*")
         .in("approval_id", approvalIds);
       submissions = subData ?? [];
-    }
-
-    const synced = await this.syncRelayerStatuses(approvals ?? [], submissions);
-    const readinessChanged = await this.applyReadyChainStatuses(group, chainRequests ?? [], approvals ?? [], submissions);
-
-    if (synced || readinessChanged) {
-      return this.refreshGroupStatus(groupId);
     }
 
     return {
@@ -826,46 +774,21 @@ export class EmailRecoveryGroupService {
     submission: Record<string, any>;
     status: RelayerRequestStatus;
   }): Promise<boolean> {
+    // DEPRECATED: status / last_error / email_auth_msg_json / proof_hash columns
+    // were dropped per ADR-0009. This method is kept only to satisfy refreshGroupStatus
+    // (also deprecated) until Phase 4 removes both. It now only writes email_nullifier,
+    // the one prove.email correlation field that is not on-chain by design.
     const { approvals, submission, status } = params;
-    const nextSubmissionStatus = this.submissionStatusFromRelayer(status);
-    const serializedEmailAuthMsg = status.emailAuthMsg
-      ? this.serializeEmailAuthMsg(status.emailAuthMsg)
-      : null;
-    const proofHash = serializedEmailAuthMsg
-      ? keccak256(stringToHex(JSON.stringify(serializedEmailAuthMsg)))
-      : null;
-
-    let changed = false;
-    if (nextSubmissionStatus && submission.status !== nextSubmissionStatus) {
-      await this.supabase
-        .from("email_recovery_chain_approval_submissions")
-        .update({
-          status: nextSubmissionStatus,
-          email_auth_msg_json: serializedEmailAuthMsg,
-          proof_hash: proofHash,
-          last_error: status.error,
-        })
-        .eq("id", submission.id);
-      changed = true;
-    }
 
     const approval = approvals.find((item) => item.id === submission.approval_id);
-    if (approval) {
-      const nextApprovalStatus = this.approvalStatusFromRelayer(status);
-      if (nextApprovalStatus && approval.status !== nextApprovalStatus) {
-        await this.supabase
-          .from("email_recovery_approvals")
-          .update({
-            status: nextApprovalStatus,
-            email_nullifier: status.emailAuthMsg?.proof.emailNullifier ?? approval.email_nullifier,
-            last_error: status.error,
-          })
-          .eq("id", approval.id);
-        changed = true;
-      }
+    if (approval && status.emailAuthMsg?.proof.emailNullifier) {
+      await this.supabase
+        .from("email_recovery_approvals")
+        .update({ email_nullifier: status.emailAuthMsg.proof.emailNullifier })
+        .eq("id", approval.id);
+      return true;
     }
-
-    return changed;
+    return false;
   }
 
   private static submissionStatusFromRelayer(status: RelayerRequestStatus): ChainSubmissionStatus | null {
