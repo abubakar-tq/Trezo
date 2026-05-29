@@ -35,7 +35,8 @@ function makeCtx(
       injected.push(s);
     },
   } as unknown as RPCContext["webview"];
-  const session = overrides.sessionForOrigin ?? null;
+  const { sessionForOrigin = null, ...ctxOverrides } = overrides;
+  const session = sessionForOrigin;
   const ctx: RPCContext = {
     webview,
     origin: "https://app.uniswap.org",
@@ -49,7 +50,7 @@ function makeCtx(
     requestSignTypedData: async () => null,
     requestSendTransaction: async () => null,
     requestSwitchChain: async () => false,
-    ...overrides,
+    ...ctxOverrides,
   };
   const decode = (): Captured => {
     const last = injected[injected.length - 1];
@@ -113,12 +114,13 @@ async function run(): Promise<void> {
   }
   // eth_signTypedData_v4 — signed -> returns sig
   {
-    const { ctx, decode } = makeCtx({
+    const { ctx, decode, touched } = makeCtx({
       sessionForOrigin: SESSION,
       requestSignTypedData: async () => "0xtyped" as `0x${string}`,
     });
     await handleRPC(ctx, msg("eth_signTypedData_v4", ["0xaddr", "{}"]));
     assertEqual(decode().result, "0xtyped", "signTypedData returns signature");
+    assertEqual(touched.length, 1, "signTypedData touches session");
   }
   // eth_sendTransaction — signed -> returns userOpHash
   {
@@ -140,6 +142,17 @@ async function run(): Promise<void> {
     const { ctx, decode } = makeCtx({ sessionForOrigin: SESSION, requestSwitchChain: async () => false });
     await handleRPC(ctx, msg("wallet_switchEthereumChain", [{ chainId: "0x1" }]));
     assertEqual(decode().error?.code, 4902, "switchChain rejected -> 4902");
+  }
+  // handler throws -> -32603 (internal error catch path)
+  {
+    const { ctx, decode } = makeCtx({
+      sessionForOrigin: SESSION,
+      requestSignMessage: async () => {
+        throw new Error("boom");
+      },
+    });
+    await handleRPC(ctx, msg("personal_sign", ["0xdead"]));
+    assert(decode().error?.code === -32603, "handler throw -> -32603");
   }
   // unknown method (incl. wallet_addEthereumChain) -> -32601
   {
