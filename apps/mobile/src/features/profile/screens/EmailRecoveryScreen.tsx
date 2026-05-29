@@ -1881,15 +1881,19 @@ const EmailRecoveryScreen: React.FC = () => {
               ) : (
                 <Text style={styles.cardDesc}>Loading guardian status...</Text>
               )}
-              <TouchableOpacity
-                style={[styles.installButton, styles.startRecoveryButton]}
-                onPress={() => navigation.navigate("EmailRecoveryStart")}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.installButtonText}>
-                  Start Email Recovery
-                </Text>
-              </TouchableOpacity>
+              {/* ADR-0011: same-device "Start Email Recovery" is testing-only.
+                  Production entry is from the new-device unauthenticated screen (v2). */}
+              {__DEV__ && (
+                <TouchableOpacity
+                  style={[styles.installButton, styles.startRecoveryButton]}
+                  onPress={() => navigation.navigate("EmailRecoveryStart")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.installButtonText}>
+                    Start Email Recovery
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>

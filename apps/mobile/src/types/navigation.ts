@@ -47,6 +47,7 @@ export type RootStackParamList = {
   EmailRecovery: undefined;
   EmailRecoveryStart: undefined;
   EmailRecoveryGroupStatus: { groupId: string };
+  RecoveryAttemptStatus: { attemptId: string };
   RecoveryEntry: { reason?: "no_local_passkey" | "user_initiated" } | undefined;
   CreateRecoveryRequest: { walletAddress?: string } | undefined;
   ShareRecoveryRequest: { requestId: string };

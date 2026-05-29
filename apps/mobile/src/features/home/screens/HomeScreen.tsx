@@ -21,6 +21,7 @@ import {
   usePasskeyAuthority,
 } from "@features/wallet/hooks/usePasskeyAuthority";
 import type { SupportedChainId } from "@/src/integration/chains";
+import { RecoveryAttemptBanner } from "@shared/components/banners/RecoveryAttemptBanner";
 import {
   Alert,
   Pressable,
@@ -221,6 +222,9 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Recovery Attempt banner — dismissable, Supabase-only, no RPC */}
+        <RecoveryAttemptBanner smartAccountAddress={smartAccountAddress as Address | undefined} />
 
         {/* Balance Card */}
         <View style={styles.balanceWrapper}>

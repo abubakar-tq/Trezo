@@ -22,6 +22,11 @@ import {
   EmailRecoveryGroupService,
 } from "@/src/features/wallet/services/EmailRecoveryGroupService";
 import { EmailRecoveryService, type LoadedEmailRecoveryMetadata } from "@/src/features/wallet/services/EmailRecoveryService";
+import { RecoveryAttemptResumeSheet } from "@/src/features/profile/screens/RecoveryAttemptResumeSheet";
+import { getSupabaseClient } from "@lib/supabase";
+import { getDeployment } from "@/src/integration/viem/deployments";
+import { getPublicClient } from "@/src/integration/viem/clients";
+import { parseAbi } from "viem";
 import type { Address, Hex } from "viem";
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -51,6 +56,8 @@ const EmailRecoveryStartScreen: React.FC = () => {
   const [deadlineDays, setDeadlineDays] = useState(DEFAULT_DEADLINE_DAYS);
   const [isCreating, setIsCreating] = useState(false);
   const [creatingStep, setCreatingStep] = useState<string>("");
+  // Resume sheet: shown if an active Recovery Attempt already exists (ADR-0011).
+  const [resumeSheetDismissed, setResumeSheetDismissed] = useState(false);
 
   useEffect(() => {
     if (!smartAccountAddress) {
@@ -116,6 +123,34 @@ const EmailRecoveryStartScreen: React.FC = () => {
     setCreatingStep("Creating new passkey on this device...");
 
     try {
+      // Phase 4.5: before creating any row, check for an expired on-chain slot.
+      // ADR-0010: server EOA clears it; user doesn't need a passkey to do this.
+      const deployment = getDeployment(resolvedChainId);
+      if (deployment?.emailRecovery) {
+        const emailRecoveryAbi = parseAbi([
+          "function getRecoveryRequest(address account) view returns (uint256 executeAfter, uint256 executeBefore, uint256 currentWeight, bytes32 recoveryDataHash)",
+        ]);
+        try {
+          const publicClient = getPublicClient(resolvedChainId);
+          const [, executeBefore] = await publicClient.readContract({
+            address: deployment.emailRecovery as Address,
+            abi: emailRecoveryAbi,
+            functionName: "getRecoveryRequest",
+            args: [smartAccountAddress],
+          }) as [bigint, bigint, bigint, `0x${string}`];
+          const nowSec = BigInt(Math.floor(Date.now() / 1000));
+          if (executeBefore > 0n && executeBefore < nowSec) {
+            setCreatingStep("Clearing previous expired Recovery Attempt…");
+            const supabase = getSupabaseClient();
+            await supabase.functions.invoke("submit-recovery-operation", {
+              body: { action: "cancel-expired-email-recovery", smartAccountAddress, chainId: resolvedChainId },
+            });
+          }
+        } catch {
+          // Non-fatal: expired-slot check is best-effort; proceed with createGroup.
+        }
+      }
+
       const passkey = await PasskeyService.createPasskey(user.id);
 
       setCreatingStep("Building multichain recovery payload...");
@@ -135,7 +170,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
       await EmailRecoveryGroupService.sendApprovals(result.groupId);
 
       setCreatingStep("");
-      navigation.navigate("EmailRecoveryGroupStatus", { groupId: result.groupId });
+      navigation.navigate("RecoveryAttemptStatus", { attemptId: result.groupId });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to start email recovery.";
       Alert.alert("Recovery start failed", message);
@@ -201,6 +236,14 @@ const EmailRecoveryStartScreen: React.FC = () => {
         <Text style={styles.headerTitle}>Start Email Recovery</Text>
         <View style={{ width: 24 }} />
       </View>
+      {/* ADR-0011: resume sheet prevents duplicate Recovery Attempt rows */}
+      {smartAccountAddress && !resumeSheetDismissed && (
+        <RecoveryAttemptResumeSheet
+          smartAccountAddress={smartAccountAddress}
+          onProceedNew={() => setResumeSheetDismissed(true)}
+          onDismiss={() => navigation.goBack()}
+        />
+      )}
 
       <ScrollView
         style={styles.scrollView}

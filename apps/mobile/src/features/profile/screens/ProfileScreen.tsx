@@ -22,6 +22,7 @@ import { useUserStore } from "@store/useUserStore";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { getDeployment, getPublicClient } from "@/src/integration/viem";
+import { RecoveryAttemptBanner } from "@shared/components/banners/RecoveryAttemptBanner";
 import { ABIS } from "@/src/integration/viem/abis";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import { Alert } from "react-native";
@@ -289,6 +290,8 @@ const ProfileScreen: React.FC = () => {
 
         {/* ── Settings ─────────────────────────────────── */}
         <View style={styles.body}>
+          {/* Sticky Recovery Attempt banner — no RPC, visible whenever an Attempt is active */}
+          <RecoveryAttemptBanner smartAccountAddress={smartAccountAddress as Address | undefined} sticky />
           {settingsGroups.map((group) => (
             <View key={group.title} style={styles.section}>
               <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>

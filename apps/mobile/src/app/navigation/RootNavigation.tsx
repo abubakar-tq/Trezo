@@ -17,6 +17,7 @@ import DevicesPasskeysScreen from "@features/profile/screens/DevicesPasskeysScre
 import { LinkDeviceScreen } from "@features/auth/screens/LinkDeviceScreen";
 import EmailRecoveryScreen from "@features/profile/screens/EmailRecoveryScreen";
 import EmailRecoveryGroupStatusScreen from "@features/profile/screens/EmailRecoveryGroupStatusScreen";
+import RecoveryAttemptStatusScreen from "@features/profile/screens/RecoveryAttemptStatusScreen";
 import EmailRecoveryStartScreen from "@features/profile/screens/EmailRecoveryStartScreen";
 import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
 import NotificationCenterScreen from "@features/notifications/screens/NotificationCenterScreen";
@@ -245,17 +246,28 @@ const RootNavigation = () => {
             animation: "slide_from_right",
           }}
         />
+        {/* ADR-0011: same-device "Start Email Recovery" is testing-only. */}
+        {__DEV__ && (
+          <Stack.Screen
+            name="EmailRecoveryStart"
+            component={EmailRecoveryStartScreen}
+            options={{
+              headerShown: false,
+              animation: "slide_from_right",
+            }}
+          />
+        )}
         <Stack.Screen
-          name="EmailRecoveryStart"
-          component={EmailRecoveryStartScreen}
+          name="EmailRecoveryGroupStatus"
+          component={EmailRecoveryGroupStatusScreen}
           options={{
             headerShown: false,
             animation: "slide_from_right",
           }}
         />
         <Stack.Screen
-          name="EmailRecoveryGroupStatus"
-          component={EmailRecoveryGroupStatusScreen}
+          name="RecoveryAttemptStatus"
+          component={RecoveryAttemptStatusScreen}
           options={{
             headerShown: false,
             animation: "slide_from_right",

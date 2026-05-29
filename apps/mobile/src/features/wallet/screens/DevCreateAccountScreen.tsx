@@ -5,6 +5,11 @@ import CreateAccountDevCard from "@/src/features/wallet/components/CreateAccount
 import { DevFundingCard } from "@/src/features/wallet/components/DevFundingCard";
 import { PasskeyVerifyCard } from "@/src/features/wallet/components/PasskeyVerifyCard";
 import { RestoreOnChainPasskeyCard } from "@/src/features/wallet/components/RestoreOnChainPasskeyCard";
+import {
+  ClearStaleRecoveryRowsCard,
+  ForceCompleteCard,
+  RelayerHealthCard,
+} from "@/src/features/wallet/components/RecoveryAttemptDevCards";
 import { useAppTheme } from "@theme";
 
 const DevCreateAccountScreen = () => {
@@ -27,6 +32,10 @@ const DevCreateAccountScreen = () => {
       <View style={styles.cardSpacing}>
         <RestoreOnChainPasskeyCard />
       </View>
+      {/* Recovery Attempt dev tools — Phase 4.6 */}
+      <RelayerHealthCard />
+      <ForceCompleteCard />
+      <ClearStaleRecoveryRowsCard />
     </ScrollView>
   );
 };
