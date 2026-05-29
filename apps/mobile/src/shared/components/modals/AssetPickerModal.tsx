@@ -308,9 +308,11 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
                       </View>
                     )}
                     <Text
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
                       style={[
                         styles.filterChipText,
-                        { color: isActive ? colors.accent : colors.textSecondary },
+                        { color: isActive ? colors.accent : colors.textSecondary, maxWidth: 110 },
                       ]}
                     >
                       {label}
@@ -402,16 +404,19 @@ const styles = StyleSheet.create({
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    gap: 5,
+    gap: 6,
+    minHeight: 30,
+    minWidth: 70,
   },
   filterChipDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',

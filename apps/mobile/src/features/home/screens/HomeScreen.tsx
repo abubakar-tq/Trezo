@@ -232,7 +232,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
             balance={totalBalanceUSD}
             loading={walletLoading}
             address={smartAccountAddress ?? undefined}
-            isDeployed={smartAccountDeployed}
+            isDeployed={isActiveOnChain(activeChainId)}
             isHydrating={isHydrating}
             hasLocalPasskey={hasLocalPasskey}
             missingPrices={missingPrices}
