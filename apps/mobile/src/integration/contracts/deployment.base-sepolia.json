@@ -1,6 +1,7 @@
 {
   "accountFactory": "0xBc20fACed405c4806f4B1bEf9B8C6704ae0afC9F",
   "chainId": 84532,
+  "crossChainExecutor": "0x8Fd359E1407f8c971DbB86F18fc1Ad24449237e1",
   "emailRecovery": "0xC4c29a16e929614d973fe7ad50e0Fb5Eb6c7753a",
   "emailRecoveryCommandHandler": "0x6f114A2628F358eaE4b798aC8803eF7b6F6C4257",
   "emailRecoveryKillSwitchAuthorizer": "0x6a5a55046e7C5B16945d7178DCCc22aBF2cF7282",

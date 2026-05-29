@@ -23,13 +23,16 @@ Trezo now uses an initializer-bound deployment model.
 
 ```bash
 forge script script/CheckRootFactory.s.sol:CheckRootFactory --rpc-url <rpc>
-forge script script/PredictInfra.s.sol:PredictInfra --rpc-url <rpc>
-forge script script/DeployInfra.s.sol:DeployInfra --rpc-url <rpc> --broadcast
-forge script script/VerifyInfra.s.sol:VerifyInfra --rpc-url <rpc>
+forge script script/CheckSpokePool.s.sol:CheckSpokePool   --rpc-url <rpc>  # pre-flight before any chain that ships CrossChainExecutor
+forge script script/PredictInfra.s.sol:PredictInfra       --rpc-url <rpc>
+forge script script/DeployInfra.s.sol:DeployInfra         --rpc-url <rpc> --broadcast
+forge script script/VerifyInfra.s.sol:VerifyInfra         --rpc-url <rpc>
 forge script script/CheckChainSupport.s.sol:CheckChainSupport --rpc-url <rpc>
 ```
 
 `DeployInfra` expects `PRIVATE_KEY`. `ENTRYPOINT` is the only optional override.
+
+`DeployInfra` deploys six contracts in one shot through the Safe singleton factory: `SmartAccount`, `PasskeyValidator`, `SocialRecovery`, `MinimalProxyFactory`, `AccountFactory`, and `CrossChainExecutor`. The first five are bytecode-only deterministic; `CrossChainExecutor` takes `(spokePool, swapRouter)` from `script/common/AcrossConfig.sol`, so its predicted address only matches across chains that have the same Across V3 SpokePool + Uniswap V3 SwapRouter02 pinned there.
 
 ## Canonical Portable/Release Flow
 
