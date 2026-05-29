@@ -33,7 +33,7 @@ export const BUILTIN_TOKENS_BY_NETWORK: Record<NetworkKey, BuiltinTokenEntry[]> 
       chainId: 11155111,
       networkKey: "ethereum-sepolia",
       type: "erc20",
-      address: "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9", // canonical V3 WETH on Sepolia
+      address: "0xfff9976782d46cc05630d1f6ebab18b2324d6b14", // router-canonical Sepolia WETH (SwapRouter02.WETH9 immutable)
       symbol: "WETH",
       name: "Wrapped Ether",
       decimals: 18,

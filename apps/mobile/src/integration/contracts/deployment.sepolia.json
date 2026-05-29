@@ -10,8 +10,8 @@
   "rootFactory": "0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7",
   "smartAccountImpl": "0x3c8175Fcc8308d0372D6cc25EFed36FeBE06B14f",
   "socialRecovery": "0x735fD4912c11AB281C482E2c7B32D37D48b574B5",
-  "swapHealthcheckAt": 1780063285,
-  "swapPoolWethUsdc": "0xfb9ce788d957e750e19c6c6f90b2956d99626d98",
+  "swapHealthcheckAt": 1780065135,
+  "swapPoolWethUsdc": "0x3289680dd4d6c10bb19b899729cda5eef58aeff1",
   "swapPoolWethUsdcFeeTier": 500,
   "swapSupported": true
 }

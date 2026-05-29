@@ -58,7 +58,9 @@ const UNISWAP_V2_ROUTER_BASE = "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24" as A
 // ─── Sepolia Addresses ────────────────────────────────────────────────────────
 // Uniswap V3 testnet deployments. Verify before mainnet rollout.
 const SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as Address;
-const SEPOLIA_WETH = "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9" as Address;
+// Router-canonical Sepolia WETH: matches SwapRouter02.WETH9 immutable so
+// the router's pay() takes the auto-wrap-from-ETH branch. Verified on-chain.
+const SEPOLIA_WETH = "0xfff9976782d46cc05630d1f6ebab18b2324d6b14" as Address;
 const UNISWAP_V3_FACTORY_SEPOLIA = "0x0227628f3F023bb0B980b67D528571c95c6DaC1c" as Address;
 const UNISWAP_QUOTER_V2_SEPOLIA = "0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3" as Address;
 const UNISWAP_SWAP_ROUTER02_SEPOLIA = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E" as Address;
@@ -94,18 +96,21 @@ const DEX_CONFIGS: Partial<Record<NetworkKey, DexConfig>> = {
       // 500-bps tier has the deepest liquidity on Sepolia by orders of
       // magnitude (verified 2026-05-29: ~56T units vs ~872B at 3000 vs
       // ~4.4B at 10000). Address pinned to skip the factory roundtrip.
+      // 500-bps pool on router-canonical WETH. Verified on-chain
+      // (2026-05-29): ~16.6 quintillion units of liquidity, ~295x deeper
+      // than the same tier on the old-WETH pool.
       {
         sellToken: SEPOLIA_USDC,
         buyToken: SEPOLIA_WETH,
         feeTier: 500,
-        poolAddress: "0xfb9ce788d957e750e19c6c6f90b2956d99626d98" as Address,
+        poolAddress: "0x3289680dd4d6c10bb19b899729cda5eef58aeff1" as Address,
         enabled: true,
       },
       {
         sellToken: SEPOLIA_WETH,
         buyToken: SEPOLIA_USDC,
         feeTier: 500,
-        poolAddress: "0xfb9ce788d957e750e19c6c6f90b2956d99626d98" as Address,
+        poolAddress: "0x3289680dd4d6c10bb19b899729cda5eef58aeff1" as Address,
         enabled: true,
       },
     ],
