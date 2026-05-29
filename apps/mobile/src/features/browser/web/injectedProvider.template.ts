@@ -65,7 +65,7 @@ export const INJECTED_PROVIDER_SCRIPT = `
   };
   function announce() {
     window.dispatchEvent(new CustomEvent("eip6963:announceProvider", {
-      detail: Object.freeze({ info: info, provider: provider })
+      detail: Object.freeze({ info: Object.freeze(info), provider: provider })
     }));
   }
   window.addEventListener("eip6963:requestProvider", announce);

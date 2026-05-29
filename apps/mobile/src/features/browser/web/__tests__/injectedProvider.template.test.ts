@@ -18,6 +18,8 @@ function run(): void {
   // EIP-6963 wiring present in the injected script
   assert(INJECTED_PROVIDER_SCRIPT.includes("eip6963:announceProvider"), "announces via eip6963");
   assert(INJECTED_PROVIDER_SCRIPT.includes("eip6963:requestProvider"), "listens for requestProvider");
+  assert(INJECTED_PROVIDER_SCRIPT.includes("Object.freeze(info)"), "info is frozen per EIP-6963");
+  assert(INJECTED_PROVIDER_SCRIPT.includes("uuid:"), "info has uuid field");
   assert(INJECTED_PROVIDER_SCRIPT.includes('name: "Trezo"'), "interpolates name");
   assert(INJECTED_PROVIDER_SCRIPT.includes('rdns: "com.trezo.wallet"'), "interpolates rdns");
   assert(INJECTED_PROVIDER_SCRIPT.includes('icon: "data:image/'), "interpolates icon data URI");
