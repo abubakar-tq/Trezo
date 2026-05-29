@@ -30,6 +30,7 @@ import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 
+import * as Clipboard from "expo-clipboard";
 import { isValidEmail } from "@utils/validation";
 import { type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
@@ -89,6 +90,10 @@ const EmailRecoveryScreen: React.FC = () => {
   const [expiryMinutes, setExpiryMinutes] = useState("2940");
   const [securityMode, setSecurityMode] =
     useState<EmailRecoverySecurityMode>("none");
+  // In production builds force "none" so the storage path stays valid
+  // regardless of any stale loaded value. Extra Security UI is __DEV__ only.
+  const effectiveSecurityMode: EmailRecoverySecurityMode = __DEV__ ? securityMode : "none";
+  const [overflowVisible, setOverflowVisible] = useState(false);
   const [vaultKeyInput, setVaultKeyInput] = useState("");
   const [hasVaultKey, setHasVaultKey] = useState(false);
   const [recoveryKitAcked, setRecoveryKitAcked] = useState<boolean | null>(null);
@@ -279,11 +284,7 @@ const EmailRecoveryScreen: React.FC = () => {
       })
       .catch((error) => {
         if (!cancelled) {
-          setModuleError(
-            error instanceof Error
-              ? error.message
-              : "Failed to read module status",
-          );
+          setModuleError("We couldn't check your setup — please try again.");
           setModuleInstalledState(false);
         }
       })
@@ -355,11 +356,8 @@ const EmailRecoveryScreen: React.FC = () => {
       })
       .catch((error) => {
         if (cancelled) return;
-        setMetadataWarning(
-          error instanceof Error
-            ? error.message
-            : "Failed to load recovery metadata from backend.",
-        );
+        console.warn("[EmailRecovery] loadMetadata failed", error);
+        setMetadataWarning("We couldn't load your recovery info — please try again.");
       })
       .finally(() => {
         if (!cancelled) {
@@ -430,15 +428,13 @@ const EmailRecoveryScreen: React.FC = () => {
     const backendStatus = currentInstall?.installStatus ?? "not_installed";
 
     if (backendStatus === "installed" && !moduleInstalledState) {
-      setMetadataWarning(
-        "Backend says installed, but on-chain check says not installed. Verify again.",
-      );
+      console.warn("[EmailRecovery] backend says installed but on-chain disagrees — user prompted to verify");
+      setMetadataWarning("We couldn't confirm your setup — try again.");
       return;
     }
     if (backendStatus !== "installed" && moduleInstalledState) {
-      setMetadataWarning(
-        "On-chain module is active but backend status needs sync.",
-      );
+      console.log("[EmailRecovery] on-chain active, syncing backend status");
+      setMetadataWarning(null);
       EmailRecoveryService.syncCurrentChainInstallStatus({
         configId: storedMetadata.config.id,
         chainId: resolvedChainId,
@@ -558,7 +554,8 @@ const EmailRecoveryScreen: React.FC = () => {
         adapter,
       );
       if (!derived?.guardianAddress) {
-        throw new Error("Could not derive the new guardian's on-chain address.");
+        console.warn("[EmailRecovery] could not derive guardian address — accountCode may be lost");
+        throw new Error("We couldn't add this guardian — try removing and re-adding them.");
       }
 
       // 2. Build + sign + submit addGuardian UserOp.
@@ -584,7 +581,7 @@ const EmailRecoveryScreen: React.FC = () => {
         configId: storedMetadata.config.id,
         guardianEmail: email,
         weight,
-        securityMode,
+        securityMode: effectiveSecurityMode,
       });
 
       // 4. Fire the acceptance invite for this one guardian.
@@ -603,18 +600,20 @@ const EmailRecoveryScreen: React.FC = () => {
       if (result.sent > 0) {
         Alert.alert(
           "Guardian Added",
-          `${email} added on-chain. Acceptance invite sent — they should check their inbox (and spam).`,
+          `${email} was added to your recovery setup. They'll receive an invitation — ask them to check their inbox (and spam).`,
         );
       } else {
+        console.warn("[EmailRecovery] guardian added but invite failed", result.errors[0]);
         Alert.alert(
-          "Guardian Added (invite send failed)",
-          `${email} is registered on-chain (row ${rowId.slice(0, 8)}…), but the acceptance email did not queue:\n${result.errors[0] ?? "unknown error"}\n\nUse the ↻ button on the row to retry.`,
+          "Guardian Added",
+          `${email} was added, but the invitation didn't send.\n\nUse the ↻ button to try again.`,
         );
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not add guardian.";
-      setModuleError(msg);
-      Alert.alert("Add Failed", msg);
+      console.warn("[EmailRecovery] addPostInstallGuardian failed", err);
+      setModuleError("Couldn't add this guardian — please try again.");
+      Alert.alert("Couldn't Add Guardian", msg);
     } finally {
       setAddingPostInstallGuardian(false);
     }
@@ -651,24 +650,22 @@ const EmailRecoveryScreen: React.FC = () => {
         setStoredMetadata(next);
         if (result.sent > 0) {
           Alert.alert(
-            "Invite Re-sent",
-            `New acceptance email queued for ${maskedEmail}. Check your inbox (and spam).`,
+            "Invitation Re-sent",
+            `A new invitation was sent to ${maskedEmail}. Ask them to check their inbox (and spam).`,
           );
         } else {
-          const relayerMsg = result.errors[0] ?? "(no upstream error returned)";
+          const relayerMsg = result.errors[0] ?? "";
+          console.warn("[EmailRecovery] resend invite failed", relayerMsg);
           const isAccountCodeDupe = /account code already used/i.test(relayerMsg);
           const hint = isAccountCodeDupe
-            ? "\n\nprove.email already has a request open with this guardian's accountCode. To force a new one, tap the trash icon to remove the guardian, then add them back — that mints a fresh accountCode and starts a clean invite."
+            ? "\n\nTap the trash icon to remove this guardian, then add them back to start a fresh invitation."
             : "";
-          Alert.alert(
-            "Resend Failed",
-            `Relayer error:\n${relayerMsg}${hint}`,
-          );
+          Alert.alert("Invitation Not Sent", `We couldn't send the invitation.${hint}`);
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Could not resend invite.";
-        setModuleError(msg);
-        Alert.alert("Resend Failed", msg);
+        console.warn("[EmailRecovery] resendGuardianInvite failed", err);
+        setModuleError("Couldn't resend the invitation — please try again.");
+        Alert.alert("Invitation Not Sent", "We couldn't resend the invitation. Please try again.");
       } finally {
         setResendingGuardianId(null);
       }
@@ -749,9 +746,9 @@ const EmailRecoveryScreen: React.FC = () => {
         setStoredMetadata(refreshed);
         Alert.alert("Guardian Removed", `${guardianMaskedEmail} has been removed.`);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to remove guardian.";
-        setModuleError(msg);
-        Alert.alert("Remove Failed", msg);
+        console.warn("[EmailRecovery] removeInstalledGuardian failed", err);
+        setModuleError("Couldn't remove this guardian — please try again.");
+        Alert.alert("Couldn't Remove Guardian", "We couldn't remove this guardian. Please try again.");
       } finally {
         setRemovingGuardianId(null);
       }
@@ -770,8 +767,8 @@ const EmailRecoveryScreen: React.FC = () => {
       Alert.alert(
         "Remove Guardian?",
         willDropBelowThreshold
-          ? `${guardianMaskedEmail} is needed to meet your threshold of ${threshold}. Removing them means you cannot trigger an email recovery until you add another guardian. Continue?`
-          : `Remove ${guardianMaskedEmail} from your guardian set? This submits an on-chain transaction.`,
+          ? `${guardianMaskedEmail} is needed to meet your threshold of ${threshold}. Removing them means you won't be able to recover this wallet until you add another guardian. Continue?`
+          : `Remove ${guardianMaskedEmail} from your recovery setup?`,
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -864,7 +861,7 @@ const EmailRecoveryScreen: React.FC = () => {
         threshold: BigInt(parsedThreshold),
         delaySeconds: BigInt(parsedDelayMinutes) * 60n,
         expirySeconds: BigInt(parsedExpiryMinutes) * 60n,
-        securityMode,
+        securityMode: effectiveSecurityMode,
         installStatus: moduleInstalledState ? "installed" : "pending",
         installUserOpHash:
           "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -903,15 +900,15 @@ const EmailRecoveryScreen: React.FC = () => {
   const handleInstallModule = useCallback(async () => {
     if (!smartAccountReady || !smartAccountAddress) {
       Alert.alert(
-        "Smart Account Required",
-        "Deploy your smart account before installing email recovery.",
+        "Wallet Required",
+        "Set up your wallet before enabling email recovery.",
       );
       return;
     }
     if (!user?.id) {
       Alert.alert(
-        "Authentication Required",
-        "Please sign in to install the email recovery module.",
+        "Sign In Required",
+        "Please sign in to continue.",
       );
       return;
     }
@@ -1001,7 +998,7 @@ const EmailRecoveryScreen: React.FC = () => {
         threshold: BigInt(parsedThreshold),
         delaySeconds: BigInt(parsedDelayMinutes) * 60n,
         expirySeconds: BigInt(parsedExpiryMinutes) * 60n,
-        securityMode,
+        securityMode: effectiveSecurityMode,
         installStatus: "pending",
         installUserOpHash: operationHash,
       });
@@ -1049,34 +1046,15 @@ const EmailRecoveryScreen: React.FC = () => {
       // SecureStore will not have the vault key — without the printed/saved
       // Recovery Kit, guardian emails (and accountCodes) appear locked. See
       // CONTEXT.md guidance on Email Recovery + vault key UX.
-      if (securityMode === "extra") {
-        Alert.alert(
-          "Email Recovery Activated",
-          "Acceptance emails will be sent to your guardians. Before continuing, back up your Recovery Kit — without it, after a guardian recovery you'd have to re-enter guardian emails manually.",
-          [
-            {
-              text: "Back up later",
-              style: "cancel",
-            },
-            {
-              text: "Open Recovery Kit",
-              onPress: () => void handleExportRecoveryKit(),
-            },
-          ],
-        );
-      } else {
-        Alert.alert(
-          "Email Recovery Activated",
-          "The module is installing on-chain. Acceptance emails will be sent to your guardians shortly — they need to reply to confirm.",
-        );
-      }
+      Alert.alert(
+        "Email Recovery Activated",
+        "Your guardians will receive an invitation — they need to reply to confirm before recovery is active.",
+      );
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to install the email recovery module.";
-      setModuleError(message);
-      Alert.alert("Installation Failed", message);
+      const message = error instanceof Error ? error.message : "Failed to set up email recovery.";
+      console.warn("[EmailRecovery] install failed", error);
+      setModuleError("We couldn't complete setup — please try again.");
+      Alert.alert("Setup Failed", "We couldn't complete setup. Please try again.");
     } finally {
       setInstallingModule(false);
     }
@@ -1091,7 +1069,7 @@ const EmailRecoveryScreen: React.FC = () => {
     smartAccountReady,
     trimmedGuardians,
     user?.id,
-    securityMode,
+    effectiveSecurityMode,
   ]);
 
   const handleAcknowledgeRecoveryKit = useCallback(async () => {
@@ -1241,7 +1219,26 @@ const EmailRecoveryScreen: React.FC = () => {
           <Feather name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Email Recovery</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity
+          onPress={() => {
+            const info = storedMetadata
+              ? [
+                  `Account: ${smartAccountAddress ?? "unknown"}`,
+                  `Chain: ${resolvedChainId}`,
+                  `Threshold: ${storedMetadata.config.threshold}`,
+                  `Delay: ${Math.floor(storedMetadata.config.delaySeconds / 60)}m`,
+                  `Expiry: ${Math.floor(storedMetadata.config.expirySeconds / 60)}m`,
+                  `Guardians: ${storedMetadata.guardians.length}`,
+                  `Status: ${storedMetadata.installations.find(i => i.chainId === Number(resolvedChainId))?.installStatus ?? "not_installed"}`,
+                ].join("\n")
+              : `Account: ${smartAccountAddress ?? "unknown"}\nChain: ${resolvedChainId}\nNo metadata loaded`;
+            void Clipboard.setStringAsync(info);
+            Alert.alert("Copied", "Debug info copied to clipboard.");
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Feather name="more-horizontal" size={22} color={colors.textPrimary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -1249,6 +1246,7 @@ const EmailRecoveryScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {__DEV__ && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Saved Recovery Metadata</Text>
           <Text style={styles.cardDesc}>
@@ -1330,7 +1328,9 @@ const EmailRecoveryScreen: React.FC = () => {
             <Text style={styles.moduleError}>{metadataWarning}</Text>
           ) : null}
         </View>
+        )}
 
+        {__DEV__ && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Privacy & Recovery Kit</Text>
           <Text style={styles.cardDesc}>
@@ -1362,7 +1362,7 @@ const EmailRecoveryScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          {securityMode === "extra" ? (
+          {effectiveSecurityMode === "extra" ? (
             <>
               <Text style={styles.moduleHint}>
                 Vault key on this device:{" "}
@@ -1405,13 +1405,12 @@ const EmailRecoveryScreen: React.FC = () => {
             </Text>
           )}
         </View>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Guardian Configuration</Text>
           <Text style={styles.cardDesc}>
-            Enter guardian email addresses and weights. The app
-            deterministically derives the on-chain EmailAuth guardian contracts
-            from these emails before installing the module.
+            Add the people you trust to help you recover this wallet.
           </Text>
 
           <View style={styles.inputRow}>
@@ -1504,7 +1503,7 @@ const EmailRecoveryScreen: React.FC = () => {
               )}
             </View>
           ))}
-          {derivedGuardians.length > 0 && (
+          {__DEV__ && derivedGuardians.length > 0 && (
             <View style={styles.payloadBox}>
               <Text style={styles.payloadTitle}>
                 Derived Guardian Contracts
@@ -1573,8 +1572,7 @@ const EmailRecoveryScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
           <Text style={styles.cardDesc}>
-            Install the on-chain email recovery module so guardians can approve
-            recovery emails.
+            Set up email recovery so your guardians can help you get back into your wallet.
           </Text>
           <View
             style={[
@@ -1604,19 +1602,18 @@ const EmailRecoveryScreen: React.FC = () => {
             />
             <Text style={styles.moduleStatusText}>
               {!smartAccountReady
-                ? "Deploy smart account to enable recovery"
+                ? "Set up your wallet first"
                 : checkingModule
-                  ? "Checking module status..."
+                  ? "Checking…"
                   : moduleInstalledState
-                    ? "Module installed"
-                    : "Module not installed"}
+                    ? "Recovery is set up"
+                    : "Recovery is not set up yet"}
             </Text>
           </View>
           {moduleError && <Text style={styles.moduleError}>{moduleError}</Text>}
           {!smartAccountReady && (
             <Text style={styles.moduleHint}>
-              Deploy your smart account first. Module installation requires an
-              on-chain contract.
+              Set up your wallet before enabling email recovery.
             </Text>
           )}
           {smartAccountReady && !guardiansReady && (
@@ -1627,21 +1624,21 @@ const EmailRecoveryScreen: React.FC = () => {
           {guardianValidationError ? (
             <Text style={styles.moduleError}>{guardianValidationError}</Text>
           ) : null}
-          {lastUserOpHash && (
+          {__DEV__ && lastUserOpHash && (
             <View style={styles.hashRow}>
               <Text style={styles.hashLabel}>UserOp Hash</Text>
               <Text style={styles.hashValue}>{lastUserOpHash}</Text>
             </View>
           )}
-          {lastOperationHash && (
+          {__DEV__ && lastOperationHash && (
             <View style={styles.hashRow}>
               <Text style={styles.hashLabel}>Bundler Operation Hash</Text>
               <Text style={styles.hashValue}>{lastOperationHash}</Text>
             </View>
           )}
-          {lastInstallPayload && (
+          {__DEV__ && lastInstallPayload && (
             <View style={styles.payloadBox}>
-              <Text style={styles.payloadTitle}>Latest Module Payload</Text>
+              <Text style={styles.payloadTitle}>Latest Install Payload</Text>
               <View style={styles.payloadRow}>
                 <Text style={styles.payloadLabel}>Sender</Text>
                 <Text style={styles.payloadValue}>
@@ -1695,12 +1692,13 @@ const EmailRecoveryScreen: React.FC = () => {
             ) : (
               <Text style={styles.installButtonText}>
                 {moduleInstalledState
-                  ? "Module Installed"
-                  : "Install Email Recovery"}
+                  ? "Recovery is set up"
+                  : "Set up Email Recovery"}
               </Text>
             )}
           </TouchableOpacity>
 
+          {__DEV__ && (
           <TouchableOpacity
             style={[
               styles.installButton,
@@ -1720,10 +1718,11 @@ const EmailRecoveryScreen: React.FC = () => {
               </Text>
             )}
           </TouchableOpacity>
+          )}
 
-          {moduleInstalledState
+          {__DEV__ && moduleInstalledState
             && smartAccountReady
-            && securityMode === "extra"
+            && effectiveSecurityMode === "extra"
             && recoveryKitAcked === false ? (
             <View style={styles.recoveryKitBanner}>
               <View style={styles.recoveryKitBannerHeader}>
@@ -1762,8 +1761,13 @@ const EmailRecoveryScreen: React.FC = () => {
             <View style={styles.guardianAcceptanceSection}>
               <Text style={styles.cardTitle}>Guardian Approval Status</Text>
               <Text style={styles.cardDesc}>
-                Each guardian must accept their role through the ZK Email verification flow before recovery is possible. On Anvil, run `make mock-accept-guardians-local` to simulate acceptance.
+                Your guardians will receive an invitation email. Recovery becomes active once enough guardians confirm.
               </Text>
+              {__DEV__ && (
+                <Text style={styles.cardDesc}>
+                  [DEV] On Anvil: `make mock-accept-guardians-local`
+                </Text>
+              )}
               {storedMetadata ? (
                 <>
                   {storedMetadata.guardians.map((guardian) => (
@@ -1841,8 +1845,7 @@ const EmailRecoveryScreen: React.FC = () => {
                   <View style={styles.addPostInstallSection}>
                     <Text style={styles.addPostInstallTitle}>Add another guardian</Text>
                     <Text style={styles.cardDesc}>
-                      Submits an on-chain addGuardian and fires a fresh acceptance invite.
-                      Useful when threshold blocks removal of an existing guardian.
+                      Add another person to your recovery setup.
                     </Text>
                     <TextInput
                       style={styles.addPostInstallInput}
