@@ -286,6 +286,8 @@ export class EmailRecoveryGroupService {
     const recoveryData = encodeEmailRecoveryData(emailRecoveryData);
     const multichainRecoveryDataHash = hashEmailRecoveryData(emailRecoveryData);
 
+    // ADR-0009: insert without `status` — lifecycle is now tracked via
+    // executed_at / deleted_at and on-chain reads, not a Supabase status column.
     const { data: group, error: groupError } = await this.supabase
       .from("email_recovery_groups")
       .insert({
@@ -307,8 +309,6 @@ export class EmailRecoveryGroupService {
         },
         recovery_data: recoveryData,
         valid_after: null,
-        deadline: new Date(deadline * 1000).toISOString(),
-        status: "draft",
       })
       .select()
       .single();
@@ -347,11 +347,6 @@ export class EmailRecoveryGroupService {
       .select();
 
     if (approvalError) throw approvalError;
-
-    await this.supabase
-      .from("email_recovery_groups")
-      .update({ status: "collecting_approvals" })
-      .eq("id", group.id);
 
     return {
       groupId: group.id,
@@ -681,12 +676,16 @@ export class EmailRecoveryGroupService {
     };
   }
 
+  // ADR-0009: cancellation is a soft delete — sets deleted_at rather than a
+  // status column (which no longer exists). The on-chain cancelRecovery() UserOp
+  // is attempted by the UI layer (Phase 4.3) after calling this method.
   static async cancelGroup(groupId: string): Promise<void> {
     const { error } = await this.supabase
       .from("email_recovery_groups")
-      .update({ status: "cancelled" })
+      .update({ deleted_at: new Date().toISOString() })
       .eq("id", groupId)
-      .in("status", ["draft", "collecting_approvals", "sending_approvals"]);
+      .is("deleted_at", null)
+      .is("executed_at", null);
 
     if (error) throw error;
   }

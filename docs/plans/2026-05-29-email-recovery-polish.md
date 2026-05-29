@@ -336,9 +336,9 @@ Where the new code intersects with concepts in CONTEXT.md or one of the three ne
 
 ## Operational notes (fill in during execution)
 
-- Relayer EOA address on Base Sepolia: _(record here after funding)_
-- Relayer EOA Base Sepolia balance at start of work: _(record)_
-- Vitest pre-existing pass count: _(should be 30)_
+- Relayer EOA address on Base Sepolia: `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`
+- Relayer EOA Base Sepolia balance at start of work: **0 ETH** — fund from faucet before testing Phase 3.2
+- Vitest pre-existing pass count: **30**
 - Post-work pass count: _(should be 30 + new tests)_
 - Baseline screenshots saved to: `docs/plans/2026-05-29-email-recovery-polish/baseline/`
 - After screenshots saved to: `docs/plans/2026-05-29-email-recovery-polish/after/`

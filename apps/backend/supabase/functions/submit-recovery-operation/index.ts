@@ -19,7 +19,8 @@ type RecoveryAction =
   | "prepare-schedule"
   | "prepare-execute"
   | "record-tx"
-  | "sync-from-chain";
+  | "sync-from-chain"
+  | "cancel-expired-email-recovery";
 type SigKind = "EOA_ECDSA" | "ERC1271" | "APPROVE_HASH";
 
 type RecoveryOperationRequest = {
@@ -105,6 +106,17 @@ type RecoveryChainStatusRow = {
 };
 
 const ZERO_BYTES32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+// ADR-0010: cancel-expired-email-recovery — server EOA reclaims blocked slots.
+// Keyed by chainId; add new entries when ADR-0006 is updated for additional chains.
+const EMAIL_RECOVERY_ADDRESSES: Record<number, Address> = {
+  84532: "0xC4c29a16e929614d973fe7ad50e0Fb5Eb6c7753a", // Base Sepolia
+};
+
+const EMAIL_RECOVERY_ABI = parseAbi([
+  "function getRecoveryRequest(address account) view returns (uint256 executeAfter, uint256 executeBefore, uint256 currentWeight, bytes32 recoveryDataHash)",
+  "function cancelExpiredRecovery(address account) external",
+]);
 
 const SCHEDULE_ABI = parseAbi([
   "function scheduleRecovery(address wallet, (bytes32 idRaw,uint256 px,uint256 py) newPassKey, (bytes32 requestId,bytes32 newPasskeyHash,bytes32 chainScopeHash,uint48 validAfter,uint48 deadline,bytes32 metadataHash) intent, (uint256 chainId,address wallet,address socialRecovery,uint256 nonce,bytes32 guardianSetHash,bytes32 policyHash)[] scopes, (uint16 index,uint8 kind,bytes sig)[] sigs) returns (bytes32 recoveryId)",
@@ -697,6 +709,61 @@ async function handleNewSponsoredFlow(body: any): Promise<Response> {
   return json({ error: "Unknown new-flow action" }, { status: 400 });
 }
 
+// ADR-0010: Reclaim an expired Recovery Attempt slot on behalf of the user.
+// The on-chain EmailRecoveryManager keeps the slot occupied even after
+// executeBefore elapses; this permissionless call clears it so a new Attempt
+// can land. Idempotent: a second call sees executeBefore===0 and returns no-op.
+// See CONTEXT.md "Recovery Attempt — expired-slot reclamation".
+async function handleCancelExpiredEmailRecovery(body: any): Promise<Response> {
+  const smartAccountAddress = asAddress(body.smartAccountAddress ?? "", "smartAccountAddress");
+  const chainId = Number(body.chainId);
+
+  const emailRecoveryAddress = EMAIL_RECOVERY_ADDRESSES[chainId];
+  if (!emailRecoveryAddress) {
+    return json(
+      { error: `chainId ${chainId} is not supported. Supported: ${Object.keys(EMAIL_RECOVERY_ADDRESSES).join(", ")}` },
+      { status: 400 },
+    );
+  }
+
+  const rpcUrl = resolveRpcUrl(chainId, "");
+  const chain = toChain(chainId, rpcUrl);
+  const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+
+  const [, executeBefore] = (await publicClient.readContract({
+    address: emailRecoveryAddress,
+    abi: EMAIL_RECOVERY_ABI,
+    functionName: "getRecoveryRequest",
+    args: [smartAccountAddress],
+  })) as [bigint, bigint, bigint, Hex];
+
+  if (executeBefore === 0n) {
+    return json({ status: "no-op", reason: "no active recovery" });
+  }
+
+  const nowSec = BigInt(Math.floor(Date.now() / 1000));
+  if (executeBefore > nowSec) {
+    return json({ status: "skipped", reason: "not yet expired", executeBefore: executeBefore.toString() });
+  }
+
+  // Slot is occupied and past its deadline — clear it via the server EOA.
+  const relayer = getRelayerAccount();
+  const walletClient = createWalletClient({ account: relayer, chain, transport: http(rpcUrl) });
+
+  try {
+    const txHash = await walletClient.writeContract({
+      address: emailRecoveryAddress,
+      abi: EMAIL_RECOVERY_ABI,
+      functionName: "cancelExpiredRecovery",
+      args: [smartAccountAddress],
+    });
+    await publicClient.waitForTransactionReceipt({ hash: txHash });
+    return json({ status: "cleared", txHash });
+  } catch (err) {
+    return json({ status: "failed", reason: extractErrorMessage(err) });
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -713,15 +780,33 @@ serve(async (req) => {
     return json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  // Diagnostic mode: return the relayer EOA address derived from the secret.
-  // Used by operators to verify which address needs Base Sepolia ETH funding.
+  // Diagnostic mode: return relayer EOA address + Base Sepolia balance.
+  // Used by Dev Controls to warn before balance drops too low for cancel-expired.
   // Does NOT expose the private key.
   if (body.action === "whoami") {
     try {
       const relayer = getRelayerAccount();
-      return json({ relayerAddress: relayer.address });
+      let relayerBalanceWei: string | null = null;
+      try {
+        const rpcUrl = resolveRpcUrl(84532, "");
+        const chain = toChain(84532, rpcUrl);
+        const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+        relayerBalanceWei = (await publicClient.getBalance({ address: relayer.address })).toString();
+      } catch {
+        // balance fetch is best-effort; don't fail whoami if RPC is flaky
+      }
+      return json({ relayerAddress: relayer.address, relayerBalanceWei });
     } catch (err) {
       return json({ error: err instanceof Error ? err.message : "whoami failed" }, { status: 500 });
+    }
+  }
+
+  // ADR-0010: cancel-expired-email-recovery — no requestId needed, just account + chain.
+  if (body.action === "cancel-expired-email-recovery") {
+    try {
+      return await handleCancelExpiredEmailRecovery(body);
+    } catch (error) {
+      return json({ error: extractErrorMessage(error) }, { status: 500 });
     }
   }
 
