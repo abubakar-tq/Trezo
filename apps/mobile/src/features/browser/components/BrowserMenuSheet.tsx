@@ -22,6 +22,13 @@ export type BrowserMenuSheetProps = {
   colors: ThemeColors;
 };
 
+type RowItem = {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+};
+
 export const BrowserMenuSheet = forwardRef<BrowserMenuHandle, BrowserMenuSheetProps>(
   (
     {
@@ -52,41 +59,65 @@ export const BrowserMenuSheet = forwardRef<BrowserMenuHandle, BrowserMenuSheetPr
       fn();
     };
 
+    const rows: RowItem[] = [
+      { icon: "rotate-cw", label: "Reload", onPress: run(onReload) },
+      { icon: "arrow-right", label: "Forward", onPress: run(onForward), disabled: !canGoForward },
+      { icon: "copy", label: "Copy link", onPress: run(onCopyLink) },
+      { icon: "share-2", label: "Share", onPress: run(onShare) },
+      { icon: "plus-square", label: "New tab", onPress: run(onNewTab) },
+      { icon: "settings", label: "Browser settings", onPress: run(onOpenSettings) },
+    ];
+
     return (
       <TrezoBottomSheet ref={sheetRef} enableDynamicSizing>
         <View style={styles.body}>
-          <View style={[styles.header, { borderBottomColor: colors.borderMuted }]}>
-            <View style={[styles.favicon, { backgroundColor: colors.surfaceElevated }]}>
-              <Feather name="globe" size={18} color={colors.textMuted} />
+          {/* Site header */}
+          <View style={[styles.header, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+            <View
+              style={[
+                styles.favicon,
+                { backgroundColor: connected ? colors.successSoft : colors.surfaceMuted },
+              ]}
+            >
+              <Feather name="globe" size={19} color={connected ? colors.success : colors.textMuted} />
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={styles.headerText}>
               <Text style={[styles.title, { color: colors.textPrimary }]} numberOfLines={1}>
                 {title || hostname || "New Tab"}
               </Text>
-              <Text
-                style={[styles.status, { color: connected ? colors.success : colors.textMuted }]}
-                numberOfLines={1}
-              >
-                {connected ? `Connected · ${hostname}` : "Not connected"}
-              </Text>
+              <View style={styles.statusRow}>
+                <View style={[styles.dot, { backgroundColor: connected ? colors.success : colors.textMuted }]} />
+                <Text
+                  style={[styles.status, { color: connected ? colors.success : colors.textMuted }]}
+                  numberOfLines={1}
+                >
+                  {connected ? hostname : "Not connected"}
+                </Text>
+              </View>
             </View>
+            {connected && (
+              <Pressable
+                onPress={run(onDisconnect)}
+                hitSlop={6}
+                style={({ pressed }) => [
+                  styles.disconnectBtn,
+                  { backgroundColor: colors.dangerSoft, opacity: pressed ? 0.6 : 1 },
+                ]}
+              >
+                <Text style={[styles.disconnectText, { color: colors.danger }]}>Disconnect</Text>
+              </Pressable>
+            )}
           </View>
 
-          <MenuRow icon="rotate-cw" label="Reload" color={colors.textPrimary} onPress={run(onReload)} />
-          <MenuRow
-            icon="chevron-right"
-            label="Forward"
-            color={colors.textPrimary}
-            disabled={!canGoForward}
-            onPress={run(onForward)}
-          />
-          <MenuRow icon="link" label="Copy link" color={colors.textPrimary} onPress={run(onCopyLink)} />
-          <MenuRow icon="share" label="Share" color={colors.textPrimary} onPress={run(onShare)} />
-          <MenuRow icon="plus" label="New tab" color={colors.textPrimary} onPress={run(onNewTab)} />
-          {connected && (
-            <MenuRow icon="power" label="Disconnect dApp" color={colors.danger} onPress={run(onDisconnect)} />
-          )}
-          <MenuRow icon="settings" label="Browser settings" color={colors.textSecondary} onPress={run(onOpenSettings)} />
+          {/* Actions */}
+          <View style={[styles.group, { backgroundColor: colors.surfaceElevated }]}>
+            {rows.map((item, i) => (
+              <View key={item.label}>
+                {i > 0 && <View style={[styles.divider, { backgroundColor: colors.borderMuted }]} />}
+                <MenuRow item={item} colors={colors} />
+              </View>
+            ))}
+          </View>
         </View>
       </TrezoBottomSheet>
     );
@@ -95,44 +126,45 @@ export const BrowserMenuSheet = forwardRef<BrowserMenuHandle, BrowserMenuSheetPr
 
 BrowserMenuSheet.displayName = "BrowserMenuSheet";
 
-function MenuRow({
-  icon,
-  label,
-  color,
-  onPress,
-  disabled,
-}: {
-  icon: React.ComponentProps<typeof Feather>["name"];
-  label: string;
-  color: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
+function MenuRow({ item, colors }: { item: RowItem; colors: ThemeColors }) {
   return (
     <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => [styles.row, { opacity: disabled ? 0.35 : pressed ? 0.6 : 1 }]}
+      onPress={item.onPress}
+      disabled={item.disabled}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: pressed ? colors.surfaceMuted : "transparent", opacity: item.disabled ? 0.4 : 1 },
+      ]}
     >
-      <Feather name={icon} size={18} color={color} />
-      <Text style={[styles.rowLabel, { color }]}>{label}</Text>
+      <View style={[styles.chip, { backgroundColor: colors.surfaceMuted }]}>
+        <Feather name={item.icon} size={17} color={colors.textSecondary} />
+      </View>
+      <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{item.label}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { paddingBottom: 12 },
+  body: { paddingBottom: 8, gap: 14 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingBottom: 14,
-    marginBottom: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  favicon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  favicon: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  headerText: { flex: 1, minWidth: 0 },
   title: { fontSize: 15, fontWeight: "700" },
-  status: { fontSize: 12, fontWeight: "500", marginTop: 2 },
-  row: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 13, paddingHorizontal: 4 },
-  rowLabel: { fontSize: 15, fontWeight: "500" },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+  dot: { width: 7, height: 7, borderRadius: 3.5 },
+  status: { fontSize: 12, fontWeight: "500", flexShrink: 1 },
+  disconnectBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+  disconnectText: { fontSize: 12, fontWeight: "700" },
+  group: { borderRadius: 16, overflow: "hidden" },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 12, minHeight: 52 },
+  chip: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  rowLabel: { fontSize: 15, fontWeight: "600", flex: 1 },
+  divider: { height: StyleSheet.hairlineWidth, marginLeft: 58 },
 });
