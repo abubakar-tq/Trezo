@@ -3,7 +3,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DEPLOYMENTS_DIR = join(__dirname, "../../../contracts/deployments");
+const DEPLOYMENTS_DIR = join(__dirname, "../../../../contracts/deployments");
 
 interface DeploymentJson {
   chainId: number;
@@ -17,9 +17,15 @@ interface DeploymentJson {
   [key: string]: unknown;
 }
 
-function loadDeployment(profile: string): DeploymentJson {
-  const path = join(DEPLOYMENTS_DIR, `${profile}.json`);
-  return JSON.parse(readFileSync(path, "utf8")) as DeploymentJson;
+// Returns null when the deployment artifact is absent (e.g. a hosted indexer like Render,
+// where local-only profiles such as 31337 / base-mainnet-fork are not committed to git).
+function loadDeployment(profile: string): DeploymentJson | null {
+  try {
+    const path = join(DEPLOYMENTS_DIR, `${profile}.json`);
+    return JSON.parse(readFileSync(path, "utf8")) as DeploymentJson;
+  } catch {
+    return null;
+  }
 }
 
 export const ANVIL_LOCAL = loadDeployment("31337");

@@ -2,7 +2,7 @@ import { ponder } from "ponder:registry";
 import { accountSecurityEvent } from "ponder:schema";
 
 ponder.on("PasskeyValidator:PasskeyAdded", async ({ event, context }) => {
-  const chainId = BigInt(context.chain.id);
+  const chainId = BigInt(context.chain!.id);
   await context.db
     .insert(accountSecurityEvent)
     .values({
@@ -20,7 +20,7 @@ ponder.on("PasskeyValidator:PasskeyAdded", async ({ event, context }) => {
 });
 
 ponder.on("PasskeyValidator:PasskeyRemoved", async ({ event, context }) => {
-  const chainId = BigInt(context.chain.id);
+  const chainId = BigInt(context.chain!.id);
   await context.db
     .insert(accountSecurityEvent)
     .values({
@@ -38,7 +38,7 @@ ponder.on("PasskeyValidator:PasskeyRemoved", async ({ event, context }) => {
 });
 
 ponder.on("PasskeyValidator:PasskeyRemovalScheduled", async ({ event, context }) => {
-  const chainId = BigInt(context.chain.id);
+  const chainId = BigInt(context.chain!.id);
   await context.db
     .insert(accountSecurityEvent)
     .values({
@@ -59,7 +59,7 @@ ponder.on("PasskeyValidator:PasskeyRemovalScheduled", async ({ event, context })
 });
 
 ponder.on("PasskeyValidator:PasskeyRemovalCancelled", async ({ event, context }) => {
-  const chainId = BigInt(context.chain.id);
+  const chainId = BigInt(context.chain!.id);
   await context.db
     .insert(accountSecurityEvent)
     .values({

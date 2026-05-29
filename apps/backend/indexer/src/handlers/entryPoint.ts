@@ -4,7 +4,7 @@ import { isKnownAccount } from "../lib/knownAccounts.js";
 
 ponder.on("EntryPoint:UserOperationEvent", async ({ event, context }) => {
   const { userOpHash, sender, paymaster, nonce, success, actualGasCost, actualGasUsed } = event.args;
-  const chainId = BigInt(context.chain.id);
+  const chainId = BigInt(context.chain!.id);
 
   if (!isKnownAccount(chainId, sender)) return;
 

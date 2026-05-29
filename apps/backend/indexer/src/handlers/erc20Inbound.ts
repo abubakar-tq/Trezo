@@ -6,7 +6,7 @@ import { projectIncomingTransfer } from "../lib/projectTransfer.js";
 
 ponder.on("Erc20Inbound:Transfer", async ({ event, context }) => {
   const { from, to, value } = event.args;
-  const chainId = BigInt(context.chain.id);
+  const chainId = BigInt(context.chain!.id);
 
   if (!isKnownAccount(chainId, to)) return;
 
