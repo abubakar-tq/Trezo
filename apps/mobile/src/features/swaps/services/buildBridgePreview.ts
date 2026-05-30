@@ -33,7 +33,9 @@ export function buildBridgePreview(plan: BridgePlan, chainNames: Record<number, 
         kind: "transfer",
       },
     ],
-    extraNotes: [feeNote],
+    extraNotes: plan.approvalRequired
+      ? [feeNote, `Approve ${quote.inputToken.symbol} first · 2 signatures`]
+      : [feeNote],
     network: {
       chainId: quote.sourceChainId,
       networkKey: quote.sourceNetworkKey,
@@ -41,5 +43,6 @@ export function buildBridgePreview(plan: BridgePlan, chainNames: Record<number, 
     },
     account: bridgeExecution.account,
     calls: [{ to: bridgeExecution.target, value: bridgeExecution.value, data: bridgeExecution.data }],
+    requiresPriorApproval: plan.approvalRequired,
   };
 }

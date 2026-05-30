@@ -35,8 +35,12 @@ export function buildSwapPreview(plan: SwapPlan, networkName: string): TxPreview
     ],
     slippageBps: quote.slippageBps,
     minReceivedDisplay: `${minDisplay} ${quote.buyToken.symbol}`,
+    extraNotes: plan.approvalRequired
+      ? [`Approve ${quote.sellToken.symbol} first · 2 signatures`]
+      : undefined,
     network: { chainId: quote.chainId, networkKey: quote.networkKey, name: networkName },
     account: swapExecution.account,
     calls: [{ to: swapExecution.target, value: swapExecution.value, data: swapExecution.data }],
+    requiresPriorApproval: plan.approvalRequired,
   };
 }

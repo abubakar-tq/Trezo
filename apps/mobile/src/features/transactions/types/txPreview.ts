@@ -31,6 +31,7 @@ export type TxPreview = {
   network: { chainId: SupportedChainId; networkKey?: NetworkKey; name: string };
   account: Address;
   calls: TxCall[];               // inner call(s) being confirmed (preflight target)
+  requiresPriorApproval?: boolean; // swap/bridge needs an ERC20 approval before the main call
 };
 
 export type GasFee = {

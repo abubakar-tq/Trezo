@@ -41,6 +41,27 @@ export function useTransactionConfirmation() {
       setLoading(true);
       sheetRef.current?.present();
 
+      if (args.preview.requiresPriorApproval) {
+        // Deferred-prepare path: the swap UserOp would revert during bundler gas
+        // estimation (transferFrom fails with no allowance). Skip prepareUserOperation
+        // and SimulationService — show derived deltas with a sponsored gas placeholder.
+        const fee: GasFee = { nativeDisplay: "—", sponsored: args.usePaymaster ?? true };
+        setGasFee(fee);
+        setSimulation({
+          status: "success",
+          source: "derived",
+          gasFee: fee,
+          warnings: ["Token approval required first — you'll sign twice"],
+        });
+        setLoading(false);
+
+        const approved = await new Promise<boolean>((resolve) => {
+          resolverRef.current = resolve;
+        });
+        return { approved, prepared: undefined };
+      }
+
+      // Normal path: prepare + preflight before the user taps Approve.
       const prepared = await SmartAccountExecutionService.prepareUserOperation(args.execution, {
         userId: args.userId,
         usePaymaster: args.usePaymaster ?? true,

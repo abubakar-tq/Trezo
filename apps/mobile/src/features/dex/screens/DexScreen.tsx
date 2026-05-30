@@ -812,28 +812,7 @@ export const DexScreen: React.FC = () => {
     let approvalTransactionId: string | undefined;
 
     try {
-      // 1) If approval required, run it silently first
-      if (plan.approvalRequired && plan.approvalExecution && plan.approvalTransactionInput) {
-        const approvalResult = await runSilentStep(
-          user.id, plan.approvalExecution, plan.approvalTransactionInput,
-          intentId, 0,
-        );
-        approvalTransactionId = approvalResult.transactionId;
-        if (!approvalResult.ok) {
-          setBridgeBusy(false);
-          return;
-        }
-      }
-
-      // 2) Show confirm sheet for main bridge deposit
-      const bridgeSequence = plan.approvalRequired ? 1 : 0;
-      const bridgeDraft = await TransactionHistoryService.createDraft({
-        ...plan.bridgeTransactionInput,
-        intentId,
-        sequenceIndex: bridgeSequence,
-        parentTransactionId: approvalTransactionId ?? null,
-      });
-
+      // 1) SHEET FIRST — build preview and show confirm sheet before any signing
       // Build chainNames from source and dest network configs
       const chainNames: Record<number, string> = {};
       try { chainNames[plan.intent.sourceChainId] = getNetworkConfig(plan.intent.sourceNetworkKey).displayName; } catch { chainNames[plan.intent.sourceChainId] = String(plan.intent.sourceChainId); }
@@ -853,22 +832,42 @@ export const DexScreen: React.FC = () => {
         approved = confirmResult.approved;
         preparedUserOp = confirmResult.prepared;
       } catch (err) {
-        const { errorCode: errCode, errorMessage: errMsg } = getErrorDetails(err);
-        await TransactionHistoryService.markFailed({ id: bridgeDraft.id, errorCode: errCode, errorMessage: errMsg });
         setErrorState(classify(err));
-        setBridgeBusy(false);
-        return;
+        return; // finally resets bridgeBusy
       }
 
-      if (!approved || !preparedUserOp) {
-        await TransactionHistoryService.markCancelled(bridgeDraft.id, "user_rejected");
-        setBridgeBusy(false);
-        return;
+      if (!approved) {
+        // User dismissed/rejected the confirm sheet — nothing drafted yet; retryable.
+        return; // finally resets bridgeBusy
       }
 
-      // 3) User approved — sign + submit bridge deposit
+      // 2) User approved — sign approval FIRST if required
+      if (plan.approvalRequired && plan.approvalExecution && plan.approvalTransactionInput) {
+        const approvalResult = await runSilentStep(
+          user.id, plan.approvalExecution, plan.approvalTransactionInput,
+          intentId, 0,
+        );
+        approvalTransactionId = approvalResult.transactionId;
+        if (!approvalResult.ok) {
+          return; // Retryable — finally resets bridgeBusy
+        }
+      }
+
+      // 3) Create main bridge draft (after approval so parentTransactionId is known)
+      const bridgeSequence = plan.approvalRequired ? 1 : 0;
+      const bridgeDraft = await TransactionHistoryService.createDraft({
+        ...plan.bridgeTransactionInput,
+        intentId,
+        sequenceIndex: bridgeSequence,
+        parentTransactionId: approvalTransactionId ?? null,
+      });
+
+      // 4) Sign + submit bridge deposit (prepare now if deferred, else use op from confirm)
       let didSubmit = false;
       try {
+        const opToSign = preparedUserOp ?? await SmartAccountExecutionService.prepareUserOperation(
+          plan.bridgeExecution, { userId: user.id, usePaymaster: true },
+        );
         await TransactionHistoryService.markPrepared(bridgeDraft.id, {
           targetAddress: plan.bridgeExecution.target,
           valueRaw: plan.bridgeExecution.value.toString(),
@@ -876,7 +875,7 @@ export const DexScreen: React.FC = () => {
           metadata: plan.bridgeExecution.metadata,
         });
         await TransactionHistoryService.markSigning(bridgeDraft.id);
-        const signed = await SmartAccountExecutionService.signUserOperation(user.id, preparedUserOp);
+        const signed = await SmartAccountExecutionService.signUserOperation(user.id, opToSign);
         await TransactionHistoryService.markSigned(bridgeDraft.id, {
           signatureBytes: signed.signature.length > 2 ? (signed.signature.length - 2) / 2 : 0,
           userOpHash: signed.userOpHash,
@@ -901,7 +900,6 @@ export const DexScreen: React.FC = () => {
           });
           setErrorState(classify(new Error("Bridge transaction failed on-chain.")));
           navigation.navigate("TransactionStatus", { transactionId: bridgeDraft.id });
-          setBridgeBusy(false);
           return;
         }
         await TransactionHistoryService.markConfirmed({
@@ -1041,30 +1039,7 @@ export const DexScreen: React.FC = () => {
     let approvalTransactionId: string | undefined;
 
     try {
-      // 1) If approval required, run it silently first
-      if (plan.approvalRequired && plan.approvalExecution && plan.approvalTransactionInput) {
-        setUiState("signing_approval");
-        const approvalResult = await runSilentStep(
-          user.id, plan.approvalExecution, plan.approvalTransactionInput,
-          intentId, 0,
-        );
-        approvalTransactionId = approvalResult.transactionId;
-        if (!approvalResult.ok) {
-          setUiState("failed");
-          return;
-        }
-        setUiState("approval_pending");
-      }
-
-      // 2) Show confirm sheet for main swap
-      const swapSequence = plan.approvalRequired ? 1 : 0;
-      const swapDraft = await TransactionHistoryService.createDraft({
-        ...plan.swapTransactionInput,
-        intentId,
-        sequenceIndex: swapSequence,
-        parentTransactionId: approvalTransactionId ?? null,
-      });
-
+      // 1) SHEET FIRST — build preview and show confirm sheet before any signing
       const swapNetworkName = (() => {
         try { return getNetworkConfig(plan.intent.networkKey).displayName; } catch { return String(plan.intent.chainId); }
       })();
@@ -1082,25 +1057,50 @@ export const DexScreen: React.FC = () => {
         approved = confirmResult.approved;
         preparedUserOp = confirmResult.prepared;
       } catch (err) {
-        const { errorCode, errorMessage: errMsg } = getErrorDetails(err);
-        await TransactionHistoryService.markFailed({ id: swapDraft.id, errorCode, errorMessage: errMsg });
         setErrorState(classify(err));
         setUiState("failed");
         return;
       }
 
-      if (!approved || !preparedUserOp) {
-        // User dismissed/rejected the confirm sheet — cancel the draft and
-        // return to quote_ready so they can review again without re-quoting.
-        await TransactionHistoryService.markCancelled(swapDraft.id, "user_rejected");
-        setUiState("quote_ready");
+      if (!approved) {
+        // User dismissed/rejected the confirm sheet — nothing has been drafted or
+        // submitted yet, so return to a retryable state (not a stuck dead-end).
+        setUiState(plan.approvalRequired ? "approval_required" : "quote_ready");
         return;
       }
 
-      // 3) User approved — sign + submit swap
+      // 2) User approved — sign approval FIRST if required
+      if (plan.approvalRequired && plan.approvalExecution && plan.approvalTransactionInput) {
+        setUiState("signing_approval");
+        const approvalResult = await runSilentStep(
+          user.id, plan.approvalExecution, plan.approvalTransactionInput,
+          intentId, 0,
+        );
+        approvalTransactionId = approvalResult.transactionId;
+        if (!approvalResult.ok) {
+          // Retryable — approval failed/cancelled; user can try again
+          setUiState("approval_required");
+          return;
+        }
+        setUiState("approval_pending");
+      }
+
+      // 3) Create main swap draft (after approval so parentTransactionId is known)
+      const swapSequence = plan.approvalRequired ? 1 : 0;
+      const swapDraft = await TransactionHistoryService.createDraft({
+        ...plan.swapTransactionInput,
+        intentId,
+        sequenceIndex: swapSequence,
+        parentTransactionId: approvalTransactionId ?? null,
+      });
+
+      // 4) Sign + submit swap (prepare now if deferred, else use op from confirm)
       setUiState("signing_swap");
       let didSubmit = false;
       try {
+        const opToSign = preparedUserOp ?? await SmartAccountExecutionService.prepareUserOperation(
+          plan.swapExecution, { userId: user.id, usePaymaster: true },
+        );
         await TransactionHistoryService.markPrepared(swapDraft.id, {
           targetAddress: plan.swapExecution.target,
           valueRaw: plan.swapExecution.value.toString(),
@@ -1108,7 +1108,7 @@ export const DexScreen: React.FC = () => {
           metadata: plan.swapExecution.metadata,
         });
         await TransactionHistoryService.markSigning(swapDraft.id);
-        const signed = await SmartAccountExecutionService.signUserOperation(user.id, preparedUserOp);
+        const signed = await SmartAccountExecutionService.signUserOperation(user.id, opToSign);
         await TransactionHistoryService.markSigned(swapDraft.id, {
           signatureBytes: signed.signature.length > 2 ? (signed.signature.length - 2) / 2 : 0,
           userOpHash: signed.userOpHash,
@@ -1172,7 +1172,7 @@ export const DexScreen: React.FC = () => {
         setUiState("failed");
       }
     } catch (outerError) {
-      // Catches errors before the confirm sheet (e.g. createDraft network failure).
+      // Catches errors before the confirm sheet or during draft creation.
       // Leave uiState as failed so the UI is not stuck in a transient state.
       setErrorState(classify(outerError));
       setUiState("failed");
