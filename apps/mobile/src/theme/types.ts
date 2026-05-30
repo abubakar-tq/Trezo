@@ -17,7 +17,6 @@ export type ThemeColors = {
   text: string;
   textPrimary: string;
   textSecondary: string;
-  secondaryText: string;
   textMuted: string;
   textOnAccent: string;
   textOnHero: string;
@@ -26,6 +25,8 @@ export type ThemeColors = {
   accentAlt: string;
   accentSoft: string;
   // Semantic states
+  dataPositive: string;
+  dataNegative: string;
   success: string;
   successSoft: string;
   warning: string;

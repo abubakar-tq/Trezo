@@ -16,7 +16,6 @@ const darkColors: ThemeColors = {
   text: "#F4F1EA",
   textPrimary: "#F4F1EA",
   textSecondary: "#8E8B85",
-  secondaryText: "#8E8B85",
   textMuted: "#5C5A55",
   textOnAccent: "#F4F1EA",
   textOnHero: "#F4F1EA",
@@ -25,6 +24,8 @@ const darkColors: ThemeColors = {
   accentAlt: "#06B6D4",
   accentSoft: "rgba(124, 58, 237, 0.12)",
   // Semantic — emerald from locked ShieldScene, terracotta replaces crimson
+  dataPositive: "#34D399",
+  dataNegative: "#E8654F",
   success: "#10B981",
   successSoft: "rgba(16, 185, 129, 0.12)",
   warning: "#F59E0B",
@@ -53,7 +54,6 @@ const lightColors: ThemeColors = {
   text: "#1A1814",
   textPrimary: "#1A1814",
   textSecondary: "#6B6860",
-  secondaryText: "#6B6860",
   textMuted: "#9B9890",
   textOnAccent: "#FFFFFF",
   textOnHero: "#1A1814",
@@ -62,6 +62,8 @@ const lightColors: ThemeColors = {
   accentAlt: "#06B6D4",
   accentSoft: "rgba(124, 58, 237, 0.10)",
   // Semantic — deepened for light mode readability
+  dataPositive: "#059669",
+  dataNegative: "#C94B35",
   success: "#059669",
   successSoft: "rgba(5, 150, 105, 0.10)",
   warning: "#D97706",
