@@ -17,6 +17,10 @@ import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
 import { encodeAbiParameters, parseAbiParameters, toBytes } from 'viem';
+import type { Address } from 'viem';
+import { getDeployment, getPublicClient } from '@/src/integration/viem';
+import { ABIS } from '@/src/integration/viem/abis';
+import type { SupportedChainId } from '@/src/integration/chains';
 // Conditionally import passkeys only if available and not in Expo Go
 let Passkey: any = null;
 
@@ -517,7 +521,8 @@ export class PasskeyService {
    */
   static async signWithPasskey(
     userId: string,
-    userOpHash: string
+    userOpHash: string,
+    opts?: { smartAccountAddress?: Address; chainId?: SupportedChainId },
   ): Promise<PasskeySignature> {
     debugLog('✍️ [PasskeyService] Signing with passkey');
     debugLog('📝 [PasskeyService] UserOp hash:', userOpHash);
@@ -534,21 +539,52 @@ export class PasskeyService {
     const challengeBytes = toBytes(userOpHash as `0x${string}`);
     const challenge = this.base64UrlEncode(this.uint8ArrayToBase64(challengeBytes));
     
-    // 3. Get RP ID for this platform
-    const rpId = getRpId();
-    
-    // 4. Get authentication (triggers biometric)
-    const authOptions = {
+    // 3. RP ID MUST equal the rpId the credential was registered under.
+    const rpId = passkey.rpId || getRpId();
+
+    // 4. Restrict the picker to the wallet's ON-CHAIN registered credential(s)
+    //    when we know the wallet + chain. A wallet's RP can accumulate several
+    //    passkeys on a device (re-provisioning, multiple accounts); listing them
+    //    all forces the user to guess which can sign. Feeding the registered ids
+    //    as allowCredentials makes Android surface only keys that actually sign
+    //    for THIS wallet. If we can't read them (not deployed / RPC error) we
+    //    fall back to the discoverable flow (no allowCredentials).
+    let allowCredentials: Array<{ id: string; type: 'public-key' }> | undefined;
+    if (opts?.smartAccountAddress && opts?.chainId) {
+      try {
+        const registered = await this.getRegisteredCredentialIds(opts.chainId, opts.smartAccountAddress);
+        if (registered.length > 0) {
+          allowCredentials = registered.map((id) => ({ id, type: 'public-key' as const }));
+          debugLog(`🔐 [PasskeyService] Restricting picker to ${registered.length} registered passkey(s):`, registered);
+        }
+      } catch (e) {
+        debugLog('⚠️ [PasskeyService] Could not read on-chain passkeys:', String(e));
+      }
+    }
+
+    // Fallback: restrict to THIS wallet's own stored passkey so the OS shows only
+    // it — never the full list of every passkey on the device. Covers deploy /
+    // pre-registration signing (no on-chain passkeys yet) and single-passkey wallets.
+    if (!allowCredentials) {
+      allowCredentials = [{ id: passkey.credentialId, type: 'public-key' as const }];
+      debugLog('🔐 [PasskeyService] Restricting picker to stored passkey:', passkey.credentialId);
+    }
+
+    // 5. Get authentication (triggers biometric). With allowCredentials the OS
+    //    shows only the wallet's registered keys; otherwise the discoverable flow
+    //    lists the device's platform passkeys.
+    const authOptions: {
+      challenge: string;
+      rpId: string;
+      timeout: number;
+      userVerification: 'required';
+      allowCredentials?: Array<{ id: string; type: 'public-key' }>;
+    } = {
       challenge: challenge,
       rpId,
       timeout: 60000,
       userVerification: 'required' as const,
-      allowCredentials: [
-        {
-          id: passkey.credentialId,
-          type: 'public-key' as const,
-        },
-      ],
+      ...(allowCredentials ? { allowCredentials } : {}),
     };
 
     // Authenticate via WebAuthn — no biometric fallback. A mock signature
@@ -582,14 +618,30 @@ export class PasskeyService {
       throw new Error('Authentication returned null result');
     }
 
-    if (authResult.id && authResult.id !== passkey.credentialId) {
-      throw new Error(
-        'The platform returned a different passkey than the one stored for this wallet on this device.',
+    // Sign with WHICHEVER registered passkey the user actually authenticated with.
+    // A wallet can have several on-chain passkeys (multi-device / recovery), so we
+    // must bind the signature to the credential that ACTUALLY signed — not a single
+    // hardcoded stored id. The on-chain PasskeyValidator looks the key up by this
+    // passkeyId and is the source of truth: an unregistered credential is rejected
+    // on submission. For a normal single-passkey wallet the returned id equals the
+    // stored one, so behaviour is unchanged.
+    const signingId = authResult.id ?? passkey.credentialId;
+    const signingIdRaw = authResult.id
+      ? this.credentialIdToBytes32(authResult.id)
+      : passkey.credentialIdRaw;
+
+    if (signingId !== passkey.credentialId) {
+      debugLog(
+        `⚠️ [PasskeyService] Signing with a different registered passkey than the locally stored ` +
+          `one (returned ${String(signingId).slice(0, 12)}…, stored ${String(passkey.credentialId).slice(0, 12)}…). ` +
+          `On-chain validator verifies the returned credential.`,
       );
+    } else {
+      debugLog('🔎 [PasskeyService] Signing credential matches stored id');
     }
-    
-    // 5. Extract signature components from WebAuthn response
-    const signature = this.parseWebAuthnSignature(authResult.response, passkey.credentialIdRaw);
+
+    // 5. Extract signature components, binding passkeyId to the credential that signed.
+    const signature = this.parseWebAuthnSignature(authResult.response, signingIdRaw);
     
     debugLog('✅ [PasskeyService] Signature created');
     debugLog('📝 [PasskeyService] Signature r:', signature.r.slice(0, 20) + '...');
@@ -1072,7 +1124,59 @@ export class PasskeyService {
     
     return this.uint8ArrayToHex(padded);
   }
-  
+
+  /**
+   * Read the credential IDs (base64url) currently registered on-chain for a
+   * wallet in the PasskeyValidator. Used to restrict the WebAuthn picker to the
+   * keys that can actually sign for this wallet. Returns [] if the wallet has no
+   * validator deployment or the read fails.
+   */
+  private static async getRegisteredCredentialIds(
+    chainId: SupportedChainId,
+    smartAccountAddress: Address,
+  ): Promise<string[]> {
+    const deployment = getDeployment(chainId);
+    const validator = deployment?.passkeyValidator as Address | undefined;
+    if (!validator) return [];
+
+    const client = getPublicClient(chainId);
+    const count = (await client.readContract({
+      address: validator,
+      abi: ABIS.passkeyValidator,
+      functionName: 'passkeyCount',
+      args: [smartAccountAddress],
+    })) as bigint;
+
+    const ids: string[] = [];
+    for (let i = 0n; i < count; i += 1n) {
+      const raw = (await client.readContract({
+        address: validator,
+        abi: ABIS.passkeyValidator,
+        functionName: 'passkeyAt',
+        args: [smartAccountAddress, i],
+      })) as string;
+      const id = this.bytes32ToCredentialId(raw);
+      if (id) ids.push(id);
+    }
+    return ids;
+  }
+
+  /**
+   * Inverse of credentialIdToBytes32: a right-zero-padded bytes32 PasskeyId back
+   * to its base64url WebAuthn credential ID (trailing zero bytes trimmed).
+   */
+  private static bytes32ToCredentialId(raw: string): string {
+    const hex = raw.startsWith('0x') ? raw.slice(2) : raw;
+    const bytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i += 1) {
+      bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    let len = 32;
+    while (len > 0 && bytes[len - 1] === 0) len -= 1;
+    if (len === 0) return '';
+    return this.base64UrlEncode(this.uint8ArrayToBase64(bytes.slice(0, len)));
+  }
+
   /**
    * Generate random challenge for WebAuthn
    */
