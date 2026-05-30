@@ -14,7 +14,11 @@
     "test:dapp": "tsx src/features/browser/web/__tests__/injectedProvider.template.test.ts && tsx src/features/browser/web/__tests__/rpcRouter.test.ts && tsx src/features/browser/store/__tests__/sessionOps.test.ts && tsx src/features/browser/utils/__tests__/url.test.ts",
     "test:revert-decoding": "tsx src/integration/viem/__tests__/revertDecoding.test.ts",
     "test:assetsim": "tsx src/features/transactions/services/assetSim/__tests__/AlchemyAssetSimulationProvider.test.ts",
-    "test:sim": "tsx src/features/transactions/services/__tests__/SimulationService.test.ts"
+    "test:sim": "tsx src/features/transactions/services/__tests__/SimulationService.test.ts",
+    "test:send-preview": "tsx src/features/send/services/__tests__/buildSendPreview.test.ts",
+    "test:swap-preview": "tsx src/features/swaps/services/__tests__/buildSwapPreview.test.ts",
+    "test:bridge-preview": "tsx src/features/swaps/services/__tests__/buildBridgePreview.test.ts",
+    "test:dapp-preview": "tsx src/features/browser/components/dapp/__tests__/buildDappPreview.test.ts"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",
