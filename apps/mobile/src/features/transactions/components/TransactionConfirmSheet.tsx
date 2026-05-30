@@ -57,7 +57,7 @@ export const TransactionConfirmSheet = forwardRef<BottomSheetModal, Props>(
             </View>
 
             {/* Hero: balance changes */}
-            <BalanceChangesCard deltas={deltas} label={changesLabel(preview.kind)} />
+            <BalanceChangesCard deltas={deltas} label={changesLabel(preview.kind)} scanning={loading} />
 
             {/* Approval warnings */}
             {(simulation?.warnings ?? []).map((w) => (
