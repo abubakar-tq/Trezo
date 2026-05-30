@@ -71,6 +71,24 @@ type UiState =
 
 const DEFAULT_QUOTE_DEBOUNCE_MS = 500;
 
+// Mirrors the helper in SwapExecutionService / BridgeExecutionService —
+// extracts a typed errorCode from the thrown value (e.g. viem error codes).
+const getErrorDetails = (errorValue: unknown): { errorCode?: string | null; errorMessage: string } => {
+  const errorCode =
+    typeof errorValue === "object" &&
+    errorValue !== null &&
+    "code" in errorValue
+      ? String((errorValue as { code?: unknown }).code)
+      : null;
+  const errorMessage =
+    errorValue instanceof Error
+      ? errorValue.message
+      : typeof errorValue === "string"
+        ? errorValue
+        : "Unknown execution failure";
+  return { errorCode, errorMessage };
+};
+
 const shorten = (value?: string | null): string => {
   if (!value) return "-";
   if (value.length <= 12) return value;
@@ -689,6 +707,7 @@ export const DexScreen: React.FC = () => {
         targetAddress: execution.target,
         valueRaw: execution.value.toString(),
         calldata: execution.data,
+        metadata: execution.metadata,
       });
       const preparedOp = await SmartAccountExecutionService.prepareUserOperation(execution, {
         userId,
@@ -709,13 +728,24 @@ export const DexScreen: React.FC = () => {
         pollIntervalMs: 2_000,
       });
       if (!receipt.success) {
-        await TransactionHistoryService.markFailed({ id: draft.id, errorMessage: "UserOperation receipt indicates failure" });
+        await TransactionHistoryService.markFailed({
+          id: draft.id,
+          errorMessage: "UserOperation receipt indicates failure",
+          debugContext: {
+            submittedUserOpHash: receipt.submittedUserOpHash,
+            receiptSuccess: false,
+          },
+        });
         return { ok: false, transactionId: draft.id };
       }
       await TransactionHistoryService.markConfirmed({
         id: draft.id,
         transactionHash: receipt.transactionHash,
         blockNumber: receipt.blockNumber,
+        debugContext: {
+          submittedUserOpHash: receipt.submittedUserOpHash,
+          receiptSuccess: true,
+        },
       });
       return { ok: true, transactionId: draft.id };
     } catch (error) {
@@ -729,8 +759,8 @@ export const DexScreen: React.FC = () => {
         await TransactionHistoryService.markCancelled(draft.id, "passkey_prompt_cancelled");
         setErrorState(classify(new Error("User cancelled passkey prompt")));
       } else {
-        const msg = error instanceof Error ? error.message : "Approval failed";
-        await TransactionHistoryService.markFailed({ id: draft.id, errorMessage: msg });
+        const { errorCode, errorMessage } = getErrorDetails(error);
+        await TransactionHistoryService.markFailed({ id: draft.id, errorCode, errorMessage });
         setErrorState(classify(error));
       }
       return { ok: false, transactionId: draft.id };
@@ -823,7 +853,8 @@ export const DexScreen: React.FC = () => {
         approved = confirmResult.approved;
         preparedUserOp = confirmResult.prepared;
       } catch (err) {
-        await TransactionHistoryService.markFailed({ id: bridgeDraft.id, errorMessage: err instanceof Error ? err.message : "Confirmation failed" });
+        const { errorCode: errCode, errorMessage: errMsg } = getErrorDetails(err);
+        await TransactionHistoryService.markFailed({ id: bridgeDraft.id, errorCode: errCode, errorMessage: errMsg });
         setErrorState(classify(err));
         setBridgeBusy(false);
         return;
@@ -842,6 +873,7 @@ export const DexScreen: React.FC = () => {
           targetAddress: plan.bridgeExecution.target,
           valueRaw: plan.bridgeExecution.value.toString(),
           calldata: plan.bridgeExecution.data,
+          metadata: plan.bridgeExecution.metadata,
         });
         await TransactionHistoryService.markSigning(bridgeDraft.id);
         const signed = await SmartAccountExecutionService.signUserOperation(user.id, preparedUserOp);
@@ -859,7 +891,14 @@ export const DexScreen: React.FC = () => {
           pollIntervalMs: 2_000,
         });
         if (!receipt.success) {
-          await TransactionHistoryService.markFailed({ id: bridgeDraft.id, errorMessage: "UserOperation receipt indicates failure" });
+          await TransactionHistoryService.markFailed({
+            id: bridgeDraft.id,
+            errorMessage: "UserOperation receipt indicates failure",
+            debugContext: {
+              submittedUserOpHash: receipt.submittedUserOpHash,
+              receiptSuccess: false,
+            },
+          });
           setErrorState(classify(new Error("Bridge transaction failed on-chain.")));
           navigation.navigate("TransactionStatus", { transactionId: bridgeDraft.id });
           setBridgeBusy(false);
@@ -869,6 +908,10 @@ export const DexScreen: React.FC = () => {
           id: bridgeDraft.id,
           transactionHash: receipt.transactionHash,
           blockNumber: receipt.blockNumber,
+          debugContext: {
+            submittedUserOpHash: receipt.submittedUserOpHash,
+            receiptSuccess: true,
+          },
         });
         setErrorState(null);
         await BalanceService.refreshBalancesAfterTransaction({
@@ -888,8 +931,8 @@ export const DexScreen: React.FC = () => {
           await TransactionHistoryService.markCancelled(bridgeDraft.id, "passkey_prompt_cancelled");
           setErrorState(classify(new Error("User cancelled passkey prompt")));
         } else {
-          const msg = error instanceof Error ? error.message : "Bridge failed";
-          await TransactionHistoryService.markFailed({ id: bridgeDraft.id, errorMessage: msg });
+          const { errorCode, errorMessage } = getErrorDetails(error);
+          await TransactionHistoryService.markFailed({ id: bridgeDraft.id, errorCode, errorMessage });
           setErrorState(classify(error));
         }
       }
@@ -997,118 +1040,141 @@ export const DexScreen: React.FC = () => {
 
     let approvalTransactionId: string | undefined;
 
-    // 1) If approval required, run it silently first
-    if (plan.approvalRequired && plan.approvalExecution && plan.approvalTransactionInput) {
-      setUiState("signing_approval");
-      const approvalResult = await runSilentStep(
-        user.id, plan.approvalExecution, plan.approvalTransactionInput,
-        intentId, 0,
-      );
-      approvalTransactionId = approvalResult.transactionId;
-      if (!approvalResult.ok) {
+    try {
+      // 1) If approval required, run it silently first
+      if (plan.approvalRequired && plan.approvalExecution && plan.approvalTransactionInput) {
+        setUiState("signing_approval");
+        const approvalResult = await runSilentStep(
+          user.id, plan.approvalExecution, plan.approvalTransactionInput,
+          intentId, 0,
+        );
+        approvalTransactionId = approvalResult.transactionId;
+        if (!approvalResult.ok) {
+          setUiState("failed");
+          return;
+        }
+        setUiState("approval_pending");
+      }
+
+      // 2) Show confirm sheet for main swap
+      const swapSequence = plan.approvalRequired ? 1 : 0;
+      const swapDraft = await TransactionHistoryService.createDraft({
+        ...plan.swapTransactionInput,
+        intentId,
+        sequenceIndex: swapSequence,
+        parentTransactionId: approvalTransactionId ?? null,
+      });
+
+      const swapNetworkName = (() => {
+        try { return getNetworkConfig(plan.intent.networkKey).displayName; } catch { return String(plan.intent.chainId); }
+      })();
+      const preview = buildSwapPreview(plan, swapNetworkName);
+
+      let approved: boolean;
+      let preparedUserOp: Awaited<ReturnType<typeof SmartAccountExecutionService.prepareUserOperation>> | undefined;
+      try {
+        const confirmResult = await tc.confirm({
+          preview,
+          execution: plan.swapExecution,
+          userId: user.id,
+          usePaymaster: true,
+        });
+        approved = confirmResult.approved;
+        preparedUserOp = confirmResult.prepared;
+      } catch (err) {
+        const { errorCode, errorMessage: errMsg } = getErrorDetails(err);
+        await TransactionHistoryService.markFailed({ id: swapDraft.id, errorCode, errorMessage: errMsg });
+        setErrorState(classify(err));
         setUiState("failed");
         return;
       }
-      setUiState("approval_pending");
-    }
 
-    // 2) Show confirm sheet for main swap
-    const swapSequence = plan.approvalRequired ? 1 : 0;
-    const swapDraft = await TransactionHistoryService.createDraft({
-      ...plan.swapTransactionInput,
-      intentId,
-      sequenceIndex: swapSequence,
-      parentTransactionId: approvalTransactionId ?? null,
-    });
+      if (!approved || !preparedUserOp) {
+        // User dismissed/rejected the confirm sheet — cancel the draft and
+        // return to quote_ready so they can review again without re-quoting.
+        await TransactionHistoryService.markCancelled(swapDraft.id, "user_rejected");
+        setUiState("quote_ready");
+        return;
+      }
 
-    const swapNetworkName = (() => {
-      try { return getNetworkConfig(plan.intent.networkKey).displayName; } catch { return String(plan.intent.chainId); }
-    })();
-    const preview = buildSwapPreview(plan, swapNetworkName);
+      // 3) User approved — sign + submit swap
+      setUiState("signing_swap");
+      let didSubmit = false;
+      try {
+        await TransactionHistoryService.markPrepared(swapDraft.id, {
+          targetAddress: plan.swapExecution.target,
+          valueRaw: plan.swapExecution.value.toString(),
+          calldata: plan.swapExecution.data,
+          metadata: plan.swapExecution.metadata,
+        });
+        await TransactionHistoryService.markSigning(swapDraft.id);
+        const signed = await SmartAccountExecutionService.signUserOperation(user.id, preparedUserOp);
+        await TransactionHistoryService.markSigned(swapDraft.id, {
+          signatureBytes: signed.signature.length > 2 ? (signed.signature.length - 2) / 2 : 0,
+          userOpHash: signed.userOpHash,
+        });
+        const submission = await SmartAccountExecutionService.submitUserOperation(signed);
+        didSubmit = true;
+        await TransactionHistoryService.markSubmitted({ id: swapDraft.id, userOpHash: submission.submittedUserOpHash as Hex });
+        await TransactionHistoryService.markPending(swapDraft.id);
+        setUiState("swap_pending");
 
-    let approved: boolean;
-    let preparedUserOp: Awaited<ReturnType<typeof SmartAccountExecutionService.prepareUserOperation>> | undefined;
-    try {
-      const confirmResult = await tc.confirm({
-        preview,
-        execution: plan.swapExecution,
-        userId: user.id,
-        usePaymaster: true,
-      });
-      approved = confirmResult.approved;
-      preparedUserOp = confirmResult.prepared;
-    } catch (err) {
-      await TransactionHistoryService.markFailed({ id: swapDraft.id, errorMessage: err instanceof Error ? err.message : "Confirmation failed" });
-      setErrorState(classify(err));
-      setUiState("failed");
-      return;
-    }
-
-    if (!approved || !preparedUserOp) {
-      await TransactionHistoryService.markCancelled(swapDraft.id, "user_rejected");
-      return;
-    }
-
-    // 3) User approved — sign + submit swap
-    setUiState("signing_swap");
-    let didSubmit = false;
-    try {
-      await TransactionHistoryService.markPrepared(swapDraft.id, {
-        targetAddress: plan.swapExecution.target,
-        valueRaw: plan.swapExecution.value.toString(),
-        calldata: plan.swapExecution.data,
-      });
-      await TransactionHistoryService.markSigning(swapDraft.id);
-      const signed = await SmartAccountExecutionService.signUserOperation(user.id, preparedUserOp);
-      await TransactionHistoryService.markSigned(swapDraft.id, {
-        signatureBytes: signed.signature.length > 2 ? (signed.signature.length - 2) / 2 : 0,
-        userOpHash: signed.userOpHash,
-      });
-      const submission = await SmartAccountExecutionService.submitUserOperation(signed);
-      didSubmit = true;
-      await TransactionHistoryService.markSubmitted({ id: swapDraft.id, userOpHash: submission.submittedUserOpHash as Hex });
-      await TransactionHistoryService.markPending(swapDraft.id);
-      setUiState("swap_pending");
-
-      const receipt = await SmartAccountExecutionService.waitForReceipt(submission, {
-        timeoutMs: 60_000,
-        pollIntervalMs: 2_000,
-      });
-      if (!receipt.success) {
-        await TransactionHistoryService.markFailed({ id: swapDraft.id, errorMessage: "UserOperation receipt indicates failure" });
-        setUiState("failed");
-        setErrorState(classify(new Error("Transaction failed on-chain.")));
+        const receipt = await SmartAccountExecutionService.waitForReceipt(submission, {
+          timeoutMs: 60_000,
+          pollIntervalMs: 2_000,
+        });
+        if (!receipt.success) {
+          await TransactionHistoryService.markFailed({
+            id: swapDraft.id,
+            errorMessage: "UserOperation receipt indicates failure",
+            debugContext: {
+              submittedUserOpHash: receipt.submittedUserOpHash,
+              receiptSuccess: false,
+            },
+          });
+          setUiState("failed");
+          setErrorState(classify(new Error("Transaction failed on-chain.")));
+          navigation.navigate("TransactionStatus", { transactionId: swapDraft.id });
+          return;
+        }
+        await TransactionHistoryService.markConfirmed({
+          id: swapDraft.id,
+          transactionHash: receipt.transactionHash,
+          blockNumber: receipt.blockNumber,
+          debugContext: {
+            submittedUserOpHash: receipt.submittedUserOpHash,
+            receiptSuccess: true,
+          },
+        });
+        setUiState("confirmed");
+        setErrorState(null);
+        await BalanceService.refreshBalancesAfterTransaction({
+          chainId: plan.intent.chainId,
+          walletAddress: plan.intent.walletAddress,
+          tokens: [plan.intent.sellToken, plan.intent.buyToken],
+        });
         navigation.navigate("TransactionStatus", { transactionId: swapDraft.id });
-        return;
+      } catch (error) {
+        const isCancel = error instanceof Error && (
+          error.message.toLowerCase().includes("cancel") ||
+          error.message.toLowerCase().includes("aborted") ||
+          error.message.toLowerCase().includes("notallowed") ||
+          error.message.toLowerCase().includes("user denied")
+        );
+        if (isCancel && !didSubmit) {
+          await TransactionHistoryService.markCancelled(swapDraft.id, "passkey_prompt_cancelled");
+          setErrorState(classify(new Error("User cancelled passkey prompt")));
+        } else {
+          const { errorCode, errorMessage } = getErrorDetails(error);
+          await TransactionHistoryService.markFailed({ id: swapDraft.id, errorCode, errorMessage });
+          setErrorState(classify(error));
+        }
+        setUiState("failed");
       }
-      await TransactionHistoryService.markConfirmed({
-        id: swapDraft.id,
-        transactionHash: receipt.transactionHash,
-        blockNumber: receipt.blockNumber,
-      });
-      setUiState("confirmed");
-      setErrorState(null);
-      await BalanceService.refreshBalancesAfterTransaction({
-        chainId: plan.intent.chainId,
-        walletAddress: plan.intent.walletAddress,
-        tokens: [plan.intent.sellToken, plan.intent.buyToken],
-      });
-      navigation.navigate("TransactionStatus", { transactionId: swapDraft.id });
-    } catch (error) {
-      const isCancel = error instanceof Error && (
-        error.message.toLowerCase().includes("cancel") ||
-        error.message.toLowerCase().includes("aborted") ||
-        error.message.toLowerCase().includes("notallowed") ||
-        error.message.toLowerCase().includes("user denied")
-      );
-      if (isCancel && !didSubmit) {
-        await TransactionHistoryService.markCancelled(swapDraft.id, "passkey_prompt_cancelled");
-        setErrorState(classify(new Error("User cancelled passkey prompt")));
-      } else {
-        const msg = error instanceof Error ? error.message : "Swap failed";
-        await TransactionHistoryService.markFailed({ id: swapDraft.id, errorMessage: msg });
-        setErrorState(classify(error));
-      }
+    } catch (outerError) {
+      // Catches errors before the confirm sheet (e.g. createDraft network failure).
+      // Leave uiState as failed so the UI is not stuck in a transient state.
+      setErrorState(classify(outerError));
       setUiState("failed");
     }
   };
