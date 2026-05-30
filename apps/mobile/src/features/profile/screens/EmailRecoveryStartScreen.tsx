@@ -58,6 +58,11 @@ const EmailRecoveryStartScreen: React.FC = () => {
   const [creatingStep, setCreatingStep] = useState<string>("");
   // Resume sheet: shown if an active Recovery Attempt already exists (ADR-0011).
   const [resumeSheetDismissed, setResumeSheetDismissed] = useState(false);
+  // DEV-only (ADR-0011): force minting a brand-new passkey on a device that
+  // already has one, to exercise the same-device owner-rotation path. Production
+  // always uses getOrCreatePasskey (create-only-if-none) and can never orphan a
+  // live wallet by overwriting its passkey.
+  const [forceNewPasskey, setForceNewPasskey] = useState(false);
 
   useEffect(() => {
     if (!smartAccountAddress) {
@@ -120,7 +125,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
     }
 
     setIsCreating(true);
-    setCreatingStep("Creating new passkey on this device...");
+    setCreatingStep("Preparing recovery passkey on this device...");
 
     try {
       // Phase 4.5: before creating any row, check for an expired on-chain slot.
@@ -151,7 +156,15 @@ const EmailRecoveryStartScreen: React.FC = () => {
         }
       }
 
-      const passkey = await PasskeyService.createPasskey(user.id);
+      // Production recovery runs on a NEW device (no local passkey), so this
+      // creates one that becomes the wallet's new owner after guardians approve.
+      // If this device already has a passkey we REUSE it (never overwrite) — that
+      // keeps a live wallet safe. The DEV toggle below intentionally forces a
+      // fresh passkey to exercise the same-device rotation path while testing.
+      const passkey =
+        __DEV__ && forceNewPasskey
+          ? await PasskeyService.createPasskey(user.id, { allowReplace: true })
+          : await PasskeyService.getOrCreatePasskey(user.id);
 
       setCreatingStep("Building multichain recovery payload...");
       const result = await EmailRecoveryGroupService.createGroup({
@@ -251,10 +264,11 @@ const EmailRecoveryStartScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>New Passkey</Text>
+          <Text style={styles.cardTitle}>Recovery Passkey</Text>
           <Text style={styles.cardDesc}>
-            A new passkey will be created on this device. Once your trusted contacts approve recovery,
-            this passkey will be activated on all selected chains.
+            On a new device a passkey is created here and becomes the wallet&apos;s new owner once your
+            trusted contacts approve recovery. If this device already has a passkey it is reused —
+            recovery never overwrites an existing key.
           </Text>
         </View>
 
@@ -339,6 +353,30 @@ const EmailRecoveryStartScreen: React.FC = () => {
             </View>
           ))}
         </View>
+
+        {__DEV__ && (
+          <View style={[styles.card, styles.devCard]}>
+            <Text style={styles.devBadge}>DEV ONLY</Text>
+            <TouchableOpacity
+              style={styles.devToggleRow}
+              onPress={() => setForceNewPasskey((v) => !v)}
+              activeOpacity={0.85}
+            >
+              <Feather
+                name={forceNewPasskey ? "check-square" : "square"}
+                size={22}
+                color={forceNewPasskey ? theme.colors.accentAlt : theme.colors.textMuted}
+              />
+              <View style={styles.devToggleTextWrap}>
+                <Text style={styles.devToggleLabel}>Force fresh passkey (simulate new device)</Text>
+                <Text style={styles.devToggleHint}>
+                  Mints a brand-new passkey even though this device already has one, to exercise the
+                  same-device owner-rotation path. Never reachable in production.
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {isCreating && creatingStep ? (
           <View style={styles.card}>
@@ -516,6 +554,35 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
       textAlign: "center",
       marginTop: 4,
+    },
+    devCard: {
+      borderColor: colors.warning,
+      borderStyle: "dashed",
+    },
+    devBadge: {
+      color: colors.warning,
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 1.5,
+    },
+    devToggleRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12,
+    },
+    devToggleTextWrap: {
+      flex: 1,
+      gap: 4,
+    },
+    devToggleLabel: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    devToggleHint: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 16,
     },
     primaryButton: {
       backgroundColor: colors.accentAlt,

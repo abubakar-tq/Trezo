@@ -232,7 +232,15 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
 export const DEFAULT_CHAIN_ID: SupportedChainId = resolveDefaultChainId();
 export const SUPPORTED_CHAIN_IDS = Object.keys(CHAINS).map(Number) as SupportedChainId[];
 
-export const PORTABLE_CHAIN_IDS = [1, 11155111, 10, 8453, 42161, 137] as const;
+// Chains that use the PORTABLE wallet salt → the same wallet resolves to the SAME
+// address on every chain (no block.chainid in the salt; see AccountFactory.portableWalletSalt
+// and contracts/DEPLOYMENTS.md, ADR-0006). Portability holds for any EVM chain where the
+// deterministic factory + validator sit at the canonical addresses — i.e. every supported
+// chain EXCEPT zkSync (Era/Sepolia), whose CREATE2 derivation differs.
+// 84532 (Base Sepolia) is our demo testnet and MUST be portable so a wallet there shares
+// its address with the same wallet on Ethereum Sepolia / Base mainnet. Omitting it forces
+// the chain-specific salt and breaks the portable-address story on the one chain we demo.
+export const PORTABLE_CHAIN_IDS = [1, 11155111, 10, 8453, 84532, 42161, 137] as const;
 
 export function isPortableChain(chainId: number): boolean {
   return (PORTABLE_CHAIN_IDS as readonly number[]).includes(chainId);

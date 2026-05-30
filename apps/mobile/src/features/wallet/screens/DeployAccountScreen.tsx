@@ -76,10 +76,13 @@ export default function DeployAccountScreen() {
       // Show the passkey spinner while the system credential UI is in flight.
       setCurrentStep("passkey");
 
-      // Create passkey (biometric prompt handled inside)
-      const passkey = await PasskeyService.createPasskey(user.id);
+      // Reuse the device's existing passkey if present; only create one on first
+      // use. The AA address is derived from the passkey public key, so minting a
+      // new passkey here (e.g. when deploying on a second chain) would change the
+      // address and orphan the wallet already deployed under the old passkey.
+      const passkey = await PasskeyService.getOrCreatePasskey(user.id);
 
-      // Predict AA address from stable wallet identity; passkey state stays outside the address formula.
+      // Predict AA address from stable wallet identity + the reused passkey.
       const chainId = deploymentChainId;
       const walletIndex = aaAccount?.walletIndex ?? 0;
       const walletId = (aaAccount?.walletId ?? deriveDefaultWalletId(user.id)) as `0x${string}`;

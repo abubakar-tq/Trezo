@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -33,6 +34,10 @@ const CreateRecoveryRequestScreen: React.FC = () => {
 
   const [isCreating, setIsCreating] = useState(false);
   const [lastSummary, setLastSummary] = useState<string>("Waiting to create request");
+  // DEV-only (ADR-0011): force a brand-new passkey on a device that already has
+  // one, to test same-device owner-rotation. Production uses getOrCreatePasskey
+  // (create-only-if-none), so it never overwrites a live wallet's passkey.
+  const [forceNewPasskey, setForceNewPasskey] = useState(false);
 
   const handleCreateRequest = async () => {
     if (!user?.id) {
@@ -48,7 +53,13 @@ const CreateRecoveryRequestScreen: React.FC = () => {
     setLastSummary("Creating passkey and reading chain state...");
 
     try {
-      const passkey = await PasskeyService.createPasskey(user.id);
+      // New device (production): no local passkey, so this creates the new owner
+      // passkey. If this device already has one we REUSE it (never overwrite). The
+      // DEV toggle forces a fresh passkey to test the same-device rotation path.
+      const passkey =
+        __DEV__ && forceNewPasskey
+          ? await PasskeyService.createPasskey(user.id, { allowReplace: true })
+          : await PasskeyService.getOrCreatePasskey(user.id);
       const recoveryService = new RecoveryRequestService();
       const walletService = new SupabaseWalletService();
 
@@ -206,13 +217,33 @@ const CreateRecoveryRequestScreen: React.FC = () => {
         <Text style={styles.kicker}>Create request</Text>
         <Text style={styles.title}>Build and publish the guardian recovery payload.</Text>
         <Text style={styles.body}>
-          This creates a new passkey on this device, reads guardian policy from chain state, computes the portable recovery digest, and stores request metadata in Supabase.
+          This uses this device&apos;s passkey (creating one only if the device has none), reads guardian policy from chain state, computes the portable recovery digest, and stores request metadata in Supabase.
         </Text>
 
         <View style={styles.summaryBox}>
           <Text style={styles.summaryLabel}>Status</Text>
           <Text style={styles.summaryValue}>{lastSummary}</Text>
         </View>
+
+        {__DEV__ && (
+          <TouchableOpacity
+            style={styles.devToggleRow}
+            onPress={() => setForceNewPasskey((v) => !v)}
+            activeOpacity={0.85}
+          >
+            <Feather
+              name={forceNewPasskey ? "check-square" : "square"}
+              size={20}
+              color={forceNewPasskey ? theme.colors.accent : theme.colors.textMuted}
+            />
+            <View style={styles.devToggleTextWrap}>
+              <Text style={styles.devToggleLabel}>DEV: force fresh passkey (simulate new device)</Text>
+              <Text style={styles.devToggleHint}>
+                Mints a new passkey even if this device already has one. Testing only — never in production.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[styles.primaryButton, isCreating && styles.disabledButton]}
@@ -280,6 +311,30 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.text,
       fontSize: 16,
       fontWeight: "700",
+    },
+    devToggleRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12,
+      padding: 14,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderStyle: "dashed",
+      borderColor: colors.warning,
+    },
+    devToggleTextWrap: {
+      flex: 1,
+      gap: 4,
+    },
+    devToggleLabel: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    devToggleHint: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 16,
     },
     primaryButton: {
       paddingVertical: 16,

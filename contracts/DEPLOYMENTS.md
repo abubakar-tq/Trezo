@@ -7,8 +7,10 @@ Trezo now uses an initializer-bound deployment model.
 - Current release: `TREZO_INFRA_V2`
 - Canonical root factory: `0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7`
 - EntryPoint: `0x0000000071727De22E5E9d8BAf0edAc6f37da032`
-- Portable chains: Ethereum, Sepolia, Optimism, Base, Arbitrum, Polygon
-- Non-portable for now: zkSync Era and zkSync Sepolia
+- Portable chains: Ethereum, Ethereum Sepolia, Optimism, Base, Base Sepolia (84532), Arbitrum, Polygon
+  - Base Sepolia is the demo testnet and is portable: a wallet there shares its address with the same wallet on every other portable chain.
+- Non-portable for now: zkSync Era and zkSync Sepolia (different CREATE2 derivation)
+- Code source of truth: `apps/mobile/src/integration/chains.ts` `PORTABLE_CHAIN_IDS`
 
 ## Wallet Address Rules
 
