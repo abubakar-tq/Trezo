@@ -1,8 +1,11 @@
 import "react-native-gesture-handler";
 import "react-native-reanimated";
 import { StatusBar } from "expo-status-bar";
-import React from "react";
+import React, { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
+
+SplashScreen.preventAutoHideAsync();
 import "./src/integration/viem/polyfills";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -38,6 +41,12 @@ const AppBootstrap: React.FC = () => {
   const isReady = useCachedResources();
   const { theme } = useAppTheme();
   useAppLock();
+
+  useEffect(() => {
+    if (isReady) {
+      SplashScreen.hideAsync();
+    }
+  }, [isReady]);
 
   if (!isReady) {
     return (
