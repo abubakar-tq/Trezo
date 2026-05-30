@@ -82,11 +82,9 @@ export const useAccountManagement = () => {
       setDeployingAccount(true);
       setAccountActionStatus("Preparing deployment…");
 
-      let passkey = await PasskeyService.getPasskey(userId);
-      if (!passkey) {
-        const created = await PasskeyService.createPasskey(userId);
-        passkey = created ?? (await PasskeyService.getPasskey(userId));
-      }
+      // Reuse the device's passkey if present; create only on first use. The AA
+      // address depends on the passkey, so a fresh one would change the address.
+      const passkey = await PasskeyService.getOrCreatePasskey(userId);
       if (!passkey) throw new Error("Unable to access passkey credentials.");
 
       const walletIndex = aaAccount?.walletIndex ?? 0;

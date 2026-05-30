@@ -158,7 +158,9 @@ const PairDeviceScreen: React.FC = () => {
     setBusy(true);
     setError(null);
     try {
-      const metadata = await PasskeyService.createPasskey(user.id);
+      // New device pairing: create this device's passkey if it has none, otherwise
+      // reuse the existing one. Never overwrite — that would change the AA address.
+      const metadata = await PasskeyService.getOrCreatePasskey(user.id);
       const updated = await DevicePairingService.submitNewDevicePasskey({
         requestId: linkParams.requestId,
         secret: linkParams.secret,

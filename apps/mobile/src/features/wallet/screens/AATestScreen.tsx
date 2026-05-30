@@ -223,7 +223,8 @@ export default function AATestScreen() {
     
     try {
       console.log('🔐 [AATest] Starting passkey creation...');
-      const passkey = await PasskeyService.createPasskey(user.id);
+      // Dev test screen: explicitly exercises passkey (re)creation.
+      const passkey = await PasskeyService.createPasskey(user.id, { allowReplace: true });
       setTestPasskey(passkey);
       
       console.log('✅ [AATest] Passkey created:', passkey.credentialId);
