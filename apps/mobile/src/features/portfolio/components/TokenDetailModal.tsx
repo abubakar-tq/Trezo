@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { type BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useAppTheme } from '@theme';
 import { TokenIcon, InteractiveChart } from '@shared/components';
 import { TrezoBottomSheet } from '@shared/components/sheets/TrezoBottomSheet';
@@ -21,6 +21,7 @@ interface TokenDetailModalProps {
   onRequestSend?: (token: TokenBalance) => void;
   onRequestReceive?: () => void;
   onRequestSwap?: (preselect: { symbol: string; side: 'in' | 'out' }) => void;
+  onRequestBuy?: () => void;
 }
 
 export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
@@ -29,6 +30,8 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
   token,
   onRequestSend,
   onRequestReceive,
+  onRequestSwap,
+  onRequestBuy,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
@@ -117,6 +120,9 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
 
   if (!token) return null;
 
+  // Responsive chart width: TrezoBottomSheet body already applies paddingHorizontal: 20 on each side
+  const chartWidth = Dimensions.get('window').width - 40; // TrezoBottomSheet body: 20 + 20
+
   // Determine the third action tile
   const isEth = symbol.toUpperCase() === 'ETH';
 
@@ -179,7 +185,7 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
           ) : (
             <InteractiveChart
               data={chartData.length > 0 ? chartData : [0, 0]}
-              chartWidth={300}
+              chartWidth={chartWidth}
               chartHeight={140}
               color={chartColor}
             />
@@ -250,7 +256,7 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
           {isEth ? (
             <TouchableOpacity
               style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
-              onPress={() => { onClose(); navigation.navigate('Buy'); }}
+              onPress={() => { onClose(); onRequestBuy ? onRequestBuy() : navigation.navigate('Buy'); }}
               activeOpacity={0.75}
             >
               <Feather name="shopping-cart" size={20} color={colors.accent} />
@@ -261,10 +267,9 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
               style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
               onPress={() => {
                 onClose();
-                navigation.navigate('Dex', {
-                  initialTab: 'swap',
-                  preselect: { symbol: token.symbol, side: userHolds ? 'in' : 'out' },
-                });
+                onRequestSwap
+                  ? onRequestSwap({ symbol: token.symbol, side: userHolds ? 'in' : 'out' })
+                  : navigation.navigate('Dex', { initialTab: 'swap', preselect: { symbol: token.symbol, side: userHolds ? 'in' : 'out' } });
               }}
               activeOpacity={0.75}
             >
@@ -283,7 +288,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
     paddingVertical: 16,
   },
   closeButton: {
@@ -308,7 +312,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   scrollBody: {
-    paddingHorizontal: 20,
     paddingBottom: 24,
   },
   priceHero: {
