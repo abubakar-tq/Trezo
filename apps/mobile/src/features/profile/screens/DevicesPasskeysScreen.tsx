@@ -219,7 +219,8 @@ const DevicesPasskeysScreen: React.FC = () => {
     if (!user?.id) { Alert.alert("Error", "User not found. Please sign in again."); return; }
     try {
       setIsSubmitting(true);
-      const metadata = await PasskeyService.createPasskey(user.id);
+      // Intentionally mints a NEW passkey to add as an additional on-chain signer.
+      const metadata = await PasskeyService.createPasskey(user.id, { allowReplace: true });
       await PasskeyAccountService.enqueuePendingPasskey(user.id, metadata);
       addPasskey({
         id: metadata.credentialId,

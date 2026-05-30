@@ -329,20 +329,41 @@ export class PasskeyService {
   }
   
   /**
-   * Create a REAL WebAuthn passkey (stored in secure enclave)
-   * Returns public metadata only - private key never leaves device
-   * 
-   * Note: Replaces any existing passkey on this device
+   * Create a REAL WebAuthn passkey (stored in secure enclave).
+   * Returns public metadata only - private key never leaves device.
+   *
+   * The smart-account address is derived from this passkey's public key, so
+   * creating a new passkey CHANGES the wallet address and orphans any wallet
+   * bound to the previous passkey. Therefore this method REFUSES to overwrite
+   * an existing passkey unless `options.allowReplace` is explicitly set.
+   *
+   * - Deploy / address-prediction paths must use {@link getOrCreatePasskey},
+   *   which reuses the stored passkey and keeps the address stable.
+   * - Recovery / add-device / pairing flows that intentionally bind a NEW
+   *   passkey pass `{ allowReplace: true }`.
    */
-  static async createPasskey(userId: string): Promise<PasskeyMetadata> {
+  static async createPasskey(
+    userId: string,
+    options?: { allowReplace?: boolean },
+  ): Promise<PasskeyMetadata> {
     debugLog('🔐 [PasskeyService] Creating WebAuthn passkey for user:', userId);
     debugLog('📱 [PasskeyService] Platform:', Platform.OS);
     debugLog('📱 [PasskeyService] __DEV__:', __DEV__);
-    
-    // Check if there's an existing passkey
+
+    // The AA address depends on the passkey public key. Silently overwriting an
+    // existing passkey would change the derived address and strand the wallet it
+    // was deployed under, so refuse unless the caller opts in explicitly.
     const existingPasskey = await this.getPasskey(userId);
+    if (existingPasskey && !options?.allowReplace) {
+      throw new Error(
+        'A passkey already exists on this device. Creating a new one would change ' +
+          'the smart-account address and orphan the existing wallet. Use ' +
+          'PasskeyService.getOrCreatePasskey() to reuse it, or call with ' +
+          '{ allowReplace: true } to intentionally rotate (recovery / add-device).',
+      );
+    }
     if (existingPasskey) {
-      debugLog('⚠️ [PasskeyService] Replacing existing passkey on this device');
+      debugLog('⚠️ [PasskeyService] Replacing existing passkey on this device (allowReplace=true)');
     }
     
     // 1. Verify passkey support — biometric-only fallback is NOT acceptable
@@ -472,6 +493,24 @@ export class PasskeyService {
     return metadata;
   }
   
+  /**
+   * Return this device's existing passkey, or create one if none is stored.
+   *
+   * This is the ONLY safe accessor for deploy / address-prediction paths. The
+   * AA address is derived from the passkey public key, so reusing the stored
+   * passkey keeps the counterfactual address stable across chains and across
+   * deploy retries. It NEVER overwrites an existing passkey.
+   */
+  static async getOrCreatePasskey(userId: string): Promise<PasskeyMetadata> {
+    const existing = await this.getPasskey(userId);
+    if (existing) {
+      debugLog('🔁 [PasskeyService] Reusing existing passkey (address-stable)');
+      return existing;
+    }
+    debugLog('🆕 [PasskeyService] No passkey on device — creating first one');
+    return this.createPasskey(userId);
+  }
+
   /**
    * Sign a UserOperation hash with passkey (triggers biometric authentication)
    * Returns WebAuthn signature in contract-compatible format
