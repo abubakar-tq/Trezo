@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio — final (no-lock chart)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#060608;--surface:rgba(18,15,24,0.70);--glass:rgba(244,241,234,0.02);--border:rgba(124,58,237,0.10);--border2:rgba(124,58,237,0.18);
+    --text:#F4F1EA;--text2:#8E8B85;--text3:#5C5A55;--accent:#7C3AED;--accentAlt:#06B6D4;--gain:#34D399;--loss:#E8654F;--warning:#F59E0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(120% 70% at 50% -10%, #120c1e 0%, #060608 55%);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;padding:32px 20px 80px;-webkit-font-smoothing:antialiased}
+  .head{max-width:1080px;margin:0 auto 28px;text-align:center}.head h1{font-size:22px;font-weight:700;letter-spacing:-.3px}.head p{color:var(--text2);font-size:14px;margin-top:6px}
+  .stage{display:flex;gap:44px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1080px;margin:0 auto}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px;width:330px}
+  .tag{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase}.t1{color:var(--accentAlt)}.t2{color:var(--accent)}
+  .tagsub{font-size:12px;color:var(--text2);text-align:center;line-height:1.5;min-height:44px}
+  .phone{width:328px;border-radius:42px;background:var(--bg);border:1px solid rgba(124,58,237,.16);padding:14px 0 16px;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 10px #0b0910,0 0 0 11px rgba(124,58,237,.12);position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:118px;height:26px;background:#000;border-radius:0 0 16px 16px;z-index:5}
+  .scroll{flex:1;padding:0 16px}.statusbar{display:flex;justify-content:space-between;padding:2px 6px 12px;font-size:11px;color:var(--text2);font-weight:600}
+  .mono{font-family:'JetBrains Mono',monospace}.row{display:flex;align-items:center}.between{justify-content:space-between}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600}
+  .chip-chain{background:rgba(124,58,237,.12);color:#c4b5fd;border:1px solid var(--border2)}.dot{width:7px;height:7px;border-radius:50%}
+  .a-title{font-size:22px;font-weight:600;letter-spacing:-.3px}
+  .sec-label{font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text2)}.see{font-size:11px;color:var(--accent);font-weight:600}
+  .gain{color:var(--gain)}.loss{color:var(--loss)}.gtxt{color:var(--text2);font-size:11px}
+  .tok{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
+  .vlabel{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2)}
+  .vnum{font-size:34px;font-weight:300;letter-spacing:-1.2px;line-height:1.05}
+  .vchg{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;margin-top:8px}
+  .vcard{border-radius:26px;padding:20px;border:1px solid var(--border2);background:radial-gradient(130% 100% at 50% 0%, rgba(124,58,237,.12), rgba(124,58,237,.03)),var(--surface);position:relative}
+  .chart{margin:14px 0 4px;width:100%;display:block}
+  .pp{display:flex;gap:5px;background:var(--glass);border:1px solid var(--border);border-radius:11px;padding:4px;margin-top:8px}
+  .pp span{flex:1;text-align:center;font-size:11px;font-weight:700;padding:6px 0;border-radius:8px;color:var(--text2)}
+  .pp span.on{background:var(--accent);color:#fff}
+  .pp span.dis{color:var(--text3);opacity:.32}                  /* dimmed, NO lock icon */
+  .pp span.tapped{color:var(--text2);opacity:.6;background:rgba(244,241,234,.04)}
+  /* tap message — human, not robotic */
+  .toast{position:absolute;left:20px;right:20px;bottom:14px;background:#15101f;border:1px solid var(--border2);border-radius:12px;padding:10px 12px;font-size:11.5px;color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,.5);display:flex;gap:8px;align-items:flex-start}
+  .toast b{font-weight:700}.toast .em{color:#c4b5fd}
+  .alloc{display:flex;height:12px;border-radius:999px;overflow:hidden;margin-top:8px}.alloc i{display:block;height:100%}
+  .alloc-key{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}.alloc-key div{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)}
+  .swatch{width:9px;height:9px;border-radius:3px}
+  .asset{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}.asset:last-child{border-bottom:0}
+  .prow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}.prow:last-child{border-bottom:0}
+  .pbtn{padding:7px 16px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--border2)}
+  .pbtn.buy{background:var(--accent);color:#fff}.pbtn.swap{background:rgba(124,58,237,.14);color:#c4b5fd}
+  .badge{font-size:9px;font-weight:800;letter-spacing:.5px;padding:2px 6px;border-radius:5px;margin-left:7px;text-transform:uppercase;background:rgba(6,182,212,.14);color:#5fd0e0}
+  .note{max-width:1080px;margin:30px auto 0;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface);font-size:13px;color:var(--text2);line-height:1.65}
+  .note b{color:var(--text)}.note code{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c4b5fd}
+  .legend{display:flex;gap:9px;align-items:flex-start;margin-top:9px}.legend .k{color:var(--accent);font-weight:800;flex-shrink:0;width:70px}
+  .scroll::-webkit-scrollbar{display:none}
+</style>
+</head>
+<body>
+  <div class="head"><h1>Portfolio — with your changes applied</h1>
+    <p>Left: young wallet — disabled periods are <b>dimmed (no lock icon)</b>; tapping one shows a human message. Right: the full funded screen with everything we decided.</p></div>
+
+  <div class="stage">
+    <!-- young wallet: no-lock + tap message -->
+    <div class="col">
+      <div class="tag t1">Young wallet — disabled-period interaction</div>
+      <div class="tagsub">No 🔒. "1Y" is just dimmed. Here it's been tapped → a short, friendly message appears (not an error).</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="row between" style="padding:2px 0 16px"><div class="a-title">Portfolio</div>
+            <div class="pill chip-chain"><span class="dot" style="background:#c4b5fd"></span>Base Sepolia</div></div>
+          <div class="vcard">
+            <div class="vlabel" style="margin-bottom:8px">Total Value</div>
+            <div class="vnum mono">$1,240.18</div>
+            <div class="vchg gain"><span>▲ $40.18</span><span style="color:var(--text3)">·</span><span>3.3% · since start</span></div>
+            <svg class="chart" viewBox="0 0 280 70" preserveAspectRatio="none" style="height:60px">
+              <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8B5CF6" stop-opacity=".30"/><stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/></linearGradient></defs>
+              <path d="M60,52 L110,46 L150,34 L200,38 L240,24 L280,20" fill="none" stroke="#8B5CF6" stroke-width="2.2" stroke-linejoin="round"/>
+              <path d="M60,52 L110,46 L150,34 L200,38 L240,24 L280,20 L280,70 L60,70 Z" fill="url(#cg)"/>
+              <circle cx="280" cy="20" r="3.5" fill="#fff"/><circle cx="60" cy="52" r="3" fill="none" stroke="#8E8B85" stroke-width="1.5"/>
+            </svg>
+            <div class="pp">
+              <span class="on">1D</span><span>1W</span><span class="dis">1M</span><span class="tapped">1Y</span><span>ALL</span>
+            </div>
+            <div style="height:46px"></div>
+            <div class="toast">
+              <span class="em">◷</span>
+              <span><b>1Y isn't ready yet.</b> Your wallet is 3 days old — longer ranges fill in as you hold. Showing <span class="em">since you started</span> for now.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- full funded screen -->
+    <div class="col">
+      <div class="tag t2">Funded — full screen</div>
+      <div class="tagsub">Clean header · tiered chart · allocation bar · holdings w/ % · Popular shelf (ETH→Buy, USDC/LINK→Swap).</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="row between" style="padding:2px 0 16px"><div class="a-title">Portfolio</div>
+            <div class="pill chip-chain"><span class="dot" style="background:#c4b5fd"></span>Base Sepolia</div></div>
+          <div class="vcard">
+            <div class="vlabel" style="margin-bottom:8px">Total Value</div>
+            <div class="vnum mono">$3,884.50</div>
+            <div class="vchg gain"><span>▲ $612.00</span><span style="color:var(--text3)">·</span><span>18.7% · 1M</span></div>
+            <svg class="chart" viewBox="0 0 280 66" preserveAspectRatio="none" style="height:58px">
+              <defs><linearGradient id="cg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8B5CF6" stop-opacity=".30"/><stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/></linearGradient></defs>
+              <path d="M0,52 L24,48 L48,54 L72,40 L96,44 L120,30 L144,36 L168,24 L192,28 L216,16 L240,22 L264,10 L280,14" fill="none" stroke="#8B5CF6" stroke-width="2.2" stroke-linejoin="round"/>
+              <path d="M0,52 L24,48 L48,54 L72,40 L96,44 L120,30 L144,36 L168,24 L192,28 L216,16 L240,22 L264,10 L280,14 L280,66 L0,66 Z" fill="url(#cg2)"/>
+              <circle cx="280" cy="14" r="3.5" fill="#fff"/>
+            </svg>
+            <div class="pp"><span>1D</span><span>1W</span><span class="on">1M</span><span class="dis">1Y</span><span>ALL</span></div>
+          </div>
+
+          <div class="row between" style="margin:22px 0 0"><span class="sec-label">Allocation</span></div>
+          <div class="alloc"><i style="width:64%;background:#8B5CF6"></i><i style="width:24%;background:#5bb0f0"></i><i style="width:12%;background:#34D399"></i></div>
+          <div class="alloc-key"><div><span class="swatch" style="background:#8B5CF6"></span>ETH 64%</div><div><span class="swatch" style="background:#5bb0f0"></span>USDC 24%</div><div><span class="swatch" style="background:#34D399"></span>LINK 12%</div></div>
+
+          <div class="row between" style="margin:22px 0 2px"><span class="sec-label">Holdings</span><span class="see">Sort: Value ▾</span></div>
+          <div class="asset"><div class="tok" style="background:rgba(98,126,234,.18);color:#9aacf0">Ξ</div><div style="flex:1"><div style="font-size:15px;font-weight:600">Ethereum <span style="font-size:11px;color:var(--text2);font-weight:600">64%</span></div><div class="mono" style="font-size:12px;color:var(--text2)">1.035 ETH</div></div><div style="text-align:right"><div class="mono" style="font-size:15px">$2,486</div><div class="gain" style="font-size:12px;font-weight:600">▲1.1%</div></div></div>
+          <div class="asset"><div class="tok" style="background:rgba(39,117,202,.18);color:#5bb0f0">$</div><div style="flex:1"><div style="font-size:15px;font-weight:600">USD Coin <span style="font-size:11px;color:var(--text2);font-weight:600">24%</span></div><div class="mono" style="font-size:12px;color:var(--text2)">932 USDC</div></div><div style="text-align:right"><div class="mono" style="font-size:15px">$932</div><div class="gtxt">—</div></div></div>
+          <div class="asset"><div class="tok" style="background:rgba(43,108,176,.20);color:#6aa6e8">⬡</div><div style="flex:1"><div style="font-size:15px;font-weight:600">Chainlink <span style="font-size:11px;color:var(--text2);font-weight:600">12%</span></div><div class="mono" style="font-size:12px;color:var(--text2)">32.8 LINK</div></div><div style="text-align:right"><div class="mono" style="font-size:15px">$466</div><div class="gain" style="font-size:12px;font-weight:600">▲0.9%</div></div></div>
+
+          <div class="row between" style="margin:22px 0 4px"><span class="sec-label">Popular on testnet</span><span class="see">Discover →</span></div>
+          <div class="prow"><div class="tok" style="background:rgba(98,126,234,.18);color:#9aacf0">Ξ</div><div style="flex:1"><div style="font-size:14px;font-weight:600">Ethereum</div><div class="mono gain" style="font-size:12px">$2,402 ▲1.1%</div></div><div class="pbtn buy">Buy</div></div>
+          <div class="prow"><div class="tok" style="background:rgba(43,108,176,.20);color:#6aa6e8">⬡</div><div style="flex:1"><div style="font-size:14px;font-weight:600">Chainlink<span class="badge">Base Sepolia</span></div><div class="mono gain" style="font-size:12px">$14.20 ▲0.9%</div></div><div class="pbtn swap">Swap</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note"><b>Your two changes, applied:</b>
+    <div class="legend"><span class="k">No lock</span><span>Disabled periods are now just <b>dimmed tabs</b> — no 🔒, no strikethrough (that's the AI tell). Tapping one shows a warm one-liner ("1Y isn't ready yet — your wallet is 3 days old…") instead of an error or a dead tap.</span></div>
+    <div class="legend"><span class="k">Tiered</span><span>1D works day one from the price feed; 1W/1M/1Y/ALL light up as snapshots accrue. No seeding, no fake line.</span></div>
+    <div class="legend"><span class="k">Rest</span><span>Everything we locked: clean "Portfolio" header · allocation stacked bar · full holdings with % · Popular-on-testnet shelf (ETH→Buy via Transak, USDC/LINK→Swap), kept on the funded screen too.</span></div>
+  </div>
+</body>
+</html>
