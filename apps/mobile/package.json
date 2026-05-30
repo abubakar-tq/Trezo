@@ -11,7 +11,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test:dapp": "tsx src/features/browser/web/__tests__/injectedProvider.template.test.ts && tsx src/features/browser/web/__tests__/rpcRouter.test.ts && tsx src/features/browser/store/__tests__/sessionOps.test.ts && tsx src/features/browser/utils/__tests__/url.test.ts && tsx src/features/browser/utils/__tests__/backAction.test.ts && tsx src/features/portfolio/utils/__tests__/portfolioChart.test.ts && tsx src/features/portfolio/utils/__tests__/allocation.test.ts && tsx src/features/portfolio/utils/__tests__/portfolioSnapshots.test.ts && tsx src/features/portfolio/utils/__tests__/popularTestnet.test.ts",
+    "test:dapp": "tsx src/features/browser/web/__tests__/injectedProvider.template.test.ts && tsx src/features/browser/web/__tests__/rpcRouter.test.ts && tsx src/features/browser/store/__tests__/sessionOps.test.ts && tsx src/features/browser/utils/__tests__/url.test.ts && tsx src/features/browser/utils/__tests__/backAction.test.ts && tsx src/features/portfolio/utils/__tests__/portfolioChart.test.ts && tsx src/features/portfolio/utils/__tests__/allocation.test.ts && tsx src/features/portfolio/utils/__tests__/portfolioSnapshots.test.ts && tsx src/features/portfolio/utils/__tests__/popularTestnet.test.ts && tsx src/features/home/utils/__tests__/portfolio24h.test.ts",
     "test:revert-decoding": "tsx src/integration/viem/__tests__/revertDecoding.test.ts",
     "test:assetsim": "tsx src/features/transactions/services/assetSim/__tests__/AlchemyAssetSimulationProvider.test.ts",
     "test:sim": "tsx src/features/transactions/services/__tests__/SimulationService.test.ts",
