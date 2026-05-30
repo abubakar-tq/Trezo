@@ -282,6 +282,20 @@ Inside `RecoveryAttemptStatusScreen`, when `useRecoveryAttemptState.state.phase 
 - **Clear Stale Rows card** — button "Delete all Attempts for this account that are not active on-chain". Reads on-chain, finds Supabase rows where chain says nothing's there, batch-deletes.
 - **Relayer Health card** — calls `whoami` action, shows the relayer EOA address + Base Sepolia balance. Visual warning if < 0.001 ETH.
 
+### 4.7a Declutter `EmailRecoveryScreen` (setup form) — hide implementation jargon
+
+The setup screen currently leaks a lot of internals at users. Hide the noise; do not delete the code paths — wrap with `__DEV__` or just stop rendering the affected `<View>`s. User asked for this explicitly during the grilling follow-up — overwhelming UX is the concern, not the underlying behavior.
+
+What to hide in production builds (keep in dev for debugging):
+
+- **"Privacy & Recovery Kit" card** (Standard / Extra Security toggle, vault key Export/Import controls, "Vault key on this device: …" status line). Force `securityMode = "none"` for all production code paths and stop rendering the card. The `encryptEmailForStorage`, `getOrCreateVaultKey`, `handleExportRecoveryKit`, `handleImportVaultKey` functions stay intact (so we can re-enable later without a rewrite); just remove the entry surface.
+- **"Saved Recovery Metadata" diagnostics card** (the block that prints group hash, module addr, raw metadata) — collapse behind a `•••` overflow → "Copy debug info" the same way Phase 4.2 does it for the status screen.
+- **Module install status badge** ("Module installed" / "Module not installed" / "Module installation requires an on-chain contract.") — replace with one user-facing line: *"Recovery is set up"* or *"Recovery is not set up yet"*. Drop the word "module" entirely from user-visible strings.
+- **Technical guardian-config copy** ("The app deterministically derives the on-chain EmailAuth guardian contracts from these emails before installing the module.") — replace with a one-liner: *"Add the people you trust to help you recover this wallet."*
+- **Per-step on-chain narration** in alerts and helper text ("Submits an on-chain addGuardian and fires a fresh acceptance invite.", "Module installation requires an on-chain contract.", "Backend says installed, but on-chain check says not installed.") — rewrite to neutral user language ("Adding guardian…", "Inviting guardian…", "We couldn't confirm your setup — try again."). Move the precise messages to console logs for support.
+
+Acceptance: a non-technical user reading the screen sees only: an explanation of what email recovery is, a guardian list with add/remove/resend, threshold/delay knobs, and a single primary CTA. No mention of "module", "on-chain", "hash", "metadata", "vault key", or "deterministic derivation" anywhere visible.
+
 ### 4.7 Verify same-device flow is dev-gated
 
 Add `__DEV__` guards around:
