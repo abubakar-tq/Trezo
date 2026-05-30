@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ScrollView, View, Text, StyleSheet } from "react-native";
 import { useAppTheme } from "@theme";
 import { UnifiedSearchBar, type SearchIntent } from "./UnifiedSearchBar";
@@ -6,6 +6,7 @@ import { TrendingTokensRow } from "./TrendingTokensRow";
 import { CategoriesRow } from "./CategoriesRow";
 import { TrendingSitesRow } from "./TrendingSitesRow";
 import { NewsFeed } from "./NewsFeed";
+import { NewsService, type NewsItem } from "@services/news/NewsService";
 import type { TokenCategoryId } from "../../data/tokenCategories";
 
 type Props = {
@@ -17,7 +18,18 @@ type Props = {
 
 export function DiscoverHome({ onSubmitSearch, onOpenTabs, onTokenPress, onSitePress }: Props) {
   const [category, setCategory] = useState<TokenCategoryId | null>(null);
+  const [news, setNews] = useState<NewsItem[]>([]);
   const { theme } = useAppTheme();
+
+  useEffect(() => {
+    let active = true;
+    NewsService.fetchTop(12).then((items) => {
+      if (active) setNews(items);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function SectionHeader({ children }: { children: React.ReactNode }) {
     return (
@@ -56,11 +68,13 @@ export function DiscoverHome({ onSubmitSearch, onOpenTabs, onTokenPress, onSiteP
         <TrendingSitesRow onPress={onSitePress} />
       </View>
 
-      {/* 5. News — hides itself when token is missing */}
-      <View style={styles.section}>
-        <SectionHeader>News</SectionHeader>
-        <NewsFeed onItemPress={onSitePress} />
-      </View>
+      {/* 5. News — entire section (header included) hides when the feed is empty */}
+      {news.length > 0 && (
+        <View style={styles.section}>
+          <SectionHeader>News</SectionHeader>
+          <NewsFeed items={news} onItemPress={onSitePress} />
+        </View>
+      )}
     </ScrollView>
   );
 }
