@@ -20,28 +20,32 @@ export type SendTransactionHandle = {
 };
 
 export const SendTransactionSheet = forwardRef<SendTransactionHandle>((_, ref) => {
-  // ── Wallet / user identity (same sources as BrowserScreen) ─────────────────
-  const aaAccount = useWalletStore((s) => s.aaAccount);
-  const smartAccountAddress = useUserStore((s) => s.smartAccountAddress);
-  const activeChainId = useWalletStore((s) => s.activeChainId);
-  const userId = useUserStore((s) => s.user?.id);
-
-  const accountAddress = (
-    aaAccount?.predictedAddress ?? smartAccountAddress ?? null
-  ) as `0x${string}` | null;
-
   // ── Unified confirm-sheet orchestrator ─────────────────────────────────────
   const tc = useTransactionConfirmation();
 
   useImperativeHandle(ref, () => ({
     ask: async (origin, tx) => {
+      // Read identity + chain fresh from stores to avoid stale-closure values
+      // (this sheet mounts once and persists, so closure-captured values can be
+      // stale null even after login — matching the getState() pattern already
+      // used for the session chainId below).
+      const accountAddress = (
+        useWalletStore.getState().aaAccount?.predictedAddress ??
+        useUserStore.getState().smartAccountAddress ??
+        null
+      ) as `0x${string}` | null;
+      const userId = useUserStore.getState().user?.id ?? null;
+
       // Guard: wallet identity must be resolved before we can confirm
       if (!accountAddress || !userId) return false;
 
       // Resolve chainId from the existing dApp session for this origin;
       // fall back to activeChainId / DEFAULT_CHAIN_ID.
       const session = useDAppSessionsStore.getState().findSession(origin);
-      const rawChainId = session?.chainId ?? activeChainId ?? DEFAULT_CHAIN_ID;
+      const rawChainId =
+        session?.chainId ??
+        useWalletStore.getState().activeChainId ??
+        DEFAULT_CHAIN_ID;
       const chainId: SupportedChainId = (SUPPORTED_CHAIN_IDS as readonly number[]).includes(rawChainId)
         ? (rawChainId as SupportedChainId)
         : DEFAULT_CHAIN_ID;
