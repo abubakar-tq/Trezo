@@ -4,8 +4,6 @@ import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
-
-SplashScreen.preventAutoHideAsync();
 import "./src/integration/viem/polyfills";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -20,6 +18,8 @@ import { isSupabaseConfigured, supabaseConfigIssue } from "@lib/supabase";
 import { AppThemeProvider, useAppTheme } from "@theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./global.css";
+
+SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
@@ -44,7 +44,7 @@ const AppBootstrap: React.FC = () => {
 
   useEffect(() => {
     if (isReady) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {});
     }
   }, [isReady]);
 

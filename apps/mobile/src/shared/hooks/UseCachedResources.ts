@@ -11,7 +11,7 @@ export const useCachedResources = () => {
 	const [isReady, setIsReady] = useState(false);
 	const { loading: authLoading } = useSupabaseAuth();
 
-	const [fontsLoaded] = useFonts({
+	const [fontsLoaded, fontError] = useFonts({
 		"Inter": Inter_400Regular,
 		"Inter-Bold": Inter_700Bold,
 		"Inter-ExtraBold": Inter_800ExtraBold,
@@ -27,5 +27,5 @@ export const useCachedResources = () => {
 		}
 	}, [authLoading]);
 
-	return isReady && fontsLoaded;
+	return isReady && (fontsLoaded || !!fontError);
 };
