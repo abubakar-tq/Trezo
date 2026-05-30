@@ -12,7 +12,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test:dapp": "tsx src/features/browser/web/__tests__/injectedProvider.template.test.ts && tsx src/features/browser/web/__tests__/rpcRouter.test.ts && tsx src/features/browser/store/__tests__/sessionOps.test.ts && tsx src/features/browser/utils/__tests__/url.test.ts",
-    "test:revert-decoding": "tsx src/integration/viem/__tests__/revertDecoding.test.ts"
+    "test:revert-decoding": "tsx src/integration/viem/__tests__/revertDecoding.test.ts",
+    "test:assetsim": "tsx src/features/transactions/services/assetSim/__tests__/AlchemyAssetSimulationProvider.test.ts"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",
