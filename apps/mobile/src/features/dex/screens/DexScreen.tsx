@@ -71,8 +71,7 @@ type UiState =
 
 const DEFAULT_QUOTE_DEBOUNCE_MS = 500;
 
-// Mirrors the helper in SwapExecutionService / BridgeExecutionService —
-// extracts a typed errorCode from the thrown value (e.g. viem error codes).
+// Extracts a typed errorCode from the thrown value (e.g. viem error codes).
 const getErrorDetails = (errorValue: unknown): { errorCode?: string | null; errorMessage: string } => {
   const errorCode =
     typeof errorValue === "object" &&
