@@ -1,7 +1,8 @@
+import { AlchemyAssetSimulationProvider } from "./AlchemyAssetSimulationProvider";
+import { NullAssetSimulationProvider, type AssetSimulationProvider } from "./AssetSimulationProvider";
 import type { TxPreview } from "../../types/txPreview";
-import type { AssetSimulationProvider } from "./AssetSimulationProvider";
 
-// Stub — returns null for now; Task 14 will wire the Alchemy Base Sepolia endpoint.
-export function resolveAssetSimProvider(_network: TxPreview["network"]): AssetSimulationProvider | null {
-  return null;
+export function resolveAssetSimProvider(network: TxPreview["network"]): AssetSimulationProvider {
+  const url = network.chainId === 84532 ? process.env.EXPO_PUBLIC_BASE_SEPOLIA_ALCHEMY_URL : undefined;
+  return url ? new AlchemyAssetSimulationProvider(url) : new NullAssetSimulationProvider();
 }
