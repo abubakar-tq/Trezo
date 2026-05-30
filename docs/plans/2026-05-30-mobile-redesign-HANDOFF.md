@@ -14,6 +14,7 @@ SETUP — do this first:
 READ THESE (in the worktree; they live in docs/plans/, which is gitignored but present on disk — if missing in the new worktree, read them by absolute path from D:\trezo\.claude\worktrees\dapp-connect\docs\plans\):
 - docs/plans/2026-05-30-mobile-redesign-spec.md   (LOCKED design spec — source of truth)
 - docs/plans/2026-05-30-mobile-redesign-plan.md   (task-by-task implementation plan)
+- docs/plans/mockups/core-*.html                  (VISUAL reference — open in a browser, match these; README has the anti-slop restraint rule)
 
 Then execute the plan with the superpowers subagent-driven-development skill (or executing-plans), task by task, in order: Stream 0 (Tasks 1–3) first — it gates everything — then Stream B (Tasks 4–8).
 
