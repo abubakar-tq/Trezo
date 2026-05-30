@@ -4,9 +4,9 @@ import { TabScreenContainer } from "@shared/components";
 import { toDestination, useBrowserStore, type BrowserTab } from "@store/useBrowserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { BackHandler, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { WebView } from "react-native-webview";
 import { hashMessage, hashTypedData, type Hex } from "viem";
@@ -14,6 +14,7 @@ import { DiscoverHome } from "../components/discover/DiscoverHome";
 import { BrowserTopBar } from "../components/BrowserTopBar";
 import { BrowserMenuSheet, type BrowserMenuHandle } from "../components/BrowserMenuSheet";
 import { getHostname } from "../utils/url";
+import { decideBrowserBackAction } from "../utils/backAction";
 import { INJECTED_PROVIDER_SCRIPT } from "@features/browser/web/injectedProvider.template";
 import { handleRPC } from "@features/browser/web/rpcRouter";
 import { useDAppSessionsStore } from "@features/browser/store/useDAppSessionsStore";
@@ -136,6 +137,41 @@ export default function BrowserScreen() {
       }
     });
   }, [colorSchemeScript]);
+
+  // Intercept Android system/gesture back so it unwinds the in-browser hierarchy
+  // (web history → Discover home) before the bottom-tab navigator's default
+  // "firstRoute" behavior leaves the tab for Home. Focus-scoped so it never
+  // hijacks back on other tabs.
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        const action = decideBrowserBackAction({
+          tabSwitcherOpen: showTabSwitcher,
+          editing,
+          showHome,
+          canGoBack,
+        });
+        switch (action) {
+          case "close-tab-switcher":
+            setShowTabSwitcher(false);
+            return true;
+          case "stop-editing":
+            setEditing(false);
+            return true;
+          case "web-go-back":
+            if (activeTabId) webRefs.current.get(activeTabId)?.goBack();
+            return true;
+          case "show-home":
+            setShowHome(true);
+            return true;
+          default:
+            return false; // passthrough → navigator handles it (→ Home tab)
+        }
+      };
+      const sub = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+      return () => sub.remove();
+    }, [showTabSwitcher, editing, showHome, canGoBack, activeTabId]),
+  );
 
   const onSubmit = useCallback(() => {
     if (!text.trim() || !activeTabId) return;
