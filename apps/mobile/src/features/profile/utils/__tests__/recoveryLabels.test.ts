@@ -21,7 +21,7 @@ assertEqual(delayLabel(172800), "48 hours", "172800s -> 48 hours");
 assertEqual(delayLabel(604800), "7 days", "604800s -> 7 days");
 
 // delayLabel — fallback (rounds to nearest hour)
-assertEqual(delayLabel(3600), "1 hours", "3600s -> 1 hours fallback");
+assertEqual(delayLabel(3600), "1 hour", "3600s -> 1 hour fallback");
 assertEqual(delayLabel(7200), "2 hours", "7200s -> 2 hours fallback");
 
 // approvalsSummary

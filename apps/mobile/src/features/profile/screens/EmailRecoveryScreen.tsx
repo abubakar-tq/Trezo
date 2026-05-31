@@ -33,7 +33,6 @@ import { useAppTheme } from "@theme";
 import * as Clipboard from "expo-clipboard";
 import { isValidEmail } from "@utils/validation";
 import { type Address, type Hex } from "viem";
-import type { UserOperation } from "viem/account-abstraction";
 
 import EmailRecoverySetup from "./EmailRecoverySetup";
 import EmailRecoveryManage from "./EmailRecoveryManage";
@@ -86,14 +85,8 @@ const EmailRecoveryScreen: React.FC = () => {
   // EmailRecoveryManager enforces expiry - delay >= MINIMUM_RECOVERY_WINDOW
   // (= 2 days = 2880 minutes). Defaults give a 49-hour window above the floor.
   const [expiryMinutes, setExpiryMinutes] = useState("2940");
-  const [securityMode, setSecurityMode] =
-    useState<EmailRecoverySecurityMode>("none");
   // Force "none" — extra-security UI has been removed from the surface.
   const effectiveSecurityMode: EmailRecoverySecurityMode = "none";
-  const [overflowVisible, setOverflowVisible] = useState(false);
-  const [vaultKeyInput, setVaultKeyInput] = useState("");
-  const [hasVaultKey, setHasVaultKey] = useState(false);
-  const [recoveryKitAcked, setRecoveryKitAcked] = useState<boolean | null>(null);
 
   const [checkingModule, setCheckingModule] = useState(false);
   const [moduleInstalledState, setModuleInstalledState] = useState<
@@ -102,10 +95,6 @@ const EmailRecoveryScreen: React.FC = () => {
   const [moduleError, setModuleError] = useState<string | null>(null);
   const [moduleStatusNonce, setModuleStatusNonce] = useState(0);
   const [installingModule, setInstallingModule] = useState(false);
-  const [lastUserOpHash, setLastUserOpHash] = useState<Hex | null>(null);
-  const [lastOperationHash, setLastOperationHash] = useState<Hex | null>(null);
-  const [lastInstallPayload, setLastInstallPayload] =
-    useState<UserOperation<"0.7"> | null>(null);
   const [derivedGuardians, setDerivedGuardians] = useState<
     { email: string; guardianAddress: Address }[]
   >([]);
@@ -332,13 +321,10 @@ const EmailRecoveryScreen: React.FC = () => {
             Math.max(Math.floor(metadata.config.expirySeconds / 60), 1),
           ),
         );
-        setSecurityMode(metadata.config.securityMode ?? "none");
         setGuardianEmails(
           metadata.guardians.map((guardian) => {
             if (guardian.resolvedEmail) return guardian.resolvedEmail;
-            if (metadata.config.securityMode === "none")
-              return guardian.maskedEmail;
-            return "";
+            return guardian.maskedEmail;
           }),
         );
         setGuardianWeights(
@@ -346,14 +332,6 @@ const EmailRecoveryScreen: React.FC = () => {
             String(Math.max(guardian.weight, 1)),
           ),
         );
-
-        EmailRecoveryService.hasVaultKey(smartAccountAddress)
-          .then(setHasVaultKey)
-          .catch(() => setHasVaultKey(false));
-
-        EmailRecoveryService.isRecoveryKitAcknowledged(smartAccountAddress)
-          .then(setRecoveryKitAcked)
-          .catch(() => setRecoveryKitAcked(false));
       })
       .catch((error) => {
         if (cancelled) return;
@@ -626,7 +604,6 @@ const EmailRecoveryScreen: React.FC = () => {
     newPostInstallEmail,
     newPostInstallWeight,
     resolvedChainId,
-    securityMode,
   ]);
 
   /**
@@ -805,11 +782,6 @@ const EmailRecoveryScreen: React.FC = () => {
     });
   }, []);
 
-  const handleRefreshModuleStatus = useCallback(() => {
-    if (!smartAccountReady) return;
-    setModuleStatusNonce((nonce) => nonce + 1);
-  }, [smartAccountReady]);
-
   /**
    * Builds + signs + submits an `uninstallModule` UserOp on the SmartAccount,
    * then marks the backend install record as "not_installed" and resets local
@@ -885,82 +857,6 @@ const EmailRecoveryScreen: React.FC = () => {
     });
   }, [visibleGuardianWeights]);
 
-  const handleSaveToCloud = useCallback(async () => {
-    if (!smartAccountReady || !smartAccountAddress) {
-      Alert.alert(
-        "Smart Account Required",
-        "Deploy your smart account before syncing.",
-      );
-      return;
-    }
-    if (!user?.id) {
-      Alert.alert("Authentication Required", "Please sign in to sync.");
-      return;
-    }
-    if (guardianValidationError) {
-      Alert.alert("Check Guardian Setup", guardianValidationError);
-      return;
-    }
-
-    let parsedWeights: bigint[];
-    try {
-      parsedWeights = parseGuardianWeights();
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Guardian weights must be greater than zero.";
-      Alert.alert("Invalid Weights", message);
-      return;
-    }
-
-    setInstallingModule(true);
-    try {
-      await EmailRecoveryService.persistMetadata({
-        userId: user.id,
-        smartAccountAddress,
-        chainId: resolvedChainId,
-        guardianEmails: trimmedGuardians,
-        guardianWeights: parsedWeights,
-        threshold: BigInt(parsedThreshold),
-        delaySeconds: BigInt(parsedDelayMinutes) * 60n,
-        expirySeconds: BigInt(parsedExpiryMinutes) * 60n,
-        securityMode: effectiveSecurityMode,
-        installStatus: moduleInstalledState ? "installed" : "pending",
-        installUserOpHash:
-          "0x0000000000000000000000000000000000000000000000000000000000000000",
-      });
-
-      const refreshedMetadata = await EmailRecoveryService.loadMetadata({
-        smartAccountAddress,
-      });
-      setStoredMetadata(refreshedMetadata);
-      Alert.alert(
-        "Sync Complete",
-        "Configuration synced to the cloud successfully.",
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to sync metadata.";
-      Alert.alert("Sync Failed", message);
-    } finally {
-      setInstallingModule(false);
-    }
-  }, [
-    smartAccountReady,
-    smartAccountAddress,
-    user?.id,
-    trimmedGuardians,
-    resolvedChainId,
-    guardianValidationError,
-    parseGuardianWeights,
-    parsedDelayMinutes,
-    parsedExpiryMinutes,
-    parsedThreshold,
-    securityMode,
-    moduleInstalledState,
-  ]);
-
   const handleInstallModule = useCallback(async () => {
     // ADR-0006: email recovery UI is gated to chains where the ZK Email
     // hosted relayer runs. Block immediately on tap so the user isn't
@@ -1008,8 +904,6 @@ const EmailRecoveryScreen: React.FC = () => {
 
     setInstallingModule(true);
     setModuleError(null);
-    setLastUserOpHash(null);
-    setLastOperationHash(null);
 
     try {
       const passkey = await PasskeyService.getPasskey(user.id);
@@ -1049,8 +943,6 @@ const EmailRecoveryScreen: React.FC = () => {
           usePaymaster: true,
         });
 
-      setLastUserOpHash(userOpHash);
-
       const signature = await PasskeyService.signWithPasskey(
         user.id,
         userOpHash,
@@ -1085,8 +977,6 @@ const EmailRecoveryScreen: React.FC = () => {
       });
       setStoredMetadata(refreshedMetadata);
 
-      setLastOperationHash(operationHash);
-      setLastInstallPayload(signedUserOp);
       setModuleInstalledState(true);
 
       // Fire-and-forget acceptance emails. Guardians whose addresses are now
@@ -1144,94 +1034,6 @@ const EmailRecoveryScreen: React.FC = () => {
     effectiveSecurityMode,
     // networkConfig is derived from resolvedChainId; no need to list separately
   ]);
-
-  const handleAcknowledgeRecoveryKit = useCallback(async () => {
-    if (!smartAccountAddress) return;
-    Alert.alert(
-      "Confirm Backup",
-      "Have you saved your Recovery Kit somewhere secure (password manager, encrypted note)? Without it, after a guardian recovery to a new device, guardian emails will appear locked.",
-      [
-        { text: "Not yet", style: "cancel" },
-        {
-          text: "Yes, I've backed it up",
-          onPress: async () => {
-            await EmailRecoveryService.markRecoveryKitAcknowledged(smartAccountAddress);
-            setRecoveryKitAcked(true);
-          },
-        },
-      ],
-    );
-  }, [smartAccountAddress]);
-
-  const handleExportRecoveryKit = useCallback(async () => {
-    if (!smartAccountAddress) {
-      Alert.alert(
-        "Smart Account Required",
-        "Create or load your smart account first.",
-      );
-      return;
-    }
-
-    try {
-      const vaultKey =
-        await EmailRecoveryService.getVaultKeyBase64(smartAccountAddress);
-      if (!vaultKey) {
-        Alert.alert(
-          "No Vault Key Found",
-          "Enable Extra Security and save/install recovery once to generate a vault key.",
-        );
-        return;
-      }
-      navigation.navigate("RecoveryKitExport", {
-        vaultKey,
-        smartAccountAddress,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to load vault key.";
-      Alert.alert("Export Failed", message);
-    }
-  }, [navigation, smartAccountAddress]);
-
-  const handleImportVaultKey = useCallback(async () => {
-    if (!smartAccountAddress) {
-      Alert.alert(
-        "Smart Account Required",
-        "Create or load your smart account first.",
-      );
-      return;
-    }
-    if (!vaultKeyInput.trim()) {
-      Alert.alert(
-        "Vault Key Required",
-        "Paste your Base64 vault key to import.",
-      );
-      return;
-    }
-
-    try {
-      await EmailRecoveryService.importVaultKeyBase64(
-        smartAccountAddress,
-        vaultKeyInput.trim(),
-      );
-      setVaultKeyInput("");
-      setHasVaultKey(true);
-
-      const refreshedMetadata = await EmailRecoveryService.loadMetadata({
-        smartAccountAddress,
-      });
-      setStoredMetadata(refreshedMetadata);
-
-      Alert.alert(
-        "Vault Key Imported",
-        "Guardians are now unlocked on this device.",
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to import vault key.";
-      Alert.alert("Import Failed", message);
-    }
-  }, [smartAccountAddress, vaultKeyInput]);
 
   if (checkingLocalSigner || !canSignForWallet) {
     return (

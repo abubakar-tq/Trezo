@@ -4,7 +4,8 @@ export function delayLabel(seconds: number): string {
     172800: "48 hours",
     604800: "7 days",
   };
-  return map[seconds] ?? `${Math.round(seconds / 3600)} hours`;
+  const h = Math.round(seconds / 3600);
+  return map[seconds] ?? `${h} ${h === 1 ? "hour" : "hours"}`;
 }
 
 export const DELAY_CHOICES = [
