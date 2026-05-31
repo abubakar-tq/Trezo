@@ -26,10 +26,6 @@ import type { TokenBalance } from "@features/portfolio/services/PortfolioService
 import type { TokenCategoryId } from "../../data/tokenCategories";
 import { TRENDING_SITES } from "../../data/trendingSites";
 
-// On-brand violet constants for Apps section fallback glyphs.
-const APP_ICON_BG = "rgba(124,58,237,0.14)";
-const APP_ICON_GLYPH = "#c4b5fd";
-
 type Props = {
   onSubmitSearch: (intent: SearchIntent) => void;
   onOpenTabs: () => void;
@@ -48,13 +44,13 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ─── Market row — reclaimed from MarketExplorer ──────────────────────────────
+// ─── Compact search result row (used when query ≥ 2 chars) ──────────────────
 
-function MarketRow({
+function SearchResultRow({
   token,
   onPress,
 }: {
-  token: any;
+  token: MarketAsset;
   onPress: (t: TokenBalance) => void;
 }) {
   const { theme } = useAppTheme();
@@ -65,7 +61,7 @@ function MarketRow({
 
   return (
     <TouchableOpacity
-      style={[styles.marketRow, { borderBottomColor: colors.border }]}
+      style={[styles.searchResultRow, { borderBottomColor: colors.border }]}
       activeOpacity={0.7}
       onPress={() =>
         onPress({
@@ -80,41 +76,172 @@ function MarketRow({
         })
       }
     >
-      <View style={styles.marketRowLeft}>
-        <TokenIcon symbol={token.symbol} size={40} style={{ borderRadius: 12 }} />
+      <View style={styles.searchResultLeft}>
+        <TokenIcon symbol={token.symbol} size={36} style={{ borderRadius: 999 }} />
         <View>
-          <Text style={[styles.marketTokenName, { color: colors.textPrimary }]}>
-            {token.name}
-          </Text>
-          <Text style={[styles.marketTokenSymbol, { color: colors.textSecondary }]}>
+          <Text style={[styles.searchResultSymbol, { color: colors.textPrimary }]}>
             {token.symbol}
+          </Text>
+          <Text style={[styles.searchResultName, { color: colors.textSecondary }]} numberOfLines={1}>
+            {token.name}
           </Text>
         </View>
       </View>
-      <View style={styles.marketRowRight}>
-        <View style={styles.sparklineWrap}>
-          <Sparkline
-            data={change >= 0 ? [10, 12, 11, 13, 14, 15] : [15, 14, 16, 14, 12, 10]}
-            width={60}
-            height={24}
-            color={changeColor}
-            strokeWidth={2}
-          />
-        </View>
-        <View style={styles.marketRowPrices}>
-          <Text style={[styles.marketPrice, { color: colors.textPrimary }]}>
+      <View style={styles.searchResultRight}>
+        <Sparkline
+          data={change >= 0 ? [10, 12, 11, 13, 14, 15] : [15, 14, 16, 14, 12, 10]}
+          width={48}
+          height={20}
+          color={changeColor}
+          strokeWidth={1.5}
+        />
+        <View style={styles.searchResultPrices}>
+          <Text style={[styles.searchResultPrice, { color: colors.textPrimary }]}>
             $
             {price > 1
               ? price.toLocaleString(undefined, { maximumFractionDigits: 2 })
               : price.toFixed(4)}
           </Text>
-          <Text style={[styles.marketChange, { color: changeColor }]}>
+          <Text style={[styles.searchResultChange, { color: changeColor }]}>
             {change > 0 ? "+" : ""}
             {change.toFixed(2)}%
           </Text>
         </View>
       </View>
     </TouchableOpacity>
+  );
+}
+
+// ─── Merged Markets section ──────────────────────────────────────────────────
+// Replaces the old separate Trending section + old vertical Market list.
+// Layout: token-category chips → search input → strip or results
+
+type MarketsSectionProps = {
+  category: TokenCategoryId | null;
+  onCategoryChange: (id: TokenCategoryId | null) => void;
+  onTokenPress: (assetId: string) => void;
+  onTokenDetailOpen: (t: TokenBalance) => void;
+};
+
+function MarketsSection({
+  category,
+  onCategoryChange,
+  onTokenPress,
+  onTokenDetailOpen,
+}: MarketsSectionProps) {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<MarketAsset[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keep a live market snapshot so we can look up tokens when a card is pressed.
+  const { assets: marketAssets } = useMarketData(20);
+
+  const handleQueryChange = useCallback((text: string) => {
+    setQuery(text);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (text.trim().length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    setSearchLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      const results = await marketService.searchAssets(text.trim());
+      setSearchResults(results.slice(0, 6));
+      setSearchLoading(false);
+    }, 300);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const isSearching = query.trim().length >= 2;
+
+  // When a card in TrendingTokensRow is pressed (assetId string), look it up in
+  // the live market snapshot and open the TokenDetail sheet.
+  const handleStripTokenPress = useCallback(
+    (assetId: string) => {
+      const asset = marketAssets.find((a) => a.id === assetId);
+      if (asset) {
+        onTokenDetailOpen({
+          symbol: asset.symbol,
+          name: asset.name,
+          amount: 0,
+          price: parseFloat(asset.priceUsd),
+          value: 0,
+          change24h: parseFloat(asset.changePercent24Hr),
+          address: asset.id as `0x${string}`,
+          decimals: 18,
+        });
+      } else {
+        // Fallback: route through the browser's assetId path
+        onTokenPress(assetId);
+      }
+    },
+    [marketAssets, onTokenDetailOpen, onTokenPress]
+  );
+
+  return (
+    <View style={styles.marketsContainer}>
+      {/* Token category chips */}
+      <CategoriesRow selected={category} onSelect={onCategoryChange} />
+
+      {/* Compact "search any coin" input */}
+      <View
+        style={[
+          styles.marketsSearch,
+          { backgroundColor: colors.glass, borderColor: colors.border },
+        ]}
+      >
+        <Feather name="search" size={14} color={colors.textMuted} />
+        <TextInput
+          style={[styles.marketsSearchInput, { color: colors.textPrimary }]}
+          placeholder="Search any coin…"
+          placeholderTextColor={colors.textMuted}
+          value={query}
+          onChangeText={handleQueryChange}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={() => handleQueryChange("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Feather name="x" size={14} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Content: search results list OR horizontal movers strip */}
+      {isSearching ? (
+        searchLoading ? (
+          <View style={styles.marketsLoader}>
+            <ActivityIndicator size="small" color={colors.accent} />
+          </View>
+        ) : searchResults.length === 0 ? (
+          <View style={styles.marketsEmpty}>
+            <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: "600" }}>
+              No tokens match "{query}"
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.marketsResults, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+            {searchResults.map((token) => (
+              <SearchResultRow key={token.id} token={token} onPress={onTokenDetailOpen} />
+            ))}
+          </View>
+        )
+      ) : (
+        /* Default: horizontal movers strip, filtered by selected category */
+        <TrendingTokensRow categoryFilter={category} onTokenPress={handleStripTokenPress} />
+      )}
+    </View>
   );
 }
 
@@ -158,86 +285,6 @@ function AppsCategoryRow({
   );
 }
 
-// ─── Market section ──────────────────────────────────────────────────────────
-
-function MarketSection({ onTokenPress }: { onTokenPress: (t: TokenBalance) => void }) {
-  const { theme } = useAppTheme();
-  const { colors } = theme;
-  const { assets: topAssets, loading: topLoading } = useMarketData(10);
-  const [search, setSearch] = useState("");
-  const [searchResults, setSearchResults] = useState<MarketAsset[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleSearchChange = useCallback((text: string) => {
-    setSearch(text);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (text.trim().length < 2) {
-      setSearchResults([]);
-      setSearchLoading(false);
-      return;
-    }
-    setSearchLoading(true);
-    debounceRef.current = setTimeout(async () => {
-      const results = await marketService.searchAssets(text.trim());
-      setSearchResults(results);
-      setSearchLoading(false);
-    }, 300);
-  }, []);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
-
-  const isSearching = search.trim().length >= 2;
-  const displayAssets = isSearching ? searchResults : topAssets.slice(0, 10);
-  const loading = isSearching ? searchLoading : topLoading;
-
-  if (loading && displayAssets.length === 0) {
-    return (
-      <View style={styles.marketLoader}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.marketSection}>
-      {/* Mini search within market */}
-      <View
-        style={[
-          styles.marketSearch,
-          { backgroundColor: colors.glass, borderColor: colors.border },
-        ]}
-      >
-        <Feather name="search" size={16} color={colors.textMuted} />
-        <TextInput
-          style={[styles.marketSearchInput, { color: colors.textPrimary }]}
-          placeholder="Search tokens…"
-          placeholderTextColor={colors.textMuted}
-          value={search}
-          onChangeText={handleSearchChange}
-        />
-      </View>
-
-      {displayAssets.length === 0 ? (
-        <View style={styles.marketEmpty}>
-          <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: "600" }}>
-            {isSearching ? `No tokens match "${search}"` : "No market data available"}
-          </Text>
-        </View>
-      ) : (
-        displayAssets.map((token) => (
-          <MarketRow key={token.id} token={token} onPress={onTokenPress} />
-        ))
-      )}
-    </View>
-  );
-}
-
 // ─── Main DiscoverHome ────────────────────────────────────────────────────────
 
 // Derive distinct app categories from the static TRENDING_SITES list.
@@ -259,7 +306,7 @@ export function DiscoverHome({ onSubmitSearch, onOpenTabs, onTokenPress, onSiteP
     };
   }, []);
 
-  function handleMarketTokenPress(token: TokenBalance) {
+  function handleTokenDetailOpen(token: TokenBalance) {
     tokenDetailRef.current?.open(token);
   }
 
@@ -275,27 +322,25 @@ export function DiscoverHome({ onSubmitSearch, onOpenTabs, onTokenPress, onSiteP
           <UnifiedSearchBar onSubmit={onSubmitSearch} onTabsPress={onOpenTabs} />
         </View>
 
-        {/* 2. Trending tokens — token category chips live here */}
+        {/* 2. Markets — merged Trending + Market: category chips, coin search, horizontal strip */}
         <View style={styles.section}>
-          <SectionHeader>Trending</SectionHeader>
-          <CategoriesRow selected={category} onSelect={setCategory} />
-          <TrendingTokensRow categoryFilter={category} onTokenPress={onTokenPress} />
+          <SectionHeader>Markets</SectionHeader>
+          <MarketsSection
+            category={category}
+            onCategoryChange={setCategory}
+            onTokenPress={onTokenPress}
+            onTokenDetailOpen={handleTokenDetailOpen}
+          />
         </View>
 
-        {/* 3. Market — vertical list with search, sparklines, 24h change */}
-        <View style={styles.section}>
-          <SectionHeader>Market</SectionHeader>
-          <MarketSection onTokenPress={handleMarketTokenPress} />
-        </View>
-
-        {/* 4. Apps (dApp list) — separate dApp category chips, independent of token chips */}
+        {/* 3. Apps (dApp list) — separate dApp category chips, independent of token chips */}
         <View style={styles.section}>
           <SectionHeader>Apps</SectionHeader>
           <AppsCategoryRow selected={appsCategory} onSelect={setAppsCategory} />
           <TrendingSitesRow onPress={onSitePress} categoryFilter={appsCategory} />
         </View>
 
-        {/* 5. News — hides when feed is empty */}
+        {/* 4. News — hides when feed is empty */}
         {news.length > 0 && (
           <View style={styles.section}>
             <SectionHeader>News</SectionHeader>
@@ -322,36 +367,44 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.5,
   },
-  // Market section
-  marketLoader: { height: 80, alignItems: "center", justifyContent: "center" },
-  marketSection: { paddingHorizontal: 16, gap: 0 },
-  marketSearch: {
+  // Merged Markets section
+  marketsContainer: { gap: 10 },
+  marketsSearch: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 14,
-    height: 44,
+    height: 40,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 10,
-    marginBottom: 8,
+    gap: 8,
+    marginHorizontal: 16,
   },
-  marketSearchInput: { flex: 1, fontSize: 14, fontWeight: "500" },
-  marketEmpty: { padding: 20, alignItems: "center" },
-  marketRow: {
+  marketsSearchInput: { flex: 1, fontSize: 13, fontWeight: "500" },
+  marketsLoader: { height: 60, alignItems: "center", justifyContent: "center" },
+  marketsEmpty: { paddingVertical: 16, paddingHorizontal: 16, alignItems: "center" },
+  // Compact search results container
+  marketsResults: {
+    marginHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  // Search result row
+  searchResultRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  marketRowLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  marketTokenName: { fontSize: 15, fontWeight: "700" },
-  marketTokenSymbol: { fontSize: 12, fontWeight: "500", marginTop: 2 },
-  marketRowRight: { flexDirection: "row", alignItems: "center", gap: 12 },
-  sparklineWrap: {},
-  marketRowPrices: { alignItems: "flex-end", minWidth: 72 },
-  marketPrice: { fontSize: 15, fontWeight: "700" },
-  marketChange: { fontSize: 12, fontWeight: "600", marginTop: 2 },
+  searchResultLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  searchResultSymbol: { fontSize: 14, fontWeight: "700" },
+  searchResultName: { fontSize: 11, fontWeight: "500", marginTop: 1, maxWidth: 140 },
+  searchResultRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  searchResultPrices: { alignItems: "flex-end", minWidth: 68 },
+  searchResultPrice: { fontSize: 13, fontWeight: "700" },
+  searchResultChange: { fontSize: 11, fontWeight: "600", marginTop: 1 },
   // Apps category chips
   appsCategoryList: { paddingHorizontal: 16, gap: 8 },
   appsCategoryChip: {
