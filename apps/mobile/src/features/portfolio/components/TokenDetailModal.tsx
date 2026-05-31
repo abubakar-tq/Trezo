@@ -1,15 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { type BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useAppTheme } from '@theme';
 import { TokenIcon, InteractiveChart } from '@shared/components';
+import { TrezoBottomSheet } from '@shared/components/sheets/TrezoBottomSheet';
 import type { TokenBalance } from '@features/portfolio/services/PortfolioService';
 import { marketService } from '@services/MarketService';
 import { useAssetHistory } from '@hooks/useMarketData';
 import { useUserHoldsToken } from '@features/wallet/hooks/useUserHoldsToken';
 import { isTokenSwappableOnTestnet } from '@services/market/testnetBias';
-
-const { width } = Dimensions.get('window');
+import { useWalletStore } from '@features/wallet/store/useWalletStore';
+import { resolveNetworkKey, type SupportedChainId } from '@/src/integration/networks';
 
 interface TokenDetailModalProps {
   visible: boolean;
@@ -18,6 +21,7 @@ interface TokenDetailModalProps {
   onRequestSend?: (token: TokenBalance) => void;
   onRequestReceive?: () => void;
   onRequestSwap?: (preselect: { symbol: string; side: 'in' | 'out' }) => void;
+  onRequestBuy?: () => void;
 }
 
 export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
@@ -27,13 +31,40 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
   onRequestSend,
   onRequestReceive,
   onRequestSwap,
+  onRequestBuy,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
+  const navigation = useNavigation<any>();
+
+  const sheetRef = React.useRef<BottomSheetModal>(null);
+
+  // Bridge controlled visible prop → imperative sheet API
+  React.useEffect(() => {
+    if (visible) {
+      sheetRef.current?.present();
+    } else {
+      sheetRef.current?.dismiss();
+    }
+  }, [visible]);
 
   const symbol = token?.symbol ?? '';
   const swappable = isTokenSwappableOnTestnet(symbol);
   const userHolds = useUserHoldsToken(symbol);
+
+  const activeChainId = useWalletStore((s) => s.activeChainId);
+  let networkKey: string | undefined;
+  try {
+    networkKey = typeof activeChainId === 'number'
+      ? resolveNetworkKey(activeChainId as SupportedChainId)
+      : undefined;
+  } catch {
+    networkKey = undefined;
+  }
+
+  // LINK has a real pool only on base-sepolia; block swap on other chains
+  const isLink = symbol.toUpperCase() === 'LINK';
+  const swapAllowedHere = swappable && (!isLink || networkKey === 'base-sepolia');
 
   const [selectedPeriod, setSelectedPeriod] = React.useState('1W');
   const [marketDetails, setMarketDetails] = React.useState<any>(null);
@@ -89,176 +120,174 @@ export const TokenDetailModal: React.FC<TokenDetailModalProps> = ({
 
   if (!token) return null;
 
+  // Responsive chart width: TrezoBottomSheet body already applies paddingHorizontal: 20 on each side
+  const chartWidth = Dimensions.get('window').width - 40; // TrezoBottomSheet body: 20 + 20
+
+  // Determine the third action tile
+  const isEth = symbol.toUpperCase() === 'ETH';
+
   return (
-    <Modal
-      visible={visible}
-      animationType="fade"
-      transparent={true}
-      onRequestClose={onClose}
+    <TrezoBottomSheet
+      ref={sheetRef}
+      snapPoints={['85%']}
+      enableDynamicSizing={false}
+      enablePanDownToClose
+      onDismiss={onClose}
     >
-      <View style={styles.overlay}>
-        <TouchableOpacity style={styles.dismissOverlay} onPress={onClose} activeOpacity={1} />
-        <View style={[styles.content, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerTitleRow}>
-              <TokenIcon symbol={token.symbol} size={28} />
-              <View>
-                <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{token.name}</Text>
-                <Text style={[styles.headerSymbol, { color: colors.textSecondary }]}>{token.symbol}</Text>
-              </View>
-            </View>
-            <TouchableOpacity onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.glass }]}>
-              <Ionicons name="close" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerTitleRow}>
+          <TokenIcon symbol={token.symbol} size={28} />
+          <View>
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{token.name}</Text>
+            <Text style={[styles.headerSymbol, { color: colors.textSecondary }]}>{token.symbol}</Text>
           </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
-            {/* Price + change badge */}
-            <View style={styles.priceHero}>
-              <Text style={[styles.currentPrice, { color: colors.textPrimary }]}>
-                ${(token.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </Text>
-              <View style={[styles.priceChange, { backgroundColor: isPositive ? colors.successSoft : colors.dangerSoft }]}>
-                <Text style={[styles.priceChangeText, { color: isPositive ? colors.success : colors.danger }]}>
-                  {isPositive ? '+' : ''}{displayChange.toFixed(2)}%
-                </Text>
-              </View>
-            </View>
-
-            {/* Holdings row (portfolio tokens only) */}
-            {token.value > 0 && (
-              <View style={[styles.holdingRow, { backgroundColor: colors.surfaceMuted }]}>
-                <Text style={[styles.holdingLabel, { color: colors.textMuted }]}>MY HOLDING</Text>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={[styles.holdingValue, { color: colors.textPrimary }]}>
-                    ${token.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </Text>
-                  <Text style={[styles.holdingAmount, { color: colors.textSecondary }]}>
-                    {token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} {token.symbol}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* Interactive chart */}
-            <View style={styles.chartContainer}>
-              {chartLoading ? (
-                <View style={{ height: 140, justifyContent: 'center' }}>
-                  <ActivityIndicator color={colors.accent} size="small" />
-                </View>
-              ) : (
-                <InteractiveChart
-                  data={chartData.length > 0 ? chartData : [0, 0]}
-                  chartWidth={width - 80}
-                  chartHeight={140}
-                  color={chartColor}
-                />
-              )}
-              {/* Period selector */}
-              <View style={styles.chartFilters}>
-                {['1D', '1W', '1M', '1Y'].map(p => (
-                  <TouchableOpacity
-                    key={p}
-                    onPress={() => setSelectedPeriod(p)}
-                    style={[styles.filterPill, selectedPeriod === p && { backgroundColor: `${colors.accent}1A` }]}
-                  >
-                    <Text style={[styles.filterText, { color: selectedPeriod === p ? colors.accent : colors.textSecondary }]}>{p}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Stats grid */}
-            <View style={[styles.statsGrid, { borderTopColor: colors.border }]}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statLabel, { color: colors.textMuted }]}>MARKET CAP</Text>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  {(() => {
-                    const cap = marketDetails ? parseFloat(marketDetails.marketCapUsd) : 0;
-                    if (!cap) return '---';
-                    if (cap >= 1e9) return `$${(cap / 1e9).toFixed(2)}B`;
-                    return `$${(cap / 1e6).toFixed(2)}M`;
-                  })()}
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statLabel, { color: colors.textMuted }]}>24H VOLUME</Text>
-                <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-                  {(() => {
-                    const vol = marketDetails ? parseFloat(marketDetails.volumeUsd24Hr) : 0;
-                    if (!vol) return '---';
-                    if (vol >= 1e9) return `$${(vol / 1e9).toFixed(2)}B`;
-                    return `$${(vol / 1e6).toFixed(2)}M`;
-                  })()}
-                </Text>
-              </View>
-            </View>
-
-            {/* Send / Receive / Swap action row */}
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
-                onPress={() => { onClose(); onRequestSend?.(token); }}
-                activeOpacity={0.75}
-              >
-                <Feather name="arrow-up-right" size={20} color={colors.accent} />
-                <Text style={[styles.actionTileLabel, { color: colors.accent }]}>Send</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
-                onPress={() => { onClose(); onRequestReceive?.(); }}
-                activeOpacity={0.75}
-              >
-                <Feather name="arrow-down-left" size={20} color={colors.accent} />
-                <Text style={[styles.actionTileLabel, { color: colors.accent }]}>Receive</Text>
-              </TouchableOpacity>
-
-              {swappable ? (
-                <TouchableOpacity
-                  style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
-                  onPress={() => { onClose(); onRequestSwap?.({ symbol: token.symbol, side: userHolds ? 'in' : 'out' }); }}
-                  activeOpacity={0.75}
-                >
-                  <Feather name="repeat" size={20} color={colors.accent} />
-                  <Text style={[styles.actionTileLabel, { color: colors.accent }]}>Swap</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={[styles.actionTile, { backgroundColor: colors.surfaceMuted }]}>
-                  <Text style={[styles.notAvailableText, { color: colors.textMuted }]}>Not available</Text>
-                </View>
-              )}
-            </View>
-          </ScrollView>
         </View>
+        <TouchableOpacity onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.glass }]}>
+          <Ionicons name="close" size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
-    </Modal>
+
+      <BottomSheetScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
+        {/* Price + change badge */}
+        <View style={styles.priceHero}>
+          <Text style={[styles.currentPrice, { color: colors.textPrimary }]}>
+            ${(token.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </Text>
+          <View style={[styles.priceChange, { backgroundColor: isPositive ? colors.successSoft : colors.dangerSoft }]}>
+            <Text style={[styles.priceChangeText, { color: isPositive ? colors.success : colors.danger }]}>
+              {isPositive ? '+' : ''}{displayChange.toFixed(2)}%
+            </Text>
+          </View>
+        </View>
+
+        {/* Holdings row (portfolio tokens only) */}
+        {(token.value ?? 0) > 0 && (
+          <View style={[styles.holdingRow, { backgroundColor: colors.surfaceMuted }]}>
+            <Text style={[styles.holdingLabel, { color: colors.textMuted }]}>MY HOLDING</Text>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[styles.holdingValue, { color: colors.textPrimary }]}>
+                ${(token.value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Text>
+              <Text style={[styles.holdingAmount, { color: colors.textSecondary }]}>
+                {token.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })} {token.symbol}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Interactive chart */}
+        <View style={styles.chartContainer}>
+          {chartLoading ? (
+            <View style={{ height: 140, justifyContent: 'center' }}>
+              <ActivityIndicator color={colors.accent} size="small" />
+            </View>
+          ) : (
+            <InteractiveChart
+              data={chartData.length > 0 ? chartData : [0, 0]}
+              chartWidth={chartWidth}
+              chartHeight={140}
+              color={chartColor}
+            />
+          )}
+          {/* Period selector */}
+          <View style={styles.chartFilters}>
+            {['1D', '1W', '1M', '1Y'].map(p => (
+              <TouchableOpacity
+                key={p}
+                onPress={() => setSelectedPeriod(p)}
+                style={[styles.filterPill, selectedPeriod === p && { backgroundColor: `${colors.accent}1A` }]}
+              >
+                <Text style={[styles.filterText, { color: selectedPeriod === p ? colors.accent : colors.textSecondary }]}>{p}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Stats grid */}
+        <View style={[styles.statsGrid, { borderTopColor: colors.border }]}>
+          <View style={styles.statItem}>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>MARKET CAP</Text>
+            <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+              {(() => {
+                const cap = marketDetails ? parseFloat(marketDetails.marketCapUsd) : 0;
+                if (!cap) return '---';
+                if (cap >= 1e9) return `$${(cap / 1e9).toFixed(2)}B`;
+                return `$${(cap / 1e6).toFixed(2)}M`;
+              })()}
+            </Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>24H VOLUME</Text>
+            <Text style={[styles.statValue, { color: colors.textPrimary }]}>
+              {(() => {
+                const vol = marketDetails ? parseFloat(marketDetails.volumeUsd24Hr) : 0;
+                if (!vol) return '---';
+                if (vol >= 1e9) return `$${(vol / 1e9).toFixed(2)}B`;
+                return `$${(vol / 1e6).toFixed(2)}M`;
+              })()}
+            </Text>
+          </View>
+        </View>
+
+        {/* Action row — gated: no dead tiles */}
+        <View style={styles.actionRow}>
+          {/* Send — always shown */}
+          <TouchableOpacity
+            style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
+            onPress={() => { onClose(); onRequestSend?.(token); }}
+            activeOpacity={0.75}
+          >
+            <Feather name="arrow-up-right" size={20} color={colors.accent} />
+            <Text style={[styles.actionTileLabel, { color: colors.accent }]}>Send</Text>
+          </TouchableOpacity>
+
+          {/* Receive — always shown */}
+          <TouchableOpacity
+            style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
+            onPress={() => { onClose(); onRequestReceive?.(); }}
+            activeOpacity={0.75}
+          >
+            <Feather name="arrow-down-left" size={20} color={colors.accent} />
+            <Text style={[styles.actionTileLabel, { color: colors.accent }]}>Receive</Text>
+          </TouchableOpacity>
+
+          {/* Third tile: Buy (ETH) | Swap (swappable here) | nothing (no dead tile) */}
+          {isEth ? (
+            <TouchableOpacity
+              style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
+              onPress={() => { onClose(); onRequestBuy ? onRequestBuy() : navigation.navigate('Buy'); }}
+              activeOpacity={0.75}
+            >
+              <Feather name="shopping-cart" size={20} color={colors.accent} />
+              <Text style={[styles.actionTileLabel, { color: colors.accent }]}>Buy</Text>
+            </TouchableOpacity>
+          ) : swapAllowedHere ? (
+            <TouchableOpacity
+              style={[styles.actionTile, { backgroundColor: `${colors.accent}1A` }]}
+              onPress={() => {
+                onClose();
+                onRequestSwap
+                  ? onRequestSwap({ symbol: token.symbol, side: userHolds ? 'in' : 'out' })
+                  : navigation.navigate('Dex', { initialTab: 'swap', preselect: { symbol: token.symbol, side: userHolds ? 'in' : 'out' } });
+              }}
+              activeOpacity={0.75}
+            >
+              <Feather name="repeat" size={20} color={colors.accent} />
+              <Text style={[styles.actionTileLabel, { color: colors.accent }]}>Swap</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </BottomSheetScrollView>
+    </TrezoBottomSheet>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dismissOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  content: {
-    width: width * 0.88,
-    borderRadius: 28,
-    borderWidth: 1,
-    paddingTop: 8,
-    overflow: 'hidden',
-  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
     paddingVertical: 16,
   },
   closeButton: {
@@ -283,7 +312,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   scrollBody: {
-    paddingHorizontal: 20,
     paddingBottom: 24,
   },
   priceHero: {
@@ -310,7 +338,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginBottom: 16,
@@ -343,7 +371,7 @@ const styles = StyleSheet.create({
   filterPill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   filterText: {
     fontSize: 11,
@@ -378,7 +406,7 @@ const styles = StyleSheet.create({
   actionTile: {
     flex: 1,
     height: 64,
-    borderRadius: 18,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 4,
@@ -386,10 +414,5 @@ const styles = StyleSheet.create({
   actionTileLabel: {
     fontSize: 12,
     fontWeight: '700',
-  },
-  notAvailableText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'center',
   },
 });

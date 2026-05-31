@@ -18,7 +18,7 @@ const DevCreateAccountScreen = () => {
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <View style={styles.section}>
         <Text style={[styles.header, { color: theme.colors.text }]}>Dev Controls</Text>
-        <Text style={[styles.subheader, { color: theme.colors.secondaryText }]}>
+        <Text style={[styles.subheader, { color: theme.colors.textSecondary }]}>
           Experimental tools for creating and funding smart accounts on your local dev setup.
         </Text>
       </View>

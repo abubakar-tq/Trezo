@@ -9,8 +9,12 @@ import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
 import { useSetUpWalletSheet } from "@features/wallet/hooks/useSetUpWalletSheet";
 import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { useWalletData } from "@hooks/useWalletData";
+import { useMarketData } from "@hooks/useMarketData";
+import { usePortfolioHistory } from "@hooks/usePortfolioHistory";
 import { useNavigation } from "@react-navigation/native";
 import TabScreenContainer from "@shared/components/TabScreenContainer";
+import { FontFamilies } from "@shared/components/TokenRegistry";
+import { TokenIcon } from "@shared/components";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
 import React, { useEffect, useMemo, useState } from "react";
@@ -38,11 +42,13 @@ import type { TokenBalance } from "../../portfolio/services/PortfolioService";
 import {
   ActionGrid,
   ActivityFeed,
+  AssetList,
   BalanceCard,
 } from "../components/dashboard";
 import type { QuickAction } from "../components/dashboard/ActionGrid";
 import { MarketTrendsCarousel } from "../components/dashboard/MarketTrendsCarousel";
 import { useAccountManagement } from "../hooks/useAccountManagement";
+import { computeTotalChange24h } from "../utils/portfolio24h";
 
 interface HomeScreenProps {
   onSend?: () => void;
@@ -71,7 +77,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   const { ref: setUpRef, requireProvisioned } = useSetUpWalletSheet();
 
   const handleActionPress = (action: QuickAction) => {
-    // Receive does NOT gate via Activation sheet — Phase 6 will wire Set-Up for that.
+    // Receive does NOT gate via Activation sheet
     if (action.key === "receive") {
       navigation.navigate("Receive");
       return;
@@ -88,12 +94,61 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
     });
   };
 
-  const { totalBalanceUSD, isLoading: walletLoading, missingPrices } = useWalletData(effectiveAddress ?? undefined);
+  const { totalBalanceUSD, tokens, isLoading: walletLoading, missingPrices } = useWalletData(effectiveAddress ?? undefined);
   const { isHydrating, hasLocalPasskey } = useAccountManagement();
   const contentBottomInset = useTabContentBottomInset();
 
-  // On-chain authority — the truth source. The shield color and security
-  // tooltip both follow this; we no longer trust hasLocalPasskey alone.
+  // Market feed — used for 24h change per token (join holdings to market by symbol)
+  const { assets: marketAssets } = useMarketData(20);
+
+  // 24h change map: symbol (uppercase) → changePercent24Hr from market feed
+  const change24hBySymbol = useMemo(() => {
+    const map: Record<string, number> = {};
+    marketAssets.forEach((a) => {
+      const pct = parseFloat(a.changePercent24Hr);
+      if (isFinite(pct)) map[a.symbol.toUpperCase()] = pct;
+    });
+    return map;
+  }, [marketAssets]);
+
+  // Build token list from wallet data for display
+  const displayTokens = useMemo((): TokenBalance[] => {
+    return tokens.map((t) => {
+      const sym = (t.symbol || "UNKNOWN").toUpperCase();
+      const realChange = change24hBySymbol[sym];
+      return {
+        symbol: t.symbol || "UNKNOWN",
+        name: t.name || "Unknown Token",
+        amount: parseFloat(t.balance_formatted || t.balance || "0"),
+        price: t.usd_price || 0,
+        value: t.usd_value || 0,
+        // Real 24h % from market feed — omit entirely when unknown (never fabricate 0)
+        ...(realChange !== undefined ? { change24h: realChange } : {}),
+        decimals: t.decimals || 18,
+        address: (t.token_address || "native") as `0x${string}`,
+      };
+    });
+  // change24hBySymbol is a dependency because we use it to set change24h per token
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokens, change24hBySymbol]);
+
+  // Sorted by value DESC (top holdings first)
+  const sortedTokens = useMemo(
+    () => [...displayTokens].sort((a, b) => (b.value ?? 0) - (a.value ?? 0)),
+    [displayTokens]
+  );
+
+  // Real portfolio 24h change — computed from market feed joined to holdings.
+  // Returns null when no holding has a known 24h % → badge renders nothing.
+  const portfolioChange24h = useMemo(() => {
+    const holdings = displayTokens.map((t) => ({
+      value: t.value ?? 0,
+      changePct24h: change24hBySymbol[t.symbol.toUpperCase()] ?? null,
+    }));
+    return computeTotalChange24h(holdings);
+  }, [displayTokens, change24hBySymbol]);
+
+  // On-chain authority — the truth source.
   const passkeyAuthority = usePasskeyAuthority({
     userId,
     smartAccountAddress: effectiveAddress as Address | null,
@@ -104,9 +159,6 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [securityTooltipVisible, setSecurityTooltipVisible] = useState(false);
 
-  // Live on-chain recovery state shown when the user taps the shield. Loaded
-  // each time the tooltip opens so it always reflects the current chain state
-  // (no caching pitfalls).
   type RecoverySnapshot = {
     guardians: readonly Address[];
     threshold: bigint;
@@ -159,8 +211,6 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   const getSecurityStatus = () => {
     if (!smartAccountDeployed) return { color: colors.warning, message: "Account not deployed" };
     if (passkeyAuthority.loading) {
-      // While checking, keep the previous green/amber from local presence as a
-      // gentle placeholder — never lie green after the check has returned.
       return hasLocalPasskey
         ? { color: colors.textMuted, message: "Verifying passkey authority…" }
         : { color: colors.accentAlt, message: "Passkey not enabled" };
@@ -185,6 +235,24 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
 
   const securityStatus = getSecurityStatus();
 
+  // Keyed on holdings: $0 with no tokens = empty state
+  const isEmpty = !walletLoading && totalBalanceUSD === 0;
+
+  // 1D portfolio sparkline — real data only (current holdings × intraday prices)
+  // Uses the same hook as PortfolioScreen for consistency.
+  const { history: sparklineHistory } = usePortfolioHistory(displayTokens, "1D");
+
+  // Valid sparkline series: ≥2 finite points, non-empty wallet (never show in $0 state)
+  const sparklineData: number[] | undefined = useMemo(() => {
+    if (isEmpty) return undefined;
+    const valid = sparklineHistory.filter(isFinite);
+    return valid.length >= 2 ? valid : undefined;
+  }, [isEmpty, sparklineHistory]);
+
+  // Format price for AssetList
+  const formatPrice = (value: number) =>
+    value.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+
   return (
     <TabScreenContainer includeBottomInset>
       <ScrollView
@@ -192,16 +260,16 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomInset + 16 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
+        {/* ── Slim Header ───────────────────────────────────────────────────
+            Spec §5.1: small wordmark left; ChainSwitcherChip + bell right.
+            Kill the big WALLET/TREZO ALL-CAPS block.
+        ── */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={styles.headerKicker}>WALLET</Text>
-            <Text style={styles.headerBrand}>TREZO</Text>
-            <View style={styles.headerChainRow}>
-              <ChainSwitcherChip
-                onError={(message) => Alert.alert("Could not switch chain", message)}
-              />
-            </View>
+            <Text style={[styles.headerWordmark, { color: colors.textPrimary }]}>trezo</Text>
+            <ChainSwitcherChip
+              onError={(message) => Alert.alert("Could not switch chain", message)}
+            />
           </View>
 
           <View style={styles.headerRight}>
@@ -229,7 +297,10 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
         {/* Recovery Attempt banner — dismissable, Supabase-only, no RPC */}
         <RecoveryAttemptBanner smartAccountAddress={effectiveAddress as Address | undefined} />
 
-        {/* Balance Card */}
+        {/* ── Balance Hero ──────────────────────────────────────────────────
+            Funded: brand gradient + real 24h change badge.
+            Empty:  flat card, $0.00, no badge.
+        ── */}
         <View style={styles.balanceWrapper}>
           <BalanceCard
             balance={totalBalanceUSD}
@@ -239,32 +310,115 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
             isHydrating={isHydrating}
             hasLocalPasskey={hasLocalPasskey}
             missingPrices={missingPrices}
+            change24hPct={portfolioChange24h?.pct ?? null}
+            isEmpty={isEmpty}
+            sparklineData={sparklineData}
             onDeploy={() => navigation.navigate("DeployAccount")}
             onEnablePasskey={() => navigation.navigate("RecoveryEntry")}
           />
         </View>
 
-        {/* Quick Actions */}
+        {/* ── Quick Actions ─────────────────────────────────────────────────
+            Funded: Receive + Send primary; Swap + Buy secondary.
+            Empty:  Receive + Buy primary; Send + Swap disabled.
+        ── */}
         <View style={styles.sectionWrapper}>
           <View style={[styles.sectionCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
-            <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>QUICK ACTIONS</Text>
-            <ActionGrid onActionPress={handleActionPress} />
+            <ActionGrid onActionPress={handleActionPress} isEmpty={isEmpty} />
           </View>
         </View>
 
-        {/* Market Trends */}
+        {isEmpty ? (
+          /* ── EMPTY STATE body ─────────────────────────────────────────── */
+          <>
+            {/* "Fund your wallet" card */}
+            <View style={styles.sectionWrapper}>
+              <View style={[styles.fundCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                <View style={[styles.fundIconBox, { backgroundColor: `${colors.accent}14`, borderColor: `${colors.accent}22` }]}>
+                  <Feather name="inbox" size={24} color={colors.accent} />
+                </View>
+                <View style={styles.fundTextBlock}>
+                  <Text style={[styles.fundTitle, { color: colors.textPrimary }]}>Fund your wallet</Text>
+                  <Text style={[styles.fundSubtitle, { color: colors.textSecondary }]}>
+                    Receive ETH to start using Trezo on testnet.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.fundCta, { backgroundColor: colors.accent }]}
+                  onPress={() => navigation.navigate("Receive")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.fundCtaText, { color: colors.textPrimary }]}>Receive</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Single native ETH row at 0.00 — the gas asset (spec §5.1 EMPTY) */}
+            <View style={styles.sectionWrapper}>
+              <View style={[styles.sectionCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Your Assets</Text>
+                </View>
+                <View style={styles.ethRow}>
+                  <TokenIcon symbol="ETH" size={44} style={{ borderRadius: 12 }} />
+                  <View style={styles.ethInfo}>
+                    <Text style={[styles.ethSymbol, { color: colors.textPrimary }]}>ETH</Text>
+                    <Text style={[styles.ethName, { color: colors.textSecondary }]}>Ethereum</Text>
+                  </View>
+                  <View style={styles.ethRight}>
+                    <Text style={[styles.ethValue, { color: colors.textMuted }]}>$0.00</Text>
+                    <Text style={[styles.ethAmount, { color: colors.textMuted }]}>0.00</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </>
+        ) : (
+          /* ── FUNDED STATE body ────────────────────────────────────────── */
+          <>
+            {/* YOUR ASSETS */}
+            {sortedTokens.length > 0 && (
+              <View style={styles.sectionWrapper}>
+                <View style={[styles.sectionCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Your Assets</Text>
+                    <TouchableOpacity onPress={() => navigation.navigate("Portfolio")} activeOpacity={0.7}>
+                      <Text style={[styles.seeAllLink, { color: colors.accent }]}>See all →</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <AssetList
+                    assets={sortedTokens.slice(0, 5)}
+                    predictedAddress={effectiveAddress}
+                    formatPrice={formatPrice}
+                    onAssetPress={handleAssetPress}
+                    change24hBySymbol={change24hBySymbol}
+                  />
+                </View>
+              </View>
+            )}
+
+            {/* RECENT ACTIVITY */}
+            <View style={styles.sectionWrapper}>
+              <View style={[styles.sectionCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Recent Activity</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate("TransactionHistory")} activeOpacity={0.7}>
+                    <Text style={[styles.seeAllLink, { color: colors.accent }]}>See all →</Text>
+                  </TouchableOpacity>
+                </View>
+                <ActivityFeed limit={3} />
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* ── Trending — ONE compact bottom shelf (spec §5.1 point 6) ──── */}
         <View style={styles.sectionWrapper}>
           <View style={[styles.sectionCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
-            <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>MARKET TRENDS</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Trending</Text>
+            </View>
             <MarketTrendsCarousel onTokenPress={handleAssetPress} />
-          </View>
-        </View>
-
-        {/* Recent Activity */}
-        <View style={styles.sectionWrapper}>
-          <View style={[styles.sectionCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
-            <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>RECENT ACTIVITY</Text>
-            <ActivityFeed limit={3} />
           </View>
         </View>
       </ScrollView>
@@ -305,7 +459,6 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
               {securityStatus.message}
             </Text>
 
-            {/* Passkey authority — the actual sign-ability check */}
             {!passkeyAuthority.loading && (() => {
               const desc = describePasskeyAuthority(passkeyAuthority.status);
               const bg =
@@ -319,7 +472,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
                 : desc.severity === "warn" ? colors.warning
                 : colors.accent;
               return (
-                <View style={{ backgroundColor: bg, padding: 10, borderRadius: 10, marginBottom: 12 }}>
+                <View style={{ backgroundColor: bg, padding: 10, borderRadius: 12, marginBottom: 12 }}>
                   <Text style={[styles.tooltipMessage, { color: fg, fontWeight: "700", marginBottom: 4 }]}>
                     {desc.title}
                   </Text>
@@ -330,7 +483,6 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
               );
             })()}
 
-            {/* Live on-chain readout */}
             {recoverySnapLoading && (
               <Text style={[styles.tooltipMessage, { color: colors.textMuted, fontStyle: "italic" }]}>
                 Reading on-chain state…
@@ -428,6 +580,8 @@ const createStyles = (colors: ThemeColors) =>
     scrollContent: {
       paddingTop: 8,
     },
+
+    // ── Slim header ────────────────────────────────────────────────────────
     header: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -436,26 +590,19 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 12,
       marginBottom: 4,
     },
-    headerKicker: {
-      fontSize: 10,
-      fontWeight: "700",
-      letterSpacing: 2,
-      color: colors.textMuted,
-    },
-    headerBrand: {
-      fontSize: 26,
-      fontWeight: "900",
-      letterSpacing: -0.5,
-      color: colors.textPrimary,
-      lineHeight: 30,
-    },
     headerLeft: {
       flex: 1,
-      gap: 4,
-    },
-    headerChainRow: {
       flexDirection: "row",
-      marginTop: 8,
+      alignItems: "center",
+      gap: 10,
+    },
+    // Small wordmark — replaces the big WALLET / TREZO ALL-CAPS block
+    headerWordmark: {
+      fontSize: 16,
+      fontWeight: "900",
+      letterSpacing: 2,
+      fontFamily: FontFamilies.sansBlack,
+      textTransform: "lowercase",
     },
     headerRight: {
       flexDirection: "row",
@@ -465,7 +612,8 @@ const createStyles = (colors: ThemeColors) =>
     headerBtn: {
       width: 42,
       height: 42,
-      borderRadius: 13,
+      // Spec §3: radius scale — 12 for chips/inputs
+      borderRadius: 12,
       justifyContent: "center",
       alignItems: "center",
       borderWidth: 1,
@@ -479,26 +627,116 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 4,
       borderWidth: 2,
     },
+
+    // ── Balance card ────────────────────────────────────────────────────────
     balanceWrapper: {
       marginHorizontal: 20,
       marginBottom: 20,
     },
+
+    // ── Section layout ──────────────────────────────────────────────────────
     sectionWrapper: {
       marginHorizontal: 20,
       marginBottom: 16,
     },
     sectionCard: {
-      borderRadius: 22,
+      // Spec §3: radius scale — 20 for glass-details / cards (was offending 22)
+      borderRadius: 20,
       paddingVertical: 18,
       paddingHorizontal: 20,
       borderWidth: 1,
     },
-    sectionLabel: {
-      fontSize: 11,
-      fontWeight: "700",
-      letterSpacing: 1.4,
+    sectionHeaderRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
       marginBottom: 14,
     },
+    sectionLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      letterSpacing: 0.3,
+    },
+    seeAllLink: {
+      fontSize: 13,
+      fontWeight: "600",
+    },
+
+    // ── Empty state — Fund Your Wallet card ─────────────────────────────────
+    fundCard: {
+      borderRadius: 20,
+      paddingVertical: 20,
+      paddingHorizontal: 20,
+      borderWidth: 1,
+      gap: 12,
+    },
+    fundIconBox: {
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+    },
+    fundTextBlock: {
+      gap: 4,
+    },
+    fundTitle: {
+      fontSize: 17,
+      fontWeight: "700",
+      letterSpacing: -0.2,
+    },
+    fundSubtitle: {
+      fontSize: 13,
+      fontWeight: "400",
+      lineHeight: 18,
+    },
+    fundCta: {
+      alignSelf: "flex-start",
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      borderRadius: 999,
+    },
+    fundCtaText: {
+      fontSize: 14,
+      fontWeight: "700",
+      letterSpacing: 0.3,
+    },
+
+    // ── Empty state — native ETH row ────────────────────────────────────────
+    ethRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 16,
+    },
+    ethInfo: {
+      flex: 1,
+      gap: 2,
+    },
+    ethSymbol: {
+      fontSize: 16,
+      fontWeight: "700",
+      letterSpacing: 0.5,
+    },
+    ethName: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    ethRight: {
+      alignItems: "flex-end",
+      gap: 2,
+    },
+    ethValue: {
+      fontSize: 16,
+      fontWeight: "700",
+      fontFamily: FontFamilies.mono,
+    },
+    ethAmount: {
+      fontSize: 12,
+      fontFamily: FontFamilies.mono,
+    },
+
+    // ── Security tooltip ────────────────────────────────────────────────────
     tooltipOverlay: {
       ...StyleSheet.absoluteFillObject,
       zIndex: 100,
@@ -509,6 +747,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     tooltipCard: {
       width: "100%",
+      // Spec §3: 20 for modals
       borderRadius: 20,
       padding: 22,
       borderWidth: 1,
@@ -531,7 +770,8 @@ const createStyles = (colors: ThemeColors) =>
     },
     tooltipBtn: {
       paddingVertical: 13,
-      borderRadius: 13,
+      // Spec §3: 999 for primary pill
+      borderRadius: 999,
       alignItems: "center",
       marginTop: 4,
     },

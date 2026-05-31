@@ -8,7 +8,9 @@ type Props = {
   onPress: (url: string) => void;
 };
 
-const ACCENT_PALETTE = ["#6C63FF", "#3DDC84", "#FF6B6B", "#F7C948", "#4FC3F7", "#FF7043"];
+// On-brand violet constants — no rainbow palette.
+const ICON_BG = "rgba(124,58,237,0.14)";
+const ICON_GLYPH = "#c4b5fd";
 
 function hostOf(url: string): string {
   try {
@@ -18,15 +20,15 @@ function hostOf(url: string): string {
   }
 }
 
-/** Real site favicon from DuckDuckGo, falling back to a colored letter badge. */
-function SiteIcon({ url, name, color }: { url: string; name: string; color: string }) {
+/** Real site favicon from DuckDuckGo, falling back to a violet letter badge. */
+function SiteIcon({ url, name }: { url: string; name: string }) {
   const [failed, setFailed] = useState(false);
   const host = hostOf(url);
 
   if (!host || failed) {
     return (
-      <View style={[styles.iconCircle, { backgroundColor: `${color}22` }]}>
-        <Text style={[styles.iconLetter, { color }]}>{name.charAt(0)}</Text>
+      <View style={[styles.iconCircle, { backgroundColor: ICON_BG }]}>
+        <Text style={[styles.iconLetter, { color: ICON_GLYPH }]}>{name.charAt(0)}</Text>
       </View>
     );
   }
@@ -51,26 +53,23 @@ export function TrendingSitesRow({ onPress }: Props) {
       keyExtractor={(item) => item.id}
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.list}
-      renderItem={({ item, index }) => {
-        const color = ACCENT_PALETTE[index % ACCENT_PALETTE.length];
-        return (
-          <Pressable
-            style={[
-              styles.card,
-              { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-            ]}
-            onPress={() => onPress(item.url)}
-          >
-            <SiteIcon url={item.url} name={item.name} color={color} />
-            <Text style={[styles.name, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-              {item.name}
-            </Text>
-            <Text style={[styles.category, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-              {item.category}
-            </Text>
-          </Pressable>
-        );
-      }}
+      renderItem={({ item }) => (
+        <Pressable
+          style={[
+            styles.card,
+            { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
+          ]}
+          onPress={() => onPress(item.url)}
+        >
+          <SiteIcon url={item.url} name={item.name} />
+          <Text style={[styles.name, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={[styles.category, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+            {item.category}
+          </Text>
+        </Pressable>
+      )}
     />
   );
 }
@@ -80,7 +79,7 @@ const styles = StyleSheet.create({
   card: {
     width: 90,
     padding: 10,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: "center",
     gap: 4,

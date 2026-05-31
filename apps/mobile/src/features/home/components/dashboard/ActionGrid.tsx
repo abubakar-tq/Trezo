@@ -14,19 +14,20 @@ export type QuickAction = {
 };
 
 export const quickActions: QuickAction[] = [
-  { key: 'buy', label: 'Buy', icon: 'plus-circle' },
-  { key: 'swap', label: 'Swap', icon: 'repeat' },
-  { key: 'send', label: 'Send', icon: 'arrow-up-right' },
   { key: 'receive', label: 'Receive', icon: 'arrow-down-left' },
+  { key: 'send', label: 'Send', icon: 'arrow-up-right' },
+  { key: 'swap', label: 'Swap', icon: 'repeat' },
+  { key: 'buy', label: 'Buy', icon: 'plus-circle' },
 ];
 
 interface ActionItemProps {
   action: QuickAction;
   onPress: (action: QuickAction) => void;
-  tint: string;
+  isPrimary: boolean;
+  isDisabled?: boolean;
 }
 
-const ActionItem: React.FC<ActionItemProps> = ({ action, onPress, tint }) => {
+const ActionItem: React.FC<ActionItemProps> = ({ action, onPress, isPrimary, isDisabled = false }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
   const scale = useSharedValue(1);
@@ -35,53 +36,120 @@ const ActionItem: React.FC<ActionItemProps> = ({ action, onPress, tint }) => {
     transform: [{ scale: scale.value }],
   }));
 
+  const handlePressIn = () => {
+    if (!isDisabled) scale.value = withSpring(0.88, SpringConfig.interaction);
+  };
+  const handlePressOut = () => {
+    scale.value = withSpring(1, SpringConfig.interaction);
+  };
+
+  if (isPrimary) {
+    // Filled violet pill — THE primary CTA (spec §4)
+    return (
+      <Pressable
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={() => !isDisabled && onPress(action)}
+        style={styles.item}
+        accessibilityRole="button"
+        accessibilityLabel={action.label}
+        disabled={isDisabled}
+      >
+        <Animated.View
+          style={[
+            styles.primaryPill,
+            {
+              backgroundColor: isDisabled ? colors.textMuted : colors.accent,
+              borderColor: isDisabled ? colors.border : colors.accent,
+            },
+            animatedStyle,
+          ]}
+        >
+          <Feather name={action.icon} size={20} color={colors.textOnAccent} strokeWidth={2} />
+        </Animated.View>
+        <Text style={[styles.label, { color: isDisabled ? colors.textMuted : colors.textPrimary }]}>
+          {action.label}
+        </Text>
+      </Pressable>
+    );
+  }
+
+  // Quiet/secondary — glass-tinted circle
   return (
     <Pressable
-      onPressIn={() => { scale.value = withSpring(0.88, SpringConfig.interaction); }}
-      onPressOut={() => { scale.value = withSpring(1, SpringConfig.interaction); }}
-      onPress={() => onPress(action)}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={() => !isDisabled && onPress(action)}
       style={styles.item}
+      accessibilityRole="button"
+      accessibilityLabel={action.label}
+      disabled={isDisabled}
     >
       <Animated.View
         style={[
-          styles.circle,
-          { backgroundColor: `${tint}18`, borderColor: `${tint}33` },
+          styles.secondaryCircle,
+          {
+            backgroundColor: isDisabled
+              ? `${colors.textMuted}10`
+              : `${colors.accent}14`,
+            borderColor: isDisabled
+              ? colors.border
+              : `${colors.accent}30`,
+            opacity: isDisabled ? 0.45 : 1,
+          },
           animatedStyle,
         ]}
       >
-        <Feather name={action.icon} size={20} color={tint} strokeWidth={2} />
+        <Feather
+          name={action.icon}
+          size={20}
+          color={isDisabled ? colors.textMuted : colors.accent}
+          strokeWidth={2}
+        />
       </Animated.View>
-      <Text style={[styles.label, { color: colors.textSecondary }]}>{action.label}</Text>
+      <Text style={[styles.label, { color: isDisabled ? colors.textMuted : colors.textSecondary }]}>
+        {action.label}
+      </Text>
     </Pressable>
   );
 };
 
 interface ActionGridProps {
   onActionPress: (action: QuickAction) => void;
+  /**
+   * When true (empty-state): Receive + Buy become primary,
+   * and Send + Swap are visually disabled (greyed, non-interactive).
+   */
+  isEmpty?: boolean;
 }
 
-export const ActionGrid: React.FC<ActionGridProps> = ({ onActionPress }) => {
-  const { theme } = useAppTheme();
-  const { colors } = theme;
-
-  const tints: Record<QuickActionKey, string> = {
-    buy: colors.success,
-    swap: colors.accent,
-    send: colors.accentAlt,
-    receive: colors.warning,
-    bridge: colors.textMuted,
+export const ActionGrid: React.FC<ActionGridProps> = ({ onActionPress, isEmpty = false }) => {
+  // Funded:  Receive primary, Send primary, Swap secondary, Buy secondary
+  // Empty:   Receive primary, Buy primary,  Send disabled,  Swap disabled
+  const getVariant = (key: QuickActionKey): { isPrimary: boolean; isDisabled: boolean } => {
+    if (isEmpty) {
+      if (key === 'receive' || key === 'buy') return { isPrimary: true, isDisabled: false };
+      return { isPrimary: false, isDisabled: true };
+    }
+    // Funded state
+    if (key === 'receive' || key === 'send') return { isPrimary: true, isDisabled: false };
+    return { isPrimary: false, isDisabled: false };
   };
 
   return (
     <View style={styles.row}>
-      {quickActions.map((action) => (
-        <ActionItem
-          key={action.key}
-          action={action}
-          onPress={onActionPress}
-          tint={tints[action.key]}
-        />
-      ))}
+      {quickActions.map((action) => {
+        const { isPrimary, isDisabled } = getVariant(action.key);
+        return (
+          <ActionItem
+            key={action.key}
+            action={action}
+            onPress={onActionPress}
+            isPrimary={isPrimary}
+            isDisabled={isDisabled}
+          />
+        );
+      })}
     </View>
   );
 };
@@ -97,10 +165,21 @@ const styles = StyleSheet.create({
     gap: 8,
     flex: 1,
   },
-  circle: {
+  // Spec §4: "Filled-violet full-pill = THE primary CTA"
+  primaryPill: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    // radius 999 = pill/circular (spec §3)
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 0,
+  },
+  // Secondary: subtle tinted circle
+  secondaryCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,

@@ -1,8 +1,9 @@
 import "react-native-gesture-handler";
 import "react-native-reanimated";
 import { StatusBar } from "expo-status-bar";
-import React from "react";
+import React, { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
 import "./src/integration/viem/polyfills";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -17,6 +18,8 @@ import { isSupabaseConfigured, supabaseConfigIssue } from "@lib/supabase";
 import { AppThemeProvider, useAppTheme } from "@theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./global.css";
+
+SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
@@ -38,6 +41,12 @@ const AppBootstrap: React.FC = () => {
   const isReady = useCachedResources();
   const { theme } = useAppTheme();
   useAppLock();
+
+  useEffect(() => {
+    if (isReady) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [isReady]);
 
   if (!isReady) {
     return (

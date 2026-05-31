@@ -22,7 +22,13 @@ export interface WalletDataState {
   ethBalance: number;
   tokens: MoralisToken[];
   totalBalanceUSD: number;
-  totalChange24h: number;
+  /**
+   * Removed: this field was hardcoded 0 and was never real data.
+   * Compute real 24h change at the call site by joining tokens to the
+   * market feed via computeTotalChange24h (see features/home/utils/portfolio24h.ts).
+   * @deprecated Do not use — use computeTotalChange24h instead.
+   */
+  totalChange24h: null;
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
@@ -106,7 +112,7 @@ export const useWalletData = (address?: string, _chain: string = "0x1"): WalletD
     ethBalance,
     tokens,
     totalBalanceUSD: totalUsd,
-    totalChange24h: 0,
+    totalChange24h: null,
     isLoading,
     isError: Boolean(error),
     error,
