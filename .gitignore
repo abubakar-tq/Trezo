@@ -129,6 +129,8 @@ docs/*
 !docs/plans/
 !docs/plans/**
 !docs/ARCHITECTURE.md
+# ...but local-only screenshots referenced by plans stay off the server.
+docs/plans/CoreScreenshots/
 
 # Foundry libraries
 contracts/lib/email-recovery/
