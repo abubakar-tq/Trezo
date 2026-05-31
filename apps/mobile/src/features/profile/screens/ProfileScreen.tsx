@@ -372,8 +372,8 @@ const ProfileScreen: React.FC = () => {
                     onPress={() => item.route && navigation.navigate(item.route as never)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.iconWrap, { backgroundColor: `${colors.accent}12` }]}>
-                      <Feather name={item.icon} size={17} color={colors.accent} />
+                    <View style={[styles.iconWrap, { backgroundColor: colors.glass, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderMuted }]}>
+                      <Feather name={item.icon} size={17} color={colors.textSecondary} />
                     </View>
                     <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{item.label}</Text>
                     {item.statusDot && (
