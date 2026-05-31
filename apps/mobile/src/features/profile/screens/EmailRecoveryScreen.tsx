@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -35,16 +34,9 @@ import * as Clipboard from "expo-clipboard";
 import { isValidEmail } from "@utils/validation";
 import { type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
-import { CardSkeleton, EmptyState, Skeleton, TextLineSkeleton } from "@shared/components/ui";
 
-// Flip to true to reveal diagnostics, vault key, and extra-security UI during development.
-const SHOW_ADVANCED_RECOVERY_UI = false;
-
-const shortenHex = (value: string | null | undefined, chars = 6) => {
-  if (!value) return "-";
-  if (value.length <= chars * 2 + 2) return value;
-  return `${value.slice(0, chars + 2)}...${value.slice(-chars)}`;
-};
+import EmailRecoverySetup from "./EmailRecoverySetup";
+import EmailRecoveryManage from "./EmailRecoveryManage";
 
 const EmailRecoveryScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
@@ -88,15 +80,16 @@ const EmailRecoveryScreen: React.FC = () => {
   const [guardianWeights, setGuardianWeights] = useState<string[]>(() =>
     Array(defaultGuardianCount).fill("1"),
   );
+  // Safety delay — exposed as tappable DELAY_CHOICES in Setup; converted to
+  // minutes for on-chain calls via Math.round(selectedDelaySeconds / 60).
+  const [selectedDelaySeconds, setSelectedDelaySeconds] = useState(172800);
   // EmailRecoveryManager enforces expiry - delay >= MINIMUM_RECOVERY_WINDOW
   // (= 2 days = 2880 minutes). Defaults give a 49-hour window above the floor.
-  const [delayMinutes, setDelayMinutes] = useState("60");
   const [expiryMinutes, setExpiryMinutes] = useState("2940");
   const [securityMode, setSecurityMode] =
     useState<EmailRecoverySecurityMode>("none");
-  // Force "none" unless the advanced UI flag is on, so the storage path
-  // stays valid and extra-security code paths can't fire in normal use.
-  const effectiveSecurityMode: EmailRecoverySecurityMode = SHOW_ADVANCED_RECOVERY_UI ? securityMode : "none";
+  // Force "none" — extra-security UI has been removed from the surface.
+  const effectiveSecurityMode: EmailRecoverySecurityMode = "none";
   const [overflowVisible, setOverflowVisible] = useState(false);
   const [vaultKeyInput, setVaultKeyInput] = useState("");
   const [hasVaultKey, setHasVaultKey] = useState(false);
@@ -122,6 +115,12 @@ const EmailRecoveryScreen: React.FC = () => {
   const [metadataWarning, setMetadataWarning] = useState<string | null>(null);
   const [checkingLocalSigner, setCheckingLocalSigner] = useState(true);
   const [canSignForWallet, setCanSignForWallet] = useState(false);
+
+  // delayMinutes derived from selectedDelaySeconds for on-chain use
+  const parsedDelayMinutes = useMemo(
+    () => Math.round(selectedDelaySeconds / 60),
+    [selectedDelaySeconds],
+  );
 
   const expectedGuardians = useMemo(
     () => Math.max(parseInt(guardianCountValue, 10) || 0, 0),
@@ -154,10 +153,6 @@ const EmailRecoveryScreen: React.FC = () => {
   const parsedThreshold = useMemo(
     () => Math.max(parseInt(thresholdValue, 10) || 0, 0),
     [thresholdValue],
-  );
-  const parsedDelayMinutes = useMemo(
-    () => Math.max(parseInt(delayMinutes, 10) || 0, 0),
-    [delayMinutes],
   );
   const parsedExpiryMinutes = useMemo(
     () => Math.max(parseInt(expiryMinutes, 10) || 0, 0),
@@ -327,9 +322,11 @@ const EmailRecoveryScreen: React.FC = () => {
         const guardianCount = Math.max(metadata.guardians.length, 1);
         setGuardianCountValue(String(guardianCount));
         setThresholdValue(String(metadata.config.threshold));
-        setDelayMinutes(
-          String(Math.max(Math.floor(metadata.config.delaySeconds / 60), 1)),
-        );
+        // Restore selected delay from stored metadata
+        const storedDelaySeconds = metadata.config.delaySeconds;
+        if (storedDelaySeconds > 0) {
+          setSelectedDelaySeconds(storedDelaySeconds);
+        }
         setExpiryMinutes(
           String(
             Math.max(Math.floor(metadata.config.expirySeconds / 60), 1),
@@ -1058,11 +1055,6 @@ const EmailRecoveryScreen: React.FC = () => {
         })();
       }
 
-      // Nudge the user to back up their Recovery Kit when extra-security mode
-      // is on. After a guardian recovery to a new device, the new device's
-      // SecureStore will not have the vault key — without the printed/saved
-      // Recovery Kit, guardian emails (and accountCodes) appear locked. See
-      // CONTEXT.md guidance on Email Recovery + vault key UX.
       Alert.alert(
         "Email Recovery Activated",
         "Your guardians will receive an invitation — they need to reply to confirm before recovery is active.",
@@ -1264,572 +1256,51 @@ const EmailRecoveryScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Screen intro — single line sets context without repeating in every card */}
-        <Text style={styles.screenIntro}>
-          Let trusted people help you regain access if you lose your device.
-        </Text>
-
-        {SHOW_ADVANCED_RECOVERY_UI && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Saved Recovery Metadata</Text>
-          <Text style={styles.cardDesc}>
-            Offchain metadata is persisted per wallet. Chain behavior remains
-            unchanged.
-          </Text>
-          {loadingStoredMetadata ? (
-            <View style={{ gap: 12 }}>
-              <Skeleton width="100%" height={60} borderRadius={16} />
-              <Skeleton width="100%" height={60} borderRadius={16} />
-              <Skeleton width="100%" height={60} borderRadius={16} />
-            </View>
-          ) : storedMetadata ? (
-            <>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Threshold</Text>
-                <Text style={styles.payloadValue}>
-                  {storedMetadata.config.threshold}
-                </Text>
-              </View>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Delay / Expiry (min)</Text>
-                <Text style={styles.payloadValue}>
-                  {Math.floor(storedMetadata.config.delaySeconds / 60)} /{" "}
-                  {Math.floor(storedMetadata.config.expirySeconds / 60)}
-                </Text>
-              </View>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Security mode</Text>
-                <Text style={styles.payloadValue}>
-                  {storedMetadata.config.securityMode === "extra"
-                    ? "Extra (encrypted)"
-                    : "Standard"}
-                </Text>
-              </View>
-              <Text style={styles.payloadSubLabel}>Masked Guardian Emails</Text>
-              {storedMetadata.guardians.map((guardian) => (
-                <View key={guardian.emailHash} style={styles.payloadRow}>
-                  <Text style={styles.payloadLabel}>
-                    {guardian.resolvedEmail ?? guardian.maskedEmail}
-                    {guardian.isLocked ? " (locked)" : ""}
-                  </Text>
-                  <Text style={styles.payloadValue}>
-                    weight {guardian.weight}
-                  </Text>
-                </View>
-              ))}
-              <Text style={styles.payloadSubLabel}>
-                Current Chain Install Status
-              </Text>
-              <Text style={styles.payloadValue}>
-                {storedMetadata.installations.find(
-                  (i) => i.chainId === Number(resolvedChainId),
-                )?.installStatus ?? "not_installed"}
-              </Text>
-              {storedMetadata.installations.find(
-                (i) => i.chainId === Number(resolvedChainId),
-              )?.installStatus !== "installed" && (
-                <Text style={styles.moduleHint}>
-                  Recovery not active on this chain. Install the module to
-                  activate it.
-                </Text>
-              )}
-            </>
-          ) : (
-            <EmptyState
-              icon="shield"
-              title="No Guardians Found"
-              description="Your wallet is currently unprotected by social recovery. Adding guardians ensures you can recover access if you lose your device."
-              actionLabel="Add your first guardian"
-              onAction={() => {
-                // Focus the guardian email input
-                setGuardianCountValue("1");
-              }}
-              style={{ marginTop: 10 }}
-            />
-          )}
-          {metadataWarning ? (
-            <Text style={styles.moduleError}>{metadataWarning}</Text>
-          ) : null}
-        </View>
+        {moduleInstalledState === null ? (
+          /* Checking module install status */
+          <View style={styles.card}>
+            <ActivityIndicator size="small" color={colors.accentAlt} />
+            <Text style={styles.cardDesc}>Checking your recovery setup…</Text>
+          </View>
+        ) : moduleInstalledState ? (
+          <EmailRecoveryManage
+            storedMetadata={storedMetadata}
+            loadingStoredMetadata={loadingStoredMetadata}
+            moduleError={moduleError}
+            resendingGuardianId={resendingGuardianId}
+            removingGuardianId={removingGuardianId}
+            onResendInvite={handleResendGuardianInvite}
+            onConfirmRemoveGuardian={confirmRemoveInstalledGuardian}
+            newPostInstallEmail={newPostInstallEmail}
+            onNewPostInstallEmailChange={setNewPostInstallEmail}
+            addingPostInstallGuardian={addingPostInstallGuardian}
+            onAddPostInstallGuardian={handleAddPostInstallGuardian}
+            visibleGuardianWeights={visibleGuardianWeights}
+            onWeightChange={handleWeightChange}
+          />
+        ) : (
+          <EmailRecoverySetup
+            guardianCountValue={guardianCountValue}
+            thresholdValue={thresholdValue}
+            visibleGuardianEmails={visibleGuardianEmails}
+            visibleGuardianWeights={visibleGuardianWeights}
+            hasDuplicateGuardians={hasDuplicateGuardians}
+            guardianValidationError={guardianValidationError}
+            onGuardianCountChange={handleGuardianCountChange}
+            onThresholdChange={setThresholdValue}
+            onGuardianEmailChange={handleGuardianEmailChange}
+            onWeightChange={handleWeightChange}
+            onDeleteGuardian={handleDeleteGuardian}
+            selectedDelaySeconds={selectedDelaySeconds}
+            onDelaySecondsChange={setSelectedDelaySeconds}
+            smartAccountReady={smartAccountReady}
+            canSubmitGuardianConfig={canSubmitGuardianConfig}
+            installingModule={installingModule}
+            moduleError={moduleError}
+            checkingModule={checkingModule}
+            onInstall={handleInstallModule}
+          />
         )}
-
-        {SHOW_ADVANCED_RECOVERY_UI && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Privacy & Recovery Kit</Text>
-          <Text style={styles.cardDesc}>
-            Standard mode stores masked guardian emails for easier recovery.
-            Extra mode encrypts guardian emails and requires your vault key on
-            each device.
-          </Text>
-
-          <View style={styles.inputRow}>
-            <TouchableOpacity
-              style={[
-                styles.modeButton,
-                securityMode === "none" ? styles.modeButtonActive : undefined,
-              ]}
-              onPress={() => setSecurityMode("none")}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.modeButtonText}>Standard</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.modeButton,
-                securityMode === "extra" ? styles.modeButtonActive : undefined,
-              ]}
-              onPress={() => setSecurityMode("extra")}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.modeButtonText}>Extra Security</Text>
-            </TouchableOpacity>
-          </View>
-
-          {effectiveSecurityMode === "extra" ? (
-            <>
-              <Text style={styles.moduleHint}>
-                Vault key on this device:{" "}
-                {hasVaultKey ? "Available" : "Not imported"}
-              </Text>
-
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={handleExportRecoveryKit}
-                activeOpacity={0.85}
-                disabled={!smartAccountAddress}
-              >
-                <Text style={styles.secondaryButtonText}>
-                  Export Recovery Kit (QR)
-                </Text>
-              </TouchableOpacity>
-
-              <TextInput
-                style={styles.textInput}
-                value={vaultKeyInput}
-                onChangeText={setVaultKeyInput}
-                placeholder="Paste vault key (Base64)"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={handleImportVaultKey}
-                activeOpacity={0.85}
-                disabled={!smartAccountAddress}
-              >
-                <Text style={styles.secondaryButtonText}>Import Vault Key</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <Text style={styles.moduleHint}>
-              Recovery key export/import is only required in Extra Security
-              mode.
-            </Text>
-          )}
-        </View>
-        )}
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Your Guardians</Text>
-
-          <View style={styles.inputRow}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Number of guardians</Text>
-              <TextInput
-                style={styles.numberInput}
-                value={guardianCountValue}
-                onChangeText={handleGuardianCountChange}
-                keyboardType="number-pad"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Threshold</Text>
-              <TextInput
-                style={styles.numberInput}
-                value={thresholdValue}
-                onChangeText={setThresholdValue}
-                keyboardType="number-pad"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-          </View>
-
-          {hasDuplicateGuardians && (
-            <Text style={[styles.summaryText, styles.summaryWarning]}>
-              Duplicate emails detected
-            </Text>
-          )}
-          {guardianValidationError ? (
-            <View style={styles.validationBox}>
-              <Text style={styles.validationText}>{guardianValidationError}</Text>
-            </View>
-          ) : null}
-
-          {visibleGuardianEmails.map((email, index) => (
-            <View key={`guardian-${index}`} style={styles.guardianRowContainer}>
-              <View style={styles.guardianRow}>
-                <View style={styles.guardianColumn}>
-                  <Text style={styles.inputLabel}>
-                    Guardian {index + 1}
-                  </Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value={email}
-                    onChangeText={(value) =>
-                      handleGuardianEmailChange(index, value)
-                    }
-                    placeholder="guardian@example.com"
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    textContentType="emailAddress"
-                  />
-                </View>
-                <View style={styles.weightColumn}>
-                  <TextInput
-                    style={[styles.numberInput, styles.weightInput]}
-                    value={visibleGuardianWeights[index] ?? "1"}
-                    onChangeText={(value) => handleWeightChange(index, value)}
-                    keyboardType="number-pad"
-                    placeholderTextColor={colors.textMuted}
-                    placeholder="wt"
-                  />
-                </View>
-              </View>
-
-              {/* Optional Delete Button */}
-              {visibleGuardianEmails.length > 1 && (
-                <TouchableOpacity
-                  style={styles.deleteGuardianButton}
-                  onPress={() => handleDeleteGuardian(index)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove guardian ${index + 1}`}
-                >
-                  <Feather
-                    name="trash-2"
-                    size={20}
-                    color={theme.colors.danger}
-                  />
-                </TouchableOpacity>
-              )}
-            </View>
-          ))}
-          {SHOW_ADVANCED_RECOVERY_UI && derivedGuardians.length > 0 && (
-            <View style={styles.payloadBox}>
-              <Text style={styles.payloadTitle}>
-                Derived Guardian Contracts
-              </Text>
-              {derivedGuardians.map(({ email, guardianAddress }) => (
-                <View key={email} style={styles.payloadRow}>
-                  <Text style={styles.payloadLabel}>{email}</Text>
-                  <Text style={styles.payloadValue}>
-                    {shortenHex(guardianAddress)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Timing</Text>
-          <View style={styles.inputRow}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Delay (min)</Text>
-              <TextInput
-                style={styles.numberInput}
-                value={delayMinutes}
-                onChangeText={setDelayMinutes}
-                keyboardType="number-pad"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Expiry (min)</Text>
-              <TextInput
-                style={styles.numberInput}
-                value={expiryMinutes}
-                onChangeText={setExpiryMinutes}
-                keyboardType="number-pad"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.moduleCard}>
-          {/* ── Header row: title + inline status (only when installed or checking) ── */}
-          <View style={styles.moduleHeader}>
-            <Text style={styles.cardTitle}>
-              {moduleInstalledState ? "Email Recovery" : "Activate Email Recovery"}
-            </Text>
-            {moduleInstalledState ? (
-              <View style={styles.statusChip}>
-                {checkingModule
-                  ? <ActivityIndicator size="small" color={colors.success} />
-                  : <Feather name="check-circle" size={14} color={colors.success} />
-                }
-                <Text style={[styles.statusChipText, { color: colors.success }]}>
-                  {checkingModule ? "Checking…" : "Active"}
-                </Text>
-              </View>
-            ) : checkingModule ? (
-              <ActivityIndicator size="small" color={colors.textMuted} />
-            ) : (
-              <TouchableOpacity
-                onPress={handleRefreshModuleStatus}
-                style={styles.refreshButton}
-                disabled={!smartAccountReady}
-              >
-                <Feather name="refresh-ccw" size={15} color={smartAccountReady ? colors.accentAlt : colors.textMuted} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {moduleError && <Text style={styles.moduleError}>{moduleError}</Text>}
-          {!smartAccountReady && (
-            <Text style={styles.moduleHint}>Set up your wallet before enabling email recovery.</Text>
-          )}
-          {guardianValidationError ? (
-            <Text style={styles.moduleError}>{guardianValidationError}</Text>
-          ) : null}
-          {SHOW_ADVANCED_RECOVERY_UI && lastUserOpHash && (
-            <View style={styles.hashRow}>
-              <Text style={styles.hashLabel}>UserOp Hash</Text>
-              <Text style={styles.hashValue}>{lastUserOpHash}</Text>
-            </View>
-          )}
-          {SHOW_ADVANCED_RECOVERY_UI && lastOperationHash && (
-            <View style={styles.hashRow}>
-              <Text style={styles.hashLabel}>Bundler Operation Hash</Text>
-              <Text style={styles.hashValue}>{lastOperationHash}</Text>
-            </View>
-          )}
-          {SHOW_ADVANCED_RECOVERY_UI && lastInstallPayload && (
-            <View style={styles.payloadBox}>
-              <Text style={styles.payloadTitle}>Latest Install Payload</Text>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Sender</Text>
-                <Text style={styles.payloadValue}>
-                  {shortenHex(lastInstallPayload.sender)}
-                </Text>
-              </View>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Nonce</Text>
-                <Text style={styles.payloadValue}>
-                  {String(lastInstallPayload.nonce)}
-                </Text>
-              </View>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Paymaster</Text>
-                <Text style={styles.payloadValue}>
-                  {lastInstallPayload.paymaster
-                    ? shortenHex(lastInstallPayload.paymaster)
-                    : "Not Sponsored"}
-                </Text>
-              </View>
-              <Text style={styles.payloadSubLabel}>Call Data</Text>
-              <Text style={styles.payloadCode}>
-                {shortenHex(lastInstallPayload.callData, 16)}
-              </Text>
-              <Text style={styles.payloadSubLabel}>Signature</Text>
-              <Text style={styles.payloadCode}>
-                {shortenHex(lastInstallPayload.signature, 20)}
-              </Text>
-            </View>
-          )}
-          {/* Only render the CTA when not yet installed — no point showing a disabled button */}
-          {!moduleInstalledState && (
-            <TouchableOpacity
-              style={[
-                styles.installButton,
-                (!smartAccountReady || !canSubmitGuardianConfig || installingModule) &&
-                  styles.installButtonDisabled,
-              ]}
-              disabled={!smartAccountReady || !canSubmitGuardianConfig || installingModule}
-              onPress={handleInstallModule}
-              activeOpacity={0.85}
-            >
-              {installingModule ? (
-                <ActivityIndicator size="small" color={colors.textOnAccent} />
-              ) : (
-                <Text style={styles.installButtonText}>Set up Email Recovery</Text>
-              )}
-            </TouchableOpacity>
-          )}
-
-          {SHOW_ADVANCED_RECOVERY_UI && (
-          <TouchableOpacity
-            style={[
-              styles.installButton,
-              styles.syncButton,
-              (!smartAccountReady || !canSubmitGuardianConfig || installingModule) &&
-                styles.installButtonDisabled,
-            ]}
-            disabled={!smartAccountReady || !canSubmitGuardianConfig || installingModule}
-            onPress={handleSaveToCloud}
-            activeOpacity={0.85}
-          >
-            {installingModule ? (
-              <ActivityIndicator size="small" color={colors.textOnAccent} />
-            ) : (
-              <Text style={styles.installButtonText}>
-                Save / Sync Cloud Metadata
-              </Text>
-            )}
-          </TouchableOpacity>
-          )}
-
-          {SHOW_ADVANCED_RECOVERY_UI && moduleInstalledState
-            && smartAccountReady
-            && effectiveSecurityMode === "extra"
-            && recoveryKitAcked === false ? (
-            <View style={styles.recoveryKitBanner}>
-              <View style={styles.recoveryKitBannerHeader}>
-                <Feather name="alert-triangle" size={20} color={colors.warning} />
-                <Text style={styles.recoveryKitBannerTitle}>
-                  Back up your Recovery Kit
-                </Text>
-              </View>
-              <Text style={styles.recoveryKitBannerBody}>
-                Email recovery is active on this device. If you ever recover to a new
-                device, you'll need this kit to read your guardian emails — without it
-                they appear locked.
-              </Text>
-              <View style={styles.recoveryKitBannerActions}>
-                <TouchableOpacity
-                  style={styles.recoveryKitBannerPrimary}
-                  onPress={() => void handleExportRecoveryKit()}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.recoveryKitBannerPrimaryText}>Back Up Now</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.recoveryKitBannerSecondary}
-                  onPress={() => void handleAcknowledgeRecoveryKit()}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.recoveryKitBannerSecondaryText}>
-                    I've backed it up
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
-
-          {moduleInstalledState && smartAccountReady && (
-            <View style={styles.guardianAcceptanceSection}>
-              {/* Summary line — counts confirmed guardians vs threshold */}
-              {storedMetadata && (
-                <View style={styles.acceptanceSummaryRow}>
-                  <Text style={styles.acceptanceSummaryText}>
-                    {storedMetadata.guardians.filter((g) => g.acceptanceStatus === "accepted").length} of {storedMetadata.guardians.length} confirmed
-                  </Text>
-                  <Text style={styles.acceptanceSummaryHint}>
-                    {storedMetadata.config.threshold} needed to recover
-                  </Text>
-                </View>
-              )}
-
-              {__DEV__ && (
-                <Text style={styles.moduleHint}>[DEV] Anvil: `make mock-accept-guardians-local`</Text>
-              )}
-
-              {storedMetadata ? (
-                <>
-                  {storedMetadata.guardians.map((guardian) => {
-                    const confirmed = guardian.acceptanceStatus === "accepted";
-                    return (
-                      <View key={guardian.emailHash} style={styles.guardianStatusRow}>
-                        <View style={styles.guardianInfo}>
-                          <Text style={styles.guardianEmailText}>
-                            {guardian.resolvedEmail ?? guardian.maskedEmail}
-                            {guardian.isLocked ? " (locked)" : ""}
-                          </Text>
-                          <Text style={[styles.guardianStatusLabel, { color: confirmed ? colors.success : colors.textMuted }]}>
-                            {confirmed ? "Confirmed" : "Invitation sent"}
-                          </Text>
-                        </View>
-                        {!confirmed && !guardian.isLocked && (
-                          <TouchableOpacity
-                            style={styles.iconBtn}
-                            onPress={() => void handleResendGuardianInvite(guardian.id, guardian.maskedEmail)}
-                            disabled={resendingGuardianId === guardian.id}
-                            accessibilityLabel={`Resend invite to ${guardian.maskedEmail}`}
-                          >
-                            {resendingGuardianId === guardian.id
-                              ? <ActivityIndicator size="small" color={colors.accentAlt} />
-                              : <Feather name="refresh-cw" size={17} color={colors.accentAlt} />
-                            }
-                          </TouchableOpacity>
-                        )}
-                        {!guardian.isLocked && (
-                          <TouchableOpacity
-                            style={styles.iconBtn}
-                            onPress={() => confirmRemoveInstalledGuardian(guardian.id, guardian.maskedEmail, guardian.normalizedEmailEncrypted)}
-                            disabled={removingGuardianId === guardian.id}
-                            accessibilityLabel={`Remove ${guardian.maskedEmail}`}
-                          >
-                            {removingGuardianId === guardian.id
-                              ? <ActivityIndicator size="small" color={colors.danger} />
-                              : <Feather name="trash-2" size={17} color={colors.danger} />
-                            }
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    );
-                  })}
-
-                  {/* Add another guardian */}
-                  <View style={styles.addGuardianSection}>
-                    <TextInput
-                      style={styles.addPostInstallInput}
-                      value={newPostInstallEmail}
-                      onChangeText={setNewPostInstallEmail}
-                      placeholder="Add guardian email…"
-                      placeholderTextColor={colors.textMuted}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      editable={!addingPostInstallGuardian}
-                    />
-                    <TouchableOpacity
-                      style={[styles.addGuardianBtn, (!newPostInstallEmail.trim() || addingPostInstallGuardian) && styles.installButtonDisabled]}
-                      onPress={() => void handleAddPostInstallGuardian()}
-                      disabled={addingPostInstallGuardian || !newPostInstallEmail.trim()}
-                      activeOpacity={0.85}
-                    >
-                      {addingPostInstallGuardian
-                        ? <ActivityIndicator size="small" color={colors.accentAlt} />
-                        : <Feather name="plus" size={16} color={colors.accentAlt} />
-                      }
-                      <Text style={styles.addGuardianBtnText}>
-                        {addingPostInstallGuardian ? "Adding…" : "Add guardian"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              ) : (
-                <ActivityIndicator size="small" color={colors.textMuted} />
-              )}
-
-              {/* ADR-0011: same-device recovery is testing-only */}
-              {__DEV__ && (
-                <TouchableOpacity
-                  style={[styles.installButton, styles.startRecoveryButton]}
-                  onPress={() => navigation.navigate("EmailRecoveryStart")}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.installButtonText}>Start Email Recovery</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </View>
       </ScrollView>
     </View>
   );
@@ -1856,12 +1327,6 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 17,
       fontWeight: "600",
     },
-    screenIntro: {
-      color: colors.textMuted,
-      fontSize: 14,
-      lineHeight: 20,
-      paddingHorizontal: 4,
-    },
     scrollView: {
       flex: 1,
     },
@@ -1870,37 +1335,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingBottom: 48,
       gap: 12,
     },
-    summaryText: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      fontWeight: "500",
-    },
-    summaryWarning: {
-      color: colors.warning,
-    },
-    validationBox: {
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: `${colors.warning}47`,
-      backgroundColor: `${colors.warning}1F`,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-    },
-    validationText: {
-      color: colors.warning,
-      fontSize: 12,
-      lineHeight: 18,
-      fontWeight: "600",
-    },
     card: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 18,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      padding: 18,
-      gap: 14,
-    },
-    moduleCard: {
       backgroundColor: colors.surfaceCard,
       borderRadius: 18,
       borderWidth: StyleSheet.hairlineWidth,
@@ -1918,173 +1353,16 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
       lineHeight: 18,
     },
-    inputRow: {
-      flexDirection: "row",
-      gap: 12,
-    },
-    inputGroup: {
-      flex: 1,
-      gap: 6,
-    },
-    inputLabel: {
-      color: colors.textMuted,
-      fontSize: 12,
-      fontWeight: "500",
-      marginLeft: 2,
-    },
-    statusChip: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 20,
-      backgroundColor: `${colors.success}15`,
-    },
-    statusChipText: {
-      fontSize: 12,
-      fontWeight: "600",
-    },
-    modeButton: {
-      flex: 1,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      paddingVertical: 12,
-      alignItems: "center",
-      backgroundColor: `${colors.textPrimary}0A`,
-    },
-    modeButtonActive: {
-      borderColor: colors.accentAlt,
-      backgroundColor: `${colors.accentAlt}24`,
-    },
-    modeButtonText: {
-      color: colors.textPrimary,
-      fontSize: 13,
-      fontWeight: "700",
-    },
-    numberInput: {
-      backgroundColor: `${colors.textPrimary}08`,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-      color: colors.textPrimary,
-      fontSize: 15,
-      fontWeight: "600",
-      textAlign: "center",
-    },
-    textInput: {
-      backgroundColor: `${colors.textPrimary}08`,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderMuted,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      color: colors.textPrimary,
-      fontSize: 15,
-    },
-    guardianRowContainer: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-    },
-    guardianRow: {
-      flex: 1,
-      flexDirection: "row",
-      gap: 8,
-      alignItems: "center",
-    },
-    deleteGuardianButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      justifyContent: "center",
-      alignItems: "center",
-      backgroundColor: `${colors.danger}12`,
-    },
-    guardianColumn: {
-      flex: 1,
-    },
-    weightColumn: {
-      width: 62,
-    },
-    weightInput: {
-      paddingHorizontal: 8,
-      fontSize: 14,
-    },
-    moduleHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    refreshButton: {
-      width: 28,
-      height: 28,
+    installButton: {
+      backgroundColor: colors.accentAlt,
       borderRadius: 14,
+      paddingVertical: 14,
       alignItems: "center",
-      justifyContent: "center",
     },
-    moduleError: {
-      color: colors.danger,
-      fontSize: 13,
-      lineHeight: 18,
-    },
-    moduleHint: {
-      color: colors.textMuted,
-      fontSize: 13,
-      lineHeight: 18,
-    },
-    hashRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      gap: 12,
-    },
-    hashLabel: {
-      color: colors.textMuted,
-      fontSize: 12,
+    installButtonText: {
+      color: colors.textOnAccent,
+      fontSize: 15,
       fontWeight: "600",
-    },
-    hashValue: {
-      color: colors.textSecondary,
-      fontSize: 12,
-      flex: 1,
-      textAlign: "right",
-    },
-    payloadBox: {
-      backgroundColor: `${colors.textPrimary}0A`,
-      borderRadius: 12,
-      padding: 12,
-      gap: 8,
-    },
-    payloadTitle: {
-      color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: "700",
-    },
-    payloadRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      gap: 8,
-    },
-    payloadLabel: {
-      color: colors.textMuted,
-      fontSize: 12,
-    },
-    payloadValue: {
-      color: colors.textSecondary,
-      fontSize: 12,
-    },
-    payloadSubLabel: {
-      color: colors.textMuted,
-      fontSize: 11,
-      marginTop: 4,
-    },
-    payloadCode: {
-      color: colors.textSecondary,
-      fontSize: 11,
-      fontFamily: "monospace",
     },
     secondaryButton: {
       borderWidth: 1,
@@ -2098,164 +1376,6 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.accentAlt,
       fontSize: 14,
       fontWeight: "700",
-    },
-    installButton: {
-      backgroundColor: colors.accentAlt,
-      borderRadius: 14,
-      paddingVertical: 14,
-      alignItems: "center",
-    },
-    installButtonDisabled: {
-      opacity: 0.45,
-    },
-    installButtonText: {
-      color: colors.textOnAccent,
-      fontSize: 15,
-      fontWeight: "600",
-    },
-    syncButton: {
-      marginTop: 8,
-    },
-    startRecoveryButton: {
-      marginTop: 8,
-      backgroundColor: colors.success,
-    },
-    recoveryKitBanner: {
-      backgroundColor: `${colors.warning}1A`,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: `${colors.warning}66`,
-      padding: 16,
-      gap: 10,
-    },
-    recoveryKitBannerHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-    },
-    recoveryKitBannerTitle: {
-      fontSize: 15,
-      fontWeight: "700",
-      color: colors.textPrimary,
-    },
-    recoveryKitBannerBody: {
-      fontSize: 13,
-      lineHeight: 18,
-      color: colors.textSecondary,
-    },
-    recoveryKitBannerActions: {
-      flexDirection: "row",
-      gap: 10,
-      marginTop: 4,
-    },
-    recoveryKitBannerPrimary: {
-      flex: 1,
-      backgroundColor: colors.warning,
-      borderRadius: 12,
-      paddingVertical: 10,
-      alignItems: "center",
-    },
-    recoveryKitBannerPrimaryText: {
-      color: colors.textOnAccent,
-      fontWeight: "700",
-      fontSize: 13,
-    },
-    recoveryKitBannerSecondary: {
-      flex: 1,
-      borderRadius: 12,
-      paddingVertical: 10,
-      alignItems: "center",
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    recoveryKitBannerSecondaryText: {
-      color: colors.textPrimary,
-      fontWeight: "600",
-      fontSize: 13,
-    },
-    guardianAcceptanceSection: {
-      gap: 2,
-    },
-    guardianStatusRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingVertical: 10,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.borderMuted,
-      gap: 8,
-    },
-    guardianInfo: {
-      flex: 1,
-      gap: 2,
-    },
-    guardianEmailText: {
-      color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: "500",
-    },
-    guardianStatusLabel: {
-      fontSize: 12,
-    },
-    iconBtn: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    acceptanceSummaryRow: {
-      flexDirection: "row",
-      alignItems: "baseline",
-      justifyContent: "space-between",
-      paddingBottom: 4,
-    },
-    acceptanceSummaryText: {
-      color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: "600",
-    },
-    acceptanceSummaryHint: {
-      color: colors.textMuted,
-      fontSize: 12,
-    },
-    addGuardianSection: {
-      marginTop: 4,
-      paddingTop: 14,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.borderMuted,
-      gap: 10,
-    },
-    addGuardianBtn: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      paddingVertical: 11,
-      paddingHorizontal: 14,
-      borderRadius: 12,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${colors.accentAlt}50`,
-      backgroundColor: `${colors.accentAlt}0E`,
-      alignSelf: "flex-start",
-    },
-    addGuardianBtnText: {
-      color: colors.accentAlt,
-      fontSize: 14,
-      fontWeight: "500",
-    },
-    addPostInstallInput: {
-      backgroundColor: `${colors.textPrimary}08`,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderMuted,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      color: colors.textPrimary,
-      fontSize: 15,
-    },
-    addPostInstallTitle: {
-      color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: "600",
     },
   });
 
