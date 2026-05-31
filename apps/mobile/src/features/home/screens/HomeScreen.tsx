@@ -38,6 +38,7 @@ import {
 import { useTabContentBottomInset } from "@hooks";
 import { useUserStore } from "../../../store/useUserStore";
 import { TokenDetailModal } from "../../portfolio/components/TokenDetailModal";
+import type { TokenDetailModalHandle } from "../../portfolio/components/TokenDetailModal";
 import type { TokenBalance } from "../../portfolio/services/PortfolioService";
 import {
   ActionGrid,
@@ -155,8 +156,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
     chainId: activeChainId as SupportedChainId | null | undefined,
   });
 
-  const [selectedToken, setSelectedToken] = React.useState<TokenBalance | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const tokenDetailRef = React.useRef<TokenDetailModalHandle>(null);
   const [securityTooltipVisible, setSecurityTooltipVisible] = useState(false);
 
   type RecoverySnapshot = {
@@ -204,8 +204,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   }, [securityTooltipVisible, effectiveAddress, activeChainId]);
 
   const handleAssetPress = (token: TokenBalance) => {
-    setSelectedToken(token);
-    setModalVisible(true);
+    tokenDetailRef.current?.open(token);
   };
 
   const getSecurityStatus = () => {
@@ -423,24 +422,20 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
         </View>
       </ScrollView>
 
-      {selectedToken && (
-        <TokenDetailModal
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          token={selectedToken}
-          onRequestSend={(t) =>
-            requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
-              navigation.navigate('Send', { tokenSymbol: t.symbol }),
-            )
-          }
-          onRequestReceive={() => requireProvisioned(isProvisioned, () => navigation.navigate('Receive'))}
-          onRequestSwap={(preselect) =>
-            requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
-              navigation.navigate('Dex', { initialTab: 'swap', preselect }),
-            )
-          }
-        />
-      )}
+      <TokenDetailModal
+        ref={tokenDetailRef}
+        onRequestSend={(t) =>
+          requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+            navigation.navigate('Send', { tokenSymbol: t.symbol }),
+          )
+        }
+        onRequestReceive={() => requireProvisioned(isProvisioned, () => navigation.navigate('Receive'))}
+        onRequestSwap={(preselect) =>
+          requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+            navigation.navigate('Dex', { initialTab: 'swap', preselect }),
+          )
+        }
+      />
 
       <ActivationSheet ref={activationSheetRef} />
       <SetUpWalletSheet ref={setUpRef} />

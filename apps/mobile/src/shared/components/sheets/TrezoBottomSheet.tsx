@@ -14,7 +14,7 @@ type Props = {
   snapPoints?: (string | number)[];
   children: React.ReactNode;
   onDismiss?: () => void;
-  /** Override the sheet panel color. Defaults to the (semi-transparent) surfaceCard token. */
+  /** Override the sheet panel color. Defaults to the (near-opaque) surfaceElevated token. */
   backgroundColor?: string;
 } & Pick<BottomSheetModalProps, "enableDynamicSizing" | "enablePanDownToClose">;
 
@@ -55,7 +55,7 @@ export const TrezoBottomSheet = forwardRef<BottomSheetModal, Props>(
         onDismiss={onDismiss}
         backdropComponent={renderBackdrop}
         backgroundStyle={{
-          backgroundColor: backgroundColor ?? theme.colors.surfaceCard,
+          backgroundColor: backgroundColor ?? theme.colors.surfaceElevated,
           borderTopLeftRadius: BorderRadius.xl,
           borderTopRightRadius: BorderRadius.xl,
         }}

@@ -30,6 +30,7 @@ import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
 import { useSetUpWalletSheet } from "@features/wallet/hooks/useSetUpWalletSheet";
 import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { TokenDetailModal } from "../components/TokenDetailModal";
+import type { TokenDetailModalHandle } from "../components/TokenDetailModal";
 import type { TokenBalance } from "../services/PortfolioService";
 import { usePortfolioSnapshots } from "../hooks/usePortfolioSnapshots";
 import { enabledPeriods, disabledPeriodMessage, valueChange } from "../utils/portfolioChart";
@@ -81,13 +82,11 @@ const PortfolioScreen: React.FC = () => {
   const { assets: marketAssets } = useMarketData(20);
 
   const [selectedPeriod, setSelectedPeriod] = useState<Period>("1W");
-  const [selectedToken, setSelectedToken] = useState<TokenBalance | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const tokenDetailRef = React.useRef<TokenDetailModalHandle>(null);
   const [touchedValue, setTouchedValue] = useState<number | null>(null);
 
   const handleAssetPress = (token: TokenBalance) => {
-    setSelectedToken(token);
-    setModalVisible(true);
+    tokenDetailRef.current?.open(token);
   };
 
   // Build displayTokens — change24h is NOT hardcoded; joined from market feed below
@@ -607,31 +606,23 @@ const PortfolioScreen: React.FC = () => {
         {renderPopularShelf()}
       </ScrollView>
 
-      {selectedToken && (
-        <TokenDetailModal
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          token={selectedToken}
-          onRequestSend={(t) =>
-            requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
-              navigation.navigate("Send", { tokenSymbol: t.symbol })
-            )
-          }
-          onRequestReceive={() =>
-            requireProvisioned(isProvisioned, () => navigation.navigate("Receive"))
-          }
-          onRequestSwap={(preselect) =>
-            requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
-              navigation.navigate("Dex", { initialTab: "swap", preselect })
-            )
-          }
-          onRequestBuy={
-            selectedToken?.symbol === "ETH"
-              ? () => requireProvisioned(isProvisioned, () => navigation.navigate("Buy"))
-              : undefined
-          }
-        />
-      )}
+      <TokenDetailModal
+        ref={tokenDetailRef}
+        onRequestSend={(t) =>
+          requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+            navigation.navigate("Send", { tokenSymbol: t.symbol })
+          )
+        }
+        onRequestReceive={() =>
+          requireProvisioned(isProvisioned, () => navigation.navigate("Receive"))
+        }
+        onRequestSwap={(preselect) =>
+          requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+            navigation.navigate("Dex", { initialTab: "swap", preselect })
+          )
+        }
+        onRequestBuy={() => requireProvisioned(isProvisioned, () => navigation.navigate("Buy"))}
+      />
 
       <ActivationSheet ref={activationSheetRef} />
       <SetUpWalletSheet ref={setUpRef} />

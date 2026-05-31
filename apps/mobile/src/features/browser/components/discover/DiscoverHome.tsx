@@ -19,6 +19,7 @@ import { NewsFeed } from "./NewsFeed";
 import { NewsService, type NewsItem } from "@services/news/NewsService";
 import { useMarketData } from "@hooks/useMarketData";
 import { TokenDetailModal } from "@features/portfolio/components/TokenDetailModal";
+import type { TokenDetailModalHandle } from "@features/portfolio/components/TokenDetailModal";
 import type { TokenBalance } from "@features/portfolio/services/PortfolioService";
 import type { TokenCategoryId } from "../../data/tokenCategories";
 
@@ -173,8 +174,7 @@ function MarketSection({ onTokenPress }: { onTokenPress: (t: TokenBalance) => vo
 export function DiscoverHome({ onSubmitSearch, onOpenTabs, onTokenPress, onSitePress }: Props) {
   const [category, setCategory] = useState<TokenCategoryId | null>(null);
   const [news, setNews] = useState<NewsItem[]>([]);
-  const [detailVisible, setDetailVisible] = useState(false);
-  const [selectedToken, setSelectedToken] = useState<TokenBalance | null>(null);
+  const tokenDetailRef = React.useRef<TokenDetailModalHandle>(null);
 
   useEffect(() => {
     let active = true;
@@ -187,8 +187,7 @@ export function DiscoverHome({ onSubmitSearch, onOpenTabs, onTokenPress, onSiteP
   }, []);
 
   function handleMarketTokenPress(token: TokenBalance) {
-    setSelectedToken(token);
-    setDetailVisible(true);
+    tokenDetailRef.current?.open(token);
   }
 
   return (
@@ -232,11 +231,7 @@ export function DiscoverHome({ onSubmitSearch, onOpenTabs, onTokenPress, onSiteP
       </ScrollView>
 
       {/* Token detail bottom-sheet — modal lives outside the ScrollView */}
-      <TokenDetailModal
-        visible={detailVisible}
-        onClose={() => setDetailVisible(false)}
-        token={selectedToken}
-      />
+      <TokenDetailModal ref={tokenDetailRef} />
     </>
   );
 }
