@@ -1,84 +1,257 @@
 import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
-import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-import PasskeyService from "@/src/features/wallet/services/PasskeyService";
-import { getRecoveryRequestService } from "@/src/features/wallet/services/RecoveryRequestService";
+import { EmailRecoveryService } from "@/src/features/wallet/services/EmailRecoveryService";
+import { SocialRecoveryService } from "@/src/features/wallet/services/SocialRecoveryService";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
+import type { Address } from "viem";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type MethodState = boolean | null; // true = on, false = off, null = checking
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+interface SegmentBarProps {
+  states: [MethodState, MethodState, MethodState];
+  colors: ThemeColors;
+}
+
+const SegmentBar: React.FC<SegmentBarProps> = ({ states, colors }) => {
+  const activeCount = states.filter((s) => s === true).length;
+  return (
+    <View style={{ gap: 10 }}>
+      <View style={{ flexDirection: "row", gap: 6 }}>
+        {states.map((s, i) => (
+          <View
+            key={i}
+            style={{
+              flex: 1,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: s === true ? colors.accent : colors.borderMuted,
+            }}
+          />
+        ))}
+      </View>
+      <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: "500" }}>
+        {activeCount} of 3 methods active
+      </Text>
+    </View>
+  );
+};
+
+interface StatusBadgeProps {
+  state: MethodState;
+  colors: ThemeColors;
+}
+
+const StatusBadge: React.FC<StatusBadgeProps> = ({ state, colors }) => {
+  if (state === null) {
+    return <ActivityIndicator size="small" color={colors.textMuted} />;
+  }
+  if (state === true) {
+    return (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+        <View
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: colors.textMuted,
+          }}
+        />
+      </View>
+    );
+  }
+  // off — amber "Set up"
+  return (
+    <Text style={{ color: colors.warning, fontSize: 13, fontWeight: "600" }}>
+      Set up
+    </Text>
+  );
+};
+
+interface MethodRowProps {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  description: string;
+  state: MethodState;
+  onPress: () => void;
+  isLast?: boolean;
+  colors: ThemeColors;
+  styles: ReturnType<typeof createStyles>;
+}
+
+const MethodRow: React.FC<MethodRowProps> = ({
+  icon,
+  label,
+  description,
+  state,
+  onPress,
+  isLast,
+  colors,
+  styles,
+}) => (
+  <>
+    <TouchableOpacity style={styles.optionRow} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.optionInfo}>
+        <View style={[styles.iconBadge, { backgroundColor: `${colors.accent}1A` }]}>
+          <Feather name={icon} size={20} color={colors.accent} />
+        </View>
+        <View style={styles.optionText}>
+          <Text style={styles.optionLabel}>{label}</Text>
+          <Text style={styles.optionDesc}>{description}</Text>
+        </View>
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <StatusBadge state={state} colors={colors} />
+        <Feather name="chevron-right" size={18} color={colors.textMuted} />
+      </View>
+    </TouchableOpacity>
+    {!isLast && <View style={styles.divider} />}
+  </>
+);
+
+interface ActivityRowProps {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  onPress: () => void;
+  isLast?: boolean;
+  colors: ThemeColors;
+  styles: ReturnType<typeof createStyles>;
+}
+
+const ActivityRow: React.FC<ActivityRowProps> = ({
+  icon,
+  label,
+  onPress,
+  isLast,
+  colors,
+  styles,
+}) => (
+  <>
+    <TouchableOpacity style={styles.optionRow} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.optionInfo}>
+        <View style={[styles.iconBadge, { backgroundColor: `${colors.accentAlt}1A` }]}>
+          <Feather name={icon} size={20} color={colors.accentAlt} />
+        </View>
+        <Text style={styles.optionLabel}>{label}</Text>
+      </View>
+      <Feather name="chevron-right" size={18} color={colors.textMuted} />
+    </TouchableOpacity>
+    {!isLast && <View style={styles.divider} />}
+  </>
+);
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 const BackupRecoveryScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
-  const user = useUserStore((state) => state.user);
-  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [openingGuardianRecovery, setOpeningGuardianRecovery] = useState(false);
 
-  const withTimeout = useCallback(async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
-    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(() => reject(new Error("Timed out")), timeoutMs);
-    });
+  const storedSmartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
+  const aaAccount = useWalletStore((state) => state.aaAccount);
+  const activeChainId = useWalletStore((state) => state.activeChainId);
 
-    try {
-      return await Promise.race([promise, timeoutPromise]);
-    } finally {
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
-      }
-    }
-  }, []);
+  const smartAccountAddress = useMemo<Address | undefined>(() => {
+    const addr = aaAccount?.predictedAddress ?? storedSmartAccountAddress ?? undefined;
+    return addr ? (addr as Address) : undefined;
+  }, [aaAccount?.predictedAddress, storedSmartAccountAddress]);
 
-  const handleGuardianRecoveryPress = useCallback(async () => {
-    if (openingGuardianRecovery) {
+  const isAccountDeployed = Boolean(aaAccount?.isDeployed ?? smartAccountDeployed ?? false);
+
+  const resolvedChainId = useMemo<SupportedChainId>(
+    () => (aaAccount?.chainId ?? activeChainId ?? DEFAULT_CHAIN_ID) as SupportedChainId,
+    [aaAccount?.chainId, activeChainId],
+  );
+
+  const smartAccountReady = Boolean(smartAccountAddress && isAccountDeployed);
+
+  // null = checking, true/false = known
+  const [guardiansOn, setGuardiansOn] = useState<MethodState>(null);
+  const [emailOn, setEmailOn] = useState<MethodState>(null);
+  // Linked devices: always on
+  const linkedDevicesOn: MethodState = true;
+
+  useEffect(() => {
+    if (!smartAccountReady || !smartAccountAddress) {
+      // Can't check — show null (unknown) rather than blocking nav
+      setGuardiansOn(null);
+      setEmailOn(null);
       return;
     }
 
-    setOpeningGuardianRecovery(true);
-    try {
-      if (!user?.id) {
-        navigation.navigate("RecoveryEntry");
-        return;
-      }
+    let cancelled = false;
 
-      const activeRequest = await withTimeout(
-        getRecoveryRequestService().getLatestActiveRecoveryRequestForUser(
-          user.id,
-          smartAccountAddress,
-        ),
-        4000,
+    const checkModules = async () => {
+      const [guardianResult, emailResult] = await Promise.allSettled([
+        SocialRecoveryService.isModuleInstalled(smartAccountAddress, resolvedChainId),
+        EmailRecoveryService.isModuleInstalled(smartAccountAddress, resolvedChainId),
+      ]);
+
+      if (cancelled) return;
+
+      setGuardiansOn(
+        guardianResult.status === "fulfilled" ? guardianResult.value : null,
       );
-      if (activeRequest) {
-        navigation.navigate("RecoveryProgress", { requestId: activeRequest.id });
-        return;
-      }
+      setEmailOn(
+        emailResult.status === "fulfilled" ? emailResult.value : null,
+      );
+    };
 
-      const localPasskey = await withTimeout(PasskeyService.getPasskey(user.id), 2500);
-      if (localPasskey?.credentialIdRaw) {
-        navigation.navigate("GuardianRecovery");
-        return;
-      }
+    void checkModules();
 
-      navigation.navigate("RecoveryEntry");
-    } catch {
-      navigation.navigate("RecoveryEntry");
-    } finally {
-      setOpeningGuardianRecovery(false);
-    }
-  }, [navigation, openingGuardianRecovery, smartAccountAddress, user?.id, withTimeout]);
+    return () => {
+      cancelled = true;
+    };
+  }, [smartAccountAddress, smartAccountReady, resolvedChainId]);
+
+  const activeCount = [guardiansOn, emailOn, linkedDevicesOn].filter(
+    (s) => s === true,
+  ).length;
+
+  const headline =
+    activeCount >= 2
+      ? "Your wallet is recoverable"
+      : activeCount === 1
+        ? "Improve your recovery coverage"
+        : "Set up recovery to protect your wallet";
+
+  const headlineColor =
+    activeCount >= 2 ? colors.textMuted : colors.warning;
+
+  const methodStates: [MethodState, MethodState, MethodState] = [
+    guardiansOn,
+    emailOn,
+    linkedDevicesOn,
+  ];
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Backup & Recovery</Text>
+        <Text style={styles.headerTitle}>Recovery & Backup</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -87,102 +260,72 @@ const BackupRecoveryScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>ACT AS A GUARDIAN</Text>
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.optionRow}
-              onPress={() => navigation.navigate("IncomingRecoveryApprovals")}
-              activeOpacity={0.85}
-            >
-              <View style={styles.optionInfo}>
-                <View
-                  style={[
-                    styles.iconBadge,
-                    { backgroundColor: `${colors.accent}26` },
-                  ]}
-                >
-                  <Feather name="inbox" size={20} color={colors.accent} />
-                </View>
-                <View style={styles.optionText}>
-                  <Text style={styles.optionLabel}>Guardian Inbox</Text>
-                  <Text style={styles.optionDesc}>
-                    Review and approve recovery requests where you are a guardian
-                  </Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={20} color={colors.textMuted} />
-            </TouchableOpacity>
-          </View>
+        {/* ── Summary card ──────────────────────────────────────────────── */}
+        <View style={styles.summaryCard}>
+          <SegmentBar states={methodStates} colors={colors} />
+          <Text style={[styles.headline, { color: headlineColor }]}>
+            {headline}
+          </Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>ONCHAIN RECOVERY</Text>
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.optionRow}
-              onPress={() => void handleGuardianRecoveryPress()}
-              activeOpacity={0.85}
-              disabled={openingGuardianRecovery}
-            >
-              <View style={styles.optionInfo}>
-                <View
-                  style={[
-                    styles.iconBadge,
-                    { backgroundColor: `${colors.accentAlt}26` },
-                  ]}
-                >
-                  <Feather name="shield" size={20} color={colors.accentAlt} />
-                </View>
-                <View style={styles.optionText}>
-                  <Text style={styles.optionLabel}>Guardian Recovery</Text>
-                  <Text style={styles.optionDesc}>
-                    {openingGuardianRecovery
-                      ? "Opening guardian recovery..."
-                      : "Start the on-chain guardian recovery flow"}
-                  </Text>
-                </View>
-              </View>
-              {openingGuardianRecovery ? (
-                <ActivityIndicator size="small" color={colors.accentAlt} />
-              ) : (
-                <Feather name="chevron-right" size={20} color={colors.textMuted} />
-              )}
-            </TouchableOpacity>
-          </View>
+        {/* ── Recovery Methods ──────────────────────────────────────────── */}
+        <Text style={styles.sectionHeader}>RECOVERY METHODS</Text>
+        <View style={styles.card}>
+          <MethodRow
+            icon="shield"
+            label="Guardians"
+            description="On-chain guardian recovery via social recovery module"
+            state={guardiansOn}
+            onPress={() => navigation.navigate("GuardianRecovery")}
+            colors={colors}
+            styles={styles}
+          />
+          <MethodRow
+            icon="mail"
+            label="Email Recovery"
+            description="Recover your wallet via trusted email guardians"
+            state={emailOn}
+            onPress={() => navigation.navigate("EmailRecovery")}
+            colors={colors}
+            styles={styles}
+          />
+          <MethodRow
+            icon="smartphone"
+            label="Linked Devices"
+            description="A paired device always provides recovery access"
+            state={linkedDevicesOn}
+            onPress={() => navigation.navigate("DevicesPasskeys")}
+            isLast
+            colors={colors}
+            styles={styles}
+          />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>OFFCHAIN RECOVERY</Text>
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.optionRow}
-              onPress={() => navigation.navigate("EmailRecovery")}
-              activeOpacity={0.85}
-            >
-              <View style={styles.optionInfo}>
-                <View
-                  style={[
-                    styles.iconBadge,
-                    { backgroundColor: `${colors.accentAlt}26` },
-                  ]}
-                >
-                  <Feather name="mail" size={20} color={colors.accentAlt} />
-                </View>
-                <View style={styles.optionText}>
-                  <Text style={styles.optionLabel}>Email Recovery</Text>
-                  <Text style={styles.optionDesc}>Set up email-based guardians</Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={20} color={colors.textMuted} />
-            </TouchableOpacity>
-          </View>
+        {/* ── Activity ──────────────────────────────────────────────────── */}
+        <Text style={[styles.sectionHeader, { marginTop: 28 }]}>ACTIVITY</Text>
+        <View style={styles.card}>
+          <ActivityRow
+            icon="clock"
+            label="Recovery Status"
+            onPress={() => navigation.navigate("IncomingRecoveryApprovals")}
+            colors={colors}
+            styles={styles}
+          />
+          <ActivityRow
+            icon="inbox"
+            label="Incoming Approvals"
+            onPress={() => navigation.navigate("IncomingRecoveryApprovals")}
+            isLast
+            colors={colors}
+            styles={styles}
+          />
         </View>
-
       </ScrollView>
     </View>
   );
 };
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
@@ -212,8 +355,18 @@ const createStyles = (colors: ThemeColors) =>
       padding: 20,
       paddingBottom: 40,
     },
-    section: {
+    summaryCard: {
+      backgroundColor: colors.surfaceCard,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.borderMuted,
+      padding: 20,
       marginBottom: 28,
+      gap: 12,
+    },
+    headline: {
+      fontSize: 15,
+      fontWeight: "600",
     },
     sectionHeader: {
       color: colors.textMuted,
@@ -263,6 +416,11 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.textMuted,
       fontSize: 13,
       marginTop: 3,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: colors.borderMuted,
+      marginHorizontal: 18,
     },
   });
 
