@@ -377,8 +377,8 @@ const GuardianRecoveryScreen: React.FC = () => {
       }
 
       const guardians = savedGuardianAddresses.map((address) => address as Address);
-      // TODO(TESTING): timelockSeconds is selectable for testing; fix to 86400 in production
-      const timelockSeconds = TIMELOCK_OPTIONS[selectedTimelockIdx]?.seconds ?? 86400;
+      // Timelock is fixed to 1 day in production; the __DEV__ picker only changes it for testing.
+      const timelockSeconds = __DEV__ ? (TIMELOCK_OPTIONS[selectedTimelockIdx]?.seconds ?? 86400) : 86400;
       const { userOp, userOpHash } = await SocialRecoveryService.buildInstallModuleUserOp({
         smartAccountAddress,
         guardians,
