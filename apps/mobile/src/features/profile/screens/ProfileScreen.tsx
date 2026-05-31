@@ -40,7 +40,7 @@ import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 
 const { width: SCREEN_W } = Dimensions.get("window");
-const HERO_H = 130;
+const HERO_H = 170;
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -490,9 +490,9 @@ const ProfileScreen: React.FC = () => {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     hero: {
-      paddingTop: 52,
-      paddingBottom: 20,
-      paddingHorizontal: 20,
+      paddingTop: 64,
+      paddingBottom: 32,
+      paddingHorizontal: 22,
       position: "relative",
       overflow: "hidden",
       backgroundColor: colors.background,
