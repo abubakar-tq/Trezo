@@ -158,12 +158,13 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    // Spec §3: circular icon containers → 999
+    borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 2,
   },
-  iconImg: { width: 36, height: 36, borderRadius: 18, marginBottom: 2 },
+  iconImg: { width: 36, height: 36, borderRadius: 999, marginBottom: 2 },
   iconLetter: { fontSize: 16, fontWeight: "700" },
   symbol: { fontSize: 12, fontWeight: "700" },
   price: { fontSize: 11, fontWeight: "500" },

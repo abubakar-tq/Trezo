@@ -65,7 +65,7 @@ const ActionItem: React.FC<ActionItemProps> = ({ action, onPress, isPrimary, isD
             animatedStyle,
           ]}
         >
-          <Feather name={action.icon} size={20} color="#F4F1EA" strokeWidth={2} />
+          <Feather name={action.icon} size={20} color={colors.textOnAccent} strokeWidth={2} />
         </Animated.View>
         <Text style={[styles.label, { color: isDisabled ? colors.textMuted : colors.textPrimary }]}>
           {action.label}

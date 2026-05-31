@@ -40,20 +40,9 @@ import { resolveNetworkKey, type SupportedChainId } from "@/src/integration/netw
 
 const { width } = Dimensions.get("window");
 
-// Allocation bar color palette — violet family tints, restrained on-brand.
-// One accent per screen; differentiate by tint/opacity, NOT a rainbow.
-const ALLOC_COLORS = [
-  "#7C3AED",       // accent violet
-  "#06B6D4",       // accentAlt cyan
-  "rgba(124, 58, 237, 0.45)", // violet muted
-  "rgba(6, 182, 212, 0.40)",  // cyan muted
-  "rgba(124, 58, 237, 0.25)", // violet faint
-  "rgba(142, 139, 133, 0.45)", // textSecondary-tinted
-];
-
-function allocColorAt(index: number): string {
-  return ALLOC_COLORS[index % ALLOC_COLORS.length];
-}
+// Allocation bar color palette is built from theme tokens inside the component
+// (allocColorAt is a closure over theme colors, not a module-level const).
+// Violet family only — no rainbow.
 
 const PERIODS: Period[] = ["1D", "1W", "1M", "1Y", "ALL"];
 
@@ -61,6 +50,19 @@ const PortfolioScreen: React.FC = () => {
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  // Allocation bar palette resolved from theme tokens — violet family, no rainbow.
+  const ALLOC_COLORS = useMemo(() => [
+    colors.accent,                          // primary violet
+    colors.accentAlt,                       // secondary cyan
+    `${colors.accent}72`,                   // violet muted
+    `${colors.accentAlt}66`,                // cyan muted
+    `${colors.accent}40`,                   // violet faint
+    "rgba(142, 139, 133, 0.45)",            // neutral tint (no token equivalent)
+  ], [colors]);
+
+  const allocColorAt = (index: number): string =>
+    ALLOC_COLORS[index % ALLOC_COLORS.length];
   const contentBottomInset = useTabContentBottomInset();
   const navigation = useNavigation<any>();
 
@@ -436,7 +438,7 @@ const PortfolioScreen: React.FC = () => {
               <View style={styles.holdingLeft}>
                 <TokenIcon symbol="ETH" size={44} style={{ borderRadius: 999 }} />
                 <View style={styles.holdingNameBlock}>
-                  <Text style={[styles.holdingSymbol, { color: styles.holdingSymbol.color }]}>ETH</Text>
+                  <Text style={[styles.holdingSymbol, { color: colors.textPrimary }]}>ETH</Text>
                   <Text style={[styles.holdingName, { color: colors.textSecondary }]}>Ethereum</Text>
                 </View>
               </View>
@@ -826,7 +828,7 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 15,
       fontWeight: "700",
       letterSpacing: 0.3,
-      color: "#F4F1EA", // textPrimary placeholder — overridden per row
+      color: colors.textPrimary,
     },
     holdingName: {
       fontSize: 12,
