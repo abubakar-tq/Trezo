@@ -238,6 +238,9 @@ export const ReceiveChainScreen: React.FC = () => {
               Send any token on {chain?.name ?? "this chain"} to this address.
             </Text>
 
+            {/* Spacer: absorbs dead space so Share button anchors consistently */}
+            <View style={styles.spacer} />
+
             {/* Share */}
             <Pressable
               onPress={handleShare}
@@ -388,6 +391,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 8,
   },
+  spacer: {
+    flex: 1,
+    minHeight: 8,
+    maxHeight: 40,
+    alignSelf: "stretch",
+  },
   shareBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -395,8 +404,7 @@ const styles = StyleSheet.create({
     gap: 10,
     width: "100%",
     height: 56,
-    borderRadius: 18,
-    marginTop: 4,
+    borderRadius: 20,
   },
   shareBtnText: {
     fontSize: 16,
