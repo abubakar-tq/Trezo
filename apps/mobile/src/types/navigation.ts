@@ -66,11 +66,8 @@ export type RootStackParamList = {
   AADebug: undefined;
   DeployAccount: undefined;
   DevCreateAccount: undefined;
-  SecurityPrivacy: undefined;
-  ConnectedDevices: undefined;
   Notifications: undefined;
   NotificationSettings: undefined;
-  Settings: undefined;
   AddGuardian: undefined;
   GuardianManagement: undefined;
   SecurityCenter: undefined;
