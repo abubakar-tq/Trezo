@@ -71,7 +71,7 @@ export class TestnetFulfillmentService {
     this.treasuryKey = Deno.env.get("TREASURY_PRIVATE_KEY") || "";
     this.isEnabled = Deno.env.get("TESTNET_DEMO_FULFILLMENT") === "true";
     // Hard cap per order so a verified order can never drain the treasury.
-    this.maxEth = Number(Deno.env.get("TESTNET_DEMO_MAX_ETH") || "0.01");
+    this.maxEth = Number(Deno.env.get("TESTNET_DEMO_MAX_ETH") || "0.025");
   }
 
   /** Chains this service knows how to fund. */

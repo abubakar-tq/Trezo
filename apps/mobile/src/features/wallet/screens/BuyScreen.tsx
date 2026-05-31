@@ -53,6 +53,14 @@ import { BuyAmountForm } from "../components/ramp/BuyAmountForm";
 import { OrderStatusCard } from "../components/ramp/OrderStatusCard";
 import { TransakWebViewModal } from "../components/ramp/TransakWebViewModal";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Testnet demo hard cap per purchase — must match the backend default in
+ * TestnetFulfillmentService (TESTNET_DEMO_MAX_ETH). Keep both in sync.
+ */
+const MAX_BUY_ETH = 0.025;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const TERMINAL_STATUSES = ["completed", "failed", "local_mock_completed", "expired", "refunded"] as const;
@@ -178,7 +186,9 @@ export const BuyScreen: React.FC = () => {
     };
   }, [transakNetwork, selectedChain?.environment, selectedChainId, selectedAsset.symbol]);
 
-  const QUICK_AMOUNTS = useMemo(() => ["30", "50", "100", "200"], []);
+  // Quick-amount chips are capped so none exceeds MAX_BUY_ETH at the $2 500/ETH
+  // rate used by estimateCrypto. Max spend = 0.025 × $2 500 = $62.50 USD.
+  const QUICK_AMOUNTS = useMemo(() => ["10", "25", "40", "60"], []);
 
   // Derived
   const fiatAmount = parseFloat(amount || "0");
@@ -189,7 +199,8 @@ export const BuyScreen: React.FC = () => {
   const displayAddress = targetAddress
     ? `${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)}`
     : "No wallet";
-  const isValidAmount = fiatAmount > 0;
+  const isOverCap = parseFloat(estimatedCrypto) > MAX_BUY_ETH;
+  const isValidAmount = fiatAmount > 0 && !isOverCap;
 
   // ── Polling ───────────────────────────────────────────────────────────────
   const stopPolling = useCallback(() => {
@@ -245,6 +256,16 @@ export const BuyScreen: React.FC = () => {
         "No Wallet Found",
         "Please go to the Wallet tab and create or import a wallet first.",
         [{ text: "OK" }]
+      );
+      return;
+    }
+
+    // Enforce testnet demo cap before hitting the backend — prevents silent
+    // infinite load when the user picks an amount above the treasury limit.
+    if (parseFloat(estimatedCrypto) > MAX_BUY_ETH) {
+      Alert.alert(
+        "Amount too high",
+        `The testnet demo caps purchases at ${MAX_BUY_ETH} ETH. Lower the amount and try again.`
       );
       return;
     }
@@ -426,6 +447,8 @@ export const BuyScreen: React.FC = () => {
               quickAmounts={QUICK_AMOUNTS}
               onQuickAmount={(v) => setAmount(v)}
               assetLoading={transakAssetsLoading}
+              maxHint={`Max ${MAX_BUY_ETH} ETH (~$${Math.floor(MAX_BUY_ETH * 2500)})`}
+              capError={isOverCap ? `Exceeds testnet cap of ${MAX_BUY_ETH} ETH. Lower your amount.` : undefined}
             />
           ) : (
             <OrderStatusCard
