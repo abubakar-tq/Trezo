@@ -41,6 +41,9 @@ export interface EmailRecoveryManageProps {
   // Advanced weights
   visibleGuardianWeights: string[];
   onWeightChange: (index: number, value: string) => void;
+
+  // Danger zone
+  onTurnOff: () => void;
 }
 
 const EmailRecoveryManage: React.FC<EmailRecoveryManageProps> = ({
@@ -57,6 +60,7 @@ const EmailRecoveryManage: React.FC<EmailRecoveryManageProps> = ({
   onAddPostInstallGuardian,
   visibleGuardianWeights,
   onWeightChange,
+  onTurnOff,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
@@ -256,6 +260,16 @@ const EmailRecoveryManage: React.FC<EmailRecoveryManageProps> = ({
         )}
       </View>
 
+      {/* ── Danger zone ── */}
+      <TouchableOpacity
+        style={styles.turnOffButton}
+        onPress={onTurnOff}
+        activeOpacity={0.85}
+        accessibilityLabel="Turn off Email Recovery"
+      >
+        <Text style={styles.turnOffButtonText}>Turn off Email Recovery</Text>
+      </TouchableOpacity>
+
       {/* ── Dev-only start recovery ── */}
       {__DEV__ && (
         <TouchableOpacity
@@ -448,6 +462,19 @@ const createStyles = (colors: ThemeColors) =>
     },
     installButtonText: {
       color: colors.textOnAccent,
+      fontSize: 15,
+      fontWeight: "600",
+    },
+    turnOffButton: {
+      borderWidth: 1,
+      borderColor: colors.danger,
+      borderRadius: 14,
+      paddingVertical: 14,
+      alignItems: "center",
+      backgroundColor: `${colors.danger}12`,
+    },
+    turnOffButtonText: {
+      color: colors.danger,
       fontSize: 15,
       fontWeight: "600",
     },

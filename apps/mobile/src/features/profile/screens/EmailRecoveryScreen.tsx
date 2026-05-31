@@ -25,6 +25,8 @@ import {
   type SupportedChainId,
 } from "@/src/integration/chains";
 import { getDefaultNetworkForChain } from "@/src/integration/networks";
+import { ABIS, buildSmartAccountExecutionUserOp, getDeployment } from "@/src/integration/viem";
+import { getBundlerUrl } from "@/src/core/network/chain";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
@@ -810,6 +812,85 @@ const EmailRecoveryScreen: React.FC = () => {
     setModuleStatusNonce((nonce) => nonce + 1);
   }, [smartAccountReady]);
 
+  /**
+   * Builds + signs + submits an `uninstallModule` UserOp on the SmartAccount,
+   * then marks the backend install record as "not_installed" and resets local
+   * UI state to show the Setup view. Called from the "Turn off Email Recovery"
+   * danger button in EmailRecoveryManage.
+   */
+  const handleTurnOffEmailRecovery = useCallback(() => {
+    Alert.alert(
+      "Turn off Email Recovery?",
+      "This will remove the email recovery module from your wallet. Your guardians won't be able to help you recover access. You can turn it back on at any time.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Turn Off",
+          style: "destructive",
+          onPress: async () => {
+            if (!user?.id || !smartAccountAddress || !storedMetadata?.config?.id) return;
+            const passkey = await PasskeyService.getPasskey(user.id);
+            if (!passkey) {
+              Alert.alert("Passkey Required", "Cannot find a passkey on this device.");
+              return;
+            }
+            setInstallingModule(true);
+            setModuleError(null);
+            try {
+              const { encodeFunctionData } = await import("viem");
+              const deployment = getDeployment(resolvedChainId);
+              if (!deployment?.emailRecovery) {
+                throw new Error(`No Email Recovery module configured for chain ${resolvedChainId}`);
+              }
+              // ERC-7579 executor module type = 2
+              const uninstallCalldata = encodeFunctionData({
+                abi: ABIS.smartAccount,
+                functionName: "uninstallModule",
+                args: [2n, deployment.emailRecovery as Address, "0x"],
+              });
+              const bundlerUrl = getBundlerUrl(resolvedChainId);
+              const { userOp, userOpHash } = await buildSmartAccountExecutionUserOp({
+                smartAccountAddress,
+                target: smartAccountAddress,
+                value: 0n,
+                data: uninstallCalldata,
+                passkeyId: passkey.credentialIdRaw as Hex,
+                chainId: resolvedChainId,
+                bundlerUrl,
+                usePaymaster: true,
+              });
+              const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
+              const encodedSignature = PasskeyService.encodeSignatureForContract(signature) as Hex;
+              const signedUserOp = { ...userOp, signature: encodedSignature };
+              await EmailRecoveryService.submitInstallModuleUserOp({
+                signedUserOp,
+                chainId: resolvedChainId,
+              });
+              await EmailRecoveryService.syncCurrentChainInstallStatus({
+                configId: storedMetadata.config.id,
+                chainId: resolvedChainId,
+                installStatus: "not_installed",
+              });
+              setModuleInstalledState(false);
+              setStoredMetadata(null);
+              Alert.alert(
+                "Email Recovery Turned Off",
+                "The email recovery module has been removed from your wallet.",
+              );
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Could not turn off email recovery.";
+              console.warn("[EmailRecovery] uninstall failed", err);
+              setModuleError("Couldn't turn off email recovery — please try again.");
+              Alert.alert("Turn Off Failed", msg);
+            } finally {
+              setInstallingModule(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [user?.id, smartAccountAddress, storedMetadata?.config?.id, resolvedChainId]);
+
   const parseGuardianWeights = useCallback((): bigint[] => {
     return visibleGuardianWeights.map((weight, index) => {
       const parsed = parseInt(weight, 10) || 0;
@@ -1277,19 +1358,18 @@ const EmailRecoveryScreen: React.FC = () => {
             onAddPostInstallGuardian={handleAddPostInstallGuardian}
             visibleGuardianWeights={visibleGuardianWeights}
             onWeightChange={handleWeightChange}
+            onTurnOff={handleTurnOffEmailRecovery}
           />
         ) : (
           <EmailRecoverySetup
             guardianCountValue={guardianCountValue}
             thresholdValue={thresholdValue}
             visibleGuardianEmails={visibleGuardianEmails}
-            visibleGuardianWeights={visibleGuardianWeights}
             hasDuplicateGuardians={hasDuplicateGuardians}
             guardianValidationError={guardianValidationError}
             onGuardianCountChange={handleGuardianCountChange}
             onThresholdChange={setThresholdValue}
             onGuardianEmailChange={handleGuardianEmailChange}
-            onWeightChange={handleWeightChange}
             onDeleteGuardian={handleDeleteGuardian}
             selectedDelaySeconds={selectedDelaySeconds}
             onDelaySecondsChange={setSelectedDelaySeconds}

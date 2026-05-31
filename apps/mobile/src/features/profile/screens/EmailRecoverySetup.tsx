@@ -19,13 +19,11 @@ export interface EmailRecoverySetupProps {
   guardianCountValue: string;
   thresholdValue: string;
   visibleGuardianEmails: string[];
-  visibleGuardianWeights: string[];
   hasDuplicateGuardians: boolean;
   guardianValidationError: string | null;
   onGuardianCountChange: (value: string) => void;
   onThresholdChange: (value: string) => void;
   onGuardianEmailChange: (index: number, value: string) => void;
-  onWeightChange: (index: number, value: string) => void;
   onDeleteGuardian: (index: number) => void;
 
   // Delay selection
@@ -45,13 +43,11 @@ const EmailRecoverySetup: React.FC<EmailRecoverySetupProps> = ({
   guardianCountValue,
   thresholdValue,
   visibleGuardianEmails,
-  visibleGuardianWeights,
   hasDuplicateGuardians,
   guardianValidationError,
   onGuardianCountChange,
   onThresholdChange,
   onGuardianEmailChange,
-  onWeightChange,
   onDeleteGuardian,
   selectedDelaySeconds,
   onDelaySecondsChange,
