@@ -257,13 +257,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 16,
-    minHeight: 80,
+    paddingVertical: 12,
+    minHeight: 64,
   },
   itemLeft: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 0.65,
+    flex: 1,
     gap: 16,
   },
   textContainer: {
@@ -290,11 +290,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   itemRight: {
-    flex: 0.35,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 12,
+    flexShrink: 0,
+    paddingLeft: 12,
   },
   amountText: {
     fontSize: 16,
