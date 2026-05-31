@@ -458,6 +458,14 @@ export const DexScreen: React.FC = () => {
           throw new Error("Sell amount must be greater than zero.");
         }
 
+        if (sellAmountRaw > sellTokenBalanceRaw) {
+          setQuote(null);
+          setApprovalRequired(false);
+          setUiState("idle");
+          setErrorState(classify(new Error("Insufficient balance.")));
+          return;
+        }
+
         const nextQuote = await SwapQuoteService.getQuote({
           networkKey,
           chainId: selectedChainId,
@@ -500,7 +508,7 @@ export const DexScreen: React.FC = () => {
       cancelled = true;
       clearTimeout(debounce);
     };
-  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, effectiveSlippageBps, walletAddress, retryNonce, swapSupported]);
+  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, effectiveSlippageBps, walletAddress, retryNonce, swapSupported, sellTokenBalanceRaw]);
 
   // ── Bridge: auto-pick first available destination when source changes ──────
   useEffect(() => {
@@ -551,6 +559,12 @@ export const DexScreen: React.FC = () => {
           throw new Error("Bridge amount must be greater than zero.");
         }
 
+        if (inputAmountRaw > sellTokenBalanceRaw) {
+          setBridgeQuote(null);
+          setErrorState(classify(new Error("Insufficient balance.")));
+          return;
+        }
+
         const q = await BridgeQuoteService.getQuote({
           sourceNetworkKey: networkKey,
           sourceChainId: selectedChainId,
@@ -590,7 +604,7 @@ export const DexScreen: React.FC = () => {
   }, [
     activeTab, bridgeReady, walletAddress, sellToken, sellAmountDecimal,
     bridgeDestNetworkKey, networkKey, selectedChainId, retryNonce,
-    effectiveBridgeOutputToken, effectiveSlippageBps, destWalletAddress,
+    effectiveBridgeOutputToken, effectiveSlippageBps, destWalletAddress, sellTokenBalanceRaw,
   ]);
 
   // Eagerly resolve the destination-chain wallet address so the bridge UI
@@ -774,8 +788,9 @@ export const DexScreen: React.FC = () => {
     }
     setErrorState(null);
     setBridgeBusy(true);
+    let plan: BridgePlan | null = null;
     try {
-      const plan = await BridgePreparationService.prepareBridge(intent);
+      plan = await BridgePreparationService.prepareBridge(intent);
       setBridgePlan(plan);
     } catch (error) {
       setBridgePlan(null);
@@ -785,13 +800,15 @@ export const DexScreen: React.FC = () => {
       } else {
         setErrorState(c);
       }
-    } finally {
       setBridgeBusy(false);
+      return;
     }
+    // Pass plan directly to avoid stale state — state setter is async
+    await handleConfirmBridge(plan);
   };
 
-  const handleConfirmBridge = async () => {
-    const plan = bridgePlan;
+  const handleConfirmBridge = async (planArg?: BridgePlan) => {
+    const plan = planArg ?? bridgePlan;
     if (!plan || !user?.id) {
       setErrorState(classify(new Error("Missing user, wallet, or token context for bridge.")));
       return;
@@ -1002,8 +1019,9 @@ export const DexScreen: React.FC = () => {
     setErrorState(null);
     setUiState("validating");
 
+    let plan: SwapPlan | null = null;
     try {
-      const plan = await SwapPreparationService.prepareSwap(intent);
+      plan = await SwapPreparationService.prepareSwap(intent);
       setPreparedPlan(plan);
       setUiState(plan.approvalRequired ? "approval_required" : "quote_ready");
     } catch (error) {
@@ -1015,11 +1033,14 @@ export const DexScreen: React.FC = () => {
       } else {
         setErrorState(c);
       }
+      return;
     }
+    // Pass plan directly to avoid stale state — state setter is async
+    await handleConfirmSwap(plan);
   };
 
-  const handleConfirmSwap = async () => {
-    const plan = preparedPlan;
+  const handleConfirmSwap = async (planArg?: SwapPlan) => {
+    const plan = planArg ?? preparedPlan;
     if (!plan || !user?.id) {
       setErrorState(classify(new Error("Missing user or wallet context for swap.")));
       return;
@@ -1191,7 +1212,6 @@ export const DexScreen: React.FC = () => {
       && sellAmountDecimal.trim().length > 0
       && quoteReady,
   );
-  const canExecute = Boolean(preparedPlan);
 
   // ── Quote freshness countdown ─────────────────────────────────────────────
   const [nowMs, setNowMs] = useState<number>(Date.now());
@@ -1297,12 +1317,23 @@ export const DexScreen: React.FC = () => {
                   <View style={styles.swapSide}>
                     <View style={styles.swapSideTopRow}>
                       <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You send</Text>
-                      <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
-                        {"Bal: "}
-                        <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
-                          {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
+                      <View style={styles.balanceRow}>
+                        <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
+                          {"Bal: "}
+                          <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+                            {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
+                          </Text>
                         </Text>
-                      </Text>
+                        {sellTokenBalanceRaw > 0n && (
+                          <TouchableOpacity
+                            onPress={() => setSellAmountDecimal(sellTokenBalanceDisplay)}
+                            style={[styles.maxBtn, { backgroundColor: `${colors.accent}1F`, borderColor: `${colors.accent}59` }]}
+                            hitSlop={8}
+                          >
+                            <Text style={[styles.maxBtnText, { color: colors.accent }]}>MAX</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
                     <View style={styles.swapSideRow}>
                       <TouchableOpacity
@@ -1538,49 +1569,28 @@ export const DexScreen: React.FC = () => {
                   ) : null}
                 </View>
 
-                {/* Bridge CTA buttons */}
-                {!bridgePlan && (
-                  <TouchableOpacity
-                    style={[
-                      styles.primaryBtn,
-                      {
-                        backgroundColor: colors.accent,
-                        opacity:
-                          bridgeQuote && !bridgeBusy && destWalletAddress && !destWalletLookupError
-                            ? 1
-                            : 0.38,
-                      },
-                    ]}
-                    onPress={handleReviewBridge}
-                    disabled={!bridgeQuote || bridgeBusy || !destWalletAddress || !!destWalletLookupError}
-                  >
-                    {bridgeBusy ? (
-                      <ActivityIndicator size="small" color={colors.textOnAccent} />
-                    ) : (
-                      <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>Review Bridge</Text>
-                    )}
-                  </TouchableOpacity>
-                )}
+                {/* Bridge CTA button */}
+                <TouchableOpacity
+                  style={[
+                    styles.primaryBtn,
+                    {
+                      backgroundColor: colors.accent,
+                      opacity:
+                        bridgeQuote && !bridgeBusy && destWalletAddress && !destWalletLookupError
+                          ? 1
+                          : 0.38,
+                    },
+                  ]}
+                  onPress={handleReviewBridge}
+                  disabled={!bridgeQuote || bridgeBusy || !destWalletAddress || !!destWalletLookupError}
+                >
+                  {bridgeBusy ? (
+                    <ActivityIndicator size="small" color={colors.textOnAccent} />
+                  ) : (
+                    <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>Review Bridge</Text>
+                  )}
+                </TouchableOpacity>
 
-                {bridgePlan && (
-                  <TouchableOpacity
-                    style={[
-                      styles.secondaryBtn,
-                      { backgroundColor: colors.glass, borderColor: colors.border, opacity: bridgeBusy ? 0.38 : 1 },
-                    ]}
-                    onPress={handleConfirmBridge}
-                    disabled={bridgeBusy}
-                  >
-                    {bridgeBusy ? (
-                      <ActivityIndicator size="small" color={colors.textPrimary} />
-                    ) : (
-                      <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>
-                        Confirm & Bridge
-                        {bridgePlan.approvalRequired ? " (approve + deposit)" : ""}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                )}
               </>
             )}
           </>
@@ -1594,12 +1604,23 @@ export const DexScreen: React.FC = () => {
           <View style={styles.swapSide}>
             <View style={styles.swapSideTopRow}>
               <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You pay</Text>
-              <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
-                {"Bal: "}
-                <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
-                  {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
+              <View style={styles.balanceRow}>
+                <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
+                  {"Bal: "}
+                  <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+                    {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
+                  </Text>
                 </Text>
-              </Text>
+                {sellTokenBalanceRaw > 0n && (
+                  <TouchableOpacity
+                    onPress={() => setSellAmountDecimal(sellTokenBalanceDisplay)}
+                    style={[styles.maxBtn, { backgroundColor: `${colors.accent}1F`, borderColor: `${colors.accent}59` }]}
+                    hitSlop={8}
+                  >
+                    <Text style={[styles.maxBtnText, { color: colors.accent }]}>MAX</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
             <View style={styles.swapSideRow}>
               <TouchableOpacity
@@ -1848,14 +1869,6 @@ export const DexScreen: React.FC = () => {
           )}
         </TouchableOpacity>
 
-        {canExecute && (
-          <TouchableOpacity
-            style={[styles.secondaryBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
-            onPress={handleConfirmSwap}
-          >
-            <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Confirm & Execute</Text>
-          </TouchableOpacity>
-        )}
         </>
         )}
       </ScrollView>
@@ -1992,6 +2005,22 @@ const createStyles = (colors: ThemeColors) =>
     balanceHint: {
       fontSize: 12,
       fontWeight: "500",
+    },
+    balanceRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    maxBtn: {
+      borderRadius: 6,
+      borderWidth: 1,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    maxBtnText: {
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.5,
     },
     swapSideRow: {
       flexDirection: "row",
