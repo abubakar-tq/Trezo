@@ -25,8 +25,6 @@ import {
   type SupportedChainId,
 } from "@/src/integration/chains";
 import { getDefaultNetworkForChain } from "@/src/integration/networks";
-import { ABIS, buildSmartAccountExecutionUserOp, getDeployment } from "@/src/integration/viem";
-import { getBundlerUrl } from "@/src/core/network/chain";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
@@ -837,26 +835,10 @@ const EmailRecoveryScreen: React.FC = () => {
             setInstallingModule(true);
             setModuleError(null);
             try {
-              const { encodeFunctionData } = await import("viem");
-              const deployment = getDeployment(resolvedChainId);
-              if (!deployment?.emailRecovery) {
-                throw new Error(`No Email Recovery module configured for chain ${resolvedChainId}`);
-              }
-              // ERC-7579 executor module type = 2
-              const uninstallCalldata = encodeFunctionData({
-                abi: ABIS.smartAccount,
-                functionName: "uninstallModule",
-                args: [2n, deployment.emailRecovery as Address, "0x"],
-              });
-              const bundlerUrl = getBundlerUrl(resolvedChainId);
-              const { userOp, userOpHash } = await buildSmartAccountExecutionUserOp({
+              const { userOp, userOpHash } = await EmailRecoveryService.buildUninstallModuleUserOp({
                 smartAccountAddress,
-                target: smartAccountAddress,
-                value: 0n,
-                data: uninstallCalldata,
                 passkeyId: passkey.credentialIdRaw as Hex,
                 chainId: resolvedChainId,
-                bundlerUrl,
                 usePaymaster: true,
               });
               const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
