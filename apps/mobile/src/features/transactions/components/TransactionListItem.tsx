@@ -106,36 +106,38 @@ export const TransactionListItem: React.FC<{
       ]}
       onPress={() => onPress?.(transaction)}
     >
-      {/* Direction icon bubble */}
-      <View
-        style={[
-          styles.iconWrap,
-          {
-            backgroundColor: `${iconTint}1F`,
-            borderColor: `${iconTint}3D`,
-          },
-        ]}
-      >
-        <Feather name={getDirectionIcon(transaction)} size={15} color={iconTint} />
+      {/* Left group: icon bubble + text column */}
+      <View style={styles.leftGroup}>
+        <View
+          style={[
+            styles.iconWrap,
+            {
+              backgroundColor: `${iconTint}1F`,
+              borderColor: `${iconTint}3D`,
+            },
+          ]}
+        >
+          <Feather name={getDirectionIcon(transaction)} size={15} color={iconTint} />
+        </View>
+
+        {/* Label + meta */}
+        <View style={styles.textWrap}>
+          <Text
+            style={[styles.label, { color: colors.textPrimary }]}
+            numberOfLines={1}
+          >
+            {primaryLabel}
+          </Text>
+          <Text
+            style={[styles.meta, { color: colors.textMuted }]}
+            numberOfLines={1}
+          >
+            {chainName} · {relativeTime(transaction.createdAt)}
+          </Text>
+        </View>
       </View>
 
-      {/* Label + meta */}
-      <View style={styles.textWrap}>
-        <Text
-          style={[styles.label, { color: colors.textPrimary }]}
-          numberOfLines={1}
-        >
-          {primaryLabel}
-        </Text>
-        <Text
-          style={[styles.meta, { color: colors.textMuted }]}
-          numberOfLines={1}
-        >
-          {chainName} · {relativeTime(transaction.createdAt)}
-        </Text>
-      </View>
-
-      {/* Right: status badge + amount */}
+      {/* Right: status badge + amount, stacked and right-aligned */}
       <View style={styles.rightWrap}>
         <TransactionStatusBadge status={transaction.status} />
         <Text
@@ -166,6 +168,14 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     gap: 10,
   },
+  /** Groups the icon bubble + text column so they share a single flex:1 left slot. */
+  leftGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+    minWidth: 0,
+  },
   iconWrap: {
     width: 34,
     height: 34,
@@ -188,12 +198,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
   },
+  /** Right column: badge + amount stacked, right-aligned. Vertical centering
+   *  comes from the parent row's alignItems: "center". */
   rightWrap: {
     alignItems: "flex-end",
-    justifyContent: "center",
     gap: 4,
     flexShrink: 0,
-    minWidth: 0,
+    paddingLeft: 8,
   },
   amount: {
     fontSize: 13,
