@@ -879,19 +879,19 @@ const GuardianRecoveryScreen: React.FC = () => {
               Add and save guardians (at least {requiredSignatures}) before installing.
             </Text>
           )}
-          {lastUserOpHash && (
+          {__DEV__ && lastUserOpHash && (
             <View style={styles.hashRow}>
               <Text style={styles.hashLabel}>UserOp Hash</Text>
               <Text style={styles.hashValue}>{lastUserOpHash}</Text>
             </View>
           )}
-          {lastOperationHash && (
+          {__DEV__ && lastOperationHash && (
             <View style={styles.hashRow}>
               <Text style={styles.hashLabel}>Bundler Operation Hash</Text>
               <Text style={styles.hashValue}>{lastOperationHash}</Text>
             </View>
           )}
-          {lastInstallPayload && (
+          {__DEV__ && lastInstallPayload && (
             <View style={styles.payloadBox}>
               <Text style={styles.payloadTitle}>Latest Module Payload</Text>
               <View style={styles.payloadRow}>
@@ -915,7 +915,7 @@ const GuardianRecoveryScreen: React.FC = () => {
             </View>
           )}
           {/* TODO(TESTING): Timelock picker — remove before production */}
-          {!moduleInstalledState && (
+          {__DEV__ && !moduleInstalledState && (
             <View style={{ marginBottom: 12 }}>
               <Text style={[styles.payloadLabel, { marginBottom: 8 }]}>
                 ⏱ Timelock (testing only)
