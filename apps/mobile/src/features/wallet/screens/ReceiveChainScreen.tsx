@@ -252,10 +252,12 @@ export const ReceiveChainScreen: React.FC = () => {
                 },
               ]}
             >
-              <Feather name="share-2" size={18} color={colors.textOnAccent} />
-              <Text style={[styles.shareBtnText, { color: colors.textOnAccent }]}>
-                Share Address
-              </Text>
+              <View style={styles.shareBtnInner}>
+                <Feather name="share-2" size={18} color={colors.textOnAccent} />
+                <Text style={[styles.shareBtnText, { color: colors.textOnAccent }]}>
+                  Share Address
+                </Text>
+              </View>
             </Pressable>
           </>
         ) : (
@@ -398,13 +400,19 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   shareBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    height: 56,
+    borderRadius: 20,
+  },
+  shareBtnInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
     width: "100%",
-    height: 56,
-    borderRadius: 20,
+    height: "100%",
   },
   shareBtnText: {
     fontSize: 16,
