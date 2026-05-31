@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 
-import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, getChainConfig, type SupportedChainId } from "@/src/integration/chains";
+import { getPublicClient } from "@/src/integration/viem/clients";
 import DevicePairingService, {
   type DevicePairingRequest,
   type WalletDevice,
@@ -386,14 +387,24 @@ const DevicesPasskeysScreen: React.FC = () => {
   };
 
   const handleCreatePairing = useCallback(async () => {
-    if (!user?.id || !walletAddress) {
+    if (!user?.id) {
       setError("Wallet address is required before creating a pairing request");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const created = await DevicePairingService.createPairingRequest({ userId: user.id, walletAddress, chainId: resolvedChainId });
+      const pairingChainId = (activeChainId || DEFAULT_CHAIN_ID) as SupportedChainId;
+      const walletService = new SupabaseWalletService();
+      const chainWallet = await walletService.getAAWalletForChain(user.id, pairingChainId);
+      if (!chainWallet?.predicted_address) {
+        const name = getChainConfig(pairingChainId)?.name ?? `chain ${pairingChainId}`;
+        setError(`Your wallet isn't active on ${name}. Switch to a chain where your wallet is deployed, then pair.`);
+        return;
+      }
+      const created = await DevicePairingService.createPairingRequest({
+        userId: user.id, walletAddress: chainWallet.predicted_address, chainId: pairingChainId,
+      });
       setActiveLink(created.deepLink);
       await loadData();
     } catch (err) {
@@ -401,21 +412,24 @@ const DevicesPasskeysScreen: React.FC = () => {
     } finally {
       setBusy(false);
     }
-  }, [loadData, user?.id, walletAddress, resolvedChainId]);
+  }, [activeChainId, loadData, user?.id]);
 
   const signAndSubmit = useCallback(
-    async (userOpHash: `0x${string}`, userOp: any) => {
+    async (userOpHash: `0x${string}`, userOp: any, chainId: SupportedChainId) => {
       if (!user?.id) throw new Error("Missing user session");
       const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
       const encoded = PasskeyService.encodeSignatureForContract(signature) as `0x${string}`;
-      return PasskeyAccountService.submitAddPasskeyUserOp({ ...userOp, signature: encoded });
+      // Submit on the SAME chain the UserOp was built+sponsored for. Without the
+      // explicit chainId, submitAddPasskeyUserOp defaulted to DEFAULT_CHAIN_ID
+      // (Base Sepolia) and an Eth-Sepolia op was sent to the Base-Sepolia bundler.
+      return PasskeyAccountService.submitAddPasskeyUserOp({ ...userOp, signature: encoded }, chainId);
     },
     [user?.id],
   );
 
   const handleApproveRequest = useCallback(
     async (request: DevicePairingRequest) => {
-      if (!user?.id || !walletAddress) return;
+      if (!user?.id) return;
       if (!request.new_passkey_id || !request.new_public_key_x || !request.new_public_key_y) {
         Alert.alert("Missing passkey payload", "The new device has not submitted passkey metadata yet.");
         return;
@@ -423,10 +437,32 @@ const DevicesPasskeysScreen: React.FC = () => {
       setBusy(true);
       setError(null);
       try {
+        // Use the chain + address baked into the request itself — this is the chain
+        // the new device created the request for, which is where the wallet is deployed.
+        const requestChainId = request.chain_id as SupportedChainId;
+        const requestWalletAddress = request.wallet_address as `0x${string}`;
+
+        // Guard: verify the account is actually deployed on-chain before building a UserOp.
+        // If the wallet has no bytecode the bundler will reject with AA20 / account not deployed.
+        try {
+          const publicClient = getPublicClient(requestChainId);
+          const code = await publicClient.getBytecode({ address: requestWalletAddress });
+          if (!code || code === "0x") {
+            const chainName = getChainConfig(requestChainId)?.name ?? `chain ${requestChainId}`;
+            setError(
+              `This pairing request targets ${chainName} where your wallet isn't deployed. It's stale — reject it and create a new one.`,
+            );
+            return;
+          }
+        } catch (guardErr) {
+          console.warn("[DevicesPasskeys] bytecode guard failed (non-fatal):", guardErr);
+          // If we can't reach the RPC, proceed and let the bundler surface the error.
+        }
+
         const currentPasskey = await PasskeyService.getPasskey(user.id);
         if (!currentPasskey?.credentialIdRaw) throw new Error("Current trusted passkey is required to approve pairing");
         const built = await PasskeyAccountService.buildAddPasskeyUserOp({
-          smartAccountAddress: walletAddress as `0x${string}`,
+          smartAccountAddress: requestWalletAddress,
           pendingPasskey: {
             idRaw: request.new_passkey_id as `0x${string}`,
             credentialId: request.new_credential_id ?? request.new_passkey_id,
@@ -437,11 +473,11 @@ const DevicesPasskeysScreen: React.FC = () => {
             createdAt: request.created_at,
           },
           signingPasskeyId: currentPasskey.credentialIdRaw as `0x${string}`,
-          chainId: resolvedChainId,
+          chainId: requestChainId,
           usePaymaster: true,
         });
-        const submittedHash = await signAndSubmit(built.userOpHash, built.userOp);
-        const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, resolvedChainId);
+        const submittedHash = await signAndSubmit(built.userOpHash, built.userOp, requestChainId);
+        const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, requestChainId);
         const success = Boolean((receipt as { success?: boolean }).success);
         if (!success) {
           await DevicePairingService.markFailed(request.id, user.id, "UserOperation reverted", submittedHash);
@@ -451,8 +487,8 @@ const DevicesPasskeysScreen: React.FC = () => {
           requestId: request.id,
           userId: user.id,
           operationHash: submittedHash,
-          walletAddress,
-          chainId: resolvedChainId,
+          walletAddress: requestWalletAddress,
+          chainId: requestChainId,
           passkeyId: request.new_passkey_id,
           credentialId: request.new_credential_id,
           deviceName: request.new_device_name,
@@ -465,7 +501,7 @@ const DevicesPasskeysScreen: React.FC = () => {
         setBusy(false);
       }
     },
-    [loadData, signAndSubmit, user?.id, walletAddress, resolvedChainId],
+    [loadData, signAndSubmit, user?.id],
   );
 
   const handleRejectRequest = useCallback(
@@ -679,9 +715,15 @@ const DevicesPasskeysScreen: React.FC = () => {
           <>
             {/* Add device CTA */}
             <TouchableOpacity
-              style={[styles.addDeviceBtn, { backgroundColor: colors.accentAlt, opacity: busy && !walletAddress ? 0.5 : 1 }]}
+              style={[
+                styles.addDeviceBtn,
+                {
+                  backgroundColor: colors.accentAlt,
+                  opacity: busy ? 0.5 : 1,
+                },
+              ]}
               onPress={handleCreatePairing}
-              disabled={busy || !walletAddress}
+              disabled={busy}
               activeOpacity={0.88}
             >
               {busy ? (
@@ -703,7 +745,9 @@ const DevicesPasskeysScreen: React.FC = () => {
                   <View style={[styles.cardIconWrap, { backgroundColor: `${colors.accentAlt}1A` }]}>
                     <Feather name="smartphone" size={15} color={colors.accentAlt} />
                   </View>
-                  <Text style={styles.cardTitle}>Scan on New Device</Text>
+                  <Text style={styles.cardTitle}>
+                    Scan on New Device
+                  </Text>
                 </View>
                 <View style={styles.qrWrapper}>
                   <QRCode value={activeLink} size={180} />
