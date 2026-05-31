@@ -35,8 +35,8 @@ type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 type SettingsItem = {
   label: string;
   icon: FeatherIconName;
-  tint: string;
   route?: keyof RootStackParamList;
+  statusDot?: boolean;
 };
 
 type SettingsGroup = {
@@ -202,26 +202,29 @@ const ProfileScreen: React.FC = () => {
   const settingsGroups: SettingsGroup[] = useMemo(
     () => [
       {
-        title: "Account",
+        title: "Security",
         items: [
-          { label: "Edit Profile", icon: "user", tint: colors.accent, route: "ProfileEdit" },
-          { label: LABELS.linkedDevices, icon: "smartphone", tint: colors.accentAlt, route: "DevicesPasskeys" },
-          { label: "Backup & Recovery", icon: "shield", tint: colors.success, route: "BackupRecovery" },
-          { label: LABELS.connectedDApps, icon: "link-2", tint: colors.success, route: "ConnectedDApps" },
-          { label: "Contacts", icon: "book", tint: colors.warning, route: "ContactList" },
+          { label: "Recovery & Backup", icon: "shield", route: "BackupRecovery", statusDot: true },
+          { label: LABELS.linkedDevices, icon: "smartphone", route: "DevicesPasskeys" },
+        ],
+      },
+      {
+        title: "Wallet",
+        items: [
+          { label: LABELS.connectedDApps, icon: "link-2", route: "ConnectedDApps" },
+          { label: "Contacts", icon: "book", route: "ContactList" },
         ],
       },
       {
         title: "Preferences",
         items: [
-          { label: "Notifications", icon: "bell", tint: colors.accentAlt, route: "NotificationSettings" },
-          { label: "Browser Settings", icon: "globe", tint: colors.success, route: "BrowserSettings" },
+          { label: "Notifications", icon: "bell", route: "NotificationSettings" },
+          { label: "Browser", icon: "globe", route: "BrowserSettings" },
           ...(__DEV__
             ? [
                 {
                   label: "Dev Controls",
                   icon: "cpu" as FeatherIconName,
-                  tint: colors.textMuted,
                   route: "DevCreateAccount" as keyof RootStackParamList,
                 },
               ]
@@ -229,7 +232,7 @@ const ProfileScreen: React.FC = () => {
         ],
       },
     ],
-    [colors],
+    [],
   );
 
   return (
@@ -311,10 +314,13 @@ const ProfileScreen: React.FC = () => {
                     onPress={() => item.route && navigation.navigate(item.route as never)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.iconWrap, { backgroundColor: `${item.tint}1A` }]}>
-                      <Feather name={item.icon} size={17} color={item.tint} />
+                    <View style={[styles.iconWrap, { backgroundColor: `${colors.accent}12` }]}>
+                      <Feather name={item.icon} size={17} color={colors.accent} />
                     </View>
                     <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{item.label}</Text>
+                    {item.statusDot && (
+                      <View style={[styles.statusDot, { backgroundColor: colors.textMuted }]} />
+                    )}
                     <Feather name="chevron-right" size={16} color={colors.textMuted} />
                   </TouchableOpacity>
                 ))}
@@ -534,6 +540,11 @@ const createStyles = (colors: ThemeColors) =>
       flex: 1,
       fontSize: 15,
       fontWeight: "600",
+    },
+    statusDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
     },
     signOutBtn: {
       flexDirection: "row",
