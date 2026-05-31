@@ -232,7 +232,7 @@ const ProfileScreen: React.FC = () => {
         ],
       },
     ],
-    [],
+    [colors],
   );
 
   return (
