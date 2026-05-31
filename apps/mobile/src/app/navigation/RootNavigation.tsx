@@ -15,7 +15,6 @@ import CompromisedWalletScreen from "@features/profile/screens/CompromisedWallet
 import DevicesPasskeysScreen from "@features/profile/screens/DevicesPasskeysScreen";
 import { LinkDeviceScreen } from "@features/auth/screens/LinkDeviceScreen";
 import EmailRecoveryScreen from "@features/profile/screens/EmailRecoveryScreen";
-import EmailRecoveryGroupStatusScreen from "@features/profile/screens/EmailRecoveryGroupStatusScreen";
 import RecoveryAttemptStatusScreen from "@features/profile/screens/RecoveryAttemptStatusScreen";
 import EmailRecoveryStartScreen from "@features/profile/screens/EmailRecoveryStartScreen";
 import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
@@ -254,14 +253,6 @@ const RootNavigation = () => {
             }}
           />
         )}
-        <Stack.Screen
-          name="EmailRecoveryGroupStatus"
-          component={EmailRecoveryGroupStatusScreen}
-          options={{
-            headerShown: false,
-            animation: "slide_from_right",
-          }}
-        />
         <Stack.Screen
           name="RecoveryAttemptStatus"
           component={RecoveryAttemptStatusScreen}
