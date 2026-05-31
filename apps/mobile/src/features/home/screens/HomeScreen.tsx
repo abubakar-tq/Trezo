@@ -10,6 +10,7 @@ import { useSetUpWalletSheet } from "@features/wallet/hooks/useSetUpWalletSheet"
 import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { useWalletData } from "@hooks/useWalletData";
 import { useMarketData } from "@hooks/useMarketData";
+import { usePortfolioHistory } from "@hooks/usePortfolioHistory";
 import { useNavigation } from "@react-navigation/native";
 import TabScreenContainer from "@shared/components/TabScreenContainer";
 import { FontFamilies } from "@shared/components/TokenRegistry";
@@ -112,17 +113,24 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
 
   // Build token list from wallet data for display
   const displayTokens = useMemo((): TokenBalance[] => {
-    return tokens.map((t) => ({
-      symbol: t.symbol || "UNKNOWN",
-      name: t.name || "Unknown Token",
-      amount: parseFloat(t.balance_formatted || t.balance || "0"),
-      price: t.usd_price || 0,
-      value: t.usd_value || 0,
-      change24h: 0, // placeholder — real value resolved per row via change24hBySymbol
-      decimals: t.decimals || 18,
-      address: (t.token_address || "native") as `0x${string}`,
-    }));
-  }, [tokens]);
+    return tokens.map((t) => {
+      const sym = (t.symbol || "UNKNOWN").toUpperCase();
+      const realChange = change24hBySymbol[sym];
+      return {
+        symbol: t.symbol || "UNKNOWN",
+        name: t.name || "Unknown Token",
+        amount: parseFloat(t.balance_formatted || t.balance || "0"),
+        price: t.usd_price || 0,
+        value: t.usd_value || 0,
+        // Real 24h % from market feed — omit entirely when unknown (never fabricate 0)
+        ...(realChange !== undefined ? { change24h: realChange } : {}),
+        decimals: t.decimals || 18,
+        address: (t.token_address || "native") as `0x${string}`,
+      };
+    });
+  // change24hBySymbol is a dependency because we use it to set change24h per token
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokens, change24hBySymbol]);
 
   // Sorted by value DESC (top holdings first)
   const sortedTokens = useMemo(
@@ -230,6 +238,17 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
   // Keyed on holdings: $0 with no tokens = empty state
   const isEmpty = !walletLoading && totalBalanceUSD === 0;
 
+  // 1D portfolio sparkline — real data only (current holdings × intraday prices)
+  // Uses the same hook as PortfolioScreen for consistency.
+  const { history: sparklineHistory } = usePortfolioHistory(displayTokens, "1D");
+
+  // Valid sparkline series: ≥2 finite points, non-empty wallet (never show in $0 state)
+  const sparklineData: number[] | undefined = useMemo(() => {
+    if (isEmpty) return undefined;
+    const valid = sparklineHistory.filter(isFinite);
+    return valid.length >= 2 ? valid : undefined;
+  }, [isEmpty, sparklineHistory]);
+
   // Format price for AssetList
   const formatPrice = (value: number) =>
     value.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -293,6 +312,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
             missingPrices={missingPrices}
             change24hPct={portfolioChange24h?.pct ?? null}
             isEmpty={isEmpty}
+            sparklineData={sparklineData}
             onDeploy={() => navigation.navigate("DeployAccount")}
             onEnablePasskey={() => navigation.navigate("RecoveryEntry")}
           />
@@ -328,7 +348,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
                   onPress={() => navigation.navigate("Receive")}
                   activeOpacity={0.85}
                 >
-                  <Text style={[styles.fundCtaText, { color: "#F4F1EA" }]}>Receive</Text>
+                  <Text style={[styles.fundCtaText, { color: colors.textPrimary }]}>Receive</Text>
                 </TouchableOpacity>
               </View>
             </View>

@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
 import { Badge } from '@shared/components/Tier1/Badge';
+import { Sparkline } from '@shared/components';
 import { FontFamilies } from '@shared/components/TokenRegistry';
 import { useAppTheme } from '@theme';
 import type { ThemeColors } from '@theme';
@@ -25,6 +26,11 @@ interface BalanceCardProps {
    * When true, renders as a flat (non-glow) card — used for the $0 empty state.
    */
   isEmpty?: boolean;
+  /**
+   * 1D portfolio-value series for the sparkline. Only rendered in the funded state
+   * when ≥2 finite points are present. NEVER pass data in the empty/$0 state.
+   */
+  sparklineData?: number[];
   onDeploy?: () => void;
   onEnablePasskey?: () => void;
 }
@@ -39,6 +45,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   missingPrices,
   change24hPct = null,
   isEmpty = false,
+  sparklineData,
   onDeploy,
   onEnablePasskey,
 }) => {
@@ -186,6 +193,24 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
         </Text>
       )}
 
+      {/* Sparkline — real 1D data only; hidden when empty or <2 points (spec §5.1) */}
+      {sparklineData && sparklineData.length >= 2 && !isEmpty && (
+        <View style={styles.sparklineWrapper}>
+          <Sparkline
+            data={sparklineData}
+            width={280}
+            height={36}
+            strokeWidth={1.5}
+            fillOpacity={0.15}
+            color={
+              sparklineData[sparklineData.length - 1] >= sparklineData[0]
+                ? colors.dataPositive
+                : colors.dataNegative
+            }
+          />
+        </View>
+      )}
+
       <View style={styles.footer}>
         <View style={styles.addressPill}>
           <Feather
@@ -253,12 +278,17 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "300",
       fontFamily: FontFamilies.mono,
       letterSpacing: -1,
-      color: "#F4F1EA",
+      color: colors.textPrimary,
     },
     missingNote: {
       fontSize: 11,
       color: "rgba(255,255,255,0.45)",
       marginTop: 2,
+    },
+    sparklineWrapper: {
+      marginTop: 12,
+      alignSelf: "stretch",
+      opacity: 0.8,
     },
     footer: {
       flexDirection: "row",
@@ -288,7 +318,8 @@ const createStyles = (colors: ThemeColors) =>
     copyBtn: {
       width: 32,
       height: 32,
-      borderRadius: 16,
+      // Spec §3: 999 for circular/icon buttons
+      borderRadius: 999,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: "rgba(255,255,255,0.12)",
