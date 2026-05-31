@@ -16,6 +16,7 @@ import type { ThemeColors } from "@theme";
 import { TabScreenContainer, InteractiveChart } from "@shared/components";
 import { FontFamilies } from "@shared/components/TokenRegistry";
 import { TokenIcon } from "@shared/components/visuals/TokenIcon";
+import Toast from "@shared/components/feedback/Toast";
 import { useWalletData } from "@hooks/useWalletData";
 import { useMarketData } from "@hooks/useMarketData";
 import { usePortfolioHistory } from "@hooks/usePortfolioHistory";
@@ -84,6 +85,7 @@ const PortfolioScreen: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<Period>("1W");
   const tokenDetailRef = React.useRef<TokenDetailModalHandle>(null);
   const [touchedValue, setTouchedValue] = useState<number | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const handleAssetPress = (token: TokenBalance) => {
     tokenDetailRef.current?.open(token);
@@ -162,7 +164,7 @@ const PortfolioScreen: React.FC = () => {
   const handlePeriodPress = (period: Period) => {
     if (!enabled[period]) {
       const msg = disabledPeriodMessage(period, walletAge);
-      Alert.alert("Not ready yet", msg);
+      setToastMsg(msg);
       return;
     }
     setSelectedPeriod(period);
@@ -626,6 +628,13 @@ const PortfolioScreen: React.FC = () => {
 
       <ActivationSheet ref={activationSheetRef} />
       <SetUpWalletSheet ref={setUpRef} />
+
+      <Toast
+        visible={toastMsg !== null}
+        message={toastMsg ?? ""}
+        severity="info"
+        onHide={() => setToastMsg(null)}
+      />
     </TabScreenContainer>
   );
 };
