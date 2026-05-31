@@ -6,6 +6,7 @@ import { TRENDING_SITES } from "../../data/trendingSites";
 
 type Props = {
   onPress: (url: string) => void;
+  categoryFilter?: string | null;
 };
 
 // On-brand violet constants — no rainbow palette.
@@ -43,13 +44,17 @@ function SiteIcon({ url, name }: { url: string; name: string }) {
   );
 }
 
-export function TrendingSitesRow({ onPress }: Props) {
+export function TrendingSitesRow({ onPress, categoryFilter }: Props) {
   const { theme } = useAppTheme();
+
+  const data = categoryFilter
+    ? TRENDING_SITES.filter((site) => site.category === categoryFilter)
+    : TRENDING_SITES;
 
   return (
     <FlatList
       horizontal
-      data={TRENDING_SITES}
+      data={data}
       keyExtractor={(item) => item.id}
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.list}

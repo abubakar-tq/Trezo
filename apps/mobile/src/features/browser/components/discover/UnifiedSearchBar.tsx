@@ -3,7 +3,10 @@ import { TextInput, Pressable, View, StyleSheet } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
 
-export type SearchIntent = { kind: "url" | "ticker" | "search"; value: string };
+export type SearchIntent =
+  | { kind: "url"; value: string }
+  | { kind: "ticker"; value: string; explicit: boolean }
+  | { kind: "search"; value: string };
 
 type Props = {
   onSubmit: (intent: SearchIntent) => void;
@@ -23,7 +26,8 @@ export function UnifiedSearchBar({ onSubmit, onTabsPress }: Props) {
     if (URL_PATTERN.test(v)) {
       onSubmit({ kind: "url", value: v.startsWith("http") ? v : `https://${v}` });
     } else if (TICKER_PATTERN.test(v)) {
-      onSubmit({ kind: "ticker", value: v.replace(/^\$/, "").toUpperCase() });
+      const explicit = v.startsWith("$");
+      onSubmit({ kind: "ticker", value: v.replace(/^\$/, "").toUpperCase(), explicit });
     } else {
       onSubmit({ kind: "search", value: v });
     }

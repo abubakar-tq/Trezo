@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ScrollView,
   View,
@@ -18,10 +18,13 @@ import { TrendingSitesRow } from "./TrendingSitesRow";
 import { NewsFeed } from "./NewsFeed";
 import { NewsService, type NewsItem } from "@services/news/NewsService";
 import { useMarketData } from "@hooks/useMarketData";
+import { marketService } from "@services/MarketService";
+import type { MarketAsset } from "@services/MarketService";
 import { TokenDetailModal } from "@features/portfolio/components/TokenDetailModal";
 import type { TokenDetailModalHandle } from "@features/portfolio/components/TokenDetailModal";
 import type { TokenBalance } from "@features/portfolio/services/PortfolioService";
 import type { TokenCategoryId } from "../../data/tokenCategories";
+import { TRENDING_SITES } from "../../data/trendingSites";
 
 // On-brand violet constants for Apps section fallback glyphs.
 const APP_ICON_BG = "rgba(124,58,237,0.14)";
@@ -115,19 +118,85 @@ function MarketRow({
   );
 }
 
+// ─── Apps dApp category chips ────────────────────────────────────────────────
+
+function AppsCategoryRow({
+  selected,
+  onSelect,
+}: {
+  selected: string | null;
+  onSelect: (cat: string | null) => void;
+}) {
+  const { theme } = useAppTheme();
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.appsCategoryList}
+    >
+      {APP_CATEGORIES.map((cat) => {
+        const isActive = selected === cat;
+        const fg = isActive ? theme.colors.textOnAccent : theme.colors.textSecondary;
+        return (
+          <TouchableOpacity
+            key={cat}
+            style={[
+              styles.appsCategoryChip,
+              {
+                backgroundColor: isActive ? theme.colors.accent : theme.colors.surfaceElevated,
+                borderColor: isActive ? theme.colors.accent : theme.colors.border,
+              },
+            ]}
+            activeOpacity={0.7}
+            onPress={() => onSelect(isActive ? null : cat)}
+          >
+            <Text style={[styles.appsCategoryLabel, { color: fg }]}>{cat}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+// ─── Market section ──────────────────────────────────────────────────────────
+
 function MarketSection({ onTokenPress }: { onTokenPress: (t: TokenBalance) => void }) {
   const { theme } = useAppTheme();
   const { colors } = theme;
-  const { assets, loading } = useMarketData(10);
+  const { assets: topAssets, loading: topLoading } = useMarketData(10);
   const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<MarketAsset[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filtered = assets.filter(
-    (t) =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.symbol.toLowerCase().includes(search.toLowerCase())
-  );
+  const handleSearchChange = useCallback((text: string) => {
+    setSearch(text);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (text.trim().length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    setSearchLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      const results = await marketService.searchAssets(text.trim());
+      setSearchResults(results);
+      setSearchLoading(false);
+    }, 300);
+  }, []);
 
-  if (loading && assets.length === 0) {
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const isSearching = search.trim().length >= 2;
+  const displayAssets = isSearching ? searchResults : topAssets.slice(0, 10);
+  const loading = isSearching ? searchLoading : topLoading;
+
+  if (loading && displayAssets.length === 0) {
     return (
       <View style={styles.marketLoader}>
         <ActivityIndicator color={colors.accent} />
@@ -150,18 +219,18 @@ function MarketSection({ onTokenPress }: { onTokenPress: (t: TokenBalance) => vo
           placeholder="Search tokens…"
           placeholderTextColor={colors.textMuted}
           value={search}
-          onChangeText={setSearch}
+          onChangeText={handleSearchChange}
         />
       </View>
 
-      {filtered.length === 0 ? (
+      {displayAssets.length === 0 ? (
         <View style={styles.marketEmpty}>
           <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: "600" }}>
-            No tokens match "{search}"
+            {isSearching ? `No tokens match "${search}"` : "No market data available"}
           </Text>
         </View>
       ) : (
-        filtered.map((token) => (
+        displayAssets.map((token) => (
           <MarketRow key={token.id} token={token} onPress={onTokenPress} />
         ))
       )}
@@ -171,8 +240,12 @@ function MarketSection({ onTokenPress }: { onTokenPress: (t: TokenBalance) => vo
 
 // ─── Main DiscoverHome ────────────────────────────────────────────────────────
 
+// Derive distinct app categories from the static TRENDING_SITES list.
+const APP_CATEGORIES = Array.from(new Set(TRENDING_SITES.map((s) => s.category)));
+
 export function DiscoverHome({ onSubmitSearch, onOpenTabs, onTokenPress, onSitePress }: Props) {
   const [category, setCategory] = useState<TokenCategoryId | null>(null);
+  const [appsCategory, setAppsCategory] = useState<string | null>(null);
   const [news, setNews] = useState<NewsItem[]>([]);
   const tokenDetailRef = React.useRef<TokenDetailModalHandle>(null);
 
@@ -202,9 +275,10 @@ export function DiscoverHome({ onSubmitSearch, onOpenTabs, onTokenPress, onSiteP
           <UnifiedSearchBar onSubmit={onSubmitSearch} onTabsPress={onOpenTabs} />
         </View>
 
-        {/* 2. Trending tokens */}
+        {/* 2. Trending tokens — token category chips live here */}
         <View style={styles.section}>
           <SectionHeader>Trending</SectionHeader>
+          <CategoriesRow selected={category} onSelect={setCategory} />
           <TrendingTokensRow categoryFilter={category} onTokenPress={onTokenPress} />
         </View>
 
@@ -214,11 +288,11 @@ export function DiscoverHome({ onSubmitSearch, onOpenTabs, onTokenPress, onSiteP
           <MarketSection onTokenPress={handleMarketTokenPress} />
         </View>
 
-        {/* 4. Apps (dApp list) — on-brand violet icons + category chips */}
+        {/* 4. Apps (dApp list) — separate dApp category chips, independent of token chips */}
         <View style={styles.section}>
           <SectionHeader>Apps</SectionHeader>
-          <CategoriesRow selected={category} onSelect={setCategory} />
-          <TrendingSitesRow onPress={onSitePress} />
+          <AppsCategoryRow selected={appsCategory} onSelect={setAppsCategory} />
+          <TrendingSitesRow onPress={onSitePress} categoryFilter={appsCategory} />
         </View>
 
         {/* 5. News — hides when feed is empty */}
@@ -278,4 +352,15 @@ const styles = StyleSheet.create({
   marketRowPrices: { alignItems: "flex-end", minWidth: 72 },
   marketPrice: { fontSize: 15, fontWeight: "700" },
   marketChange: { fontSize: 12, fontWeight: "600", marginTop: 2 },
+  // Apps category chips
+  appsCategoryList: { paddingHorizontal: 16, gap: 8 },
+  appsCategoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  appsCategoryLabel: { fontSize: 13, fontWeight: "600" },
 });

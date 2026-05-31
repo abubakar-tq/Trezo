@@ -301,9 +301,16 @@ export default function BrowserScreen() {
               if (intent.kind === "url") {
                 openUrl(intent.value);
               } else if (intent.kind === "ticker") {
-                openUrl(`https://www.coingecko.com/en/search?query=${encodeURIComponent(intent.value)}`);
+                if (intent.explicit) {
+                  // User typed an explicit $TICKER — open the CoinGecko token page.
+                  openUrl(`https://www.coingecko.com/en/coins/${intent.value.toLowerCase()}`);
+                } else {
+                  // Bare word matched the ticker pattern — route through the web3-aware resolver.
+                  openUrl(toDestination(intent.value, settings.searchEngine));
+                }
               } else {
-                openUrl(`https://www.google.com/search?q=${encodeURIComponent(intent.value)}`);
+                // kind === "search": use the configured search engine (web3compass / DDG / Google).
+                openUrl(toDestination(intent.value, settings.searchEngine));
               }
             }}
             onOpenTabs={() => setShowTabSwitcher(true)}

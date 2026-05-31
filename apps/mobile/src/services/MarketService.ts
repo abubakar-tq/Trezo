@@ -235,6 +235,23 @@ class MarketService {
   }
 
   /**
+   * Search assets by name/symbol using CoinCap v2 /assets?search=<query>.
+   * Returns up to `limit` results mapped to the standard MarketAsset shape.
+   */
+  async searchAssets(query: string, limit = 20): Promise<MarketAsset[]> {
+    if (!query.trim()) return [];
+    try {
+      const response = await this.api.get(`/assets`, {
+        params: { search: query.trim(), limit },
+      });
+      return response.data.data as MarketAsset[];
+    } catch (error) {
+      console.warn('[MarketService] searchAssets failed:', error);
+      return [];
+    }
+  }
+
+  /**
    * Helper to convert interval labels to CoinCap intervals
    */
   getIntervalForLabel(label: string): string {
