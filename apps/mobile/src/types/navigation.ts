@@ -46,7 +46,6 @@ export type RootStackParamList = {
   GuardianRecovery: undefined;
   EmailRecovery: undefined;
   EmailRecoveryStart: undefined;
-  EmailRecoveryGroupStatus: { groupId: string };
   RecoveryAttemptStatus: { attemptId: string };
   RecoveryEntry: { reason?: "no_local_passkey" | "user_initiated" } | undefined;
   CreateRecoveryRequest: { walletAddress?: string } | undefined;
@@ -66,11 +65,8 @@ export type RootStackParamList = {
   AADebug: undefined;
   DeployAccount: undefined;
   DevCreateAccount: undefined;
-  SecurityPrivacy: undefined;
-  ConnectedDevices: undefined;
   Notifications: undefined;
   NotificationSettings: undefined;
-  Settings: undefined;
   AddGuardian: undefined;
   GuardianManagement: undefined;
   SecurityCenter: undefined;

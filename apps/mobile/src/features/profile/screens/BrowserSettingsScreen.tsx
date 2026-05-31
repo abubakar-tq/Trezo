@@ -130,8 +130,7 @@ export default function BrowserSettingsScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
         <View style={styles.headerIndicator} />
-        <Text style={[styles.headerKicker, { color: colors.accent }]}>GALACTIC CONFIGURATION</Text>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>BROWSER CORE</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Browser Settings</Text>
       </View>
 
       <ScrollView
@@ -143,7 +142,7 @@ export default function BrowserSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>TAB QUANTUM STATE</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Tabs</Text>
           </View>
 
           <View style={styles.glassCard}>
@@ -180,7 +179,7 @@ export default function BrowserSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>NAVIGATION ENGINE</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Search</Text>
           </View>
 
           <View style={styles.glassCard}>
@@ -207,7 +206,7 @@ export default function BrowserSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SECURITY PROTOCOLS</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Security</Text>
           </View>
 
           <View style={styles.glassCard}>
@@ -231,27 +230,8 @@ export default function BrowserSettingsScreen() {
               showChevron
             />
             
-            <View style={[styles.divider, { backgroundColor: colors.borderMuted }]} />
-            
-            <SettingRow
-              icon="database"
-              label="Clear Browser Cache"
-              description="Free up local storage space"
-              colors={colors}
-              onPress={() => {}} 
-              showChevron
-            />
           </View>
         </View>
-        
-        {/* Dangerous Actions */}
-        <TouchableOpacity 
-          style={[styles.clearAllButton, { borderColor: `${colors.danger}4D`, backgroundColor: colors.glass }]}
-          activeOpacity={0.8}
-        >
-          <Feather name="alert-circle" size={18} color={colors.danger} />
-          <Text style={[styles.clearAllText, { color: colors.danger }]}>CLEAR ALL BROWSING DATA</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* History Limit Modal */}
@@ -378,16 +358,16 @@ export default function BrowserSettingsScreen() {
       <Modal visible={showClearHistoryModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
            <View style={[styles.modalContent, { backgroundColor: colors.surfaceCard, borderColor: `${colors.danger}4D` }]}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Purge History?</Text>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Clear browsing data?</Text>
               <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
-                This will permanently delete {historyCount} journey logs. This action is irreversible.
+                This will permanently delete {historyCount} browsing history entries. This action cannot be undone.
               </Text>
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={styles.modalButton} onPress={() => setShowClearHistoryModal(false)}>
                   <Text style={{ color: colors.textMuted }}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.modalButton, { backgroundColor: colors.danger }]} onPress={handleConfirmClearHistory}>
-                  <Text style={{ color: colors.textOnAccent, fontWeight: '700' }}>Confirm Purge</Text>
+                  <Text style={{ color: colors.textOnAccent, fontWeight: '700' }}>Clear history</Text>
                 </TouchableOpacity>
               </View>
            </View>
@@ -462,13 +442,6 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       backgroundColor: `${colors.accent}4D`,
       marginBottom: 16,
     },
-    headerKicker: {
-      fontSize: 11,
-      fontWeight: "900",
-      letterSpacing: 3,
-      marginBottom: 6,
-      opacity: 0.8,
-    },
     headerTitle: {
       fontSize: 28,
       fontWeight: "900",
@@ -539,22 +512,6 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       fontSize: 13,
       lineHeight: 18,
       flex: 1,
-    },
-    clearAllButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 10,
-      paddingVertical: 18,
-      borderRadius: 24,
-      borderWidth: 1,
-      marginTop: 10,
-      marginBottom: 20,
-    },
-    clearAllText: {
-      fontSize: 13,
-      fontWeight: '900',
-      letterSpacing: 1,
     },
     // Modal
     modalOverlay: {

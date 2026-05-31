@@ -1,18 +1,27 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Clipboard from "expo-clipboard";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { Avatar, TabScreenContainer } from "@shared/components";
 import { LABELS } from "@shared/copy/labels";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import {
+  Canvas,
+  Rect,
+  RadialGradient,
+  vec,
+} from "@shopify/react-native-skia";
 
 import { RootStackParamList } from "@/src/types/navigation";
 import { useTabContentBottomInset } from "@hooks";
@@ -30,13 +39,16 @@ import type { Address, Hex } from "viem";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 
+const { width: SCREEN_W } = Dimensions.get("window");
+const HERO_H = 130;
+
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
 type SettingsItem = {
   label: string;
   icon: FeatherIconName;
-  tint: string;
   route?: keyof RootStackParamList;
+  statusDot?: boolean;
 };
 
 type SettingsGroup = {
@@ -47,13 +59,12 @@ type SettingsGroup = {
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { theme, resolvedMode, setMode } = useAppTheme();
-  const { colors, gradients } = theme;
+  const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
   const contentBottomInset = useTabContentBottomInset();
 
   const user = useUserStore((state) => state.user);
   const profile = useUserStore((state) => state.profile);
-  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   const resetUser = useUserStore((state) => state.reset);
   const setGuardNavigation = useAuthFlowStore((state) => state.setGuardNavigation);
 
@@ -178,10 +189,18 @@ const ProfileScreen: React.FC = () => {
     user?.email?.split("@")[0]?.replace(/[^a-zA-Z0-9]/g, " ") ??
     "Explorer";
   const avatarUri = profile?.avatarUrl ?? null;
+  const hasPhoto = Boolean(avatarUri);
+
+  const heroEmail = user?.email ?? "wallet@trezo.app";
 
   const handleToggleTheme = useCallback(() => {
     setMode(resolvedMode === "dark" ? "light" : "dark");
   }, [resolvedMode, setMode]);
+
+  const handleCopyAddress = useCallback(async () => {
+    if (!smartAccountAddress) return;
+    await Clipboard.setStringAsync(smartAccountAddress);
+  }, [smartAccountAddress]);
 
   const executeSignOut = useCallback(async () => {
     if (isSigningOut) return;
@@ -202,26 +221,29 @@ const ProfileScreen: React.FC = () => {
   const settingsGroups: SettingsGroup[] = useMemo(
     () => [
       {
-        title: "Account",
+        title: "Security",
         items: [
-          { label: "Edit Profile", icon: "user", tint: colors.accent, route: "ProfileEdit" },
-          { label: LABELS.linkedDevices, icon: "smartphone", tint: colors.accentAlt, route: "DevicesPasskeys" },
-          { label: "Backup & Recovery", icon: "shield", tint: colors.success, route: "BackupRecovery" },
-          { label: LABELS.connectedDApps, icon: "link-2", tint: colors.success, route: "ConnectedDApps" },
-          { label: "Contacts", icon: "book", tint: colors.warning, route: "ContactList" },
+          { label: "Recovery & Backup", icon: "shield", route: "BackupRecovery", statusDot: true },
+          { label: LABELS.linkedDevices, icon: "smartphone", route: "DevicesPasskeys" },
+        ],
+      },
+      {
+        title: "Wallet",
+        items: [
+          { label: LABELS.connectedDApps, icon: "link-2", route: "ConnectedDApps" },
+          { label: "Contacts", icon: "book", route: "ContactList" },
         ],
       },
       {
         title: "Preferences",
         items: [
-          { label: "Notifications", icon: "bell", tint: colors.accentAlt, route: "NotificationSettings" },
-          { label: "Browser Settings", icon: "globe", tint: colors.success, route: "BrowserSettings" },
+          { label: "Notifications", icon: "bell", route: "NotificationSettings" },
+          { label: "Browser", icon: "globe", route: "BrowserSettings" },
           ...(__DEV__
             ? [
                 {
                   label: "Dev Controls",
                   icon: "cpu" as FeatherIconName,
-                  tint: colors.textMuted,
                   route: "DevCreateAccount" as keyof RootStackParamList,
                 },
               ]
@@ -239,7 +261,31 @@ const ProfileScreen: React.FC = () => {
         contentContainerStyle={{ paddingBottom: contentBottomInset + 24 }}
       >
         {/* ── Hero ─────────────────────────────────────── */}
-        <LinearGradient colors={gradients.profileHero} style={styles.hero}>
+        <View style={styles.hero}>
+          {/* Skia radial color bleed */}
+          <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Rect x={0} y={0} width={SCREEN_W} height={HERO_H}>
+              <RadialGradient
+                c={vec(82, HERO_H * 0.54)}
+                r={SCREEN_W * 0.65}
+                colors={[
+                  hasPhoto ? "rgba(124,58,237,0.18)" : "rgba(124,58,237,0.22)",
+                  "transparent",
+                ]}
+              />
+            </Rect>
+            {!hasPhoto && (
+              <Rect x={0} y={0} width={SCREEN_W} height={HERO_H}>
+                <RadialGradient
+                  c={vec(82, HERO_H * 0.54)}
+                  r={SCREEN_W * 0.42}
+                  colors={["rgba(219,39,119,0.10)", "transparent"]}
+                />
+              </Rect>
+            )}
+          </Canvas>
+
+          {/* Theme toggle — absolute top-right */}
           <TouchableOpacity
             style={[styles.themeBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
             onPress={handleToggleTheme}
@@ -254,39 +300,49 @@ const ProfileScreen: React.FC = () => {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => navigation.navigate("ProfileEdit")}
-            activeOpacity={0.85}
-            style={styles.avatarTouchable}
-          >
-            <View style={[styles.avatarRing, { borderColor: `${colors.accent}4D` }]}>
-              <Avatar size={84} uri={avatarUri} label={displayName} />
-            </View>
-            <View style={[styles.cameraChip, { backgroundColor: colors.accent }]}>
-              <Feather name="camera" size={11} color={colors.textOnAccent} />
-            </View>
-          </TouchableOpacity>
-
-          <Text style={[styles.heroName, { color: colors.textPrimary }]}>{displayName}</Text>
-          <Text style={[styles.heroEmail, { color: colors.textSecondary }]}>
-            {user?.email ?? "wallet@trezo.app"}
-          </Text>
-
-          <View style={styles.pillRow}>
-            {user?.email_confirmed_at ? (
-              <View style={[styles.pill, { backgroundColor: `${colors.success}1A`, borderColor: `${colors.success}33` }]}>
-                <Feather name="check-circle" size={11} color={colors.success} />
-                <Text style={[styles.pillText, { color: colors.success }]}>Verified</Text>
+          {/* Horizontal row: avatar left, meta right */}
+          <View style={styles.heroRow}>
+            {/* Avatar + camera chip */}
+            <TouchableOpacity
+              onPress={() => navigation.navigate("ProfileEdit")}
+              activeOpacity={0.85}
+              style={styles.avatarWrap}
+            >
+              {!avatarUri ? (
+                <LinearGradient
+                  colors={["#7C3AED", "#db2777"]}
+                  start={{ x: 0.1, y: 0.1 }}
+                  end={{ x: 0.9, y: 0.9 }}
+                  style={styles.avatarGradientWrap}
+                >
+                  <Avatar size={62} uri={undefined} label={displayName} />
+                </LinearGradient>
+              ) : (
+                <Avatar size={66} uri={avatarUri} label={displayName} />
+              )}
+              <View style={styles.cameraChip}>
+                <Feather name="camera" size={11} color="rgba(255,255,255,0.85)" />
               </View>
-            ) : null}
-            {smartAccountDeployed ? (
-              <View style={[styles.pill, { backgroundColor: `${colors.accent}1A`, borderColor: `${colors.accent}33` }]}>
-                <Feather name="shield" size={11} color={colors.accent} />
-                <Text style={[styles.pillText, { color: colors.accent }]}>Protected</Text>
-              </View>
-            ) : null}
+            </TouchableOpacity>
+
+            {/* Name / email / address */}
+            <View style={styles.heroMeta}>
+              <Text style={styles.heroName} numberOfLines={1}>
+                {displayName}
+              </Text>
+              <Text style={styles.heroEmail} numberOfLines={1}>
+                {heroEmail}
+              </Text>
+              {smartAccountAddress ? (
+                <TouchableOpacity onPress={() => void handleCopyAddress()} activeOpacity={0.7}>
+                  <Text style={styles.heroAddress} numberOfLines={1}>
+                    {`${smartAccountAddress.slice(0, 6)}…${smartAccountAddress.slice(-4)}`}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
-        </LinearGradient>
+        </View>
 
         {/* ── Settings ─────────────────────────────────── */}
         <View style={styles.body}>
@@ -311,10 +367,13 @@ const ProfileScreen: React.FC = () => {
                     onPress={() => item.route && navigation.navigate(item.route as never)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.iconWrap, { backgroundColor: `${item.tint}1A` }]}>
-                      <Feather name={item.icon} size={17} color={item.tint} />
+                    <View style={[styles.iconWrap, { backgroundColor: `${colors.accent}12` }]}>
+                      <Feather name={item.icon} size={17} color={colors.accent} />
                     </View>
                     <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{item.label}</Text>
+                    {item.statusDot && (
+                      <View style={[styles.statusDot, { backgroundColor: colors.textMuted }]} />
+                    )}
                     <Feather name="chevron-right" size={16} color={colors.textMuted} />
                   </TouchableOpacity>
                 ))}
@@ -431,17 +490,17 @@ const ProfileScreen: React.FC = () => {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     hero: {
-      paddingTop: 56,
-      paddingBottom: 40,
-      paddingHorizontal: 24,
-      alignItems: "center",
-      gap: 6,
+      paddingTop: 52,
+      paddingBottom: 20,
+      paddingHorizontal: 20,
       position: "relative",
+      overflow: "hidden",
+      backgroundColor: colors.background,
     },
     themeBtn: {
       position: "absolute",
-      top: 16,
-      right: 20,
+      top: 14,
+      right: 18,
       width: 38,
       height: 38,
       borderRadius: 19,
@@ -449,53 +508,63 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       borderWidth: 1,
     },
-    avatarTouchable: {
-      position: "relative",
-      marginBottom: 8,
+    heroRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
     },
-    avatarRing: {
-      borderWidth: 2.5,
-      borderRadius: 50,
-      padding: 3,
+    avatarWrap: {
+      position: "relative",
+      width: 66,
+      height: 66,
+    },
+    avatarGradientWrap: {
+      width: 66,
+      height: 66,
+      borderRadius: 33,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1.5,
+      borderColor: "rgba(255,255,255,0.13)",
+      shadowColor: "#7C3AED",
+      shadowOpacity: 0.35,
+      shadowRadius: 16,
+      elevation: 8,
     },
     cameraChip: {
       position: "absolute",
-      bottom: 4,
-      right: 4,
-      width: 24,
-      height: 24,
-      borderRadius: 12,
+      bottom: 0,
+      right: 0,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: "rgba(255,255,255,0.13)",
+      borderWidth: 1.5,
+      borderColor: "rgba(255,255,255,0.18)",
       alignItems: "center",
       justifyContent: "center",
     },
+    heroMeta: {
+      flex: 1,
+      minWidth: 0,
+    },
     heroName: {
-      fontSize: 24,
+      fontSize: 18,
       fontWeight: "800",
-      letterSpacing: -0.5,
-      marginTop: 4,
+      letterSpacing: -0.45,
+      color: "#f5f0ff",
+      marginBottom: 3,
     },
     heroEmail: {
-      fontSize: 13,
-      fontWeight: "500",
-      marginTop: 2,
+      fontSize: 11.5,
+      color: "rgba(196,181,253,0.42)",
+      marginBottom: 5,
     },
-    pillRow: {
-      flexDirection: "row",
-      gap: 8,
-      marginTop: 12,
-    },
-    pill: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 20,
-      borderWidth: 1,
-    },
-    pillText: {
-      fontSize: 12,
-      fontWeight: "700",
+    heroAddress: {
+      fontSize: 11.5,
+      color: "rgba(196,181,253,0.38)",
+      letterSpacing: 0.3,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     },
     body: {
       paddingHorizontal: 20,
@@ -534,6 +603,11 @@ const createStyles = (colors: ThemeColors) =>
       flex: 1,
       fontSize: 15,
       fontWeight: "600",
+    },
+    statusDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
     },
     signOutBtn: {
       flexDirection: "row",

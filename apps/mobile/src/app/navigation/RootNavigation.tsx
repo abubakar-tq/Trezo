@@ -12,11 +12,9 @@ import BackupRecoveryScreen from "@features/profile/screens/BackupRecoveryScreen
 import BrowserSettingsScreen from "@features/profile/screens/BrowserSettingsScreen";
 import { ConnectedDAppsScreen } from "@features/profile/screens/ConnectedDAppsScreen";
 import CompromisedWalletScreen from "@features/profile/screens/CompromisedWalletScreen";
-import ConnectedDevicesScreen from "@features/profile/screens/ConnectedDevicesScreen";
 import DevicesPasskeysScreen from "@features/profile/screens/DevicesPasskeysScreen";
 import { LinkDeviceScreen } from "@features/auth/screens/LinkDeviceScreen";
 import EmailRecoveryScreen from "@features/profile/screens/EmailRecoveryScreen";
-import EmailRecoveryGroupStatusScreen from "@features/profile/screens/EmailRecoveryGroupStatusScreen";
 import RecoveryAttemptStatusScreen from "@features/profile/screens/RecoveryAttemptStatusScreen";
 import EmailRecoveryStartScreen from "@features/profile/screens/EmailRecoveryStartScreen";
 import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
@@ -25,7 +23,6 @@ import NotificationSettingsScreen from "@features/profile/screens/NotificationSe
 import PairDeviceScreen from "@features/profile/screens/PairDeviceScreen";
 import ProfileEditScreen from "@features/profile/screens/ProfileEditScreen";
 import RecoveryKitExportScreen from "@features/profile/screens/RecoveryKitExportScreen";
-import SecurityPrivacyScreen from "@features/profile/screens/SecurityPrivacyScreen";
 import AddGuardianScreen from "@features/recovery/screens/AddGuardianScreen";
 import CreateRecoveryRequestScreen from "@features/recovery/screens/CreateRecoveryRequestScreen";
 import GuardianManagementScreen from "@features/recovery/screens/GuardianManagementScreen";
@@ -36,7 +33,6 @@ import SecurityCenterScreen from "@features/recovery/screens/SecurityCenterScree
 import ShareRecoveryScreen from "@features/recovery/screens/ShareRecoveryScreen";
 import IncomingRecoveryApprovalsScreen from "@features/recovery/screens/IncomingRecoveryApprovalsScreen";
 import ThresholdConfigurationScreen from "@features/recovery/screens/ThresholdConfigurationScreen";
-import SettingsScreen from "@features/settings/screens/SettingsScreen";
 import TransactionDetailScreen from "@features/transactions/screens/TransactionDetailScreen";
 import TransactionHistoryScreen from "@features/transactions/screens/TransactionHistoryScreen";
 import TransactionStatusScreen from "@features/transactions/screens/TransactionStatusScreen";
@@ -258,14 +254,6 @@ const RootNavigation = () => {
           />
         )}
         <Stack.Screen
-          name="EmailRecoveryGroupStatus"
-          component={EmailRecoveryGroupStatusScreen}
-          options={{
-            headerShown: false,
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
           name="RecoveryAttemptStatus"
           component={RecoveryAttemptStatusScreen}
           options={{
@@ -373,22 +361,6 @@ const RootNavigation = () => {
           }}
         />
         <Stack.Screen
-          name="SecurityPrivacy"
-          component={SecurityPrivacyScreen}
-          options={{
-            headerShown: false,
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
-          name="ConnectedDevices"
-          component={ConnectedDevicesScreen}
-          options={{
-            headerShown: false,
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
           name="Notifications"
           component={NotificationCenterScreen}
           options={{
@@ -439,11 +411,6 @@ const RootNavigation = () => {
             headerTitle: "Dev Controls",
             animation: "slide_from_right",
           }}
-        />
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{ headerShown: false, animation: "slide_from_right" }}
         />
         <Stack.Screen
           name="AddGuardian"
