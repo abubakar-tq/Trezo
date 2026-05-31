@@ -23,7 +23,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  Share,
   StatusBar,
   StyleSheet,
   Text,
@@ -141,16 +140,6 @@ export const ReceiveChainScreen: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleShare = async () => {
-    if (!address) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try {
-      await Share.share({ message: address });
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle="light-content" />
@@ -241,25 +230,6 @@ export const ReceiveChainScreen: React.FC = () => {
             <Text style={[styles.hint, { color: colors.textSecondary }]}>
               Send any token on {chain?.name ?? "this chain"} to this address.
             </Text>
-
-            {/* Share */}
-            <Pressable
-              onPress={handleShare}
-              style={({ pressed }) => [
-                styles.shareBtn,
-                {
-                  backgroundColor: colors.accent,
-                  opacity: pressed ? 0.85 : 1,
-                },
-              ]}
-            >
-              <View style={styles.shareBtnInner}>
-                <Feather name="share-2" size={18} color={colors.textOnAccent} />
-                <Text style={[styles.shareBtnText, { color: colors.textOnAccent }]}>
-                  Share Address
-                </Text>
-              </View>
-            </Pressable>
           </>
         ) : (
           <View style={styles.loadingWrap}>
@@ -396,25 +366,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     textAlign: "center",
     paddingHorizontal: 8,
-  },
-  shareBtn: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    height: 56,
-    borderRadius: 20,
-  },
-  shareBtnInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    width: "100%",
-    height: "100%",
-  },
-  shareBtnText: {
-    fontSize: 16,
-    fontWeight: "700",
   },
 });
 

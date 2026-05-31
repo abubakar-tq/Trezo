@@ -190,6 +190,7 @@ const styles = StyleSheet.create({
   },
   rightWrap: {
     alignItems: "flex-end",
+    justifyContent: "center",
     gap: 4,
     flexShrink: 0,
     minWidth: 0,
