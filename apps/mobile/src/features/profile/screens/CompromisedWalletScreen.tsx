@@ -51,7 +51,6 @@ const CompromisedWalletScreen: React.FC = () => {
           <Feather name="alert-octagon" size={48} color={theme.colors.danger} />
         </View>
 
-        <Text style={styles.title}>Secure your wallet</Text>
         <Text style={styles.reassurance}>
           Recovery options are available — your funds are safe until you act.
         </Text>
