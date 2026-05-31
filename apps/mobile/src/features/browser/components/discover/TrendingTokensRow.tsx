@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   card: {
     width: 90,
     padding: 10,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: "center",
     gap: 4,
