@@ -278,7 +278,8 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "300",
       fontFamily: FontFamilies.mono,
       letterSpacing: -1,
-      color: colors.textPrimary,
+      // Must be light in BOTH themes — sits on the violet brand gradient.
+      color: colors.textOnAccent,
     },
     missingNote: {
       fontSize: 11,

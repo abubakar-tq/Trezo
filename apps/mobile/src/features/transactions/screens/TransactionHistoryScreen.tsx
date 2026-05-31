@@ -126,6 +126,7 @@ export const TransactionHistoryScreen: React.FC = () => {
         <FlatList
           data={rows}
           keyExtractor={(item) => item.id}
+          style={styles.list}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <TransactionListItem
@@ -197,6 +198,9 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     textAlign: "center",
+  },
+  list: {
+    flex: 1,
   },
   listContent: {
     paddingBottom: 20,
