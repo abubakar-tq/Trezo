@@ -22,6 +22,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   Share,
   StatusBar,
   StyleSheet,
@@ -170,11 +171,14 @@ export const ReceiveChainScreen: React.FC = () => {
         <View style={{ width: 44 }} />
       </View>
 
-      <View
-        style={[
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
           styles.body,
           { paddingBottom: insets.bottom + 24 },
         ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {resolving ? (
           <View style={styles.loadingWrap}>
@@ -238,9 +242,6 @@ export const ReceiveChainScreen: React.FC = () => {
               Send any token on {chain?.name ?? "this chain"} to this address.
             </Text>
 
-            {/* Spacer: absorbs dead space so Share button anchors consistently */}
-            <View style={styles.spacer} />
-
             {/* Share */}
             <Pressable
               onPress={handleShare}
@@ -267,7 +268,7 @@ export const ReceiveChainScreen: React.FC = () => {
             </Text>
           </View>
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 };
@@ -306,8 +307,10 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -0.5,
   },
-  body: {
+  scrollView: {
     flex: 1,
+  },
+  body: {
     paddingHorizontal: 24,
     paddingTop: 8,
     alignItems: "center",
@@ -318,6 +321,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 16,
+    paddingVertical: 60,
   },
   loadingText: {
     fontSize: 14,
@@ -392,12 +396,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     textAlign: "center",
     paddingHorizontal: 8,
-  },
-  spacer: {
-    flex: 1,
-    minHeight: 8,
-    maxHeight: 40,
-    alignSelf: "stretch",
   },
   shareBtn: {
     alignItems: "center",

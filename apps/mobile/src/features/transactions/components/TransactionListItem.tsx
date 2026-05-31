@@ -159,6 +159,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 12,
@@ -176,6 +177,7 @@ const styles = StyleSheet.create({
   },
   textWrap: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   label: {
@@ -190,7 +192,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     gap: 4,
     flexShrink: 0,
-    maxWidth: "45%",
+    minWidth: 0,
   },
   amount: {
     fontSize: 13,
