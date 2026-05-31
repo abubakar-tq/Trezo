@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 
 import { EmailRecoveryService } from "@/src/features/wallet/services/EmailRecoveryService";
+import { getRecoveryRequestService } from "@/src/features/wallet/services/RecoveryRequestService";
 import { SocialRecoveryService } from "@/src/features/wallet/services/SocialRecoveryService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
@@ -28,11 +30,12 @@ type MethodState = boolean | null; // true = on, false = off, null = checking
 
 interface SegmentBarProps {
   states: [MethodState, MethodState, MethodState];
+  activeCount?: number;
   colors: ThemeColors;
 }
 
-const SegmentBar: React.FC<SegmentBarProps> = ({ states, colors }) => {
-  const activeCount = states.filter((s) => s === true).length;
+const SegmentBar: React.FC<SegmentBarProps> = ({ states, activeCount: activeCountProp, colors }) => {
+  const activeCount = activeCountProp ?? states.filter((s) => s === true).length;
   return (
     <View style={{ gap: 10 }}>
       <View style={{ flexDirection: "row", gap: 6 }}>
@@ -166,6 +169,7 @@ const BackupRecoveryScreen: React.FC = () => {
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
 
+  const user = useUserStore((state) => state.user);
   const storedSmartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   const aaAccount = useWalletStore((state) => state.aaAccount);
@@ -193,9 +197,9 @@ const BackupRecoveryScreen: React.FC = () => {
 
   useEffect(() => {
     if (!smartAccountReady || !smartAccountAddress) {
-      // Can't check — show null (unknown) rather than blocking nav
-      setGuardiansOn(null);
-      setEmailOn(null);
+      // Account not deployed — show "Set up" badges instead of permanent spinners
+      setGuardiansOn(false);
+      setEmailOn(false);
       return;
     }
 
@@ -244,6 +248,32 @@ const BackupRecoveryScreen: React.FC = () => {
     linkedDevicesOn,
   ];
 
+  const handleRecoveryStatusPress = useCallback(async () => {
+    if (!user) {
+      navigation.navigate("RecoveryEntry");
+      return;
+    }
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Timed out")), 4000),
+      );
+      const activeRequest = await Promise.race([
+        getRecoveryRequestService().getLatestActiveRecoveryRequestForUser(
+          user.id,
+          smartAccountAddress,
+        ),
+        timeoutPromise,
+      ]);
+      if (activeRequest) {
+        navigation.navigate("RecoveryProgress", { requestId: activeRequest.id });
+      } else {
+        Alert.alert("No active recovery", "There is no recovery in progress for your wallet.");
+      }
+    } catch {
+      navigation.navigate("RecoveryEntry");
+    }
+  }, [user, smartAccountAddress, navigation]);
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -262,7 +292,7 @@ const BackupRecoveryScreen: React.FC = () => {
       >
         {/* ── Summary card ──────────────────────────────────────────────── */}
         <View style={styles.summaryCard}>
-          <SegmentBar states={methodStates} colors={colors} />
+          <SegmentBar states={methodStates} activeCount={activeCount} colors={colors} />
           <Text style={[styles.headline, { color: headlineColor }]}>
             {headline}
           </Text>
@@ -307,7 +337,7 @@ const BackupRecoveryScreen: React.FC = () => {
           <ActivityRow
             icon="clock"
             label="Recovery Status"
-            onPress={() => navigation.navigate("IncomingRecoveryApprovals")}
+            onPress={() => { void handleRecoveryStatusPress(); }}
             colors={colors}
             styles={styles}
           />
