@@ -691,7 +691,7 @@ const DevicesPasskeysScreen: React.FC = () => {
                   <View style={[styles.addDeviceIconWrap, { backgroundColor: "rgba(255,255,255,0.18)" }]}>
                     <Feather name="plus" size={16} color={colors.textOnAccent} />
                   </View>
-                  <Text style={[styles.addDeviceLabel, { color: colors.textOnAccent }]}>Add New Device</Text>
+                  <Text style={[styles.addDeviceLabel, { color: colors.textOnAccent }]}>Add a Device</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -716,18 +716,16 @@ const DevicesPasskeysScreen: React.FC = () => {
             )}
 
             {/* Pending pairing requests */}
-            <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
-              <View style={styles.cardHeader}>
-                <View style={[styles.cardIconWrap, { backgroundColor: `${colors.warning}1A` }]}>
-                  <Feather name="clock" size={15} color={colors.warning} />
+            {requests.length > 0 && (
+              <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: `${colors.warning}1A` }]}>
+                    <Feather name="clock" size={15} color={colors.warning} />
+                  </View>
+                  <Text style={styles.cardTitle}>Pending Requests</Text>
                 </View>
-                <Text style={styles.cardTitle}>Pending Requests</Text>
-              </View>
 
-              {requests.length === 0 ? (
-                <Text style={[styles.emptyHint, { color: colors.textMuted }]}>No pending pairing requests.</Text>
-              ) : (
-                requests.map((request, i) => (
+                {requests.map((request, i) => (
                   <View
                     key={request.id}
                     style={[
@@ -763,9 +761,9 @@ const DevicesPasskeysScreen: React.FC = () => {
                       </View>
                     )}
                   </View>
-                ))
-              )}
-            </View>
+                ))}
+              </View>
+            )}
 
             {/* My passkeys */}
             <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
