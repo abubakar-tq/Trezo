@@ -40,7 +40,7 @@ import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 
 const { width: SCREEN_W } = Dimensions.get("window");
-const HERO_H = 130;
+const HERO_H = 196;
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -262,14 +262,16 @@ const ProfileScreen: React.FC = () => {
       >
         {/* ── Hero ─────────────────────────────────────── */}
         <View style={styles.hero}>
-          {/* Skia radial color bleed */}
+          {/* Skia radial color bleed — toned way down in light mode */}
           <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
             <Rect x={0} y={0} width={SCREEN_W} height={HERO_H}>
               <RadialGradient
-                c={vec(82, HERO_H * 0.54)}
+                c={vec(90, HERO_H * 0.54)}
                 r={SCREEN_W * 0.65}
                 colors={[
-                  hasPhoto ? "rgba(124,58,237,0.18)" : "rgba(124,58,237,0.22)",
+                  resolvedMode === "dark"
+                    ? (hasPhoto ? "rgba(124,58,237,0.20)" : "rgba(124,58,237,0.24)")
+                    : (hasPhoto ? "rgba(124,58,237,0.07)" : "rgba(124,58,237,0.09)"),
                   "transparent",
                 ]}
               />
@@ -277,9 +279,12 @@ const ProfileScreen: React.FC = () => {
             {!hasPhoto && (
               <Rect x={0} y={0} width={SCREEN_W} height={HERO_H}>
                 <RadialGradient
-                  c={vec(82, HERO_H * 0.54)}
+                  c={vec(90, HERO_H * 0.54)}
                   r={SCREEN_W * 0.42}
-                  colors={["rgba(219,39,119,0.10)", "transparent"]}
+                  colors={[
+                    resolvedMode === "dark" ? "rgba(219,39,119,0.10)" : "rgba(219,39,119,0.04)",
+                    "transparent",
+                  ]}
                 />
               </Rect>
             )}
@@ -315,13 +320,13 @@ const ProfileScreen: React.FC = () => {
                   end={{ x: 0.9, y: 0.9 }}
                   style={styles.avatarGradientWrap}
                 >
-                  <Avatar size={62} uri={undefined} label={displayName} />
+                  <Avatar size={82} uri={undefined} label={displayName} />
                 </LinearGradient>
               ) : (
-                <Avatar size={66} uri={avatarUri} label={displayName} />
+                <Avatar size={88} uri={avatarUri} label={displayName} />
               )}
               <View style={styles.cameraChip}>
-                <Feather name="camera" size={11} color="rgba(255,255,255,0.85)" />
+                <Feather name="camera" size={13} color={colors.textOnAccent} />
               </View>
             </TouchableOpacity>
 
@@ -490,9 +495,9 @@ const ProfileScreen: React.FC = () => {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     hero: {
-      paddingTop: 52,
-      paddingBottom: 20,
-      paddingHorizontal: 20,
+      paddingTop: 74,
+      paddingBottom: 38,
+      paddingHorizontal: 22,
       position: "relative",
       overflow: "hidden",
       backgroundColor: colors.background,
@@ -511,36 +516,36 @@ const createStyles = (colors: ThemeColors) =>
     heroRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 14,
+      gap: 18,
     },
     avatarWrap: {
       position: "relative",
-      width: 66,
-      height: 66,
+      width: 88,
+      height: 88,
     },
     avatarGradientWrap: {
-      width: 66,
-      height: 66,
-      borderRadius: 33,
+      width: 88,
+      height: 88,
+      borderRadius: 44,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1.5,
-      borderColor: "rgba(255,255,255,0.13)",
-      shadowColor: "#7C3AED",
-      shadowOpacity: 0.35,
-      shadowRadius: 16,
-      elevation: 8,
+      borderColor: `${colors.accent}28`,
+      shadowColor: colors.accent,
+      shadowOpacity: 0.32,
+      shadowRadius: 20,
+      elevation: 10,
     },
     cameraChip: {
       position: "absolute",
       bottom: 0,
       right: 0,
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      backgroundColor: "rgba(255,255,255,0.13)",
-      borderWidth: 1.5,
-      borderColor: "rgba(255,255,255,0.18)",
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: colors.accent,
+      borderWidth: 2,
+      borderColor: colors.background,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -549,20 +554,20 @@ const createStyles = (colors: ThemeColors) =>
       minWidth: 0,
     },
     heroName: {
-      fontSize: 18,
+      fontSize: 23,
       fontWeight: "800",
-      letterSpacing: -0.45,
-      color: "#f5f0ff",
-      marginBottom: 3,
+      letterSpacing: -0.6,
+      color: colors.textPrimary,
+      marginBottom: 4,
     },
     heroEmail: {
-      fontSize: 11.5,
-      color: "rgba(196,181,253,0.42)",
-      marginBottom: 5,
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginBottom: 6,
     },
     heroAddress: {
-      fontSize: 11.5,
-      color: "rgba(196,181,253,0.38)",
+      fontSize: 13,
+      color: colors.textMuted,
       letterSpacing: 0.3,
       fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     },
