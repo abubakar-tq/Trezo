@@ -45,6 +45,7 @@ import ReceiveScreen from "@features/wallet/screens/ReceiveScreen";
 import ReceiveChainScreen from "@features/wallet/screens/ReceiveChainScreen";
 import SendScreen from "@features/wallet/screens/SendScreen";
 import { useLazyPasskeyBackfill } from "@features/wallet/hooks/useLazyPasskeyBackfill";
+import { useDevicePairingDeepLink } from "@features/wallet/hooks/useDevicePairingDeepLink";
 import PasskeyService from "@features/wallet/services/PasskeyService";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
@@ -133,6 +134,7 @@ const RootNavigation = () => {
   }, []);
 
   useLazyPasskeyBackfill();
+  useDevicePairingDeepLink();
 
   return (
     <NavigationContainer
@@ -242,17 +244,21 @@ const RootNavigation = () => {
             animation: "slide_from_right",
           }}
         />
-        {/* ADR-0011: same-device "Start Email Recovery" is testing-only. */}
-        {__DEV__ && (
-          <Stack.Screen
-            name="EmailRecoveryStart"
-            component={EmailRecoveryStartScreen}
-            options={{
-              headerShown: false,
-              animation: "slide_from_right",
-            }}
-          />
-        )}
+        {/*
+          ADR-0011 (updated 2026-06-02): the new-device recovery initiator is a
+          real production entry (email recovery is live on Base Sepolia), so the
+          route is registered unconditionally. The same-device "Start Email
+          Recovery" shortcut and the forceNewPasskey toggle remain __DEV__-only
+          inside the screens themselves.
+        */}
+        <Stack.Screen
+          name="EmailRecoveryStart"
+          component={EmailRecoveryStartScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
         <Stack.Screen
           name="RecoveryAttemptStatus"
           component={RecoveryAttemptStatusScreen}

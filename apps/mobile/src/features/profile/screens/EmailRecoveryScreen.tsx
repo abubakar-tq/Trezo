@@ -26,7 +26,12 @@ import {
 } from "@/src/integration/chains";
 import { getDefaultNetworkForChain } from "@/src/integration/networks";
 import { RootStackParamList } from "@/src/types/navigation";
+import { useDevSettingsStore } from "@store/useDevSettingsStore";
 import { useUserStore } from "@store/useUserStore";
+import {
+  deriveExpiryMinutes,
+  MIN_RECOVERY_WINDOW_MINUTES,
+} from "../utils/recoveryLabels";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 
@@ -82,9 +87,13 @@ const EmailRecoveryScreen: React.FC = () => {
   // Safety delay — exposed as tappable DELAY_CHOICES in Setup; converted to
   // minutes for on-chain calls via Math.round(selectedDelaySeconds / 60).
   const [selectedDelaySeconds, setSelectedDelaySeconds] = useState(172800);
-  // EmailRecoveryManager enforces expiry - delay >= MINIMUM_RECOVERY_WINDOW
-  // (= 2 days = 2880 minutes). Defaults give a 49-hour window above the floor.
-  const [expiryMinutes, setExpiryMinutes] = useState("2940");
+  // Dev Controls "Allow short recovery delays" — surfaces 5m/30m/1h options so
+  // the execute step can be tested without waiting out a production delay. Hard
+  // gated on __DEV__ so it can never reach a production build.
+  const allowShortRecoveryDelays = useDevSettingsStore(
+    (state) => state.allowShortRecoveryDelays,
+  );
+  const showShortDelayOptions = __DEV__ && allowShortRecoveryDelays;
   // Force "none" — extra-security UI has been removed from the surface.
   const effectiveSecurityMode: EmailRecoverySecurityMode = "none";
 
@@ -143,9 +152,12 @@ const EmailRecoveryScreen: React.FC = () => {
     () => Math.max(parseInt(thresholdValue, 10) || 0, 0),
     [thresholdValue],
   );
+  // Expiry is derived from the delay so the on-chain recovery window
+  // (expiry - delay) is always exactly RECOVERY_WINDOW_MINUTES, comfortably
+  // above MIN_RECOVERY_WINDOW_MINUTES — for every delay option, prod or dev.
   const parsedExpiryMinutes = useMemo(
-    () => Math.max(parseInt(expiryMinutes, 10) || 0, 0),
-    [expiryMinutes],
+    () => deriveExpiryMinutes(parsedDelayMinutes),
+    [parsedDelayMinutes],
   );
   const hasDuplicateGuardians = useMemo(() => {
     const normalized = trimmedGuardians.map((email) => email.toLowerCase());
@@ -197,8 +209,7 @@ const EmailRecoveryScreen: React.FC = () => {
     }
     // EmailRecoveryManager.configureRecovery requires
     //   expiry - delay >= MINIMUM_RECOVERY_WINDOW (2 days = 2880 minutes).
-    // Catch this client-side instead of failing the UserOp at simulation time.
-    const MIN_RECOVERY_WINDOW_MINUTES = 2880;
+    // Derived expiry guarantees this; the guard stays as defense in depth.
     if (parsedExpiryMinutes - parsedDelayMinutes < MIN_RECOVERY_WINDOW_MINUTES) {
       return `Expiry must be at least ${MIN_RECOVERY_WINDOW_MINUTES} minutes (48 hours) greater than delay. Current window: ${parsedExpiryMinutes - parsedDelayMinutes} min.`;
     }
@@ -311,16 +322,12 @@ const EmailRecoveryScreen: React.FC = () => {
         const guardianCount = Math.max(metadata.guardians.length, 1);
         setGuardianCountValue(String(guardianCount));
         setThresholdValue(String(metadata.config.threshold));
-        // Restore selected delay from stored metadata
+        // Restore selected delay from stored metadata. Expiry is derived from
+        // the delay (see parsedExpiryMinutes), so there is nothing else to set.
         const storedDelaySeconds = metadata.config.delaySeconds;
         if (storedDelaySeconds > 0) {
           setSelectedDelaySeconds(storedDelaySeconds);
         }
-        setExpiryMinutes(
-          String(
-            Math.max(Math.floor(metadata.config.expirySeconds / 60), 1),
-          ),
-        );
         setGuardianEmails(
           metadata.guardians.map((guardian) => {
             if (guardian.resolvedEmail) return guardian.resolvedEmail;
@@ -1067,10 +1074,10 @@ const EmailRecoveryScreen: React.FC = () => {
                 </Text>
                 <TouchableOpacity
                   style={styles.installButton}
-                  onPress={() => navigation.navigate("RecoveryEntry")}
+                  onPress={() => navigation.navigate("EmailRecoveryStart")}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.installButtonText}>Open recovery options</Text>
+                  <Text style={styles.installButtonText}>Start email recovery</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.secondaryButton}
@@ -1157,6 +1164,7 @@ const EmailRecoveryScreen: React.FC = () => {
             onDeleteGuardian={handleDeleteGuardian}
             selectedDelaySeconds={selectedDelaySeconds}
             onDelaySecondsChange={setSelectedDelaySeconds}
+            showShortDelayOptions={showShortDelayOptions}
             smartAccountReady={smartAccountReady}
             canSubmitGuardianConfig={canSubmitGuardianConfig}
             installingModule={installingModule}
@@ -1218,7 +1226,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 18,
     },
     installButton: {
-      backgroundColor: colors.accentAlt,
+      backgroundColor: colors.accent,
       borderRadius: 14,
       paddingVertical: 14,
       alignItems: "center",
@@ -1230,7 +1238,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     secondaryButton: {
       borderWidth: 1,
-      borderColor: `${colors.accentAlt}4D`,
+      borderColor: `${colors.accent}4D`,
       borderRadius: 14,
       paddingVertical: 12,
       alignItems: "center",

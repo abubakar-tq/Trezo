@@ -135,6 +135,11 @@ const DevicesPasskeysScreen: React.FC = () => {
           userId: user.id,
           smartAccountAddress: (walletAddress ?? walletFromStore ?? null) as `0x${string}` | null,
           chainId: resolvedChainId,
+          // Without this, canSignForWallet trusts ANY local passkey — so a new
+          // device holding a stray/local-only key is treated as authorized and
+          // never sees the inbound "Pair this device" scanner. Matching the
+          // wallet owner makes the gate reflect real signing authority.
+          expectedPasskeyId: aaAccount?.ownerAddress ?? null,
         });
         if (active) { setCanSignForWallet(signerStatus.canSignForWallet); setCheckingLocalSigner(false); }
       };
@@ -692,7 +697,7 @@ const DevicesPasskeysScreen: React.FC = () => {
                   Pair this device with a trusted device that already has your wallet, or use recovery if you no longer have access to your trusted device.
                 </Text>
                 <TouchableOpacity
-                  style={[styles.addDeviceBtn, { backgroundColor: colors.accentAlt, marginTop: 4 }]}
+                  style={[styles.addDeviceBtn, { backgroundColor: colors.accent, marginTop: 4 }]}
                   onPress={() => navigation.navigate("LinkDevice")}
                   activeOpacity={0.88}
                 >
@@ -718,7 +723,7 @@ const DevicesPasskeysScreen: React.FC = () => {
               style={[
                 styles.addDeviceBtn,
                 {
-                  backgroundColor: colors.accentAlt,
+                  backgroundColor: colors.accent,
                   opacity: busy ? 0.5 : 1,
                 },
               ]}

@@ -108,10 +108,10 @@ export function RecoveryAttemptResumeSheet({
         </Text>
 
         <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: colors.accentAlt }]}
+          style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
           onPress={handleContinue}
         >
-          <Text style={[styles.primaryBtnLabel, { color: "#fff" }]}>Continue</Text>
+          <Text style={[styles.primaryBtnLabel, { color: colors.textOnAccent }]}>Continue</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

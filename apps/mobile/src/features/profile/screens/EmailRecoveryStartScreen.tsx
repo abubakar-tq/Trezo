@@ -130,6 +130,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
     try {
       // Phase 4.5: before creating any row, check for an expired on-chain slot.
       // ADR-0010: server EOA clears it; user doesn't need a passkey to do this.
+      let expiredSlotClearFailed = false;
       const deployment = getDeployment(resolvedChainId);
       if (deployment?.emailRecovery) {
         const emailRecoveryAbi = parseAbi([
@@ -147,13 +148,28 @@ const EmailRecoveryStartScreen: React.FC = () => {
           if (executeBefore > 0n && executeBefore < nowSec) {
             setCreatingStep("Clearing previous expired Recovery Attempt…");
             const supabase = getSupabaseClient();
-            await supabase.functions.invoke("submit-recovery-operation", {
-              body: { action: "cancel-expired-email-recovery", smartAccountAddress, chainId: resolvedChainId },
-            });
+            const { data: clearData, error: clearError } = await supabase.functions.invoke(
+              "submit-recovery-operation",
+              { body: { action: "cancel-expired-email-recovery", smartAccountAddress, chainId: resolvedChainId } },
+            );
+            // The edge fn returns { status: "failed" } with HTTP 200 on an
+            // on-chain revert, so `error` stays null — data.status is the
+            // load-bearing signal. A genuinely failed clear must NOT fall through
+            // to createGroup (it would fail on-chain with a murkier error).
+            const clearStatus = (clearData as { status?: string } | null)?.status;
+            if (clearError || clearStatus === "failed") {
+              expiredSlotClearFailed = true;
+            }
           }
         } catch {
-          // Non-fatal: expired-slot check is best-effort; proceed with createGroup.
+          // Non-fatal: the expired-slot READ is best-effort. A read failure just
+          // means we proceed to createGroup, which surfaces any real conflict.
         }
+      }
+      if (expiredSlotClearFailed) {
+        throw new Error(
+          "Couldn't clear the previous expired recovery attempt. Please try again in a moment.",
+        );
       }
 
       // Production recovery runs on a NEW device (no local passkey), so this
@@ -191,7 +207,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
       setIsCreating(false);
       setCreatingStep("");
     }
-  }, [user?.id, smartAccountAddress, selectedChainIds, deadlineDays, navigation]);
+  }, [user?.id, smartAccountAddress, selectedChainIds, deadlineDays, navigation, resolvedChainId, forceNewPasskey]);
 
   if (loadingMetadata) {
     return (

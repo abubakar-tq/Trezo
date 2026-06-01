@@ -18,6 +18,7 @@ import type { Address } from "viem";
 import { getSupabaseClient } from "@lib/supabase";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useAppTheme } from "@theme";
+import { FontFamilies } from "@shared/components/TokenRegistry";
 import type { ThemeColors } from "@theme";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import {
@@ -334,8 +335,8 @@ const RecoveryAttemptStatusScreen: React.FC = () => {
                 <React.Fragment key={label}>
                   <View style={styles.stepChip}>
                     <View style={[styles.stepDot, { backgroundColor: dotColor }]}>
-                      {s === "done" && <Feather name="check" size={10} color="#fff" />}
-                      {s === "active" && <ActivityIndicator size="small" color="#fff" style={{ transform: [{ scale: 0.55 }] }} />}
+                      {s === "done" && <Feather name="check" size={10} color={theme.colors.textOnAccent} />}
+                      {s === "active" && <ActivityIndicator size="small" color={theme.colors.textOnAccent} style={{ transform: [{ scale: 0.55 }] }} />}
                     </View>
                     <Text style={[styles.stepLabel, { color: labelColor }]}>{label}</Text>
                   </View>
@@ -425,7 +426,7 @@ const createStyles = (colors: ThemeColors) =>
     stepLabel: { fontSize: 11, fontWeight: "500" },
     stepLine: { height: 2, flex: 0.5, marginBottom: 14 },
     devSection: { opacity: 0.6 },
-    devText: { fontSize: 11, fontFamily: "monospace" },
+    devText: { fontSize: 11, fontFamily: FontFamilies.mono },
   });
 
 export default RecoveryAttemptStatusScreen;

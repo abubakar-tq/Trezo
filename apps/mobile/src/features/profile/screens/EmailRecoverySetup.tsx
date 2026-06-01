@@ -12,7 +12,7 @@ import {
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 
-import { DELAY_CHOICES } from "../utils/recoveryLabels";
+import { DELAY_CHOICES, DEV_DELAY_CHOICES } from "../utils/recoveryLabels";
 
 export interface EmailRecoverySetupProps {
   // Guardian config
@@ -29,6 +29,8 @@ export interface EmailRecoverySetupProps {
   // Delay selection
   selectedDelaySeconds: number;
   onDelaySecondsChange: (seconds: number) => void;
+  // Dev-only: reveal short (5m/30m/1h) delays for testing the execute step.
+  showShortDelayOptions?: boolean;
 
   // Install
   smartAccountReady: boolean;
@@ -51,6 +53,7 @@ const EmailRecoverySetup: React.FC<EmailRecoverySetupProps> = ({
   onDeleteGuardian,
   selectedDelaySeconds,
   onDelaySecondsChange,
+  showShortDelayOptions = false,
   smartAccountReady,
   canSubmitGuardianConfig,
   installingModule,
@@ -195,6 +198,45 @@ const EmailRecoverySetup: React.FC<EmailRecoverySetupProps> = ({
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Dev-only short delays — gated by the Dev Controls toggle. */}
+        {showShortDelayOptions ? (
+          <>
+            <Text style={styles.devDelayLabel}>⚡ Short delays (testing only)</Text>
+            <View style={styles.delayChoicesRow}>
+              {DEV_DELAY_CHOICES.map((choice) => (
+                <TouchableOpacity
+                  key={choice.seconds}
+                  style={[
+                    styles.delayChip,
+                    selectedDelaySeconds === choice.seconds && styles.delayChipActive,
+                  ]}
+                  onPress={() => onDelaySecondsChange(choice.seconds)}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.delayChipLabel,
+                      selectedDelaySeconds === choice.seconds && styles.delayChipLabelActive,
+                    ]}
+                  >
+                    {choice.label}
+                  </Text>
+                  {choice.note ? (
+                    <Text
+                      style={[
+                        styles.delayChipNote,
+                        selectedDelaySeconds === choice.seconds && styles.delayChipNoteActive,
+                      ]}
+                    >
+                      {choice.note}
+                    </Text>
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        ) : null}
       </View>
 
       {/* ── Activate card ── */}
@@ -361,6 +403,11 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       gap: 10,
     },
+    devDelayLabel: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: "600",
+    },
     delayChip: {
       flex: 1,
       borderWidth: 1,
@@ -407,7 +454,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 18,
     },
     installButton: {
-      backgroundColor: colors.accentAlt,
+      backgroundColor: colors.accent,
       borderRadius: 14,
       paddingVertical: 14,
       alignItems: "center",

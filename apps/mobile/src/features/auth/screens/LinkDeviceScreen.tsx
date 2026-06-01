@@ -249,7 +249,7 @@ export function LinkDeviceScreen() {
             disabled={!pasteLink.trim() || isPasting}
             style={[
               styles.pasteBtn,
-              { backgroundColor: colors.accentAlt, opacity: !pasteLink.trim() || isPasting ? 0.5 : 1 },
+              { backgroundColor: colors.accent, opacity: !pasteLink.trim() || isPasting ? 0.5 : 1 },
             ]}
             activeOpacity={0.88}
           >

@@ -3,7 +3,12 @@ import { NavigationProp, useNavigation } from "@react-navigation/native";
 import React, { useCallback, useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import type { Address } from "viem";
+
+import LocalSignerService from "@/src/features/wallet/services/LocalSignerService";
+import { resolveGuardianRecoveryTarget } from "@/src/features/wallet/utils/guardianRecoveryTarget";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
@@ -18,6 +23,9 @@ const STEPS = [
 const CompromisedWalletScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const user = useUserStore((state) => state.user);
+  const storedSmartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const aaAccount = useWalletStore((state) => state.aaAccount);
+  const activeChainId = useWalletStore((state) => state.activeChainId);
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
 
@@ -27,14 +35,33 @@ const CompromisedWalletScreen: React.FC = () => {
       return;
     }
 
-    const localPasskey = await PasskeyService.getPasskey(user.id);
-    if (localPasskey?.credentialIdRaw) {
-      navigation.navigate("GuardianRecovery");
-      return;
-    }
+    // Only send the user to GuardianRecovery when this device can actually sign
+    // for the wallet on-chain — the exact precondition that screen blocks on. A
+    // local-only / stale passkey otherwise dead-ends at "This device cannot manage
+    // guardians yet". Otherwise route to the recovery/link path. See
+    // utils/guardianRecoveryTarget.
+    const smartAccountAddress = aaAccount?.predictedAddress ?? storedSmartAccountAddress ?? null;
+    const chainId = (aaAccount?.chainId ?? activeChainId ?? DEFAULT_CHAIN_ID) as SupportedChainId;
+    const { canManage } = await resolveGuardianRecoveryTarget(
+      {
+        userId: user.id,
+        smartAccountAddress: smartAccountAddress ? (smartAccountAddress as Address) : null,
+        chainId,
+        expectedPasskeyId: aaAccount?.ownerAddress ?? null,
+      },
+      (params) => LocalSignerService.getWalletSignerStatus(params),
+    );
 
-    navigation.navigate("RecoveryEntry");
-  }, [navigation, user?.id]);
+    navigation.navigate(canManage ? "GuardianRecovery" : "RecoveryEntry");
+  }, [
+    aaAccount?.chainId,
+    aaAccount?.ownerAddress,
+    aaAccount?.predictedAddress,
+    activeChainId,
+    navigation,
+    storedSmartAccountAddress,
+    user?.id,
+  ]);
 
   return (
     <View style={styles.container}>

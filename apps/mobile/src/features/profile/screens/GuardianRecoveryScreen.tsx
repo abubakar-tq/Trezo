@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { NavigationProp, useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -19,6 +19,7 @@ import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
+import { FontFamilies } from "@shared/components/TokenRegistry";
 
 import { useRecoveryStatusStore } from "@store/useRecoveryStatusStore";
 import type { Guardian } from "@store/useRecoveryStatusStore";
@@ -27,6 +28,7 @@ import { useUserStore } from "@store/useUserStore";
 import { isAddress, type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
 import { GuardianUpdateModal } from "./GuardianUpdateModal";
+import type { RootStackParamList } from "@/src/types/navigation";
 
 const shortenHex = (value: string | null | undefined, chars = 6) => {
   if (!value) return "—";
@@ -45,7 +47,7 @@ const TIMELOCK_OPTIONS = [
 ] as const;
 
 const GuardianRecoveryScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -480,7 +482,11 @@ const GuardianRecoveryScreen: React.FC = () => {
 
                 <TouchableOpacity
                   style={styles.blockedPrimaryButton}
-                  onPress={() => navigation.navigate("RecoveryEntry" as never)}
+                  onPress={() =>
+                    navigation.canGoBack()
+                      ? navigation.goBack()
+                      : navigation.navigate("RecoveryEntry", { reason: "no_local_passkey" })
+                  }
                   activeOpacity={0.85}
                 >
                   <Text style={styles.blockedPrimaryButtonText}>Open recovery options</Text>
@@ -488,7 +494,7 @@ const GuardianRecoveryScreen: React.FC = () => {
 
                 <TouchableOpacity
                   style={styles.blockedSecondaryButton}
-                  onPress={() => navigation.navigate("BackupRecovery" as never)}
+                  onPress={() => navigation.navigate("BackupRecovery")}
                   activeOpacity={0.85}
                 >
                   <Text style={styles.blockedSecondaryButtonText}>Back to backup & recovery</Text>
@@ -519,13 +525,13 @@ const GuardianRecoveryScreen: React.FC = () => {
               deployed to the network. Deploy your smart account to enable recovery configuration.
             </Text>
             {smartAccountAddress && (
-              <Text style={[styles.blockedText, { fontFamily: 'monospace', fontSize: 12, marginTop: 8 }]}>
+              <Text style={[styles.blockedText, { fontFamily: FontFamilies.mono, fontSize: 12, marginTop: 8 }]}>
                 {smartAccountAddress.slice(0, 10)}...{smartAccountAddress.slice(-8)}
               </Text>
             )}
             <TouchableOpacity
               style={styles.blockedPrimaryButton}
-              onPress={() => navigation.navigate('DeployAccount' as never)}
+              onPress={() => navigation.navigate("DeployAccount")}
               activeOpacity={0.85}
             >
               <Text style={styles.blockedPrimaryButtonText}>Deploy Wallet</Text>
@@ -1049,12 +1055,12 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.accent,
       fontSize: 11,
       fontWeight: "700",
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
     guardianAddress: {
       color: colors.textPrimary,
       fontSize: 13,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.monoMedium,
       fontWeight: "500",
     },
     csub: {
@@ -1246,7 +1252,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: 14,
       color: colors.textPrimary,
       fontSize: 14,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
     submitButton: {
       backgroundColor: colors.accent,
@@ -1298,7 +1304,7 @@ const createStyles = (colors: ThemeColors) =>
     payloadValue: {
       color: colors.textPrimary,
       fontSize: 13,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
     payloadSubLabel: {
       color: colors.textSecondary,
@@ -1308,7 +1314,7 @@ const createStyles = (colors: ThemeColors) =>
     payloadCode: {
       color: colors.textPrimary,
       fontSize: 12,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
       marginTop: 2,
     },
     hashRow: {
@@ -1325,7 +1331,7 @@ const createStyles = (colors: ThemeColors) =>
     hashValue: {
       color: colors.textPrimary,
       fontSize: 12,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
     // Install CTA
     installButton: {

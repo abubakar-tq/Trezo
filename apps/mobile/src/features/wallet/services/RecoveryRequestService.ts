@@ -1,5 +1,7 @@
 import { getSupabaseClient } from "@lib/supabase";
 
+import { isDeadlineLive } from "../utils/recoveryLiveness";
+
 export type RecoveryRequestStatus =
   | "draft"
   | "collecting_approvals"
@@ -315,7 +317,16 @@ export class RecoveryRequestService {
     walletAddress?: string | null,
   ): Promise<RecoveryRequestRecord | null> {
     const requests = await this.listRecoveryRequestsForUser(userId, walletAddress);
-    const active = requests.find((request) => !TERMINAL_RECOVERY_REQUEST_STATUSES.has(request.status));
+    // A request is only "active" if its status is non-terminal AND its deadline
+    // has not passed. The off-chain status can lag the deadline (a backend job
+    // flips it to "expired"), so without the deadline guard a dead request would
+    // still be offered as "Resume Recovery". See utils/recoveryLiveness.
+    const now = Date.now();
+    const active = requests.find(
+      (request) =>
+        !TERMINAL_RECOVERY_REQUEST_STATUSES.has(request.status) &&
+        isDeadlineLive(request.deadline, now),
+    );
     return active ?? null;
   }
 
