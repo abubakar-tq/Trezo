@@ -85,6 +85,12 @@ export class LifiClient {
     if (!data?.transactionRequest?.to || !data?.estimate?.approvalAddress) {
       throw new LifiError("LI.FI quote missing transactionRequest/approvalAddress (no route?).");
     }
+    // Output amounts must be plain uint strings — otherwise BigInt() downstream
+    // throws a cryptic SyntaxError instead of a clear "no route" failure.
+    const isUintString = (v: unknown): v is string => typeof v === "string" && /^\d+$/.test(v);
+    if (!isUintString(data.estimate.toAmount) || !isUintString(data.estimate.toAmountMin)) {
+      throw new LifiError("LI.FI quote returned a malformed output amount.");
+    }
     return data;
   }
 }

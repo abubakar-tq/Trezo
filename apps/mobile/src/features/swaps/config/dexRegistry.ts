@@ -12,6 +12,7 @@
 
 import type { NetworkKey } from "@/src/integration/networks";
 import type { Address } from "viem";
+import { LIFI_DIAMOND } from "../lifi/constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,8 @@ const UNISWAP_SWAP_ROUTER02_BASE = "0x2626664c2603336E57B271c5C0b26F421741e481" 
 const UNISWAP_V2_ROUTER_BASE = "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24" as Address;
 // LI.FI Diamond (deterministic across chains incl. Base). Token approvals for
 // LI.FI-routed swaps target this address (= estimate.approvalAddress). ADR 0014.
-const LIFI_DIAMOND_BASE = "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE" as Address;
+// Single source of truth lives in lifi/constants.ts.
+const LIFI_DIAMOND_BASE = LIFI_DIAMOND;
 
 // ─── Sepolia Addresses ────────────────────────────────────────────────────────
 // Uniswap V3 testnet deployments. Verify before mainnet rollout.

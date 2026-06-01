@@ -8,7 +8,7 @@
  */
 
 import { LifiClient } from "../lifi/LifiClient";
-import { isLifiBridgeRoute, lifiChainIdForNetwork, LIFI_NATIVE_ADDRESS } from "../lifi/constants";
+import { isLifiBridgeRoute, lifiChainIdForNetwork, LIFI_DIAMOND, LIFI_NATIVE_ADDRESS } from "../lifi/constants";
 import type { BridgeRouteProvider, BridgeRouteRequest, BridgeRouteQuote } from "./BridgeRouteProvider";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 import { hexToBigInt, type Address, type Hex } from "viem";
@@ -45,6 +45,18 @@ export class LiFiBridgeProvider implements BridgeRouteProvider {
       toAddress: req.destAccount ?? req.account,
       slippage: req.slippageBps / 10_000,
     });
+
+    // Defense-in-depth (fail-closed): LI.FI routes through the Diamond. The
+    // execution-ready fields are read-only today, but guard them now so the
+    // future mainnet execution flip can never approve/call an untrusted target.
+    const approvalAddress = quote.estimate.approvalAddress as Address;
+    const target = quote.transactionRequest.to as Address;
+    if (approvalAddress.toLowerCase() !== LIFI_DIAMOND.toLowerCase()) {
+      throw new Error(`LI.FI bridge approvalAddress ${approvalAddress} is not the trusted Diamond.`);
+    }
+    if (target.toLowerCase() !== LIFI_DIAMOND.toLowerCase()) {
+      throw new Error(`LI.FI bridge target ${target} is not the trusted Diamond.`);
+    }
 
     const feePct = quote.estimate.feeCosts?.[0]?.percentage;
     return {

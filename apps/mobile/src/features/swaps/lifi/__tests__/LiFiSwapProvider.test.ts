@@ -62,6 +62,21 @@ async function run(): Promise<void> {
   }
   assert(threw, "rejects untrusted approvalAddress");
 
+  // SECURITY: a transactionRequest.to that is not the Diamond must also be rejected.
+  const tamperedTarget = JSON.parse(JSON.stringify(fixture));
+  tamperedTarget.transactionRequest.to = "0x000000000000000000000000000000000000dEaD";
+  const badTargetProvider = new LiFiSwapProvider(new LifiClient({ fetchImpl: fetchReturning(tamperedTarget) }));
+  let threwTarget = false;
+  try {
+    await badTargetProvider.getQuote({
+      networkKey: "base-mainnet-fork", chainId: 8453 as any, account: "0xabc",
+      sellToken: usdc, buyToken: weth, sellAmountRaw: 1n, slippageBps: 50,
+    });
+  } catch {
+    threwTarget = true;
+  }
+  assert(threwTarget, "rejects untrusted transactionRequest.to");
+
   console.log("OK");
 }
 

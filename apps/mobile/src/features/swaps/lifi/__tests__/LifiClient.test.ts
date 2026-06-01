@@ -60,6 +60,20 @@ async function run(): Promise<void> {
   }
   assert(threw2, "missing transactionRequest throws");
 
+  // malformed amount: ok with tx + approvalAddress but a non-numeric toAmount
+  const badAmt = JSON.parse(JSON.stringify(fixture));
+  badAmt.estimate.toAmount = "NaN";
+  const badAmtClient = new LifiClient({
+    fetchImpl: (async () => ({ ok: true, status: 200, json: async () => badAmt } as unknown as Response)) as unknown as typeof fetch,
+  });
+  let threw3 = false;
+  try {
+    await badAmtClient.getQuote({ fromChain: 8453, toChain: 8453, fromToken: "0x", toToken: "0x", fromAmount: "1", fromAddress: "0x" });
+  } catch {
+    threw3 = true;
+  }
+  assert(threw3, "malformed output amount throws");
+
   console.log("OK");
 }
 
