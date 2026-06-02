@@ -1,4 +1,5 @@
 // @ts-nocheck — Dev-only showcase; Tier1/2/3 component paths may be stale
+/* eslint-disable import/no-unresolved */
 /**
  * ComponentShowcase.tsx
  * Development Screen: Visual QA for all UI components and screens

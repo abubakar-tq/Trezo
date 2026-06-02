@@ -7,7 +7,7 @@ interface MeshBackgroundProps {
   intensity?: number;
 }
 
-export const MeshBackground = React.memo<MeshBackgroundProps>(({ intensity = 1 }) => {
+export const MeshBackground = React.memo<MeshBackgroundProps>(function MeshBackground({ intensity = 1 }) {
   const { theme } = useAppTheme();
   const { colors, mode } = theme;
   const { width, height } = useWindowDimensions();

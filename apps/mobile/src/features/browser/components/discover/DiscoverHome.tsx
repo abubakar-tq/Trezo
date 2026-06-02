@@ -227,7 +227,7 @@ function MarketsSection({
         ) : searchResults.length === 0 ? (
           <View style={styles.marketsEmpty}>
             <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: "600" }}>
-              No tokens match "{query}"
+              No tokens match &quot;{query}&quot;
             </Text>
           </View>
         ) : (

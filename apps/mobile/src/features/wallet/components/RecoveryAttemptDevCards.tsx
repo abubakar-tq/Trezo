@@ -69,7 +69,7 @@ export function ForceCompleteCard() {
     <View style={[styles.card, { backgroundColor: theme.colors.surfaceCard, borderColor: theme.colors.border }]}>
       <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>Force Complete</Text>
       <Text style={[styles.cardDesc, { color: theme.colors.textMuted }]}>
-        Directly calls completeRecovery for an attempt ID. Use when auto-execute couldn't fire.
+        Directly calls completeRecovery for an attempt ID. Use when auto-execute couldn&apos;t fire.
       </Text>
       <TextInput
         style={[styles.input, { color: theme.colors.textPrimary, borderColor: theme.colors.border }]}

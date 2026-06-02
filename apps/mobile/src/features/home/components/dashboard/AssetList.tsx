@@ -148,6 +148,8 @@ export const AssetList = React.memo<AssetListProps>(({
   );
 });
 
+AssetList.displayName = "AssetList";
+
 const styles = StyleSheet.create({
   container: {
   },

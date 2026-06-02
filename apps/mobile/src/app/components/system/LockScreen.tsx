@@ -523,7 +523,7 @@ const LockScreen: React.FC = () => {
                         <Text style={[styles.advisoryDot, { color: colors.textMuted }]}>·</Text>
                         <TouchableOpacity onPress={handleRecheckSecurityLevel} activeOpacity={0.7}>
                           <Text style={[styles.advisoryLink, { color: colors.accent }]}>
-                            I've set one
+                            I&apos;ve set one
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -613,7 +613,7 @@ const LockScreen: React.FC = () => {
               Re-login Required
             </Text>
             <Text style={[styles.modalMessage, { color: colors.textSecondary }]}>
-              Your current session will be closed and all local data cleared. You'll
+              Your current session will be closed and all local data cleared. You&apos;ll
               need to log in again with your credentials.
             </Text>
 

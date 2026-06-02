@@ -155,7 +155,7 @@ export const SetUpWalletSheet = forwardRef<SetUpSheetHandle>((_, ref) => {
         {step === "success" && (
           <>
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
-              You're ready to receive.
+              You&apos;re ready to receive.
             </Text>
             <Pressable
               onPress={() => {

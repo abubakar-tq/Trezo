@@ -28,7 +28,7 @@ interface TokenDetailModalProps {
 }
 
 export const TokenDetailModal = React.forwardRef<TokenDetailModalHandle, TokenDetailModalProps>(
-  ({ onClose, onRequestSend, onRequestReceive, onRequestSwap, onRequestBuy }, ref) => {
+  function TokenDetailModal({ onClose, onRequestSend, onRequestReceive, onRequestSwap, onRequestBuy }, ref) {
     const { theme } = useAppTheme();
     const { colors } = theme;
     const navigation = useNavigation<any>();

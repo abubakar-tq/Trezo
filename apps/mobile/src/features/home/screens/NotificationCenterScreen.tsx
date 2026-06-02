@@ -316,7 +316,7 @@ export const NotificationCenterScreen: React.FC<
                   color={colors.textSecondary}
                   style={{ fontSize: 13, textAlign: "center" }}
                 >
-                  You're all caught up. New alerts will appear here.
+                  You&apos;re all caught up. New alerts will appear here.
                 </BodyText>
               </View>
             </View>

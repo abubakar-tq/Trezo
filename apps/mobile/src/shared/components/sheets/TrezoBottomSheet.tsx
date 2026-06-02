@@ -66,6 +66,7 @@ export const TrezoBottomSheet = forwardRef<BottomSheetModal, Props>(
     );
   },
 );
+TrezoBottomSheet.displayName = "TrezoBottomSheet";
 
 const styles = StyleSheet.create({
   body: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 24 },
