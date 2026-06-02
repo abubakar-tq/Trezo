@@ -20,7 +20,7 @@ import { useUserStore } from "@store/useUserStore";
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { getPublicClient } from "@/src/integration/viem/clients";
 import { getDeployment } from "@/src/integration/viem/deployments";
-import { DEFAULT_CHAIN_ID } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import { useAppTheme } from "@theme";
 import Constants from "expo-constants";
 
@@ -74,11 +74,11 @@ export function RestoreOnChainPasskeyCard() {
   const activeAccount = useWalletStore((s) => s?.activeAccount);
 
   const storedAddress = useMemo<`0x${string}` | undefined>(() => {
-    const candidate = aaAccount?.address ?? activeAccount?.address;
+    const candidate = aaAccount?.predictedAddress ?? activeAccount?.address;
     return candidate && /^0x[0-9a-fA-F]{40}$/.test(candidate)
       ? (candidate as `0x${string}`)
       : undefined;
-  }, [aaAccount?.address, activeAccount?.address]);
+  }, [aaAccount?.predictedAddress, activeAccount?.address]);
 
   // Manual override so the rescue works even when the wallet store didn't
   // hydrate the AA account (common when the user is locked out and can't
@@ -90,7 +90,7 @@ export function RestoreOnChainPasskeyCard() {
     return storedAddress;
   }, [manualAddress, storedAddress]);
 
-  const chainId = aaAccount?.chainId ?? activeAccount?.chainId ?? DEFAULT_CHAIN_ID;
+  const chainId = (aaAccount?.chainId ?? DEFAULT_CHAIN_ID) as SupportedChainId;
 
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState<OnChainEntry[]>([]);
@@ -197,7 +197,7 @@ export function RestoreOnChainPasskeyCard() {
       </Text>
       <Text style={styles.meta}>
         chainId: {String(chainId)}{"\n"}
-        store.aaAccount: {aaAccount?.address ?? "null"}{"\n"}
+        store.aaAccount: {aaAccount?.predictedAddress ?? "null"}{"\n"}
         store.activeAccount: {activeAccount?.address ?? "null"}{"\n"}
         resolved: {smartAccountAddress ?? "none — paste below"}{"\n"}
         rpId: {rpId}{"\n"}
