@@ -155,9 +155,9 @@ const EmailRecoveryManage: React.FC<EmailRecoveryManageProps> = ({
                       accessibilityLabel={`Resend invite to ${guardian.maskedEmail}`}
                     >
                       {resendingGuardianId === guardian.id ? (
-                        <ActivityIndicator size="small" color={colors.accentAlt} />
+                        <ActivityIndicator size="small" color={colors.textSecondary} />
                       ) : (
-                        <Feather name="refresh-cw" size={17} color={colors.accentAlt} />
+                        <Feather name="refresh-cw" size={17} color={colors.textSecondary} />
                       )}
                     </TouchableOpacity>
                   )}
@@ -209,9 +209,9 @@ const EmailRecoveryManage: React.FC<EmailRecoveryManageProps> = ({
                 activeOpacity={0.85}
               >
                 {addingPostInstallGuardian ? (
-                  <ActivityIndicator size="small" color={colors.accentAlt} />
+                  <ActivityIndicator size="small" color={colors.accent} />
                 ) : (
-                  <Feather name="plus" size={16} color={colors.accentAlt} />
+                  <Feather name="plus" size={16} color={colors.accent} />
                 )}
                 <Text style={styles.addGuardianBtnText}>
                   {addingPostInstallGuardian ? "Adding…" : "Add guardian"}
@@ -238,8 +238,8 @@ const EmailRecoveryManage: React.FC<EmailRecoveryManageProps> = ({
         {showAdvanced && storedMetadata && (
           <View style={styles.advancedSection}>
             <Text style={styles.moduleHint}>
-              Each guardian's vote weight. Defaults are equal (1). Increase a
-              guardian's weight to require fewer others to approve.
+              Each guardian&apos;s vote weight (default 1). Higher weight means fewer
+              others are needed to approve.
             </Text>
             {storedMetadata.guardians.map((guardian, index) => (
               <View key={guardian.emailHash} style={styles.weightRow}>
@@ -288,11 +288,11 @@ const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     card: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 18,
+      borderRadius: 16,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      padding: 18,
-      gap: 14,
+      padding: 16,
+      gap: 16,
     },
     summaryHeaderRow: {
       flexDirection: "row",
@@ -304,8 +304,8 @@ const createStyles = (colors: ThemeColors) =>
       gap: 5,
       paddingHorizontal: 10,
       paddingVertical: 5,
-      borderRadius: 20,
-      backgroundColor: `${colors.success}15`,
+      borderRadius: 9999,
+      backgroundColor: colors.successSoft,
     },
     statusChipText: {
       fontSize: 12,
@@ -383,10 +383,10 @@ const createStyles = (colors: ThemeColors) =>
       gap: 10,
     },
     addPostInstallInput: {
-      backgroundColor: `${colors.textPrimary}08`,
+      backgroundColor: colors.inputBackground,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderMuted,
-      borderRadius: 12,
+      borderColor: colors.inputBorder,
+      borderRadius: 8,
       paddingHorizontal: 14,
       paddingVertical: 12,
       color: colors.textPrimary,
@@ -400,12 +400,12 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: 14,
       borderRadius: 12,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${colors.accentAlt}50`,
-      backgroundColor: `${colors.accentAlt}0E`,
+      borderColor: colors.accent,
+      backgroundColor: colors.accentSoft,
       alignSelf: "flex-start",
     },
     addGuardianBtnText: {
-      color: colors.accentAlt,
+      color: colors.accent,
       fontSize: 14,
       fontWeight: "500",
     },
@@ -440,10 +440,10 @@ const createStyles = (colors: ThemeColors) =>
     },
     weightInput: {
       width: 62,
-      backgroundColor: `${colors.textPrimary}08`,
+      backgroundColor: colors.inputBackground,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      borderRadius: 12,
+      borderColor: colors.inputBorder,
+      borderRadius: 8,
       paddingHorizontal: 8,
       paddingVertical: 10,
       color: colors.textPrimary,
@@ -452,8 +452,8 @@ const createStyles = (colors: ThemeColors) =>
       textAlign: "center",
     },
     installButton: {
-      backgroundColor: colors.accentAlt,
-      borderRadius: 14,
+      backgroundColor: colors.accent,
+      borderRadius: 16,
       paddingVertical: 14,
       alignItems: "center",
     },
@@ -468,10 +468,10 @@ const createStyles = (colors: ThemeColors) =>
     turnOffButton: {
       borderWidth: 1,
       borderColor: colors.danger,
-      borderRadius: 14,
+      borderRadius: 16,
       paddingVertical: 14,
       alignItems: "center",
-      backgroundColor: `${colors.danger}12`,
+      backgroundColor: colors.dangerSoft,
     },
     turnOffButtonText: {
       color: colors.danger,

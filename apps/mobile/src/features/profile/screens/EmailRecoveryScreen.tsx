@@ -1058,19 +1058,16 @@ const EmailRecoveryScreen: React.FC = () => {
             {checkingLocalSigner ? (
               <>
                 <Text style={styles.cardTitle}>Checking local signer access...</Text>
-                <ActivityIndicator size="small" color={colors.accentAlt} />
+                <ActivityIndicator size="small" color={colors.accent} />
                 <Text style={styles.cardDesc}>
-                  Trezo is verifying whether this device has a wallet passkey that is active for
-                  this account.
+                  Checking this device for an active wallet passkey.
                 </Text>
               </>
             ) : (
               <>
                 <Text style={styles.cardTitle}>This device cannot manage email recovery yet</Text>
                 <Text style={styles.cardDesc}>
-                  Email recovery setup is wallet-authorized. This device may know the wallet and its
-                  saved metadata, but it cannot change or install recovery until a passkey on this
-                  device is active for the wallet.
+                  This device needs an active wallet passkey before it can manage email recovery.
                 </Text>
                 <TouchableOpacity
                   style={styles.installButton}
@@ -1131,7 +1128,7 @@ const EmailRecoveryScreen: React.FC = () => {
         {moduleInstalledState === null ? (
           /* Checking module install status */
           <View style={styles.card}>
-            <ActivityIndicator size="small" color={colors.accentAlt} />
+            <ActivityIndicator size="small" color={colors.accent} />
             <Text style={styles.cardDesc}>Checking your recovery setup…</Text>
           </View>
         ) : moduleInstalledState ? (
@@ -1209,7 +1206,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     card: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 18,
+      borderRadius: 16,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       padding: 18,
@@ -1227,7 +1224,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     installButton: {
       backgroundColor: colors.accent,
-      borderRadius: 14,
+      borderRadius: 16,
       paddingVertical: 14,
       alignItems: "center",
     },
@@ -1238,16 +1235,16 @@ const createStyles = (colors: ThemeColors) =>
     },
     secondaryButton: {
       borderWidth: 1,
-      borderColor: `${colors.accent}4D`,
-      borderRadius: 14,
+      borderColor: colors.borderMuted,
+      borderRadius: 16,
       paddingVertical: 12,
       alignItems: "center",
-      backgroundColor: `${colors.accentAlt}1A`,
+      backgroundColor: colors.surfaceMuted,
     },
     secondaryButtonText: {
-      color: colors.accentAlt,
+      color: colors.textSecondary,
       fontSize: 14,
-      fontWeight: "700",
+      fontWeight: "600",
     },
   });
 

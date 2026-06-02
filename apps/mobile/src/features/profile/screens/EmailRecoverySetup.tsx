@@ -76,8 +76,7 @@ const EmailRecoverySetup: React.FC<EmailRecoverySetupProps> = ({
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Your Guardians</Text>
         <Text style={styles.cardDesc}>
-          Add the email addresses of people you trust. They'll each receive an
-          invitation and need to confirm before recovery becomes active.
+          Each trusted contact gets an invitation and must confirm before recovery turns on.
         </Text>
 
         <View style={styles.inputRow}>
@@ -153,7 +152,7 @@ const EmailRecoverySetup: React.FC<EmailRecoverySetupProps> = ({
           onPress={() => onGuardianCountChange(String(visibleGuardianEmails.length + 1))}
           activeOpacity={0.85}
         >
-          <Feather name="plus" size={16} color={colors.accentAlt} />
+          <Feather name="plus" size={16} color={colors.accent} />
           <Text style={styles.addGuardianBtnText}>Add guardian</Text>
         </TouchableOpacity>
       </View>
@@ -202,7 +201,7 @@ const EmailRecoverySetup: React.FC<EmailRecoverySetupProps> = ({
         {/* Dev-only short delays — gated by the Dev Controls toggle. */}
         {showShortDelayOptions ? (
           <>
-            <Text style={styles.devDelayLabel}>⚡ Short delays (testing only)</Text>
+            <Text style={styles.devDelayLabel}>Short delays (testing only)</Text>
             <View style={styles.delayChoicesRow}>
               {DEV_DELAY_CHOICES.map((choice) => (
                 <TouchableOpacity
@@ -286,11 +285,11 @@ const createStyles = (colors: ThemeColors) =>
     },
     card: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 18,
+      borderRadius: 16,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      padding: 18,
-      gap: 14,
+      padding: 16,
+      gap: 16,
     },
     cardTitle: {
       color: colors.textPrimary,
@@ -317,19 +316,19 @@ const createStyles = (colors: ThemeColors) =>
       marginLeft: 2,
     },
     numberInput: {
-      backgroundColor: `${colors.textPrimary}08`,
+      backgroundColor: colors.inputBackground,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      borderRadius: 12,
+      borderRadius: 8,
       paddingHorizontal: 12,
-      paddingVertical: 11,
+      paddingVertical: 12,
       color: colors.textPrimary,
       fontSize: 15,
       fontWeight: "600",
       textAlign: "center",
     },
     textInput: {
-      backgroundColor: `${colors.textPrimary}08`,
+      backgroundColor: colors.inputBackground,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.borderMuted,
       borderRadius: 12,
@@ -347,10 +346,10 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.warning,
     },
     validationBox: {
-      borderRadius: 14,
+      borderRadius: 16,
       borderWidth: 1,
-      borderColor: `${colors.warning}47`,
-      backgroundColor: `${colors.warning}1F`,
+      borderColor: colors.warning,
+      backgroundColor: colors.warningSoft,
       paddingHorizontal: 14,
       paddingVertical: 12,
     },
@@ -380,7 +379,7 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 18,
       justifyContent: "center",
       alignItems: "center",
-      backgroundColor: `${colors.danger}12`,
+      backgroundColor: colors.dangerSoft,
     },
     addGuardianBtn: {
       flexDirection: "row",
@@ -388,14 +387,14 @@ const createStyles = (colors: ThemeColors) =>
       gap: 6,
       paddingVertical: 11,
       paddingHorizontal: 14,
-      borderRadius: 12,
+      borderRadius: 8,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${colors.accentAlt}50`,
-      backgroundColor: `${colors.accentAlt}0E`,
+      borderColor: colors.accent,
+      backgroundColor: colors.accentSoft,
       alignSelf: "flex-start",
     },
     addGuardianBtnText: {
-      color: colors.accentAlt,
+      color: colors.accent,
       fontSize: 14,
       fontWeight: "500",
     },
@@ -412,16 +411,16 @@ const createStyles = (colors: ThemeColors) =>
       flex: 1,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 14,
+      borderRadius: 16,
       paddingVertical: 12,
       paddingHorizontal: 8,
       alignItems: "center",
       gap: 3,
-      backgroundColor: `${colors.textPrimary}06`,
+      backgroundColor: colors.surfaceMuted,
     },
     delayChipActive: {
-      borderColor: colors.accentAlt,
-      backgroundColor: `${colors.accentAlt}20`,
+      borderColor: colors.accent,
+      backgroundColor: colors.accentSoft,
     },
     delayChipLabel: {
       color: colors.textPrimary,
@@ -429,14 +428,14 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "600",
     },
     delayChipLabelActive: {
-      color: colors.accentAlt,
+      color: colors.accent,
     },
     delayChipNote: {
       color: colors.textMuted,
       fontSize: 11,
     },
     delayChipNoteActive: {
-      color: colors.accentAlt,
+      color: colors.accent,
     },
     moduleHeader: {
       flexDirection: "row",
@@ -455,7 +454,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     installButton: {
       backgroundColor: colors.accent,
-      borderRadius: 14,
+      borderRadius: 16,
       paddingVertical: 14,
       alignItems: "center",
     },

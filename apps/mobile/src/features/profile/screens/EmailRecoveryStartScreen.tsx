@@ -220,7 +220,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={theme.colors.accentAlt} />
+          <ActivityIndicator size="large" color={theme.colors.accent} />
           <Text style={styles.loadingText}>Loading recovery config...</Text>
         </View>
       </View>
@@ -282,9 +282,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Recovery Passkey</Text>
           <Text style={styles.cardDesc}>
-            On a new device a passkey is created here and becomes the wallet&apos;s new owner once your
-            trusted contacts approve recovery. If this device already has a passkey it is reused —
-            recovery never overwrites an existing key.
+            A recovery passkey is created on new devices and reused on this one—recovery never overwrites an existing key.
           </Text>
         </View>
 
@@ -310,7 +308,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
                 >
                   <View style={styles.chainCheck}>
                     {isSelected ? (
-                      <Feather name="check-circle" size={20} color={theme.colors.accentAlt} />
+                      <Feather name="check-circle" size={20} color={theme.colors.accent} />
                     ) : (
                       <Feather name="circle" size={20} color={theme.colors.textMuted} />
                     )}
@@ -381,13 +379,12 @@ const EmailRecoveryStartScreen: React.FC = () => {
               <Feather
                 name={forceNewPasskey ? "check-square" : "square"}
                 size={22}
-                color={forceNewPasskey ? theme.colors.accentAlt : theme.colors.textMuted}
+                color={forceNewPasskey ? theme.colors.accent : theme.colors.textMuted}
               />
               <View style={styles.devToggleTextWrap}>
                 <Text style={styles.devToggleLabel}>Force fresh passkey (simulate new device)</Text>
                 <Text style={styles.devToggleHint}>
-                  Mints a brand-new passkey even though this device already has one, to exercise the
-                  same-device owner-rotation path. Never reachable in production.
+                  Forces a fresh passkey to test same-device owner rotation. Dev-only.
                 </Text>
               </View>
             </TouchableOpacity>
@@ -396,7 +393,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
 
         {isCreating && creatingStep ? (
           <View style={styles.card}>
-            <ActivityIndicator size="small" color={theme.colors.accentAlt} />
+            <ActivityIndicator size="small" color={theme.colors.accent} />
             <Text style={styles.creatingStepText}>{creatingStep}</Text>
           </View>
         ) : null}
@@ -439,7 +436,7 @@ const createStyles = (colors: ThemeColors) =>
     headerTitle: {
       color: colors.textPrimary,
       fontSize: 20,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     scrollView: {
       flex: 1,
@@ -461,7 +458,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     card: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 22,
+      borderRadius: 24,
       borderWidth: 1,
       borderColor: colors.border,
       padding: 20,
@@ -470,7 +467,7 @@ const createStyles = (colors: ThemeColors) =>
     cardTitle: {
       color: colors.textPrimary,
       fontSize: 18,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     cardDesc: {
       color: colors.textSecondary,
@@ -487,15 +484,15 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       paddingVertical: 12,
       paddingHorizontal: 14,
-      borderRadius: 14,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
       gap: 12,
       backgroundColor: colors.glass,
     },
     chainRowSelected: {
-      borderColor: colors.accentAlt,
-      backgroundColor: `${colors.accentAlt}14`,
+      borderColor: colors.accent,
+      backgroundColor: colors.accentSoft,
     },
     chainCheck: {
       width: 24,
@@ -525,12 +522,12 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: `${colors.textPrimary}0A`,
+      backgroundColor: colors.surfaceMuted,
     },
     deadlineValue: {
       color: colors.textPrimary,
       fontSize: 18,
-      fontWeight: "700",
+      fontWeight: "600",
       minWidth: 80,
       textAlign: "center",
     },
@@ -544,12 +541,12 @@ const createStyles = (colors: ThemeColors) =>
       width: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: `${colors.accentAlt}1F`,
+      backgroundColor: colors.surfaceMuted,
       alignItems: "center",
       justifyContent: "center",
     },
     guardianIndexText: {
-      color: colors.accentAlt,
+      color: colors.textSecondary,
       fontSize: 12,
       fontWeight: "700",
     },
@@ -578,7 +575,7 @@ const createStyles = (colors: ThemeColors) =>
     devBadge: {
       color: colors.warning,
       fontSize: 11,
-      fontWeight: "800",
+      fontWeight: "700",
       letterSpacing: 1.5,
     },
     devToggleRow: {
@@ -601,7 +598,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 16,
     },
     primaryButton: {
-      backgroundColor: colors.accentAlt,
+      backgroundColor: colors.accent,
       borderRadius: 16,
       paddingVertical: 16,
       alignItems: "center",
