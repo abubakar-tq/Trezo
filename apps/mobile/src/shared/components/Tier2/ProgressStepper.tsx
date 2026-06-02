@@ -44,7 +44,7 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
                 justifyContent: "center",
                 alignItems: "center",
                 borderWidth: idx === currentStep ? 2 : 0,
-                borderColor: colors.accent,
+                borderColor: colors.border,
               }}
             >
               <OverlineText

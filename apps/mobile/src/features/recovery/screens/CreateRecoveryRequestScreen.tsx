@@ -217,7 +217,7 @@ const CreateRecoveryRequestScreen: React.FC = () => {
         <Text style={styles.kicker}>Create request</Text>
         <Text style={styles.title}>Build and publish the guardian recovery payload.</Text>
         <Text style={styles.body}>
-          This uses this device&apos;s passkey (creating one only if the device has none), reads guardian policy from chain state, computes the portable recovery digest, and stores request metadata in Supabase.
+          Uses this device&apos;s passkey and your on-chain guardian policy to build the recovery request.
         </Text>
 
         <View style={styles.summaryBox}>
@@ -270,7 +270,7 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: "center",
     },
     card: {
-      borderRadius: 28,
+      borderRadius: 24,
       padding: 24,
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -285,9 +285,9 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     title: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 26,
-      fontWeight: "800",
+      fontWeight: "600",
       lineHeight: 32,
     },
     body: {
@@ -296,7 +296,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 22,
     },
     summaryBox: {
-      borderRadius: 18,
+      borderRadius: 16,
       padding: 16,
       backgroundColor: colors.surfaceMuted,
       gap: 4,
@@ -316,8 +316,8 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "flex-start",
       gap: 12,
-      padding: 14,
-      borderRadius: 14,
+      padding: 16,
+      borderRadius: 16,
       borderWidth: 1,
       borderStyle: "dashed",
       borderColor: colors.warning,
@@ -338,7 +338,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     primaryButton: {
       paddingVertical: 16,
-      borderRadius: 18,
+      borderRadius: 16,
       backgroundColor: colors.accent,
       alignItems: "center",
       justifyContent: "center",
@@ -353,7 +353,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     tertiaryButton: {
       paddingVertical: 16,
-      borderRadius: 18,
+      borderRadius: 16,
       alignItems: "center",
       borderWidth: 1,
       borderColor: colors.border,

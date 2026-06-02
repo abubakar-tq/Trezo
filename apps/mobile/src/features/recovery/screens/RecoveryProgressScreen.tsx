@@ -293,12 +293,12 @@ const RecoveryProgressScreen: React.FC = () => {
 
         {/* Timelock countdown — shown when recovery is scheduled and waiting */}
         {timelockCountdown && (
-          <View style={[styles.statusBanner, { backgroundColor: theme.colors.accent + '14', borderColor: theme.colors.accent + '40' }]}>
+          <View style={[styles.statusBanner, { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.accent }]}>
             <Text style={[styles.statusBannerText, { color: theme.colors.accent }]}>
-              ⏳ New passkey activates in: {timelockCountdown}
+              New passkey activates in: {timelockCountdown}
             </Text>
             <Text style={[styles.rowMeta, { marginTop: 4 }]}>
-              Once the timelock expires you can execute recovery and the new passkey will become active on this device.
+              After the timelock expires, execute recovery to activate the new passkey here.
             </Text>
           </View>
         )}
@@ -404,23 +404,23 @@ const RecoveryProgressScreen: React.FC = () => {
             until executeRecovery completes. Show clear guidance instead of a
             broken button. */}
         {thresholdReached && schedulableChains.length > 0 && (
-          <View style={[styles.statusBanner, { backgroundColor: theme.colors.warning + '14', borderColor: theme.colors.warning + '40', marginTop: 16 }]}>
+          <View style={[styles.statusBanner, { backgroundColor: theme.colors.warningSoft, borderColor: theme.colors.warning, marginTop: 16 }]}>
             <Text style={[styles.statusBannerText, { color: theme.colors.warning }]}>
-              👉 Ready to schedule
+              Ready to schedule
             </Text>
             <Text style={[styles.rowMeta, { marginTop: 4 }]}>
-              Ask your guardian to open their app → Profile → Backup &amp; Recovery → Guardian Inbox → tap <Text style={{ fontWeight: "700" }}>Submit Schedule On-Chain</Text>. Pimlico pays the gas.
+              Ask your guardian to open Guardian Inbox and tap <Text style={{ fontWeight: "700" }}>Submit Schedule On-Chain</Text>.
             </Text>
           </View>
         )}
 
         {executableChains.length > 0 && (
-          <View style={[styles.statusBanner, { backgroundColor: theme.colors.success + '14', borderColor: theme.colors.success + '40', marginTop: 12 }]}>
+          <View style={[styles.statusBanner, { backgroundColor: theme.colors.successSoft, borderColor: theme.colors.success, marginTop: 12 }]}>
             <Text style={[styles.statusBannerText, { color: theme.colors.success }]}>
-              👉 Timelock expired — ready to execute
+              Timelock expired — ready to execute
             </Text>
             <Text style={[styles.rowMeta, { marginTop: 4 }]}>
-              Ask your guardian to open Guardian Inbox and tap <Text style={{ fontWeight: "700" }}>Execute Recovery</Text>. Once that runs, your new passkey becomes active on this wallet and the shield turns green.
+              Ask your guardian to open Guardian Inbox and tap <Text style={{ fontWeight: "700" }}>Execute Recovery</Text> to activate your new passkey.
             </Text>
           </View>
         )}
@@ -498,7 +498,7 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.text,
       fontSize: 24,
       lineHeight: 30,
-      fontWeight: "800",
+      fontWeight: "600",
     },
     errorText: {
       color: colors.danger,
@@ -534,7 +534,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     statusBanner: {
-      borderRadius: 14,
+      borderRadius: 16,
       backgroundColor: colors.surfaceMuted,
       padding: 12,
       borderWidth: 1,
@@ -558,7 +558,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     row: {
-      borderRadius: 14,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.background,

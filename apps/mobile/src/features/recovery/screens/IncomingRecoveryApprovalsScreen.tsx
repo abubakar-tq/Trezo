@@ -77,8 +77,8 @@ const RequestRow: React.FC<RowProps> = ({ request, onApprove, onSubmitSchedule, 
   return (
     <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
       <View style={styles.cardHeader}>
-        <View style={[styles.iconBubble, { backgroundColor: `${colors.accent}22` }]}>
-          <Feather name="shield" size={18} color={colors.accent} />
+        <View style={[styles.iconBubble, { backgroundColor: colors.surfaceMuted }]}>
+          <Feather name="shield" size={18} color={colors.textSecondary} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Recovery request</Text>
@@ -91,7 +91,7 @@ const RequestRow: React.FC<RowProps> = ({ request, onApprove, onSubmitSchedule, 
             styles.statusPill,
             {
               backgroundColor:
-                request.status === "threshold_reached" ? `${colors.success}22` : `${colors.warning}22`,
+                request.status === "threshold_reached" ? colors.successSoft : colors.warningSoft,
             },
           ]}
         >
@@ -121,7 +121,7 @@ const RequestRow: React.FC<RowProps> = ({ request, onApprove, onSubmitSchedule, 
       {request.requester_note && (
         <View style={[styles.noteBox, { backgroundColor: colors.surfaceMuted }]}>
           <Text style={[styles.noteText, { color: colors.textMuted }]} numberOfLines={3}>
-            "{request.requester_note}"
+            &quot;{request.requester_note}&quot;
           </Text>
         </View>
       )}
@@ -130,7 +130,7 @@ const RequestRow: React.FC<RowProps> = ({ request, onApprove, onSubmitSchedule, 
         const action = pickAction(request);
         if (action === "complete") {
           return (
-            <View style={[styles.approvedBanner, { backgroundColor: `${colors.success}1A` }]}>
+            <View style={[styles.approvedBanner, { backgroundColor: colors.successSoft }]}>
               <Feather name="check-circle" size={16} color={colors.success} />
               <Text style={[styles.approvedText, { color: colors.success }]}>Recovery executed</Text>
             </View>
@@ -138,7 +138,7 @@ const RequestRow: React.FC<RowProps> = ({ request, onApprove, onSubmitSchedule, 
         }
         if (action === "waiting") {
           return (
-            <View style={[styles.approvedBanner, { backgroundColor: `${colors.success}1A` }]}>
+            <View style={[styles.approvedBanner, { backgroundColor: colors.successSoft }]}>
               <Feather name="check-circle" size={16} color={colors.success} />
               <Text style={[styles.approvedText, { color: colors.success }]}>
                 {request.already_approved ? "Approved — waiting for next step" : "Waiting"}
@@ -431,7 +431,7 @@ const IncomingRecoveryApprovalsScreen: React.FC = () => {
 
   const renderEmpty = () => (
     <View style={styles.emptyState}>
-      <View style={[styles.iconBubble, { backgroundColor: `${colors.accent}1A`, width: 60, height: 60, borderRadius: 30 }]}>
+      <View style={[styles.iconBubble, { backgroundColor: colors.accentSoft, width: 60, height: 60, borderRadius: 9999 }]}>
         <Feather name="inbox" size={28} color={colors.accent} />
       </View>
       <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No pending approvals</Text>
@@ -456,7 +456,7 @@ const IncomingRecoveryApprovalsScreen: React.FC = () => {
       </View>
 
       {error && (
-        <View style={[styles.errorBanner, { backgroundColor: `${colors.danger}1A` }]}>
+        <View style={[styles.errorBanner, { backgroundColor: colors.dangerSoft }]}>
           <Feather name="alert-triangle" size={16} color={colors.danger} />
           <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
         </View>
@@ -469,18 +469,15 @@ const IncomingRecoveryApprovalsScreen: React.FC = () => {
         && (() => {
         const desc = describePasskeyAuthority(passkeyAuthority.status);
         const isError = desc.severity === "error";
-        const bg = isError ? `${colors.danger}1A` : `${colors.warning}1A`;
+        const bg = isError ? colors.dangerSoft : colors.warningSoft;
         const fg = isError ? colors.danger : colors.warning;
         return (
           <View style={[styles.errorBanner, { backgroundColor: bg, flexDirection: "column", alignItems: "flex-start", gap: 4 }]}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Feather name="alert-octagon" size={16} color={fg} />
-              <Text style={[styles.errorText, { color: fg, fontWeight: "800" }]}>{desc.title}</Text>
+              <Text style={[styles.errorText, { color: fg, fontWeight: "600" }]}>{desc.title}</Text>
             </View>
             <Text style={[styles.errorText, { color: fg, fontSize: 12 }]}>{desc.body}</Text>
-            <Text style={[styles.errorText, { color: fg, fontSize: 11, fontStyle: "italic" }]}>
-              Approve / Schedule / Execute are disabled until this is resolved.
-            </Text>
           </View>
         );
       })()}
@@ -528,26 +525,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   iconBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
-  title: { fontSize: 17, fontWeight: "800" },
+  title: { fontSize: 17, fontWeight: "600" },
   errorBanner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     padding: 12,
     margin: 16,
-    borderRadius: 12,
+    borderRadius: 16,
   },
   errorText: { flex: 1, fontSize: 13, fontWeight: "600" },
   loadingState: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: 32 },
   emptyState: { alignItems: "center", gap: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: "800", marginTop: 8 },
+  emptyTitle: { fontSize: 18, fontWeight: "600", marginTop: 8 },
   emptyText: { fontSize: 14, fontWeight: "500", textAlign: "center", lineHeight: 20 },
   card: {
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   cardHeader: {
     flexDirection: "row",
@@ -562,31 +559,31 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  cardTitle: { fontSize: 15, fontWeight: "800" },
+  cardTitle: { fontSize: 15, fontWeight: "600" },
   cardSubtitle: { fontSize: 12, fontWeight: "600", marginTop: 2 },
-  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  statusText: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 9999 },
+  statusText: { fontSize: 10, fontWeight: "700", letterSpacing: 1 },
   metaRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
   metaLabel: { fontSize: 12, fontWeight: "600" },
   metaValue: { fontSize: 13, fontWeight: "700" },
-  noteBox: { padding: 10, borderRadius: 10, marginTop: 8 },
+  noteBox: { padding: 10, borderRadius: 8, marginTop: 8 },
   noteText: { fontSize: 12, fontStyle: "italic" },
   approveBtn: {
     height: 44,
-    borderRadius: 14,
-    marginTop: 14,
+    borderRadius: 16,
+    marginTop: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
-  approveBtnText: { fontSize: 14, fontWeight: "800" },
+  approveBtnText: { fontSize: 14, fontWeight: "600" },
   approvedBanner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     padding: 10,
-    borderRadius: 12,
+    borderRadius: 16,
     marginTop: 12,
     justifyContent: "center",
   },

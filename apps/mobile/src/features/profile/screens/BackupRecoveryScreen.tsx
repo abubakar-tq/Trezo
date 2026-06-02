@@ -113,7 +113,7 @@ const MethodRow: React.FC<MethodRowProps> = ({
   <>
     <TouchableOpacity style={styles.optionRow} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.optionInfo}>
-        <View style={[styles.iconBadge, { backgroundColor: `${colors.accent}1A` }]}>
+        <View style={[styles.iconBadge, { backgroundColor: colors.accentSoft }]}>
           <Feather name={icon} size={20} color={colors.accent} />
         </View>
         <View style={styles.optionText}>
@@ -150,8 +150,8 @@ const ActivityRow: React.FC<ActivityRowProps> = ({
   <>
     <TouchableOpacity style={styles.optionRow} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.optionInfo}>
-        <View style={[styles.iconBadge, { backgroundColor: `${colors.accentAlt}1A` }]}>
-          <Feather name={icon} size={20} color={colors.accentAlt} />
+        <View style={[styles.iconBadge, { backgroundColor: colors.surfaceMuted }]}>
+          <Feather name={icon} size={20} color={colors.textSecondary} />
         </View>
         <Text style={styles.optionLabel}>{label}</Text>
       </View>
@@ -376,7 +376,7 @@ const createStyles = (colors: ThemeColors) =>
     headerTitle: {
       color: colors.textPrimary,
       fontSize: 20,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     scrollView: {
       flex: 1,
@@ -387,7 +387,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     summaryCard: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 20,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.borderMuted,
       padding: 20,
@@ -408,7 +408,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     card: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 20,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.borderMuted,
       overflow: "hidden",
@@ -432,7 +432,7 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,
-      borderColor: `${colors.border}80`,
+      borderColor: colors.border,
     },
     optionText: {
       flex: 1,

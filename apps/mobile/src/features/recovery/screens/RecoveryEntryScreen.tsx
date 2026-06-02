@@ -181,14 +181,14 @@ const RecoveryEntryScreen: React.FC = () => {
     state.kind === "error"
       ? state.message
       : state.kind === "no_account"
-      ? "Your smart account hasn't been deployed yet so there is no passkey to recover. Continue to finish setting up your wallet."
+      ? "Your smart account isn't deployed yet, so there's no passkey to recover. Continue to finish setup."
       : state.kind === "has_active_request"
       ? "Resume your active request to view guardian approvals, per-chain status, and timelock progress."
       : state.kind === "has_passkey"
       ? "Configure guardian recovery so you can recover this wallet if you ever lose access to this device."
       : state.kind === "no_passkey" && state.hasLocalPasskey
-      ? "The passkey on this device can't sign for your wallet. Link this device by scanning the pairing code from a device you already use, or recover your account."
-      : "Link this device by scanning the pairing code from a device you already use — or recover your account with your guardians or email.";
+      ? "This device's passkey can't sign for your wallet. Scan a pairing code from a device you use, or recover your account."
+      : "Scan a pairing code from a device you already use, or recover with your guardians or email.";
 
   const renderActions = () => {
     switch (state.kind) {
@@ -327,7 +327,7 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: "center",
     },
     card: {
-      borderRadius: 28,
+      borderRadius: 24,
       padding: 24,
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -344,7 +344,7 @@ const createStyles = (colors: ThemeColors) =>
     title: {
       color: colors.text,
       fontSize: 28,
-      fontWeight: "800",
+      fontWeight: "600",
       lineHeight: 34,
     },
     body: {
@@ -364,7 +364,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     primaryButton: {
       paddingVertical: 16,
-      borderRadius: 18,
+      borderRadius: 16,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
@@ -375,7 +375,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     secondaryButton: {
       paddingVertical: 16,
-      borderRadius: 18,
+      borderRadius: 16,
       backgroundColor: colors.surfaceMuted,
       alignItems: "center",
     },
@@ -410,7 +410,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     tertiaryButton: {
       paddingVertical: 16,
-      borderRadius: 18,
+      borderRadius: 16,
       alignItems: "center",
       borderWidth: 1,
       borderColor: colors.border,

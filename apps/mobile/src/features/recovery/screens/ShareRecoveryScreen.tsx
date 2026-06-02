@@ -114,7 +114,7 @@ const ShareRecoveryScreen: React.FC = () => {
 
   const handleCopy = () => {
     ExpoClipboard.setStringAsync(link);
-    Alert.alert("Link copied", "Share the guardian approval link with your configured guardians.");
+    Alert.alert("Link copied", "Send it to your guardians to approve recovery.");
   };
 
   const handleShare = async () => {
@@ -213,7 +213,7 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: "center",
     },
     card: {
-      borderRadius: 28,
+      borderRadius: 24,
       padding: 24,
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -228,9 +228,9 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     title: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 26,
-      fontWeight: "800",
+      fontWeight: "600",
       lineHeight: 32,
     },
     body: {
@@ -244,7 +244,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     summaryBox: {
-      borderRadius: 18,
+      borderRadius: 16,
       padding: 16,
       backgroundColor: colors.surfaceMuted,
       gap: 4,
@@ -256,7 +256,7 @@ const createStyles = (colors: ThemeColors) =>
       letterSpacing: 1.2,
     },
     summaryValue: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 16,
       fontWeight: "700",
     },
@@ -265,12 +265,12 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
     },
     sectionTitle: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 16,
       fontWeight: "700",
     },
     guardianRow: {
-      borderRadius: 14,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.background,
@@ -281,7 +281,7 @@ const createStyles = (colors: ThemeColors) =>
       gap: 10,
     },
     guardianAddress: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 13,
       flexShrink: 1,
       fontWeight: "600",
@@ -298,7 +298,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     primaryButton: {
       paddingVertical: 16,
-      borderRadius: 18,
+      borderRadius: 16,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
@@ -309,14 +309,14 @@ const createStyles = (colors: ThemeColors) =>
     secondaryButton: {
       flex: 1,
       paddingVertical: 14,
-      borderRadius: 18,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       alignItems: "center",
     },
     secondaryButtonText: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontWeight: "700",
       fontSize: 15,
     },

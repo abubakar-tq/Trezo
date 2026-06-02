@@ -256,7 +256,7 @@ const GuardianRecoveryScreen: React.FC = () => {
     if (moduleInstalledState && storedGuardians.length > 0) {
       Alert.alert(
         "On-Chain Guardians Active",
-        "This screen manages pre-install guardian metadata. Once the module is installed, changing guardians here would drift from the on-chain guardian set. Use the active guardian configuration for recovery, or add an explicit wallet-authorized update flow before changing it.",
+        "Guardians are now enforced on-chain. Use Update Guardians On-Chain to change them.",
       );
       return;
     }
@@ -378,7 +378,7 @@ const GuardianRecoveryScreen: React.FC = () => {
         setModuleError(null);
         Alert.alert(
           "Module Already Installed",
-          "The social recovery module is already active on this wallet. No need to install it again — open Backup & Recovery → Guardian Recovery to view or update guardians.",
+          "Social recovery is already active on this wallet.",
         );
       } else {
         setModuleError(raw);
@@ -475,9 +475,7 @@ const GuardianRecoveryScreen: React.FC = () => {
               <>
                 <Text style={styles.blockedTitle}>This device cannot manage guardians yet</Text>
                 <Text style={styles.blockedText}>
-                  Guardian setup is a wallet-authorized action. This device can read saved guardian
-                  metadata from your account, but without an active wallet passkey it cannot
-                  install or edit the live guardian set.
+                  Managing guardians needs a wallet passkey on this device. You can view guardians but not change them here.
                 </Text>
 
                 <TouchableOpacity
@@ -521,8 +519,7 @@ const GuardianRecoveryScreen: React.FC = () => {
             <Feather name="alert-circle" size={40} color={colors.warning} style={{ marginBottom: 16 }} />
             <Text style={styles.blockedTitle}>Deploy Your Wallet First</Text>
             <Text style={styles.blockedText}>
-              Guardian recovery is an on-chain feature. Your wallet address exists but is not yet
-              deployed to the network. Deploy your smart account to enable recovery configuration.
+              Deploy your smart account on-chain to set up guardian recovery.
             </Text>
             {smartAccountAddress && (
               <Text style={[styles.blockedText, { fontFamily: FontFamilies.mono, fontSize: 12, marginTop: 8 }]}>
@@ -576,7 +573,7 @@ const GuardianRecoveryScreen: React.FC = () => {
         <View style={styles.card}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 16 }}>
             <View style={styles.icChip}>
-              <Feather name="shield" size={17} color={colors.accent} />
+              <Feather name="shield" size={17} color={colors.textSecondary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.summaryTitle}>
@@ -750,7 +747,7 @@ const GuardianRecoveryScreen: React.FC = () => {
         <View style={styles.card}>
           <View style={styles.thresholdRow}>
             <View style={styles.thresholdIconWrap}>
-              <Feather name="settings" size={15} color={colors.accent} />
+              <Feather name="settings" size={15} color={colors.textSecondary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.thresholdLabel}>Threshold</Text>
@@ -834,7 +831,7 @@ const GuardianRecoveryScreen: React.FC = () => {
         {__DEV__ && !moduleInstalledState && (
           <View style={{ marginBottom: 12 }}>
             <Text style={[styles.payloadLabel, { marginBottom: 8 }]}>
-              ⏱ Timelock (testing only)
+              Timelock (testing only)
             </Text>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
               {TIMELOCK_OPTIONS.map((opt, idx) => (
@@ -844,10 +841,10 @@ const GuardianRecoveryScreen: React.FC = () => {
                   style={{
                     paddingHorizontal: 14,
                     paddingVertical: 8,
-                    borderRadius: 12,
+                    borderRadius: 8,
                     borderWidth: 1.5,
                     borderColor: idx === selectedTimelockIdx ? colors.accent : colors.border,
-                    backgroundColor: idx === selectedTimelockIdx ? colors.accent + '20' : colors.surface,
+                    backgroundColor: idx === selectedTimelockIdx ? colors.accentSoft : colors.surface,
                   }}
                 >
                   <Text style={{
@@ -927,21 +924,21 @@ const createStyles = (colors: ThemeColors) =>
     headerTitle: {
       color: colors.textPrimary,
       fontSize: 20,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     refreshButton: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: 9999,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: `${colors.borderMuted}80`,
+      backgroundColor: colors.surfaceMuted,
     },
     blockedCard: {
       borderRadius: 24,
       borderWidth: 1,
-      borderColor: `${colors.warning}47`,
-      backgroundColor: `${colors.warning}1A`,
+      borderColor: colors.warning,
+      backgroundColor: colors.warningSoft,
       padding: 20,
       gap: 12,
       marginTop: 16,
@@ -949,7 +946,7 @@ const createStyles = (colors: ThemeColors) =>
     blockedTitle: {
       color: colors.textPrimary,
       fontSize: 20,
-      fontWeight: "700",
+      fontWeight: "600",
       lineHeight: 28,
     },
     blockedText: {
@@ -992,7 +989,7 @@ const createStyles = (colors: ThemeColors) =>
     // Summary card
     card: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 18,
+      borderRadius: 16,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       overflow: "hidden",
@@ -1001,7 +998,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 36,
       height: 36,
       borderRadius: 18,
-      backgroundColor: `${colors.accent}12`,
+      backgroundColor: colors.accentSoft,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -1047,12 +1044,12 @@ const createStyles = (colors: ThemeColors) =>
       width: 34,
       height: 34,
       borderRadius: 17,
-      backgroundColor: `${colors.accent}10`,
+      backgroundColor: colors.surfaceMuted,
       alignItems: "center",
       justifyContent: "center",
     },
     guardianBadgeText: {
-      color: colors.accent,
+      color: colors.textSecondary,
       fontSize: 11,
       fontWeight: "700",
       fontFamily: FontFamilies.mono,
@@ -1106,7 +1103,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     updateGuardiansBtnText: {
       color: colors.textOnAccent,
-      fontWeight: "800",
+      fontWeight: "600",
       fontSize: 15,
     },
     // Settings / threshold row
@@ -1121,7 +1118,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 34,
       height: 34,
       borderRadius: 17,
-      backgroundColor: `${colors.accent}12`,
+      backgroundColor: colors.surfaceMuted,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -1144,7 +1141,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 30,
       height: 30,
       borderRadius: 15,
-      backgroundColor: `${colors.textPrimary}0F`,
+      backgroundColor: colors.surfaceMuted,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -1180,7 +1177,7 @@ const createStyles = (colors: ThemeColors) =>
     configTitle: {
       color: colors.textPrimary,
       fontSize: 18,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     configDesc: {
       color: colors.textSecondary,
@@ -1205,7 +1202,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "600",
     },
     mnInput: {
-      backgroundColor: `${colors.textPrimary}0F`,
+      backgroundColor: colors.inputBackground,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 16,
@@ -1244,10 +1241,10 @@ const createStyles = (colors: ThemeColors) =>
     },
     addressInput: {
       flex: 1,
-      backgroundColor: `${colors.textPrimary}0F`,
+      backgroundColor: colors.inputBackground,
       borderWidth: 1,
       borderColor: colors.borderMuted,
-      borderRadius: 14,
+      borderRadius: 16,
       paddingHorizontal: 16,
       paddingVertical: 14,
       color: colors.textPrimary,
@@ -1283,7 +1280,7 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.borderMuted,
       padding: 14,
-      backgroundColor: `${colors.surfaceCard}99`,
+      backgroundColor: colors.surfaceMuted,
       gap: 8,
     },
     payloadTitle: {
@@ -1318,9 +1315,9 @@ const createStyles = (colors: ThemeColors) =>
       marginTop: 2,
     },
     hashRow: {
-      backgroundColor: `${colors.textPrimary}0A`,
-      borderRadius: 12,
-      padding: 10,
+      backgroundColor: colors.surfaceMuted,
+      borderRadius: 8,
+      padding: 8,
       marginTop: 4,
     },
     hashLabel: {
@@ -1355,7 +1352,7 @@ const createStyles = (colors: ThemeColors) =>
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: `${colors.background}D9`,
+      backgroundColor: "rgba(0,0,0,0.85)",
       alignItems: "center",
       justifyContent: "center",
       gap: 12,

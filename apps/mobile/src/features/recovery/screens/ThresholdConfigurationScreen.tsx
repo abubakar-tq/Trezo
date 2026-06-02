@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
 
 
@@ -42,10 +43,10 @@ export const ThresholdConfigurationScreen: React.FC<
   const isSaving = false;
 
   const getSecurityLevel = (threshold: number, total: number) => {
-    if (total <= 1) return { label: "Limited", color: colors.warning, icon: "⚠️" };
-    if (threshold === 1) return { label: "Low Security", color: colors.danger, icon: "🛡️" };
-    if (threshold === total) return { label: "Strict", color: colors.success, icon: "🔒" };
-    return { label: "Balanced", color: colors.accent, icon: "✅" };
+    if (total <= 1) return { label: "Limited", color: colors.warning, softBg: colors.warningSoft, icon: "alert-triangle" as const };
+    if (threshold === 1) return { label: "Low Security", color: colors.danger, softBg: colors.dangerSoft, icon: "shield" as const };
+    if (threshold === total) return { label: "Strict", color: colors.success, softBg: colors.successSoft, icon: "lock" as const };
+    return { label: "Balanced", color: colors.success, softBg: colors.successSoft, icon: "check-circle" as const };
   };
 
   const security = getSecurityLevel(selectedThreshold, totalContacts);
@@ -69,22 +70,22 @@ export const ThresholdConfigurationScreen: React.FC<
         <View style={{ gap: 8 }}>
           <TouchableOpacity 
             onPress={onCancel}
-            style={{ 
+            style={{
               marginBottom: 8,
               width: 40,
               height: 40,
-              borderRadius: 20,
+              borderRadius: 9999,
               backgroundColor: colors.glass,
               alignItems: 'center',
               justifyContent: 'center'
             }}
           >
-            <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700' }}>←</Text>
+            <Feather name="chevron-left" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text
             style={{
               fontSize: 28,
-              fontWeight: "800",
+              fontWeight: "600",
               color: colors.textPrimary,
             }}
           >
@@ -127,7 +128,7 @@ export const ThresholdConfigurationScreen: React.FC<
                     width: '30%',
                     aspectRatio: 1,
                     backgroundColor: isSelected ? colors.accent : colors.glass,
-                    borderRadius: 20,
+                    borderRadius: 24,
                     alignItems: "center",
                     justifyContent: "center",
                     borderWidth: 2,
@@ -137,7 +138,7 @@ export const ThresholdConfigurationScreen: React.FC<
                   <Text
                     style={{
                       fontSize: 24,
-                      fontWeight: "800",
+                      fontWeight: "600",
                       color: isSelected ? colors.textOnAccent : colors.textPrimary,
                     }}
                   >
@@ -162,50 +163,50 @@ export const ThresholdConfigurationScreen: React.FC<
         {/* SECURITY ANALYSIS CARD */}
         <View
           style={{
-            backgroundColor: `${security.color}14`,
+            backgroundColor: security.softBg,
             borderRadius: 24,
             padding: 24,
             borderWidth: 1,
-            borderColor: `${security.color}33`,
+            borderColor: colors.border,
             gap: 16
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View 
-              style={{ 
-                width: 44, 
-                height: 44, 
-                borderRadius: 22, 
-                backgroundColor: `${security.color}26`,
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 9999,
+                backgroundColor: security.softBg,
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
             >
-              <Text style={{ fontSize: 20 }}>{security.icon}</Text>
+              <Feather name={security.icon} size={20} color={security.color} />
             </View>
             <View>
               <Text style={{ fontSize: 12, fontWeight: '700', color: security.color, letterSpacing: 0.5 }}>
                 SECURITY ANALYSIS
               </Text>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>
+              <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textPrimary }}>
                 {security.label}
               </Text>
             </View>
           </View>
 
           <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 22 }}>
-            {selectedThreshold === 1 
-              ? "High Risk: Only one contact is needed to access your account. This is vulnerable if a contact's email is compromised."
+            {selectedThreshold === 1
+              ? "One contact alone can recover your account, so a single compromised contact is enough."
               : selectedThreshold === totalContacts
-              ? "Strict Security: Every single contact must approve. If even one contact loses access, recovery becomes impossible."
-              : `Recommended: Requiring ${selectedThreshold} of ${totalContacts} contacts provides optimal protection against both compromise and loss of access.`}
+              ? "Every contact must approve; if one loses access, recovery becomes impossible."
+              : `Requiring ${selectedThreshold} of ${totalContacts} balances protection against both compromise and lost access.`}
           </Text>
 
           {selectedThreshold === 1 && (
-            <View style={{ 
-              backgroundColor: `${colors.danger}1A`,
-              padding: 12, 
-              borderRadius: 12,
+            <View style={{
+              backgroundColor: colors.dangerSoft,
+              padding: 12,
+              borderRadius: 8,
               borderLeftWidth: 3,
               borderLeftColor: colors.danger
             }}>

@@ -133,7 +133,7 @@ const createStyles = (colors: ThemeColors) =>
     headerTitle: {
       color: colors.textPrimary,
       fontSize: 20,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     body: {
       flex: 1,
@@ -147,7 +147,7 @@ const createStyles = (colors: ThemeColors) =>
     title: {
       color: colors.textPrimary,
       fontSize: 22,
-      fontWeight: "700",
+      fontWeight: "600",
       lineHeight: 30,
       textAlign: "center",
     },
@@ -161,7 +161,7 @@ const createStyles = (colors: ThemeColors) =>
     primaryButton: {
       marginTop: 12,
       backgroundColor: colors.danger,
-      borderRadius: 12,
+      borderRadius: 16,
       paddingVertical: 14,
       alignItems: "center",
     },
@@ -172,7 +172,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     secondaryButton: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 12,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.borderMuted,
       paddingVertical: 14,
@@ -185,7 +185,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     stepsCard: {
       marginTop: 8,
-      borderRadius: 14,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.borderMuted,
       backgroundColor: colors.surfaceCard,
