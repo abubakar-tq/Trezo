@@ -692,16 +692,16 @@ const DevicesPasskeysScreen: React.FC = () => {
                 <View style={[styles.authRequiredIcon, { backgroundColor: `${colors.warning}1A`, borderColor: `${colors.warning}40` }]}>
                   <Feather name="shield-off" size={20} color={colors.warning} />
                 </View>
-                <Text style={[styles.authRequiredTitle, { color: colors.textPrimary }]}>This device isn't authorized yet</Text>
+                <Text style={[styles.authRequiredTitle, { color: colors.textPrimary }]}>This device isn&apos;t authorized yet</Text>
                 <Text style={[styles.authRequiredBody, { color: colors.textSecondary }]}>
-                  Pair this device with a trusted device that already has your wallet, or use recovery if you no longer have access to your trusted device.
+                  Pair with a trusted device that has your wallet, or recover if you no longer can.
                 </Text>
                 <TouchableOpacity
                   style={[styles.addDeviceBtn, { backgroundColor: colors.accent, marginTop: 4 }]}
                   onPress={() => navigation.navigate("LinkDevice")}
                   activeOpacity={0.88}
                 >
-                  <View style={[styles.addDeviceIconWrap, { backgroundColor: "rgba(255,255,255,0.18)" }]}>
+                  <View style={[styles.addDeviceIconWrap, { backgroundColor: `${colors.textOnAccent}2E` }]}>
                     <Feather name="link-2" size={16} color={colors.textOnAccent} />
                   </View>
                   <Text style={[styles.addDeviceLabel, { color: colors.textOnAccent }]}>Pair this device</Text>
@@ -735,7 +735,7 @@ const DevicesPasskeysScreen: React.FC = () => {
                 <ActivityIndicator color={colors.textOnAccent} />
               ) : (
                 <>
-                  <View style={[styles.addDeviceIconWrap, { backgroundColor: "rgba(255,255,255,0.18)" }]}>
+                  <View style={[styles.addDeviceIconWrap, { backgroundColor: `${colors.textOnAccent}2E` }]}>
                     <Feather name="plus" size={16} color={colors.textOnAccent} />
                   </View>
                   <Text style={[styles.addDeviceLabel, { color: colors.textOnAccent }]}>Add a Device</Text>
@@ -747,8 +747,8 @@ const DevicesPasskeysScreen: React.FC = () => {
             {activeLink && (
               <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
                 <View style={styles.cardHeader}>
-                  <View style={[styles.cardIconWrap, { backgroundColor: `${colors.accentAlt}1A` }]}>
-                    <Feather name="smartphone" size={15} color={colors.accentAlt} />
+                  <View style={[styles.cardIconWrap, { backgroundColor: `${colors.accent}1A` }]}>
+                    <Feather name="smartphone" size={15} color={colors.accent} />
                   </View>
                   <Text style={styles.cardTitle}>
                     Scan on New Device
@@ -758,7 +758,7 @@ const DevicesPasskeysScreen: React.FC = () => {
                   <QRCode value={activeLink} size={180} />
                 </View>
                 <Text style={[styles.cardHint, { color: colors.textSecondary }]}>
-                  Open this QR code on the new device. If the device is signed out, Trezo will resume pairing automatically after sign-in.
+                  Scan on the new device — pairing resumes automatically after sign-in.
                 </Text>
                 <Text style={[styles.cardMono, { color: colors.textMuted }]} selectable>{activeLink}</Text>
               </View>
@@ -782,8 +782,8 @@ const DevicesPasskeysScreen: React.FC = () => {
                       i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderMuted },
                     ]}
                   >
-                    <View style={[styles.deviceAvatarWrap, { backgroundColor: `${colors.accentAlt}1A` }]}>
-                      <Feather name="smartphone" size={14} color={colors.accentAlt} />
+                    <View style={[styles.deviceAvatarWrap, { backgroundColor: colors.surfaceMuted }]}>
+                      <Feather name="smartphone" size={14} color={colors.textSecondary} />
                     </View>
                     <View style={styles.listRowContent}>
                       <Text style={[styles.listRowTitle, { color: colors.textPrimary }]}>
@@ -824,12 +824,12 @@ const DevicesPasskeysScreen: React.FC = () => {
                 <TouchableOpacity
                   onPress={handleAddPasskey}
                   disabled={isSubmitting}
-                  style={[styles.addPasskeyBtn, { backgroundColor: `${colors.accentAlt}18`, borderColor: `${colors.accentAlt}40` }]}
+                  style={[styles.addPasskeyBtn, { backgroundColor: `${colors.accent}18`, borderColor: `${colors.accent}40` }]}
                 >
                   {isSubmitting ? (
-                    <ActivityIndicator size="small" color={colors.accentAlt} />
+                    <ActivityIndicator size="small" color={colors.accent} />
                   ) : (
-                    <Feather name="plus" size={15} color={colors.accentAlt} />
+                    <Feather name="plus" size={15} color={colors.accent} />
                   )}
                 </TouchableOpacity>
               </View>
@@ -869,12 +869,12 @@ const DevicesPasskeysScreen: React.FC = () => {
                         <TouchableOpacity
                           onPress={() => handleRegisterOnChain(pk)}
                           disabled={processingId === pk.id}
-                          style={[styles.iconBtn, { backgroundColor: `${colors.accentAlt}18`, borderColor: `${colors.accentAlt}40`, opacity: processingId === pk.id ? 0.5 : 1 }]}
+                          style={[styles.iconBtn, { backgroundColor: `${colors.accent}18`, borderColor: `${colors.accent}40`, opacity: processingId === pk.id ? 0.5 : 1 }]}
                         >
                           {processingId === pk.id ? (
-                            <ActivityIndicator size="small" color={colors.accentAlt} />
+                            <ActivityIndicator size="small" color={colors.accent} />
                           ) : (
-                            <Feather name="upload-cloud" size={14} color={colors.accentAlt} />
+                            <Feather name="upload-cloud" size={14} color={colors.accent} />
                           )}
                         </TouchableOpacity>
                       )}
@@ -932,8 +932,8 @@ const DevicesPasskeysScreen: React.FC = () => {
                             {device.device_name ?? "Unnamed device"}
                           </Text>
                           {isThis && (
-                            <View style={[styles.thisDevicePill, { backgroundColor: `${colors.accentAlt}18`, borderColor: `${colors.accentAlt}40` }]}>
-                              <Text style={[styles.thisDevicePillText, { color: colors.accentAlt }]}>This device</Text>
+                            <View style={[styles.thisDevicePill, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderMuted }]}>
+                              <Text style={[styles.thisDevicePillText, { color: colors.textSecondary }]}>This device</Text>
                             </View>
                           )}
                         </View>
@@ -1064,7 +1064,7 @@ const createStyles = (colors: ThemeColors) =>
     headerBackBtn: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,
@@ -1081,7 +1081,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     headerTitle: {
       fontSize: 18,
-      fontWeight: "800",
+      fontWeight: "600",
       color: colors.textPrimary,
       letterSpacing: -0.3,
     },
@@ -1113,7 +1113,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     card: {
-      borderRadius: 20,
+      borderRadius: 16,
       borderWidth: 1,
       padding: 16,
       gap: 14,
@@ -1298,7 +1298,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     authRequiredTitle: {
       fontSize: 16,
-      fontWeight: "800",
+      fontWeight: "600",
       letterSpacing: -0.2,
     },
     authRequiredBody: {

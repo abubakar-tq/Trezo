@@ -371,16 +371,16 @@ export const DeviceVerificationScreen = () => {
           <TouchableOpacity
             onPress={handleContinuePairing}
             activeOpacity={0.85}
-            style={[styles.pairingBanner, { backgroundColor: `${colors.accent}1A`, borderColor: `${colors.accent}59` }]}
+            style={[styles.pairingBanner, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
           >
-            <View style={[styles.pairingIconWrap, { backgroundColor: `${colors.accent}22` }]}>
-              <Ionicons name="phone-portrait-outline" size={18} color={colors.accent} />
+            <View style={[styles.pairingIconWrap, { backgroundColor: colors.surfaceMuted }]}>
+              <Ionicons name="phone-portrait-outline" size={18} color={colors.textSecondary} />
             </View>
             <View style={styles.pairingTextBlock}>
               <Text style={[styles.pairingTitle, { color: colors.textPrimary }]}>Continue Device Pairing</Text>
               <Text style={[styles.pairingSubtitle, { color: colors.textSecondary }]}>Tap to add this device to your wallet</Text>
             </View>
-            <Ionicons name="arrow-forward" size={16} color={colors.accent} />
+            <Ionicons name="arrow-forward" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
 
@@ -390,7 +390,7 @@ export const DeviceVerificationScreen = () => {
             <AnimatedView
               style={[styles.halo, haloStyle, { backgroundColor: colors.accent }]}
             />
-            <View style={[styles.iconBadge, { backgroundColor: `${colors.surfaceElevated}D9`, borderColor: `${colors.accent}66` }]}>
+            <View style={[styles.iconBadge, { backgroundColor: colors.surfaceElevated, borderColor: colors.glassBorder }]}>
               <MaterialCommunityIcons name={iconName} size={44} color={colors.accent} />
             </View>
           </View>
@@ -404,13 +404,13 @@ export const DeviceVerificationScreen = () => {
               <View
                 style={[
                   styles.stepDot,
-                  { backgroundColor: setupStep === "first" ? colors.accent : `${colors.accent}66` },
+                  { backgroundColor: setupStep === "first" ? colors.accent : colors.accentSoft },
                 ]}
               />
               <View
                 style={[
                   styles.stepDot,
-                  { backgroundColor: setupStep === "confirm" ? colors.accent : `${colors.border}99` },
+                  { backgroundColor: setupStep === "confirm" ? colors.accent : colors.borderMuted },
                 ]}
               />
             </View>
@@ -418,12 +418,12 @@ export const DeviceVerificationScreen = () => {
 
           {/* Error state */}
           {!inPinMode && lastError ? (
-            <View style={[styles.errorPill, { backgroundColor: `${colors.danger}18`, borderColor: `${colors.danger}40` }]}>
+            <View style={[styles.errorPill, { backgroundColor: colors.dangerSoft, borderColor: colors.danger }]}>
               <Text style={[styles.errorText, { color: colors.danger }]}>{lastError}</Text>
             </View>
           ) : null}
           {inPinMode && pinError ? (
-            <View style={[styles.errorPill, { backgroundColor: `${colors.danger}18`, borderColor: `${colors.danger}40` }]}>
+            <View style={[styles.errorPill, { backgroundColor: colors.dangerSoft, borderColor: colors.danger }]}>
               <Text style={[styles.errorText, { color: colors.danger }]}>{pinError}</Text>
             </View>
           ) : null}
@@ -444,7 +444,7 @@ export const DeviceVerificationScreen = () => {
                   activeOpacity={0.85}
                   style={[
                     styles.secondaryBtn,
-                    { backgroundColor: `${colors.surfaceMuted}CC`, borderColor: `${colors.border}80`, marginTop: 12 },
+                    { backgroundColor: colors.surfaceMuted, borderColor: colors.border, marginTop: 12 },
                   ]}
                   onPress={handleSwitchToBiometric}
                   disabled={pinBusy}
@@ -478,7 +478,7 @@ export const DeviceVerificationScreen = () => {
                 <View
                   style={[
                     styles.advisoryBanner,
-                    { backgroundColor: `${colors.warning}1F`, borderColor: `${colors.warning}66` },
+                    { backgroundColor: colors.warningSoft, borderColor: colors.warning },
                   ]}
                 >
                   <MaterialCommunityIcons
@@ -492,12 +492,11 @@ export const DeviceVerificationScreen = () => {
                       Add a device screen lock too
                     </Text>
                     <Text style={[styles.advisoryBody, { color: colors.textSecondary }]}>
-                      Your phone has no PIN, pattern, or biometric. Adding one
-                      in {Platform.OS === "ios" ? "iOS Settings" : "Android Settings"} makes Trezo safer.
+                      Your phone has no screen lock. Add one in {Platform.OS === "ios" ? "iOS Settings" : "Android Settings"} to keep Trezo safer.
                     </Text>
                     <TouchableOpacity onPress={handleRecheckSecurityLevel} activeOpacity={0.7} style={{ marginTop: 6 }}>
                       <Text style={[styles.advisoryLink, { color: colors.accent }]}>
-                        I've set one — recheck
+                        I&apos;ve set one — recheck
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -523,7 +522,7 @@ export const DeviceVerificationScreen = () => {
 
               <TouchableOpacity
                 activeOpacity={0.85}
-                style={[styles.secondaryBtn, { backgroundColor: `${colors.surfaceMuted}CC`, borderColor: `${colors.border}80` }]}
+                style={[styles.secondaryBtn, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}
                 onPress={handleSwitchToPin}
                 disabled={isAuthenticating}
               >
@@ -541,7 +540,7 @@ export const DeviceVerificationScreen = () => {
             onPress={handleRecover}
             disabled={isAuthenticating || isLoggingOut}
           >
-            <Text style={[styles.linkText, { color: colors.accent }]}>
+            <Text style={[styles.linkText, { color: colors.textSecondary }]}>
               No passkey on this device? Recover account
             </Text>
           </TouchableOpacity>
@@ -575,7 +574,7 @@ export const DeviceVerificationScreen = () => {
 
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Re-login Required</Text>
             <Text style={[styles.modalBody, { color: colors.textSecondary }]}>
-              {"Your current session will be closed and all local data cleared. You'll need to log in again with your credentials."}
+              {"This clears all local data and signs you out — you'll need to log in again."}
             </Text>
 
             <View style={styles.modalBtns}>
@@ -677,7 +676,7 @@ const createStyles = () =>
     },
     title: {
       fontSize: 27,
-      fontWeight: "800",
+      fontWeight: "600",
       textAlign: "center",
       letterSpacing: -0.3,
     },
@@ -698,10 +697,10 @@ const createStyles = () =>
       borderRadius: 2,
     },
     errorPill: {
-      borderRadius: 12,
+      borderRadius: 8,
       borderWidth: 1,
-      paddingHorizontal: 14,
-      paddingVertical: 9,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
     },
     errorText: {
       fontSize: 13,
@@ -713,8 +712,8 @@ const createStyles = () =>
       gap: 10,
     },
     primaryBtn: {
-      borderRadius: 17,
-      paddingVertical: 15,
+      borderRadius: 16,
+      paddingVertical: 16,
       alignItems: "center",
     },
     primaryBtnText: {
@@ -722,8 +721,8 @@ const createStyles = () =>
       fontWeight: "700",
     },
     secondaryBtn: {
-      borderRadius: 17,
-      paddingVertical: 15,
+      borderRadius: 16,
+      paddingVertical: 16,
       alignItems: "center",
       borderWidth: 1,
     },
@@ -795,8 +794,8 @@ const createStyles = () =>
       paddingHorizontal: 24,
     },
     modalCard: {
-      borderRadius: 28,
-      padding: 26,
+      borderRadius: 24,
+      padding: 24,
       width: "100%",
       maxWidth: 380,
       borderWidth: 1,
@@ -813,7 +812,7 @@ const createStyles = () =>
     },
     modalTitle: {
       fontSize: 21,
-      fontWeight: "800",
+      fontWeight: "600",
       textAlign: "center",
       letterSpacing: -0.3,
     },

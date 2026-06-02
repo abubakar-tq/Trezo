@@ -140,17 +140,17 @@ export function LinkDeviceScreen() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         {/* Intro / instructions */}
-        <View style={[styles.introCard, { backgroundColor: `${colors.accentAlt}1A`, borderColor: `${colors.accentAlt}33` }]}>
+        <View style={[styles.introCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
           <Text style={styles.introTitle}>Pair with a trusted device</Text>
           <Text style={styles.introBody}>
-            Open Trezo on a device that already has your wallet, go to Linked Devices, tap{" "}
-            <Text style={styles.introEmphasis}>Add New Device</Text>, then scan the QR with this device's camera.
+            On your existing wallet device, open Linked Devices, tap{" "}
+            <Text style={styles.introEmphasis}>Add New Device</Text>, then scan the QR here.
           </Text>
         </View>
 
         {/* Error banner */}
         {errorMessage ? (
-          <View style={[styles.errorCard, { backgroundColor: `${colors.danger}12`, borderColor: `${colors.danger}40` }]}>
+          <View style={[styles.errorCard, { backgroundColor: colors.dangerSoft, borderColor: colors.danger }]}>
             <Feather name="alert-circle" size={14} color={colors.danger} />
             <Text style={[styles.errorText, { color: colors.danger }]}>{errorMessage}</Text>
           </View>
@@ -159,8 +159,8 @@ export function LinkDeviceScreen() {
         {/* Camera card */}
         <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           <View style={styles.cardHeader}>
-            <View style={[styles.cardIconWrap, { backgroundColor: `${colors.accent}1A` }]}>
-              <Feather name="camera" size={15} color={colors.accent} />
+            <View style={[styles.cardIconWrap, { backgroundColor: colors.surfaceMuted }]}>
+              <Feather name="camera" size={15} color={colors.textSecondary} />
             </View>
             <Text style={styles.cardTitle}>Scan pairing QR</Text>
           </View>
@@ -179,7 +179,7 @@ export function LinkDeviceScreen() {
               </View>
             ) : (
               <View style={styles.cameraPlaceholder}>
-                <View style={[styles.permissionIconWrap, { backgroundColor: `${colors.warning}1A`, borderColor: `${colors.warning}40` }]}>
+                <View style={[styles.permissionIconWrap, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
                   <Feather name="camera-off" size={22} color={colors.warning} />
                 </View>
                 <Text style={[styles.permissionTitle, { color: colors.textPrimary }]}>Camera access needed</Text>
@@ -224,8 +224,8 @@ export function LinkDeviceScreen() {
         {/* Paste card */}
         <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           <View style={styles.cardHeader}>
-            <View style={[styles.cardIconWrap, { backgroundColor: `${colors.accentAlt}1A` }]}>
-              <Feather name="link-2" size={15} color={colors.accentAlt} />
+            <View style={[styles.cardIconWrap, { backgroundColor: colors.surfaceMuted }]}>
+              <Feather name="link-2" size={15} color={colors.textSecondary} />
             </View>
             <Text style={styles.cardTitle}>Or paste the pairing link</Text>
           </View>
@@ -284,7 +284,7 @@ const createStyles = (colors: ThemeColors) =>
     headerBackBtn: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,
@@ -301,7 +301,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     headerTitle: {
       fontSize: 18,
-      fontWeight: "800",
+      fontWeight: "600",
       color: colors.textPrimary,
       letterSpacing: -0.3,
     },
@@ -337,7 +337,7 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "flex-start",
       gap: 8,
-      borderRadius: 13,
+      borderRadius: 16,
       borderWidth: 1,
       paddingHorizontal: 13,
       paddingVertical: 11,
@@ -349,7 +349,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 19,
     },
     card: {
-      borderRadius: 20,
+      borderRadius: 16,
       borderWidth: 1,
       padding: 16,
       gap: 14,
@@ -362,7 +362,7 @@ const createStyles = (colors: ThemeColors) =>
     cardIconWrap: {
       width: 32,
       height: 32,
-      borderRadius: 9,
+      borderRadius: 8,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -414,7 +414,7 @@ const createStyles = (colors: ThemeColors) =>
       marginBottom: 4,
     },
     permissionBtn: {
-      borderRadius: 14,
+      borderRadius: 16,
       paddingHorizontal: 18,
       paddingVertical: 12,
       alignItems: "center",
@@ -427,13 +427,13 @@ const createStyles = (colors: ThemeColors) =>
     },
     pasteInput: {
       borderWidth: 1,
-      borderRadius: 12,
+      borderRadius: 16,
       paddingHorizontal: 14,
       paddingVertical: 12,
       fontSize: 13,
     },
     pasteBtn: {
-      borderRadius: 14,
+      borderRadius: 16,
       paddingVertical: 13,
       alignItems: "center",
       justifyContent: "center",

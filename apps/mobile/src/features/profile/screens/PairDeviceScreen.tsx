@@ -230,7 +230,7 @@ const PairDeviceScreen: React.FC = () => {
         ) : !linkParams ? (
           <>
             <Text style={styles.title}>No pairing link found</Text>
-            <Text style={styles.subtitle}>Scan the pairing QR code shown on a device you already use to add this one. You can also go back with the arrow above.</Text>
+            <Text style={styles.subtitle}>Scan the pairing QR code shown on a device you already use.</Text>
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={() => navigation.navigate("LinkDevice")}
@@ -309,7 +309,7 @@ const PairDeviceScreen: React.FC = () => {
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Before you continue</Text>
               <Text style={styles.noteBody}>
-                Real passkeys should be created on a physical device in a native build. Emulator biometric fallback is only suitable for local UI testing.
+                Create passkeys on a physical device — emulator biometrics are for UI testing only.
               </Text>
             </View>
 
@@ -355,7 +355,7 @@ const createStyles = (colors: ThemeColors) =>
     headerBackBtn: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,
@@ -372,7 +372,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     headerTitle: {
       fontSize: 18,
-      fontWeight: "800",
+      fontWeight: "600",
       color: colors.textPrimary,
       letterSpacing: -0.3,
     },
@@ -393,10 +393,10 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     introCard: {
-      backgroundColor: `${colors.accentAlt}1F`,
-      borderRadius: 14,
+      backgroundColor: colors.surfaceCard,
+      borderRadius: 16,
       borderWidth: 1,
-      borderColor: `${colors.accentAlt}3D`,
+      borderColor: colors.borderMuted,
       padding: 14,
       gap: 6,
     },
@@ -419,10 +419,10 @@ const createStyles = (colors: ThemeColors) =>
       gap: 6,
     },
     noteCard: {
-      backgroundColor: `${colors.warning}1F`,
-      borderRadius: 14,
+      backgroundColor: colors.warningSoft,
+      borderRadius: 16,
       borderWidth: 1,
-      borderColor: `${colors.warning}47`,
+      borderColor: colors.warning,
       padding: 14,
       gap: 6,
     },
@@ -453,10 +453,10 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 12,
     },
     primaryButton: {
-      marginTop: 10,
+      marginTop: 8,
       backgroundColor: colors.accent,
-      borderRadius: 12,
-      paddingVertical: 14,
+      borderRadius: 16,
+      paddingVertical: 16,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -473,7 +473,7 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
     },
     note: {
-      color: `${colors.textMuted}D9`,
+      color: colors.textMuted,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -482,9 +482,9 @@ const createStyles = (colors: ThemeColors) =>
       width: 64,
       height: 64,
       borderRadius: 32,
-      backgroundColor: `${colors.success}1F`,
+      backgroundColor: colors.successSoft,
       borderWidth: 1,
-      borderColor: `${colors.success}66`,
+      borderColor: colors.success,
       alignItems: "center",
       justifyContent: "center",
       marginBottom: 4,
