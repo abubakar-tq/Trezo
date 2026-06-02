@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Geist variable fonts (bundled, no CDN) ─────────────────────────────── */
+@font-face {
+  font-family: 'Geist';
+  src: url('./fonts/GeistSans.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('./fonts/GeistMono.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+/* ── Design tokens ──────────────────────────────────────────────────────── */
+:root {
+  --bg: #060608;
+  --surface: rgba(14, 12, 18, .95);
+  --card: rgba(20, 16, 27, .72);
+  --card-2: rgba(26, 21, 35, .6);
+  --elevated: rgba(24, 20, 32, .95);
+  --muted-surface: rgba(14, 12, 18, .45);
+  --border: rgba(124, 58, 237, .13);
+  --border-2: rgba(124, 58, 237, .07);
+  --text: #F4F1EA;
+  --text-2: #9A968F;
+  --text-3: #5C5A55;
+  --accent: #7C3AED;
+  --accent-2: #06B6D4;
+  --accent-soft: rgba(124, 58, 237, .15);
+  --success: #34D399;
+  --success-soft: rgba(52, 211, 153, .13);
+  --warning: #F59E0B;
+  --warning-soft: rgba(245, 158, 11, .13);
+  --danger: #E8654F;
+  --danger-soft: rgba(232, 101, 79, .13);
+  --glass-border: rgba(124, 58, 237, .1);
+  --input-bg: rgba(12, 10, 16, .85);
+  --input-border: rgba(124, 58, 237, .16);
+  --font: 'Geist', system-ui, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, monospace;
+  --shadow-pop: 0 28px 80px rgba(6, 2, 16, .75), 0 0 0 1px rgba(124, 58, 237, .08);
+}
+
+/* ── Base reset + body ──────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Action popup (toolbar): Chrome sizes the popup to its content, so the body
+   MUST have an explicit width or it collapses to a thin sliver. */
+html, body {
+  width: 384px;
+  min-height: 520px;
+}
+/* Dedicated approval window (opened via chrome.windows.create?ctx=window):
+   the window controls the size, so fill it instead of the fixed popup width. */
+html[data-ctx="window"],
+html[data-ctx="window"] body {
+  width: 100%;
+  min-height: 100vh;
+}
+
+body {
+  background:
+    radial-gradient(1100px 560px at 12% -8%, rgba(124, 58, 237, .12), transparent 58%),
+    radial-gradient(820px 460px at 100% 4%, rgba(6, 182, 212, .06), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle noise grain overlay */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .022;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Utility classes matching the mockup (used by component kit) ────────── */
+.mono {
+  font-family: var(--mono);
+}
+
+.addr {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: -0.01em;
+  word-break: break-all;
+}

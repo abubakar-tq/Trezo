@@ -151,3 +151,4 @@ kilo.jsonc
 .roo/.env.*
 .roo/
 .rooignore
+.design-skills/
