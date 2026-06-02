@@ -160,7 +160,7 @@ export const TransactionListItem: React.FC<{
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     justifyContent: "space-between",
     borderWidth: 1,
     borderRadius: 14,
@@ -198,10 +198,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
   },
-  /** Right column: badge + amount stacked, right-aligned. Vertical centering
-   *  comes from the parent row's alignItems: "center". */
   rightWrap: {
     alignItems: "flex-end",
+    justifyContent: "center",
     gap: 4,
     flexShrink: 0,
     paddingLeft: 8,
