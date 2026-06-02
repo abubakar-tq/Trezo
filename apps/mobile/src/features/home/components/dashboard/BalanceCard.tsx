@@ -105,6 +105,9 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
             <Text style={[styles.ctaPillText, { color: changeColor }]}>
               {sign}{change24hPct.toFixed(2)}%
             </Text>
+            <Text style={[styles.ctaPillText, { color: "rgba(255,255,255,0.4)" }]}>
+              · 24H
+            </Text>
           </View>
         );
       }
@@ -196,6 +199,9 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
       {/* Sparkline — real 1D data only; hidden when empty or <2 points (spec §5.1) */}
       {sparklineData && sparklineData.length >= 2 && !isEmpty && (
         <View style={styles.sparklineWrapper}>
+          <View style={styles.sparklineHeader}>
+            <Text style={styles.sparklineTimeLabel}>Past 24 hours</Text>
+          </View>
           <Sparkline
             data={sparklineData}
             width={280}
@@ -290,6 +296,18 @@ const createStyles = (colors: ThemeColors) =>
       marginTop: 12,
       alignSelf: "stretch",
       opacity: 0.8,
+    },
+    sparklineHeader: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      marginBottom: 4,
+    },
+    sparklineTimeLabel: {
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 0.6,
+      textTransform: "uppercase",
+      color: "rgba(255,255,255,0.4)",
     },
     footer: {
       flexDirection: "row",
