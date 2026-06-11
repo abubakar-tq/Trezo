@@ -40,6 +40,7 @@ export interface TestnetChainDef {
   socialRecovery?: `0x${string}`;
   passkeyValidator?: `0x${string}`;
   startBlock: number;
+  heavyStartBlock: number; // For heavy contracts like ERC20 and EntryPoint
   tokens: `0x${string}`[]; // known ERC-20 contracts to index (Transfer-volume control)
 }
 
@@ -51,6 +52,7 @@ export const TESTNET_CHAINS: Record<string, TestnetChainDef> = {
     socialRecovery: (process.env.BASE_SEPOLIA_SOCIAL_RECOVERY ?? "0x735fD4912c11AB281C482E2c7B32D37D48b574B5") as `0x${string}`,
     passkeyValidator: (process.env.BASE_SEPOLIA_PASSKEY_VALIDATOR ?? "0xD3252Ca22F6a2A294F003eF95ea1768C30f9976A") as `0x${string}`,
     startBlock: Number(process.env.BASE_SEPOLIA_START_BLOCK ?? "41380204"),
+    heavyStartBlock: Number(process.env.BASE_SEPOLIA_HEAVY_START_BLOCK ?? "42291000"),
     tokens: [
       "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC
       "0x4200000000000000000000000000000000000006", // WETH
@@ -62,8 +64,9 @@ export const TESTNET_CHAINS: Record<string, TestnetChainDef> = {
     rpc: process.env.PONDER_ETH_SEPOLIA_RPC_URL,
     accountFactory: (process.env.ETH_SEPOLIA_ACCOUNT_FACTORY ?? "0xBc20fACed405c4806f4B1bEf9B8C6704ae0afC9F") as `0x${string}`,
     socialRecovery: (process.env.ETH_SEPOLIA_SOCIAL_RECOVERY ?? "0x735fD4912c11AB281C482E2c7B32D37D48b574B5") as `0x${string}`,
-    passkeyValidator: (process.env.ETH_SEPOLIA_PASSKEY_VALIDATOR ?? "0xD3252Ca22F6a2A294F003eF95ea1768C30f9976A") as `0x${string}`,
+    passkeyValidator: (process.env.BASE_SEPOLIA_PASSKEY_VALIDATOR ?? "0xD3252Ca22F6a2A294F003eF95ea1768C30f9976A") as `0x${string}`,
     startBlock: Number(process.env.ETH_SEPOLIA_START_BLOCK ?? "10945815"),
+    heavyStartBlock: Number(process.env.ETH_SEPOLIA_HEAVY_START_BLOCK ?? "10947500"),
     tokens: [
       "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // USDC
       "0xfff9976782d46cc05630d1f6ebab18b2324d6b14", // WETH

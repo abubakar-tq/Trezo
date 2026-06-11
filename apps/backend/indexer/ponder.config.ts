@@ -14,7 +14,7 @@ const ACCOUNT_CREATED = parseAbiItem(
 
 // Anvil is only available when its local deployment artifact (contracts/deployments/31337.json)
 // is present — true in local dev, false on a hosted indexer (Render). Omit it cleanly otherwise.
-const includeAnvil = ANVIL_LOCAL !== null;
+const includeAnvil = false;
 const anvilFactory = (ANVIL_LOCAL?.accountFactory ?? "") as `0x${string}`;
 
 // A factory address that always exists, for the REQUIRED top-level account `address`
@@ -23,25 +23,45 @@ const defaultFactory = (Object.values(ACTIVE_TESTNET_CHAINS)[0]?.accountFactory 
   ANVIL_LOCAL?.accountFactory ??
   "0xBc20fACed405c4806f4B1bEf9B8C6704ae0afC9F") as `0x${string}`;
 
+import { http, fallback } from "viem";
+
+console.log("=== RUNTIME CONFIG DEBUG ===");
+console.log("ETH_SEPOLIA_RPC_URL raw:", process.env.PONDER_ETH_SEPOLIA_RPC_URL);
+console.log("BASE_SEPOLIA_RPC_URL raw:", process.env.PONDER_BASE_SEPOLIA_RPC_URL);
+console.log("ACTIVE_TESTNET_CHAINS:", JSON.stringify(ACTIVE_TESTNET_CHAINS, null, 2));
+console.log("============================");
+
+
+
 // chains: optional anvilLocal + each active testnet (RPC configured).
-const chains: Record<string, { id: number; rpc: string; pollingInterval?: number }> = {};
+const chains: Record<string, Network> = {};
 if (includeAnvil) {
   chains.anvilLocal = {
     id: 31337,
-    rpc: process.env.PONDER_ANVIL_RPC_URL ?? "http://192.168.100.68:8545",
+    transport: http(process.env.PONDER_ANVIL_RPC_URL ?? "http://127.0.0.1:8545"),
     pollingInterval: 1000,
   };
 }
 for (const [key, c] of Object.entries(ACTIVE_TESTNET_CHAINS)) {
-  chains[key] = { id: c.id, rpc: c.rpc!, pollingInterval: 2000 };
+  const rpcUrls = c.rpc!.includes(",") ? c.rpc!.split(",").map(url => url.trim()) : [c.rpc!];
+  chains[key] = {
+    id: c.id,
+    transport: rpcUrls.length > 1 ? fallback(rpcUrls.map(url => http(url))) : http(rpcUrls[0]),
+    pollingInterval: 3000,
+    maxRequestsPerSecond: 5,
+    maxHistoricalTaskConcurrency: 2,
+  };
 }
 
 // Per-chain entry for each active testnet for a contract field.
 const perChain = (build: (c: (typeof ACTIVE_TESTNET_CHAINS)[string]) => unknown) =>
   Object.fromEntries(Object.entries(ACTIVE_TESTNET_CHAINS).map(([key, c]) => [key, build(c)]));
 
+console.log("=== FINAL CHAINS OBJECT ===");
+console.log(JSON.stringify(chains, null, 2));
+console.log("===========================");
+
 export default createConfig({
-  database: { kind: "postgres", connectionString: process.env.DATABASE_URL! },
   chains,
   contracts: {
     AccountFactory: {
@@ -81,7 +101,7 @@ export default createConfig({
       abi: EntryPointAbi,
       chain: {
         ...(includeAnvil ? { anvilLocal: { address: ENTRYPOINT_V07, startBlock: 0 } } : {}),
-        ...perChain((c) => ({ address: ENTRYPOINT_V07, startBlock: c.startBlock })),
+        ...perChain((c) => ({ address: ENTRYPOINT_V07, startBlock: c.heavyStartBlock })),
       },
     },
     // ERC-20 receives: restrict to KNOWN TOKEN CONTRACTS per chain (volume control).
@@ -90,7 +110,7 @@ export default createConfig({
       abi: Erc20Abi,
       chain: {
         ...(includeAnvil ? { anvilLocal: { startBlock: 0 } } : {}),
-        ...perChain((c) => ({ address: c.tokens, startBlock: c.startBlock })),
+        ...perChain((c) => ({ address: c.tokens, startBlock: c.heavyStartBlock })),
       },
     },
   },
