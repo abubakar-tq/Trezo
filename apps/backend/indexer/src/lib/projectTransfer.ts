@@ -34,35 +34,32 @@ export async function projectIncomingTransfer(t: IncomingTransfer): Promise<void
 
   const { error } = await supabase
     .from("wallet_transactions")
-    .upsert(
-      {
-        user_id: wallet.user_id,
-        aa_wallet_id: wallet.id,
-        wallet_address: wallet.predicted_address,
-        chain_id: t.chainId,
-        network_key: networkKey,
-        type: t.tokenType === "native" ? "send_native" : "send_erc20",
-        status: "confirmed",
-        direction: "incoming",
-        token_type: t.tokenType,
-        token_address: t.tokenAddress,
-        token_symbol: t.tokenSymbol,
-        token_decimals: t.tokenDecimals,
-        from_address: t.from,
-        to_address: t.to,
-        amount_raw: t.valueRaw.toString(),
-        amount_display: amountDisplay,
-        target_address: t.to,
-        value_raw: t.tokenType === "native" ? t.valueRaw.toString() : "0",
-        calldata: "0x",
-        transaction_hash: t.txHash,
-        log_index: t.logIndex,
-        block_number: Number(t.blockNumber),
-        confirmed_at: new Date(Number(t.blockTimestampSec) * 1000).toISOString(),
-        metadata: { source: "indexer" },
-      },
-      { onConflict: "chain_id,transaction_hash,log_index", ignoreDuplicates: true },
-    );
+    .insert({
+      user_id: wallet.user_id,
+      aa_wallet_id: wallet.id,
+      wallet_address: wallet.predicted_address,
+      chain_id: t.chainId,
+      network_key: networkKey,
+      type: t.tokenType === "native" ? "send_native" : "send_erc20",
+      status: "confirmed",
+      direction: "incoming",
+      token_type: t.tokenType,
+      token_address: t.tokenAddress,
+      token_symbol: t.tokenSymbol,
+      token_decimals: t.tokenDecimals,
+      from_address: t.from,
+      to_address: t.to,
+      amount_raw: t.valueRaw.toString(),
+      amount_display: amountDisplay,
+      target_address: t.to,
+      value_raw: t.tokenType === "native" ? t.valueRaw.toString() : "0",
+      calldata: "0x",
+      transaction_hash: t.txHash,
+      log_index: t.logIndex,
+      block_number: Number(t.blockNumber),
+      confirmed_at: new Date(Number(t.blockTimestampSec) * 1000).toISOString(),
+      metadata: { source: "indexer" },
+    });
 
   if (error && error.code !== "23505") {
     console.error("[indexer] projectIncomingTransfer failed", { txHash: t.txHash, error });
