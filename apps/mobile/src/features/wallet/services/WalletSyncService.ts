@@ -13,6 +13,7 @@ import {
   SupabaseWalletService,
   type AAWallet,
 } from "./SupabaseWalletService";
+import { TransactionHistoryService } from "@/src/features/transactions/services/TransactionHistoryService";
 
 type PersistWalletMetadataParams = {
   userId: string;
@@ -76,7 +77,7 @@ export class WalletSyncService {
   static async persistWalletMetadata(
     params: PersistWalletMetadataParams,
   ): Promise<AAWallet> {
-    return this.walletService.saveAAWallet({
+    const wallet = await this.walletService.saveAAWallet({
       userId: params.userId,
       predictedAddress: params.predictedAddress,
       ownerAddress: params.ownerAddress,
@@ -91,6 +92,17 @@ export class WalletSyncService {
       deploymentBlockNumber: params.deploymentBlockNumber,
       deployedAt: params.deployedAt,
     });
+
+    // Fire off asynchronous historical backfill for the newly created/saved wallet
+    TransactionHistoryService.backfillHistoricalTransfers(
+      wallet.user_id,
+      wallet.id,
+      wallet.predicted_address,
+      wallet.chain_id,
+      wallet.network_key ?? "anvil-local"
+    ).catch(e => console.warn("[WalletSyncService] Backfill failed silently:", e));
+
+    return wallet;
   }
 
   static async hydrateWalletForUser(

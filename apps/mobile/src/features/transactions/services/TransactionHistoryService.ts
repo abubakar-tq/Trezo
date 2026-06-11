@@ -14,6 +14,7 @@ import type { SupportedChainId } from "@/src/integration/chains";
 import { getDeployment } from "@/src/integration/viem/deployments";
 import { getSupabaseClient } from "@/src/lib/supabase";
 import type { Address, Hex } from "viem";
+import { fetchMoralisHistoricalTransfers } from "@/src/lib/api/transfers";
 
 type WalletTransactionRow = {
   id: string;
@@ -221,6 +222,86 @@ const updateById = async (id: string, patch: Record<string, unknown>): Promise<W
 };
 
 export class TransactionHistoryService {
+  static async backfillHistoricalTransfers(userId: string, aaWalletId: string, walletAddress: string, chainId: number, networkKey: string) {
+    try {
+      const { native, erc20 } = await fetchMoralisHistoricalTransfers(walletAddress, chainId);
+      if (!native.length && !erc20.length) return;
+
+      const rows: any[] = [];
+      const lowerWallet = walletAddress.toLowerCase();
+
+      // Parse Native ETH transfers
+      for (const t of native) {
+        rows.push({
+          user_id: userId,
+          aa_wallet_id: aaWalletId,
+          wallet_address: lowerWallet,
+          chain_id: chainId,
+          network_key: networkKey,
+          type: "send_native",
+          status: "confirmed",
+          direction: (t.to_address || "").toLowerCase() === lowerWallet ? "incoming" : "outgoing",
+          token_type: "native",
+          token_address: null,
+          token_symbol: "ETH",
+          token_decimals: 18,
+          from_address: (t.from_address || "").toLowerCase(),
+          to_address: (t.to_address || "").toLowerCase(),
+          amount_raw: t.value || "0",
+          amount_display: t.value ? (Number(t.value) / 1e18).toString() : "0",
+          target_address: (t.to_address || "").toLowerCase(),
+          value_raw: t.value || "0",
+          calldata: "0x",
+          transaction_hash: t.hash,
+          log_index: -1,
+          block_number: parseInt(t.block_number || "0", 10),
+          confirmed_at: new Date(t.block_timestamp).toISOString(),
+          metadata: { source: "moralis_backfill" },
+        });
+      }
+
+      // Parse ERC-20 Token transfers
+      for (const t of erc20) {
+        rows.push({
+          user_id: userId,
+          aa_wallet_id: aaWalletId,
+          wallet_address: lowerWallet,
+          chain_id: chainId,
+          network_key: networkKey,
+          type: "send_erc20",
+          status: "confirmed",
+          direction: (t.to_address || "").toLowerCase() === lowerWallet ? "incoming" : "outgoing",
+          token_type: "erc20",
+          token_address: (t.address || "").toLowerCase(),
+          token_symbol: t.token_symbol,
+          token_decimals: parseInt(t.token_decimals || "18", 10),
+          from_address: (t.from_address || "").toLowerCase(),
+          to_address: (t.to_address || "").toLowerCase(),
+          amount_raw: t.value || "0",
+          amount_display: t.value_decimal || "0",
+          target_address: (t.to_address || "").toLowerCase(),
+          value_raw: "0",
+          calldata: "0x",
+          transaction_hash: t.transaction_hash,
+          log_index: t.log_index || 0,
+          block_number: parseInt(t.block_number || "0", 10),
+          confirmed_at: new Date(t.block_timestamp).toISOString(),
+          metadata: { source: "moralis_backfill" },
+        });
+      }
+
+      // Insert individually to safely catch and ignore 23505 (Unique Constraint Violations)
+      for (const row of rows) {
+        const { error } = await supabase.from("wallet_transactions").insert(row);
+        if (error && error.code !== "23505") {
+          console.warn("[TransactionHistoryService] Backfill insert failed:", error);
+        }
+      }
+    } catch (error) {
+      console.warn("[TransactionHistoryService] Failed to execute backfill:", error);
+    }
+  }
+
   static async getById(id: string): Promise<WalletTransaction | null> {
     return loadById(id);
   }
