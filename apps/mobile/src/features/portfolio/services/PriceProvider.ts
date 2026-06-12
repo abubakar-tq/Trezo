@@ -1,4 +1,5 @@
 import { marketService } from "@/src/services/MarketService";
+import { isStablecoinAddress } from "@/src/features/assets/config/tokenRegistry";
 
 import type { Address } from "viem";
 import type { SupportedChainId } from "@/src/integration/chains";
@@ -42,10 +43,23 @@ export class CoinCapPriceProvider implements PriceProvider {
       }
     }
 
+    const PEG_USD = 1.0;
+    const PEG_BAND = 0.02; // ±2% — outside this, show the real price (genuine depeg)
+
     for (const q of tokens) {
       const key = priceKey(q.chainId, q.address);
-      const price = bySymbol.get(q.symbol.toUpperCase());
-      out.set(key, typeof price === "number" ? price : null);
+      const live = bySymbol.get(q.symbol.toUpperCase());
+
+      if (
+        q.address !== "native" &&
+        isStablecoinAddress(q.chainId, q.address as string) &&
+        (typeof live !== "number" || Math.abs(live - PEG_USD) <= PEG_BAND)
+      ) {
+        out.set(key, PEG_USD); // peg display to $1.00 (also covers the no-live-price case)
+        continue;
+      }
+
+      out.set(key, typeof live === "number" ? live : null);
     }
 
     return out;

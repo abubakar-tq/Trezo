@@ -422,7 +422,7 @@ const mapMoralisChainToEvm = (value: string): Exclude<EvmChain, "all"> | null =>
   return (entry?.[0] as Exclude<EvmChain, "all"> | undefined) ?? null;
 };
 
-const resolveMoralisApiKey = (): string | null => {
+export const resolveMoralisApiKey = (): string | null => {
   const fromProcess = typeof process !== "undefined" ? process.env?.MORALIS_API_KEY : undefined;
   const key = fromProcess ?? ENV_MORALIS_API_KEY;
   if (!key) {

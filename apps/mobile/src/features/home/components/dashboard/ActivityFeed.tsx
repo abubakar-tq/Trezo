@@ -25,6 +25,9 @@ const relativeTime = (iso: string): string => {
 };
 
 const getTypeLabel = (tx: WalletTransaction): string => {
+  if (tx.direction === "incoming") {
+    return "Received";
+  }
   switch (tx.type) {
     case "send_native":
       return "Send Native";
@@ -36,6 +39,7 @@ const getTypeLabel = (tx: WalletTransaction): string => {
 };
 
 const getIcon = (tx: WalletTransaction): keyof typeof Feather.glyphMap => {
+  if (tx.direction === "incoming") return "arrow-down-left";
   if (tx.type === "send_native" || tx.type === "send_erc20") return "arrow-up-right";
   if (tx.type === "swap" || tx.type === "cross_chain_swap") return "repeat";
   if (tx.type === "bridge") return "shuffle";

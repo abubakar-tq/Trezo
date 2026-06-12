@@ -1,5 +1,5 @@
 import React, { useMemo, useState, forwardRef, useImperativeHandle, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
 import { Sparkline, TokenIcon } from '@shared/components';
@@ -172,6 +172,17 @@ export const MarketExplorer = forwardRef<any, MarketExplorerProps>(function Mark
         )}
         {/* End of list condition handled by ternary above */}
       </View>
+
+      {/* CoinGecko attribution — required by free-tier API terms */}
+      <TouchableOpacity
+        onPress={() => Linking.openURL('https://www.coingecko.com/en/api')}
+        style={styles.attributionRow}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.attributionText, { color: colors.textMuted }]}>
+          Data provided by CoinGecko
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 });
@@ -199,8 +210,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   attributionRow: {
-    marginBottom: 16,
-    flexDirection: 'row',
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  attributionText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   sourcePill: {
     paddingHorizontal: 12,

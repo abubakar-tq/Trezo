@@ -4,7 +4,7 @@ import { rememberAccount } from "../lib/knownAccounts.js";
 
 ponder.on("AccountFactory:AccountCreated", async ({ event, context }) => {
   const { account, walletId, walletIndex, mode, salt } = event.args;
-  const chainId = BigInt(context.network.chainId);
+  const chainId = BigInt(context.chain!.id);
 
   rememberAccount(chainId, account);
 

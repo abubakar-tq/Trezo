@@ -171,3 +171,14 @@ export const BUILTIN_TOKENS_BY_NETWORK: Record<NetworkKey, BuiltinTokenEntry[]> 
     },
   ],
 } as const;
+
+const STABLECOIN_ADDRESSES: Set<string> = new Set(
+  Object.values(BUILTIN_TOKENS_BY_NETWORK)
+    .flat()
+    .filter((t) => t.tags?.includes("stablecoin"))
+    .map((t) => `${t.chainId}:${t.address.toLowerCase()}`),
+);
+
+/** True if (chainId, address) is a known, registry-tagged stablecoin. */
+export const isStablecoinAddress = (chainId: number, address: string): boolean =>
+  STABLECOIN_ADDRESSES.has(`${chainId}:${address.toLowerCase()}`);
