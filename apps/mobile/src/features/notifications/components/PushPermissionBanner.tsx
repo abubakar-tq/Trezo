@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, Linking } from "react-native";
+import { View, Text, TouchableOpacity, Linking, AppState } from "react-native";
 import * as Notifications from "expo-notifications";
 import { useNotificationStore } from "@features/notifications/store/useNotificationStore";
 import { PushNotificationsService } from "@features/notifications/services/PushNotificationsService";
@@ -13,10 +13,32 @@ export const PushPermissionBanner = () => {
   const [osGranted, setOsGranted] = useState<boolean | null>(null);
 
   useEffect(() => {
-    Notifications.getPermissionsAsync().then(({ status }) => {
-      setOsGranted(status === "granted");
+    const checkStatus = () => {
+      Notifications.getPermissionsAsync().then(({ status }) => {
+        const isGranted = status === "granted";
+        setOsGranted(isGranted);
+        
+        // If they granted it in settings, auto-sync the database store
+        if (isGranted && !pushEnabled && userId) {
+          savePreferences({ pushEnabled: true }).catch(() => undefined);
+        }
+      });
+    };
+
+    // Initial check
+    checkStatus();
+
+    // Re-check every time the app comes to foreground
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        checkStatus();
+      }
     });
-  }, [pushEnabled]); // re-check when store changes
+
+    return () => {
+      subscription.remove();
+    };
+  }, [pushEnabled, userId, savePreferences]);
 
   if (!userId) return null;
   // If the user turned it on AND the OS says it's granted, hide banner
