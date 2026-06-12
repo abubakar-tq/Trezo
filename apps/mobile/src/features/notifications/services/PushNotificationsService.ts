@@ -94,22 +94,30 @@ const attachReceivedListener = () => {
 };
 
 export const PushNotificationsService = {
-  async bootstrap({ userId, pushEnabled }: PushBootstrapInput): Promise<void> {
-    if (Platform.OS === "web") return;
+  async bootstrap({ userId, pushEnabled }: PushBootstrapInput): Promise<Notifications.PermissionStatus | "web"> {
+    if (Platform.OS === "web") return "web";
     ensureForegroundHandler();
     attachResponseListener();
     attachReceivedListener();
     await ensureAndroidChannel();
 
-    if (!pushEnabled) return;
+    if (!pushEnabled) {
+      // If store says it's off, we don't attempt to register.
+      return Notifications.PermissionStatus.DENIED;
+    }
 
-    const granted = await requestPermission();
-    if (!granted) return;
+    const { status } = await Notifications.getPermissionsAsync();
+    
+    // If the OS says they haven't explicitly granted it, we return early
+    // and let the soft prompt UI ask them.
+    if (status !== Notifications.PermissionStatus.GRANTED) {
+      return status;
+    }
 
     const token = await getExpoToken();
-    if (!token) return;
+    if (!token) return status;
 
-    if (token === lastRegisteredToken) return;
+    if (token === lastRegisteredToken) return status;
     try {
       await PushTokenService.upsert({ userId, token });
       lastRegisteredToken = token;
@@ -118,6 +126,26 @@ export const PushNotificationsService = {
         console.warn("[PushNotifications] failed to upsert token", err);
       }
     }
+    
+    return status;
+  },
+
+  async promptForPermission(userId: string): Promise<boolean> {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== "granted") return false;
+
+    const token = await getExpoToken();
+    if (!token) return true; // Permission granted, but token failed (will retry on next boot)
+
+    try {
+      await PushTokenService.upsert({ userId, token });
+      lastRegisteredToken = token;
+    } catch (err) {
+      if (__DEV__) {
+        console.warn("[PushNotifications] failed to upsert token after explicit prompt", err);
+      }
+    }
+    return true;
   },
 
   teardown(): void {
