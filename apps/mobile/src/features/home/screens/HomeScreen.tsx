@@ -301,111 +301,113 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
               <Text style={[styles.tooltipTitle, { color: colors.textPrimary }]}>Security Status</Text>
             </View>
 
-            <Text style={[styles.tooltipMessage, { color: colors.textSecondary, marginBottom: 12 }]}>
-              {securityStatus.message}
-            </Text>
-
-            {/* Passkey authority — the actual sign-ability check */}
-            {!passkeyAuthority.loading && (() => {
-              const desc = describePasskeyAuthority(passkeyAuthority.status);
-              const bg =
-                desc.severity === "ok" ? `${colors.success}1A`
-                : desc.severity === "error" ? `${colors.danger}1A`
-                : desc.severity === "warn" ? `${colors.warning}1A`
-                : `${colors.accent}1A`;
-              const fg =
-                desc.severity === "ok" ? colors.success
-                : desc.severity === "error" ? colors.danger
-                : desc.severity === "warn" ? colors.warning
-                : colors.accent;
-              return (
-                <View style={{ backgroundColor: bg, padding: 10, borderRadius: 10, marginBottom: 12 }}>
-                  <Text style={[styles.tooltipMessage, { color: fg, fontWeight: "700", marginBottom: 4 }]}>
-                    {desc.title}
-                  </Text>
-                  <Text style={[styles.tooltipMessage, { color: fg, fontSize: 12 }]}>
-                    {desc.body}
-                  </Text>
-                </View>
-              );
-            })()}
-
-            {/* Live on-chain readout */}
-            {recoverySnapLoading && (
-              <Text style={[styles.tooltipMessage, { color: colors.textMuted, fontStyle: "italic" }]}>
-                Reading on-chain state…
+            <ScrollView style={{ maxHeight: 350 }} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.tooltipMessage, { color: colors.textSecondary, marginBottom: 12, marginTop: 12 }]}>
+                {securityStatus.message}
               </Text>
-            )}
-            {recoverySnapErr && !recoverySnapLoading && (
-              <Text style={[styles.tooltipMessage, { color: colors.danger }]}>
-                Could not read on-chain state: {recoverySnapErr}
-              </Text>
-            )}
-            {recoverySnap && !recoverySnapLoading && (
-              <View style={{ gap: 6, marginBottom: 12 }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={[styles.tooltipMessage, { color: colors.textMuted }]}>Guardians</Text>
-                  <Text style={[styles.tooltipMessage, { color: colors.textPrimary, fontWeight: "700" }]}>
-                    {recoverySnap.guardians.length === 0
-                      ? "none on-chain"
-                      : `${recoverySnap.threshold.toString()}-of-${recoverySnap.guardians.length}`}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={[styles.tooltipMessage, { color: colors.textMuted }]}>Timelock</Text>
-                  <Text style={[styles.tooltipMessage, { color: colors.textPrimary, fontWeight: "700" }]}>
-                    {recoverySnap.timelockSeconds === 0n
-                      ? "—"
-                      : recoverySnap.timelockSeconds >= 86400n
-                      ? `${Number(recoverySnap.timelockSeconds / 86400n)}d`
-                      : recoverySnap.timelockSeconds >= 3600n
-                      ? `${Number(recoverySnap.timelockSeconds / 3600n)}h`
-                      : `${Number(recoverySnap.timelockSeconds / 60n)}min`}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={[styles.tooltipMessage, { color: colors.textMuted }]}>Recoveries executed</Text>
-                  <Text style={[styles.tooltipMessage, { color: colors.textPrimary, fontWeight: "700" }]}>
-                    {recoverySnap.nonce.toString()}
-                  </Text>
-                </View>
-                {recoverySnap.executeAfter > 0n && (
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      backgroundColor: `${colors.warning}1A`,
-                      padding: 8,
-                      borderRadius: 8,
-                      marginTop: 4,
-                    }}
-                  >
-                    <Text style={[styles.tooltipMessage, { color: colors.warning, fontWeight: "700" }]}>
-                      Recovery pending
+
+              {/* Passkey authority — the actual sign-ability check */}
+              {!passkeyAuthority.loading && (() => {
+                const desc = describePasskeyAuthority(passkeyAuthority.status);
+                const bg =
+                  desc.severity === "ok" ? `${colors.success}1A`
+                  : desc.severity === "error" ? `${colors.danger}1A`
+                  : desc.severity === "warn" ? `${colors.warning}1A`
+                  : `${colors.accent}1A`;
+                const fg =
+                  desc.severity === "ok" ? colors.success
+                  : desc.severity === "error" ? colors.danger
+                  : desc.severity === "warn" ? colors.warning
+                  : colors.accent;
+                return (
+                  <View style={{ backgroundColor: bg, padding: 10, borderRadius: 10, marginBottom: 12 }}>
+                    <Text style={[styles.tooltipMessage, { color: fg, fontWeight: "700", marginBottom: 4 }]}>
+                      {desc.title}
                     </Text>
-                    <Text style={[styles.tooltipMessage, { color: colors.warning }]}>
-                      executes {new Date(Number(recoverySnap.executeAfter) * 1000).toLocaleString()}
+                    <Text style={[styles.tooltipMessage, { color: fg, fontSize: 12 }]}>
+                      {desc.body}
                     </Text>
                   </View>
-                )}
-                {recoverySnap.nonce > 0n && recoverySnap.executeAfter === 0n && (
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "center",
-                      backgroundColor: `${colors.success}1A`,
-                      padding: 8,
-                      borderRadius: 8,
-                      marginTop: 4,
-                    }}
-                  >
-                    <Text style={[styles.tooltipMessage, { color: colors.success, fontWeight: "700" }]}>
-                      ✓ Recovery completed — passkey rotated
+                );
+              })()}
+
+              {/* Live on-chain readout */}
+              {recoverySnapLoading && (
+                <Text style={[styles.tooltipMessage, { color: colors.textMuted, fontStyle: "italic" }]}>
+                  Reading on-chain state…
+                </Text>
+              )}
+              {recoverySnapErr && !recoverySnapLoading && (
+                <Text style={[styles.tooltipMessage, { color: colors.danger }]}>
+                  Could not read on-chain state: {recoverySnapErr}
+                </Text>
+              )}
+              {recoverySnap && !recoverySnapLoading && (
+                <View style={{ gap: 6, marginBottom: 12 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={[styles.tooltipMessage, { color: colors.textMuted }]}>Guardians</Text>
+                    <Text style={[styles.tooltipMessage, { color: colors.textPrimary, fontWeight: "700" }]}>
+                      {recoverySnap.guardians.length === 0
+                        ? "none on-chain"
+                        : `${recoverySnap.threshold.toString()}-of-${recoverySnap.guardians.length}`}
                     </Text>
                   </View>
-                )}
-              </View>
-            )}
+                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={[styles.tooltipMessage, { color: colors.textMuted }]}>Timelock</Text>
+                    <Text style={[styles.tooltipMessage, { color: colors.textPrimary, fontWeight: "700" }]}>
+                      {recoverySnap.timelockSeconds === 0n
+                        ? "—"
+                        : recoverySnap.timelockSeconds >= 86400n
+                        ? `${Number(recoverySnap.timelockSeconds / 86400n)}d`
+                        : recoverySnap.timelockSeconds >= 3600n
+                        ? `${Number(recoverySnap.timelockSeconds / 3600n)}h`
+                        : `${Number(recoverySnap.timelockSeconds / 60n)}min`}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={[styles.tooltipMessage, { color: colors.textMuted }]}>Recoveries executed</Text>
+                    <Text style={[styles.tooltipMessage, { color: colors.textPrimary, fontWeight: "700" }]}>
+                      {recoverySnap.nonce.toString()}
+                    </Text>
+                  </View>
+                  {recoverySnap.executeAfter > 0n && (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        backgroundColor: `${colors.warning}1A`,
+                        padding: 8,
+                        borderRadius: 8,
+                        marginTop: 4,
+                      }}
+                    >
+                      <Text style={[styles.tooltipMessage, { color: colors.warning, fontWeight: "700" }]}>
+                        Recovery pending
+                      </Text>
+                      <Text style={[styles.tooltipMessage, { color: colors.warning }]}>
+                        executes {new Date(Number(recoverySnap.executeAfter) * 1000).toLocaleString()}
+                      </Text>
+                    </View>
+                  )}
+                  {recoverySnap.nonce > 0n && recoverySnap.executeAfter === 0n && (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "center",
+                        backgroundColor: `${colors.success}1A`,
+                        padding: 8,
+                        borderRadius: 8,
+                        marginTop: 4,
+                      }}
+                    >
+                      <Text style={[styles.tooltipMessage, { color: colors.success, fontWeight: "700" }]}>
+                        ✓ Recovery completed — passkey rotated
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </ScrollView>
 
             <Pressable
               style={[styles.tooltipBtn, { backgroundColor: colors.accent }]}
