@@ -38,6 +38,7 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: "com.trezo.wallet", // set your Android applicationId
+    googleServicesFile: "./google-services.json",
   },
   web: {
     output: "single",

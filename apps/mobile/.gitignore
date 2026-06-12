@@ -36,3 +36,7 @@ Thumbs.db
 *.p12
 *.key
 *.mobileprovision
+
+# Firebase Secrets
+google-services.json
+*-firebase-adminsdk-*.json
