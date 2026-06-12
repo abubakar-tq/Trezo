@@ -47,7 +47,7 @@ for (const [key, c] of Object.entries(ACTIVE_TESTNET_CHAINS)) {
   chains[key] = {
     id: c.id,
     rpc: rpcUrls.length > 1 ? fallback(rpcUrls.map(url => http(url))) : http(rpcUrls[0]),
-    pollingInterval: 3000,
+    pollingInterval: 12000,
     maxRequestsPerSecond: 5,
     maxHistoricalTaskConcurrency: 2,
   };
