@@ -42,6 +42,7 @@ import {
   getChainConfig,
   type SupportedChainId,
 } from "@/src/integration/chains";
+import { resolveNetworkKey } from "@/src/integration/networks";
 import { useUserStore } from "@/src/store/useUserStore";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -174,10 +175,20 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
     [],
   );
   const selectedChain = getChainConfig(selectedChainId);
-  const tokenOptions = useMemo(
-    () => TokenRegistryService.listTokens(selectedChainId),
-    [selectedChainId],
-  );
+  // Use the network-key-aware token list so builtin ERC20s registered via
+  // BUILTIN_TOKENS_BY_NETWORK (e.g. Base Sepolia USDC/WETH/LINK) are included.
+  // The legacy chain-id list only returns native + deployment-manifest tokens,
+  // so on testnets whose manifest has no `usdc` (Base Sepolia) it collapsed to
+  // ETH only. Mirrors TokenDiscoveryProvider's defaultTokenLister.
+  const tokenOptions = useMemo(() => {
+    try {
+      return TokenRegistryService.listTokensForNetwork(
+        resolveNetworkKey(selectedChainId),
+      );
+    } catch {
+      return TokenRegistryService.listTokens(selectedChainId);
+    }
+  }, [selectedChainId]);
 
   const contactCandidates = useMemo(() => {
     const base = contacts
