@@ -28,6 +28,7 @@ type NotificationStoreActions = {
   markRead: (notificationId: string) => Promise<void>;
   markAllRead: () => Promise<void>;
   remove: (notificationId: string) => Promise<void>;
+  clearAll: () => Promise<void>;
   setPreferencesLocal: (next: Partial<NotificationPreferences>) => void;
   savePreferences: (next: Partial<NotificationPreferences>) => Promise<void>;
   applyRealtime: (event: { type: "INSERT" | "UPDATE" | "DELETE"; notification: AppNotification | null; id: string }) => void;
@@ -156,6 +157,17 @@ export const useNotificationStore = create<NotificationStore>()(
           await NotificationService.remove(notificationId);
         } catch (err) {
           set({ notifications, unreadCount: computeUnread(notifications), error: err instanceof Error ? err.message : "Failed to dismiss notification" });
+        }
+      },
+
+      clearAll: async () => {
+        const { activeUserId, notifications } = get();
+        if (!activeUserId) return;
+        set({ notifications: [], unreadCount: 0 });
+        try {
+          await NotificationService.clearAll(activeUserId);
+        } catch (err) {
+          set({ notifications, unreadCount: computeUnread(notifications), error: err instanceof Error ? err.message : "Failed to clear notifications" });
         }
       },
 
