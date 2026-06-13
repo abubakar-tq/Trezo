@@ -1,0 +1,17 @@
+{
+  "accountFactory": "0xBc20fACed405c4806f4B1bEf9B8C6704ae0afC9F",
+  "chainId": 11155111,
+  "crossChainExecutor": "0x42AB0eC92D306b8385128BfC8d081b9625774693",
+  "entryPoint": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+  "infraVersion": "TREZO_INFRA_V2",
+  "passkeyValidator": "0xD3252Ca22F6a2A294F003eF95ea1768C30f9976A",
+  "portable": true,
+  "proxyFactory": "0x3854e7f61907675a43FFd8152DEfff5cB06e85c3",
+  "rootFactory": "0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7",
+  "smartAccountImpl": "0x3c8175Fcc8308d0372D6cc25EFed36FeBE06B14f",
+  "socialRecovery": "0x735fD4912c11AB281C482E2c7B32D37D48b574B5",
+  "swapHealthcheckAt": 1780065135,
+  "swapPoolWethUsdc": "0x3289680dd4d6c10bb19b899729cda5eef58aeff1",
+  "swapPoolWethUsdcFeeTier": 500,
+  "swapSupported": true
+}

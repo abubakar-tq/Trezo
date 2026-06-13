@@ -1,0 +1,567 @@
+{
+  "abi": [
+    {
+      "type": "constructor",
+      "inputs": [
+        {
+          "name": "_implementationTemplate",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_deterministicRootDeployer",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_proxyFactorySalt",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "_entryPoint",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "CHAIN_SPECIFIC_MODE",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "CHAIN_SPECIFIC_WALLET_SALT_TYPEHASH",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "PORTABLE_MODE",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "PORTABLE_WALLET_SALT_TYPEHASH",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "chainSpecificWalletSalt",
+      "inputs": [
+        {
+          "name": "walletId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "walletIndex",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "initHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "createAccount",
+      "inputs": [
+        {
+          "name": "walletId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "walletIndex",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "passkeyInit",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "createChainSpecificAccount",
+      "inputs": [
+        {
+          "name": "walletId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "walletIndex",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "passkeyInit",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "deterministicRootDeployer",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "entryPoint",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "implementationTemplate",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "initializerCalldata",
+      "inputs": [
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "passkeyInit",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "initCalldata",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "initializerHash",
+      "inputs": [
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "passkeyInit",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "portableWalletSalt",
+      "inputs": [
+        {
+          "name": "walletId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "walletIndex",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "initHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "pure"
+    },
+    {
+      "type": "function",
+      "name": "predictAccount",
+      "inputs": [
+        {
+          "name": "walletId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "walletIndex",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "passkeyInit",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "predicted",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "predictChainSpecificAccount",
+      "inputs": [
+        {
+          "name": "walletId",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "walletIndex",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "passkeyInit",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "predicted",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "predictProxyFactory",
+      "inputs": [
+        {
+          "name": "_implementationTemplate",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_deterministicRootDeployer",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "_proxyFactorySalt",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "predictedAccountFactory",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "predicted",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "pure"
+    },
+    {
+      "type": "function",
+      "name": "proxyFactory",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "proxyFactorySalt",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "event",
+      "name": "AccountCreated",
+      "inputs": [
+        {
+          "name": "account",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "walletId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "walletIndex",
+          "type": "uint256",
+          "indexed": true,
+          "internalType": "uint256"
+        },
+        {
+          "name": "mode",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "salt",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "error",
+      "name": "AccountFactory_ZeroAddress",
+      "inputs": []
+    }
+  ]
+}

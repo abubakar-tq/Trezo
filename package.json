@@ -10,6 +10,7 @@
   "workspaces": [
     "apps/mobile",
     "apps/guardian-approval",
+    "apps/extension",
     "apps/backend/indexer",
     "apps/backend/zk-email-recovery-api",
     "contracts"

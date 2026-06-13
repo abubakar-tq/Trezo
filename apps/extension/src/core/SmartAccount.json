@@ -1,0 +1,775 @@
+{
+  "abi": [
+    {
+      "type": "constructor",
+      "inputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "receive",
+      "stateMutability": "payable"
+    },
+    {
+      "type": "function",
+      "name": "activeValidator",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "addPasskeyFromRecovery",
+      "inputs": [
+        {
+          "name": "newPassKey",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "execute",
+      "inputs": [
+        {
+          "name": "dest",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "value",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "functionData",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "getEntryPoint",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getInitialized",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "getNonce",
+      "inputs": [
+        {
+          "name": "key",
+          "type": "uint192",
+          "internalType": "uint192"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "initialize",
+      "inputs": [
+        {
+          "name": "_entryPoint",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "passkey",
+          "type": "tuple",
+          "internalType": "struct PasskeyTypes.PasskeyInit",
+          "components": [
+            {
+              "name": "idRaw",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "px",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "py",
+              "type": "uint256",
+              "internalType": "uint256"
+            }
+          ]
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "installExecutor",
+      "inputs": [
+        {
+          "name": "executor",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "init",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "installModule",
+      "inputs": [
+        {
+          "name": "moduleType",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "module",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "init",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "installRecoveryExecutorModule",
+      "inputs": [
+        {
+          "name": "module",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "init",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "installValidator",
+      "inputs": [
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "init",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "isExecutorInstalled",
+      "inputs": [
+        {
+          "name": "executor",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "isModuleInstalled",
+      "inputs": [
+        {
+          "name": "moduleTypeId",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "module",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "isRecoveryModule",
+      "inputs": [
+        {
+          "name": "module",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "isValidSignature",
+      "inputs": [
+        {
+          "name": "hash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "data",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes4",
+          "internalType": "bytes4"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "isValidatorInstalled",
+      "inputs": [
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "listValidators",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address[]",
+          "internalType": "address[]"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "ping",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "who",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "setActiveValidator",
+      "inputs": [
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "setActiveValidatorFromAccount",
+      "inputs": [
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "uninstallExecutor",
+      "inputs": [
+        {
+          "name": "executor",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "data",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "uninstallModule",
+      "inputs": [
+        {
+          "name": "moduleType",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "module",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "data",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "uninstallValidator",
+      "inputs": [
+        {
+          "name": "validator",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "data",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "updateRecoveryModule",
+      "inputs": [
+        {
+          "name": "module",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "enabled",
+          "type": "bool",
+          "internalType": "bool"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
+      "name": "validateUserOp",
+      "inputs": [
+        {
+          "name": "userOp",
+          "type": "tuple",
+          "internalType": "struct PackedUserOperation",
+          "components": [
+            {
+              "name": "sender",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "nonce",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "initCode",
+              "type": "bytes",
+              "internalType": "bytes"
+            },
+            {
+              "name": "callData",
+              "type": "bytes",
+              "internalType": "bytes"
+            },
+            {
+              "name": "accountGasLimits",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "preVerificationGas",
+              "type": "uint256",
+              "internalType": "uint256"
+            },
+            {
+              "name": "gasFees",
+              "type": "bytes32",
+              "internalType": "bytes32"
+            },
+            {
+              "name": "paymasterAndData",
+              "type": "bytes",
+              "internalType": "bytes"
+            },
+            {
+              "name": "signature",
+              "type": "bytes",
+              "internalType": "bytes"
+            }
+          ]
+        },
+        {
+          "name": "userOpHash",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        },
+        {
+          "name": "missingAccountFunds",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "validationData",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "event",
+      "name": "AccountInitialized",
+      "inputs": [
+        {
+          "name": "entryPoint",
+          "type": "address",
+          "indexed": false,
+          "internalType": "address"
+        },
+        {
+          "name": "passKeyId",
+          "type": "bytes32",
+          "indexed": false,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "ActiveValidatorChanged",
+      "inputs": [
+        {
+          "name": "previous",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "current",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "ExecutorInstalled",
+      "inputs": [
+        {
+          "name": "executor",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "ExecutorUninstalled",
+      "inputs": [
+        {
+          "name": "executor",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "ModuleInstalled",
+      "inputs": [
+        {
+          "name": "moduleTypeId",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "module",
+          "type": "address",
+          "indexed": false,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "ModuleUninstalled",
+      "inputs": [
+        {
+          "name": "moduleTypeId",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "module",
+          "type": "address",
+          "indexed": false,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "PasskeyAddedViaRecovery",
+      "inputs": [
+        {
+          "name": "passkeyId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "RecoveryModuleUpdated",
+      "inputs": [
+        {
+          "name": "module",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "enabled",
+          "type": "bool",
+          "indexed": false,
+          "internalType": "bool"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "ValidatorInstalled",
+      "inputs": [
+        {
+          "name": "validator",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "event",
+      "name": "ValidatorUninstalled",
+      "inputs": [
+        {
+          "name": "validator",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "error",
+      "name": "AlreadyInitialized",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "MinimalAccount__CallFailed",
+      "inputs": [
+        {
+          "name": "",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "MinimalAccount__NotFromEntryPoint",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "RecoveryModuleNotInstalled",
+      "inputs": [
+        {
+          "name": "module",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SMARTACCOUNT_INITIALIZATION_FAILED",
+      "inputs": [
+        {
+          "name": "reason",
+          "type": "bytes",
+          "internalType": "bytes"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "UnauthorizedRecoveryModule",
+      "inputs": [
+        {
+          "name": "caller",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "ZeroAddress",
+      "inputs": []
+    }
+  ]
+}
