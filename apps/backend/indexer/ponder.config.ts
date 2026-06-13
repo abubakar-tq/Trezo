@@ -38,7 +38,7 @@ const chains: Record<string, Network> = {};
 if (includeAnvil) {
   chains.anvilLocal = {
     id: 31337,
-    transport: http(process.env.PONDER_ANVIL_RPC_URL ?? "http://127.0.0.1:8545"),
+    rpc: http(process.env.PONDER_ANVIL_RPC_URL ?? "http://127.0.0.1:8545"),
     pollingInterval: 1000,
   };
 }
@@ -46,8 +46,8 @@ for (const [key, c] of Object.entries(ACTIVE_TESTNET_CHAINS)) {
   const rpcUrls = c.rpc!.includes(",") ? c.rpc!.split(",").map(url => url.trim()) : [c.rpc!];
   chains[key] = {
     id: c.id,
-    transport: rpcUrls.length > 1 ? fallback(rpcUrls.map(url => http(url))) : http(rpcUrls[0]),
-    pollingInterval: 3000,
+    rpc: rpcUrls.length > 1 ? fallback(rpcUrls.map(url => http(url))) : http(rpcUrls[0]),
+    pollingInterval: 12000,
     maxRequestsPerSecond: 5,
     maxHistoricalTaskConcurrency: 2,
   };

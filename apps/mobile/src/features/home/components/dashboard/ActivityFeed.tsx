@@ -73,6 +73,8 @@ const getAmount = (tx: WalletTransaction): string => {
   return `${sign}${tx.amountDisplay}`;
 };
 
+import { PushPermissionBanner } from "@/src/features/notifications/components/PushPermissionBanner";
+
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 3 }) => {
   const navigation = useNavigation<any>();
   const { theme } = useAppTheme();
@@ -154,6 +156,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 3 }) => {
 
   return (
     <View style={styles.container}>
+      <PushPermissionBanner />
       <View style={styles.list}>
         {rows.map((tx, index) => (
           <TouchableOpacity

@@ -136,22 +136,18 @@ export function usePasskeyAuthority(params: {
 
         const credentialIdRaw = local.credentialIdRaw as Hex;
         const [count, hasIt] = await Promise.all([
-          client
-            .readContract({
-              address: validatorAddr,
-              abi: ABIS.passkeyValidator,
-              functionName: "passkeyCount",
-              args: [smartAccountAddress],
-            })
-            .catch(() => 0n) as Promise<bigint>,
-          client
-            .readContract({
-              address: validatorAddr,
-              abi: ABIS.passkeyValidator,
-              functionName: "hasPasskey",
-              args: [smartAccountAddress, credentialIdRaw],
-            })
-            .catch(() => false) as Promise<boolean>,
+          client.readContract({
+            address: validatorAddr,
+            abi: ABIS.passkeyValidator,
+            functionName: "passkeyCount",
+            args: [smartAccountAddress],
+          }) as Promise<bigint>,
+          client.readContract({
+            address: validatorAddr,
+            abi: ABIS.passkeyValidator,
+            functionName: "hasPasskey",
+            args: [smartAccountAddress, credentialIdRaw],
+          }) as Promise<boolean>,
         ]);
 
         if (cancelled) return;
