@@ -725,7 +725,7 @@ export const DexScreen: React.FC = () => {
       });
       const preparedOp = await SmartAccountExecutionService.prepareUserOperation(execution, {
         userId,
-        usePaymaster: true,
+        usePaymaster: networkConfig?.defaultUsePaymaster ?? true,
       });
       await TransactionHistoryService.markSigning(draft.id);
       const signedOp = await SmartAccountExecutionService.signUserOperation(userId, preparedOp);
@@ -844,7 +844,7 @@ export const DexScreen: React.FC = () => {
           preview,
           execution: plan.bridgeExecution,
           userId: user.id,
-          usePaymaster: true,
+          usePaymaster: networkConfig?.defaultUsePaymaster ?? true,
         });
         approved = confirmResult.approved;
         preparedUserOp = confirmResult.prepared;
@@ -883,7 +883,7 @@ export const DexScreen: React.FC = () => {
       let didSubmit = false;
       try {
         const opToSign = preparedUserOp ?? await SmartAccountExecutionService.prepareUserOperation(
-          plan.bridgeExecution, { userId: user.id, usePaymaster: true },
+          plan.bridgeExecution, { userId: user.id, usePaymaster: networkConfig?.defaultUsePaymaster ?? true },
         );
         await TransactionHistoryService.markPrepared(bridgeDraft.id, {
           targetAddress: plan.bridgeExecution.target,
@@ -1073,7 +1073,7 @@ export const DexScreen: React.FC = () => {
           preview,
           execution: plan.swapExecution,
           userId: user.id,
-          usePaymaster: true,
+          usePaymaster: networkConfig?.defaultUsePaymaster ?? true,
         });
         approved = confirmResult.approved;
         preparedUserOp = confirmResult.prepared;
@@ -1120,7 +1120,7 @@ export const DexScreen: React.FC = () => {
       let didSubmit = false;
       try {
         const opToSign = preparedUserOp ?? await SmartAccountExecutionService.prepareUserOperation(
-          plan.swapExecution, { userId: user.id, usePaymaster: true },
+          plan.swapExecution, { userId: user.id, usePaymaster: networkConfig?.defaultUsePaymaster ?? true },
         );
         await TransactionHistoryService.markPrepared(swapDraft.id, {
           targetAddress: plan.swapExecution.target,

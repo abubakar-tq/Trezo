@@ -42,6 +42,7 @@ import {
   getChainConfig,
   type SupportedChainId,
 } from "@/src/integration/chains";
+import { getNetworkConfig, resolveNetworkKey } from "@/src/integration/networks";
 import { useUserStore } from "@/src/store/useUserStore";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -174,6 +175,9 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
     [],
   );
   const selectedChain = getChainConfig(selectedChainId);
+  const networkConfig = useMemo(() => {
+    try { return getNetworkConfig(resolveNetworkKey(selectedChainId)); } catch { return null; }
+  }, [selectedChainId]);
   const tokenOptions = useMemo(
     () => TokenRegistryService.listTokens(selectedChainId),
     [selectedChainId],
@@ -278,7 +282,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
             chainId: selectedChainId,
             walletAddress,
             token,
-            feeMode: "sponsored",
+            feeMode: networkConfig?.defaultUsePaymaster ? "sponsored" : "wallet_paid",
           });
           const key =
             token.address === "native"
@@ -410,7 +414,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
 
     // 1) Validate
     const validation = await SendValidationService.validate(intent, {
-      feeMode: "sponsored",
+      feeMode: networkConfig?.defaultUsePaymaster ? "sponsored" : "wallet_paid",
     });
     if (!validation.isValid) {
       setErrorMessage(validation.errors[0]?.message ?? "Validation failed.");
