@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
 
 interface SparklineProps {
   data: number[];
@@ -74,3 +73,5 @@ export const Sparkline = React.memo<SparklineProps>(({
     </View>
   );
 });
+
+Sparkline.displayName = 'Sparkline';

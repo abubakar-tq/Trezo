@@ -17,6 +17,10 @@ import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
 import { encodeAbiParameters, parseAbiParameters, toBytes } from 'viem';
+import type { Address } from 'viem';
+import { getDeployment, getPublicClient } from '@/src/integration/viem';
+import { ABIS } from '@/src/integration/viem/abis';
+import type { SupportedChainId } from '@/src/integration/chains';
 // Conditionally import passkeys only if available and not in Expo Go
 let Passkey: any = null;
 
@@ -52,15 +56,8 @@ const P256_HALF_N = P256_N / 2n;
  *   - /.well-known/assetlinks.json (Android)
  *   - /.well-known/apple-app-site-association (iOS)
  * - Configure via EXPO_PUBLIC_PASSKEY_RP_ID (default: abubakar-tq.github.io)
- * - When passkeys are not available, returns a fallback RP ID for biometric auth
  */
 function getRpId(): string {
-  // If we're in Expo Go or passkeys are not available, use a fallback RP ID for biometric authentication
-  if (isExpoGo || !Passkey) {
-    console.warn('Using fallback RP ID for biometric authentication');
-    return 'trezo.wallet'; // Fallback for biometric auth
-  }
-
   const rpId = String(CONFIGURED_RP_ID).trim().toLowerCase();
 
   // Android/iOS require a real domain that is linked via Digital Asset Links / AASA
@@ -143,7 +140,6 @@ export interface PasskeyMetadata {
   deviceName: string;         // Device identifier
   deviceType: 'ios' | 'android';
   createdAt: string;          // ISO timestamp
-  source?: 'passkey' | 'biometric-fallback';
 }
 
 /**
@@ -267,25 +263,6 @@ export class PasskeyService {
     return this.base64UrlToUint8Array(normalized);
   }
 
-  private static buildMockCredentialId(): string {
-    const mockId = new Uint8Array(32);
-    crypto.getRandomValues(mockId);
-    return this.base64UrlEncode(this.uint8ArrayToBase64(mockId));
-  }
-
-  private static buildMockPublicKeyBase64Url(): string {
-    const x = new Uint8Array(32);
-    const y = new Uint8Array(32);
-    crypto.getRandomValues(x);
-    crypto.getRandomValues(y);
-
-    const rawPublicKey = new Uint8Array(64);
-    rawPublicKey.set(x, 0);
-    rawPublicKey.set(y, 32);
-
-    return this.base64UrlEncode(this.uint8ArrayToBase64(rawPublicKey));
-  }
-  
   // ==================== PUBLIC API ====================
   
   /**
@@ -356,47 +333,62 @@ export class PasskeyService {
   }
   
   /**
-   * Create a REAL WebAuthn passkey (stored in secure enclave)
-   * Returns public metadata only - private key never leaves device
-   * 
-   * Note: Replaces any existing passkey on this device
+   * Create a REAL WebAuthn passkey (stored in secure enclave).
+   * Returns public metadata only - private key never leaves device.
+   *
+   * The smart-account address is derived from this passkey's public key, so
+   * creating a new passkey CHANGES the wallet address and orphans any wallet
+   * bound to the previous passkey. Therefore this method REFUSES to overwrite
+   * an existing passkey unless `options.allowReplace` is explicitly set.
+   *
+   * - Deploy / address-prediction paths must use {@link getOrCreatePasskey},
+   *   which reuses the stored passkey and keeps the address stable.
+   * - Recovery / add-device / pairing flows that intentionally bind a NEW
+   *   passkey pass `{ allowReplace: true }`.
    */
-  static async createPasskey(userId: string): Promise<PasskeyMetadata> {
+  static async createPasskey(
+    userId: string,
+    options?: { allowReplace?: boolean },
+  ): Promise<PasskeyMetadata> {
     debugLog('🔐 [PasskeyService] Creating WebAuthn passkey for user:', userId);
     debugLog('📱 [PasskeyService] Platform:', Platform.OS);
     debugLog('📱 [PasskeyService] __DEV__:', __DEV__);
-    
-    // Check if there's an existing passkey
+
+    // The AA address depends on the passkey public key. Silently overwriting an
+    // existing passkey would change the derived address and strand the wallet it
+    // was deployed under, so refuse unless the caller opts in explicitly.
     const existingPasskey = await this.getPasskey(userId);
+    if (existingPasskey && !options?.allowReplace) {
+      throw new Error(
+        'A passkey already exists on this device. Creating a new one would change ' +
+          'the smart-account address and orphan the existing wallet. Use ' +
+          'PasskeyService.getOrCreatePasskey() to reuse it, or call with ' +
+          '{ allowReplace: true } to intentionally rotate (recovery / add-device).',
+      );
+    }
     if (existingPasskey) {
-      debugLog('⚠️ [PasskeyService] Replacing existing passkey on this device');
+      debugLog('⚠️ [PasskeyService] Replacing existing passkey on this device (allowReplace=true)');
     }
     
-    // 1. Check if passkeys or biometric authentication are supported
+    // 1. Verify passkey support — biometric-only fallback is NOT acceptable
+    //    because it cannot produce contract-valid P-256 signatures, which
+    //    would silently brick the smart account.
+    if (!Passkey) {
+      throw new Error(
+        'Passkeys are not available in this build. Use a development build or release APK — not Expo Go.',
+      );
+    }
+
     let isSupported = false;
-    if (Passkey) {
-      try {
-        isSupported = await Passkey.isSupported();
-        debugLog('✅ [PasskeyService] Passkey support verified');
-      } catch (e) {
-        console.warn('Passkey support check failed:', e);
-      }
-    }
-
-    // Fallback to biometric authentication
-    if (!isSupported) {
-      try {
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-        isSupported = hasHardware && isEnrolled;
-        debugLog('✅ [PasskeyService] Biometric fallback support verified');
-      } catch (e) {
-        console.warn('Biometric support check failed:', e);
-      }
+    try {
+      isSupported = await Passkey.isSupported();
+      debugLog('✅ [PasskeyService] Passkey support verified');
+    } catch (e) {
+      console.warn('Passkey support check failed:', e);
     }
 
     if (!isSupported) {
-      throw new Error('Neither passkeys nor biometric authentication are supported on this device.');
+      throw new Error('Passkeys are not supported on this device.');
     }
     
     // 2. Generate challenge (in production, get from server)
@@ -451,75 +443,26 @@ export class PasskeyService {
       authenticatorSelection: registrationOptions.authenticatorSelection,
     }, null, 2));
     
-    // 5. Create passkey or use biometric authentication
+    // 5. Create passkey via WebAuthn — must succeed; no fallback path exists
+    //    because only a real P-256 keypair can sign for PasskeyValidator.sol.
     let result;
-    if (Passkey) {
-      try {
-        debugLog('🔐 [PasskeyService] Attempting to create passkey...');
-        result = await Passkey.create(registrationOptions);
-        debugLog('✅ [PasskeyService] Passkey created in secure enclave');
-      } catch (passkeyError: any) {
-        console.warn('❌ [PasskeyService] Passkey creation failed, trying fallback:', passkeyError);
-        // Try biometric fallback
-        try {
-          const authResult = await LocalAuthentication.authenticateAsync({
-            promptMessage: 'Authenticate to create your wallet',
-            fallbackLabel: 'Use PIN',
-            disableDeviceFallback: false,
-          });
-
-          if (authResult.success) {
-            // Mock passkey result for biometric authentication
-            const credentialId = this.buildMockCredentialId();
-            result = {
-              id: credentialId,
-              rawId: credentialId,
-              response: {
-                clientDataJSON: 'biometric-auth',
-                attestationObject: 'biometric-attestation',
-                publicKey: this.buildMockPublicKeyBase64Url(),
-              },
-              type: 'biometric',
-            };
-            debugLog('✅ [PasskeyService] Biometric authentication successful');
-          } else {
-            throw new Error('Biometric authentication failed');
-          }
-        } catch (biometricError) {
-          console.error('❌ [PasskeyService] Both passkey and biometric authentication failed');
-          throw biometricError;
-        }
+    try {
+      debugLog('🔐 [PasskeyService] Attempting to create passkey...');
+      result = await Passkey.create(registrationOptions);
+      debugLog('✅ [PasskeyService] Passkey created in secure enclave');
+    } catch (passkeyError: any) {
+      const message = passkeyError?.message ?? String(passkeyError);
+      console.error('❌ [PasskeyService] Passkey creation failed:', passkeyError);
+      // "folsom activity" appears on Samsung devices when Samsung Pass is the
+      // default credential provider and fails internally. Surface the hint.
+      if (Platform.OS === 'android' && /folsom|NotAllowedError/i.test(message)) {
+        throw new Error(
+          'Passkey creation failed. On Samsung devices, open Settings → General management → ' +
+            'Passwords, passkeys and autofill services → Preferred service, and set it to Google. ' +
+            `Underlying error: ${message}`,
+        );
       }
-    } else {
-      // Direct biometric fallback for Expo Go
-      try {
-        const authResult = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Authenticate to create your wallet',
-          fallbackLabel: 'Use PIN',
-          disableDeviceFallback: false,
-        });
-
-        if (authResult.success) {
-          // Mock passkey result for biometric authentication
-          const credentialId = this.buildMockCredentialId();
-          result = {
-            id: credentialId,
-            rawId: credentialId,
-            response: {
-              clientDataJSON: 'biometric-auth',
-              attestationObject: 'biometric-attestation',
-              publicKey: this.buildMockPublicKeyBase64Url(),
-            },
-            type: 'biometric',
-          };
-          debugLog('✅ [PasskeyService] Biometric authentication successful');
-        } else {
-          throw new Error('Biometric authentication failed');
-        }
-      } catch (error: any) {
-        console.error('❌ [PasskeyService] Biometric authentication failed:', error);
-        throw error;
-      }
+      throw new Error(`Passkey creation failed: ${message}`);
     }
 
     if (!result) {
@@ -542,7 +485,6 @@ export class PasskeyService {
       deviceName: this.getCurrentDeviceLabel(),
       deviceType: Platform.OS as 'ios' | 'android',
       createdAt: new Date().toISOString(),
-      source: result.type === 'biometric' ? 'biometric-fallback' : 'passkey',
     };
 
     // 9. Save metadata to AsyncStorage (replaces old passkey if exists)
@@ -556,12 +498,31 @@ export class PasskeyService {
   }
   
   /**
+   * Return this device's existing passkey, or create one if none is stored.
+   *
+   * This is the ONLY safe accessor for deploy / address-prediction paths. The
+   * AA address is derived from the passkey public key, so reusing the stored
+   * passkey keeps the counterfactual address stable across chains and across
+   * deploy retries. It NEVER overwrites an existing passkey.
+   */
+  static async getOrCreatePasskey(userId: string): Promise<PasskeyMetadata> {
+    const existing = await this.getPasskey(userId);
+    if (existing) {
+      debugLog('🔁 [PasskeyService] Reusing existing passkey (address-stable)');
+      return existing;
+    }
+    debugLog('🆕 [PasskeyService] No passkey on device — creating first one');
+    return this.createPasskey(userId);
+  }
+
+  /**
    * Sign a UserOperation hash with passkey (triggers biometric authentication)
    * Returns WebAuthn signature in contract-compatible format
    */
   static async signWithPasskey(
     userId: string,
-    userOpHash: string
+    userOpHash: string,
+    opts?: { smartAccountAddress?: Address; chainId?: SupportedChainId },
   ): Promise<PasskeySignature> {
     debugLog('✍️ [PasskeyService] Signing with passkey');
     debugLog('📝 [PasskeyService] UserOp hash:', userOpHash);
@@ -578,105 +539,109 @@ export class PasskeyService {
     const challengeBytes = toBytes(userOpHash as `0x${string}`);
     const challenge = this.base64UrlEncode(this.uint8ArrayToBase64(challengeBytes));
     
-    // 3. Get RP ID for this platform
-    const rpId = getRpId();
-    
-    // 4. Get authentication (triggers biometric)
-    const authOptions = {
+    // 3. RP ID MUST equal the rpId the credential was registered under.
+    const rpId = passkey.rpId || getRpId();
+
+    // 4. Restrict the picker to the wallet's ON-CHAIN registered credential(s)
+    //    when we know the wallet + chain. A wallet's RP can accumulate several
+    //    passkeys on a device (re-provisioning, multiple accounts); listing them
+    //    all forces the user to guess which can sign. Feeding the registered ids
+    //    as allowCredentials makes Android surface only keys that actually sign
+    //    for THIS wallet. If we can't read them (not deployed / RPC error) we
+    //    fall back to the discoverable flow (no allowCredentials).
+    let allowCredentials: Array<{ id: string; type: 'public-key' }> | undefined;
+    if (opts?.smartAccountAddress && opts?.chainId) {
+      try {
+        const registered = await this.getRegisteredCredentialIds(opts.chainId, opts.smartAccountAddress);
+        if (registered.length > 0) {
+          allowCredentials = registered.map((id) => ({ id, type: 'public-key' as const }));
+          debugLog(`🔐 [PasskeyService] Restricting picker to ${registered.length} registered passkey(s):`, registered);
+        }
+      } catch (e) {
+        debugLog('⚠️ [PasskeyService] Could not read on-chain passkeys:', String(e));
+      }
+    }
+
+    // Fallback: restrict to THIS wallet's own stored passkey so the OS shows only
+    // it — never the full list of every passkey on the device. Covers deploy /
+    // pre-registration signing (no on-chain passkeys yet) and single-passkey wallets.
+    if (!allowCredentials) {
+      allowCredentials = [{ id: passkey.credentialId, type: 'public-key' as const }];
+      debugLog('🔐 [PasskeyService] Restricting picker to stored passkey:', passkey.credentialId);
+    }
+
+    // 5. Get authentication (triggers biometric). With allowCredentials the OS
+    //    shows only the wallet's registered keys; otherwise the discoverable flow
+    //    lists the device's platform passkeys.
+    const authOptions: {
+      challenge: string;
+      rpId: string;
+      timeout: number;
+      userVerification: 'required';
+      allowCredentials?: Array<{ id: string; type: 'public-key' }>;
+    } = {
       challenge: challenge,
       rpId,
       timeout: 60000,
       userVerification: 'required' as const,
-      allowCredentials: [
-        {
-          id: passkey.credentialId,
-          type: 'public-key' as const,
-        },
-      ],
+      ...(allowCredentials ? { allowCredentials } : {}),
     };
 
-    let authResult;
-    if (Passkey) {
-      try {
-        debugLog('🔐 [PasskeyService] Attempting passkey authentication...');
-        authResult = await Passkey.get(authOptions);
-        debugLog('✅ [PasskeyService] Passkey authentication successful');
-      } catch (passkeyError: any) {
-        console.warn('❌ [PasskeyService] Passkey authentication failed, trying fallback:', passkeyError);
-        // Try biometric fallback
-        try {
-          const biometricResult = await LocalAuthentication.authenticateAsync({
-            promptMessage: 'Authenticate to sign transaction',
-            fallbackLabel: 'Use PIN',
-            disableDeviceFallback: false,
-          });
-
-          if (biometricResult.success) {
-            // Mock authentication result for biometric
-            authResult = {
-              id: passkey.credentialId,
-              rawId: this.base64UrlToUint8Array(passkey.credentialId),
-              response: {
-                authenticatorData: 'biometric-auth-data',
-                clientDataJSON: 'biometric-client-data',
-                signature: 'biometric-signature',
-                userHandle: 'biometric-user-handle'
-              },
-              type: 'biometric'
-            };
-            debugLog('✅ [PasskeyService] Biometric authentication successful');
-          } else {
-            throw new Error('Biometric authentication failed');
-          }
-        } catch (biometricError) {
-          console.error('❌ [PasskeyService] Both passkey and biometric authentication failed');
-          throw biometricError;
-        }
-      }
-    } else {
-      // Direct biometric fallback for Expo Go
-      try {
-        const biometricResult = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Authenticate to sign transaction',
-          fallbackLabel: 'Use PIN',
-          disableDeviceFallback: false,
-        });
-
-        if (biometricResult.success) {
-          // Mock authentication result for biometric
-          authResult = {
-            id: passkey.credentialId,
-            rawId: this.base64UrlToUint8Array(passkey.credentialId),
-            response: {
-              authenticatorData: 'biometric-auth-data',
-              clientDataJSON: 'biometric-client-data',
-              signature: 'biometric-signature',
-              userHandle: 'biometric-user-handle'
-            },
-            type: 'biometric'
-          };
-          debugLog('✅ [PasskeyService] Biometric authentication successful');
-        } else {
-          throw new Error('Biometric authentication failed');
-        }
-      } catch (error: any) {
-        console.error('❌ [PasskeyService] Biometric authentication failed:', error);
-        throw error;
-      }
+    // Authenticate via WebAuthn — no biometric fallback. A mock signature
+    // cannot satisfy the on-chain PasskeyValidator, so we must fail loudly
+    // and let the caller surface the real reason to the user.
+    if (!Passkey) {
+      throw new Error(
+        'Passkeys are not available in this build. Use a development build or release APK — not Expo Go.',
+      );
     }
-    
+
+    let authResult;
+    try {
+      debugLog('🔐 [PasskeyService] Attempting passkey authentication...');
+      authResult = await Passkey.get(authOptions);
+      debugLog('✅ [PasskeyService] Passkey authentication successful');
+    } catch (passkeyError: any) {
+      const message = passkeyError?.message ?? String(passkeyError);
+      console.error('❌ [PasskeyService] Passkey authentication failed:', passkeyError);
+      if (Platform.OS === 'android' && /folsom|NotAllowedError/i.test(message)) {
+        throw new Error(
+          'Passkey signing failed. On Samsung devices, open Settings → General management → ' +
+            'Passwords, passkeys and autofill services → Preferred service, and set it to Google. ' +
+            `Underlying error: ${message}`,
+        );
+      }
+      throw new Error(`Passkey signing failed: ${message}`);
+    }
+
     if (!authResult) {
       throw new Error('Authentication returned null result');
     }
 
-    if (authResult.id && authResult.id !== passkey.credentialId) {
-      throw new Error(
-        'The platform returned a different passkey than the one stored for this wallet on this device.',
+    // Sign with WHICHEVER registered passkey the user actually authenticated with.
+    // A wallet can have several on-chain passkeys (multi-device / recovery), so we
+    // must bind the signature to the credential that ACTUALLY signed — not a single
+    // hardcoded stored id. The on-chain PasskeyValidator looks the key up by this
+    // passkeyId and is the source of truth: an unregistered credential is rejected
+    // on submission. For a normal single-passkey wallet the returned id equals the
+    // stored one, so behaviour is unchanged.
+    const signingId = authResult.id ?? passkey.credentialId;
+    const signingIdRaw = authResult.id
+      ? this.credentialIdToBytes32(authResult.id)
+      : passkey.credentialIdRaw;
+
+    if (signingId !== passkey.credentialId) {
+      debugLog(
+        `⚠️ [PasskeyService] Signing with a different registered passkey than the locally stored ` +
+          `one (returned ${String(signingId).slice(0, 12)}…, stored ${String(passkey.credentialId).slice(0, 12)}…). ` +
+          `On-chain validator verifies the returned credential.`,
       );
+    } else {
+      debugLog('🔎 [PasskeyService] Signing credential matches stored id');
     }
-    
-    // 5. Extract signature components from WebAuthn response
-    const signature = this.parseWebAuthnSignature(authResult.response, passkey.credentialIdRaw);
+
+    // 5. Extract signature components, binding passkeyId to the credential that signed.
+    const signature = this.parseWebAuthnSignature(authResult.response, signingIdRaw);
     
     debugLog('✅ [PasskeyService] Signature created');
     debugLog('📝 [PasskeyService] Signature r:', signature.r.slice(0, 20) + '...');
@@ -725,6 +690,71 @@ export class PasskeyService {
     return passkey !== null;
   }
   
+  /**
+   * RESCUE: Overwrite the local AsyncStorage passkey metadata with values
+   * known to match a passkey already registered on-chain. Used when the
+   * local SecureStore got out-of-sync with the on-chain validator (e.g. an
+   * aborted recovery flow created a new local passkey that's not registered).
+   *
+   * Caller is responsible for reading credentialIdRaw + px + py from the
+   * on-chain PasskeyValidator and passing them in.
+   *
+   * NOTE: this does NOT re-create the WebAuthn private key on the device.
+   * It assumes the original credential (matching credentialIdRaw) is still
+   * in the device's WebAuthn keystore — which is true if the user hasn't
+   * uninstalled the app or wiped the keystore. WebAuthn will find it on
+   * the next signWithPasskey call.
+   */
+  static async restorePasskeyFromOnChainValues(params: {
+    userId: string;
+    credentialIdRaw: string; // 0x... 32-byte hex (right-padded with zeros if shorter)
+    publicKeyX: string; // 0x... 32-byte hex
+    publicKeyY: string; // 0x... 32-byte hex
+    rpId: string;
+  }): Promise<PasskeyMetadata> {
+    // Trim trailing zero bytes from credentialIdRaw to recover the original
+    // WebAuthn credential ID (typical iOS/Android is 16 bytes).
+    const rawHex = params.credentialIdRaw.startsWith('0x')
+      ? params.credentialIdRaw.slice(2)
+      : params.credentialIdRaw;
+    const rawBytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) {
+      rawBytes[i] = parseInt(rawHex.slice(i * 2, i * 2 + 2), 16);
+    }
+    let realLength = 32;
+    while (realLength > 0 && rawBytes[realLength - 1] === 0) realLength -= 1;
+    if (realLength === 0) {
+      throw new Error('credentialIdRaw is all zeros — cannot reconstruct credentialId.');
+    }
+    const trimmed = rawBytes.slice(0, realLength);
+    const base64 = this.uint8ArrayToBase64(trimmed);
+    const credentialId = this.base64UrlEncode(base64);
+
+    const metadata: PasskeyMetadata = {
+      credentialId,
+      credentialIdRaw: params.credentialIdRaw.startsWith('0x')
+        ? params.credentialIdRaw
+        : `0x${params.credentialIdRaw}`,
+      publicKeyX: params.publicKeyX.startsWith('0x')
+        ? params.publicKeyX
+        : `0x${params.publicKeyX}`,
+      publicKeyY: params.publicKeyY.startsWith('0x')
+        ? params.publicKeyY
+        : `0x${params.publicKeyY}`,
+      rpId: params.rpId,
+      deviceName: this.getCurrentDeviceLabel(),
+      deviceType: Platform.OS as 'ios' | 'android',
+      createdAt: new Date().toISOString(),
+    };
+
+    await this.savePasskey(params.userId, metadata);
+    debugLog('🚑 [PasskeyService] Restored passkey metadata from on-chain values', {
+      credentialId,
+      credentialIdRaw: metadata.credentialIdRaw,
+    });
+    return metadata;
+  }
+
   /**
    * Delete passkey from this device
    * (removes from AsyncStorage, secure enclave cleanup is automatic)
@@ -1094,7 +1124,59 @@ export class PasskeyService {
     
     return this.uint8ArrayToHex(padded);
   }
-  
+
+  /**
+   * Read the credential IDs (base64url) currently registered on-chain for a
+   * wallet in the PasskeyValidator. Used to restrict the WebAuthn picker to the
+   * keys that can actually sign for this wallet. Returns [] if the wallet has no
+   * validator deployment or the read fails.
+   */
+  private static async getRegisteredCredentialIds(
+    chainId: SupportedChainId,
+    smartAccountAddress: Address,
+  ): Promise<string[]> {
+    const deployment = getDeployment(chainId);
+    const validator = deployment?.passkeyValidator as Address | undefined;
+    if (!validator) return [];
+
+    const client = getPublicClient(chainId);
+    const count = (await client.readContract({
+      address: validator,
+      abi: ABIS.passkeyValidator,
+      functionName: 'passkeyCount',
+      args: [smartAccountAddress],
+    })) as bigint;
+
+    const ids: string[] = [];
+    for (let i = 0n; i < count; i += 1n) {
+      const raw = (await client.readContract({
+        address: validator,
+        abi: ABIS.passkeyValidator,
+        functionName: 'passkeyAt',
+        args: [smartAccountAddress, i],
+      })) as string;
+      const id = this.bytes32ToCredentialId(raw);
+      if (id) ids.push(id);
+    }
+    return ids;
+  }
+
+  /**
+   * Inverse of credentialIdToBytes32: a right-zero-padded bytes32 PasskeyId back
+   * to its base64url WebAuthn credential ID (trailing zero bytes trimmed).
+   */
+  private static bytes32ToCredentialId(raw: string): string {
+    const hex = raw.startsWith('0x') ? raw.slice(2) : raw;
+    const bytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i += 1) {
+      bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    let len = 32;
+    while (len > 0 && bytes[len - 1] === 0) len -= 1;
+    if (len === 0) return '';
+    return this.base64UrlEncode(this.uint8ArrayToBase64(bytes.slice(0, len)));
+  }
+
   /**
    * Generate random challenge for WebAuthn
    */
@@ -1170,9 +1252,30 @@ export class PasskeyService {
     }
   }
 
+  /**
+   * Delete a passkey row from Supabase by credential_id.
+   * Idempotent — succeeds silently if no row matches.
+   */
+  static async deleteCloudPasskey(userId: string, credentialId: string): Promise<void> {
+    try {
+      const { getSupabaseClient } = require('@lib/supabase') as typeof import('@lib/supabase');
+      const client = getSupabaseClient();
+      const { error } = await client
+        .from('passkeys')
+        .delete()
+        .eq('user_id', userId)
+        .eq('credential_id', credentialId);
+      if (error) {
+        console.warn('Failed to delete cloud passkey:', error);
+      }
+    } catch (err) {
+      console.warn('Failed to delete cloud passkey:', err);
+    }
+  }
+
   static async syncPasskeyToCloud(
     userId: string,
-    walletId: string,
+    walletId: string | null | undefined,
     passkey: {
       credentialId: string;
       credentialIdRaw: string;
@@ -1184,13 +1287,18 @@ export class PasskeyService {
       rpId: string;
     },
   ): Promise<void> {
+    // aa_wallet_id is a UUID FK — only set it when walletId is a valid UUID.
+    // Hex bytes32 wallet IDs (from deriveDefaultWalletId) must not be passed here.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const aaWalletId = walletId && UUID_RE.test(walletId) ? walletId : undefined;
+
     try {
       const { getSupabaseClient } = require('@lib/supabase') as typeof import('@lib/supabase');
       const client = getSupabaseClient();
       const { error } = await client.from('passkeys').upsert(
         {
           user_id: userId,
-          aa_wallet_id: walletId,
+          ...(aaWalletId !== undefined && { aa_wallet_id: aaWalletId }),
           credential_id: passkey.credentialId,
           credential_id_raw: passkey.credentialIdRaw,
           public_key: JSON.stringify({

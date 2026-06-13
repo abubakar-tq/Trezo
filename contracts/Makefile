@@ -5,7 +5,7 @@ DEFAULT_ANVIL_KEY := 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6
 
 DEFAULT_ANVIL_ACCOUNT := 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
 
-ANVIL_RPC_URL = http://192.168.100.68:8545
+ANVIL_RPC_URL ?= http://$(LAPTOP_IP):8545
 LOCAL_PRIVATE_KEY ?= $(DEFAULT_ANVIL_KEY)
 
 # Where the Expo app lives (relative to contracts/)
@@ -24,10 +24,22 @@ CHAIN_ID ?= $(CHAIN_ID_LOCAL)
 SCRIPT_VERBOSITY ?= -vvvv
 
 # ── Base Fork ────────────────────────────────────────────────────────────────
-BASE_FORK_RPC_URL   ?= http://192.168.100.68:8545
+BASE_FORK_RPC_URL   ?= http://$(LAPTOP_IP):8545
 BASE_FORK_CHAIN_ID  ?= 8453
 BASE_FORK_PROFILE   ?= base-mainnet-fork
 ENTRYPOINT         ?= 0x0000000071727De22E5E9d8BAf0edAc6f37da032
+
+# ── Testnet deployer keystore + Etherscan verify ─────────────────────────────
+# Created once via: cast wallet import trezo-testnet-deployer --interactive
+DEPLOYER_KEYSTORE ?= trezo-testnet-deployer
+ETHERSCAN_API_KEY ?=
+VERIFY_FLAGS := $(if $(ETHERSCAN_API_KEY),--verify --etherscan-api-key $(ETHERSCAN_API_KEY))
+KEYSTORE_FLAGS := --account $(DEPLOYER_KEYSTORE)
+
+# ── Testnet RPC URLs (set in .env or pass via env) ──────────────────────────
+SEPOLIA_RPC_URL      ?=
+BASE_SEPOLIA_RPC_URL ?= https://sepolia.base.org
+ARB_SEPOLIA_RPC_URL  ?= https://sepolia-rollup.arbitrum.io/rpc
 
 ANVIL_NETWORK_ARGS := --rpc-url $(ANVIL_RPC_URL) --private-key $(LOCAL_PRIVATE_KEY) --broadcast $(SCRIPT_VERBOSITY)
 
@@ -51,6 +63,7 @@ PREDICT_WALLET_ENV := \
 .PHONY: help
 help:
 	@echo "Common targets:"
+	@echo "  make bootstrap                          # one-time: init submodules + install modulekit pnpm deps"
 	@echo "  make build"
 	@echo "  make deploy-local"
 	@echo "  make predict-local"
@@ -62,7 +75,6 @@ help:
 	@echo "  make check-chain-support RPC_URL=<rpc>"
 	@echo "  make predict-infra RPC_URL=<rpc> [ENTRYPOINT=...]"
 	@echo "  make deploy-infra RPC_URL=<rpc> PRIVATE_KEY=<pk> [ENTRYPOINT=...]"
-	@echo "  make deploy-sepolia   # compatibility alias for make deploy-infra-sepolia"
 	@echo "  make verify-infra RPC_URL=<rpc> [ENTRYPOINT=...]"
 	@echo "  make predict-wallet RPC_URL=<rpc> ACCOUNT_FACTORY=<addr> WALLET_ID=<bytes32> VALIDATOR=<addr> PASSKEY_ID_RAW=<bytes32> PASSKEY_PX=<uint256> PASSKEY_PY=<uint256> [WALLET_INDEX=0]"
 	@echo ""
@@ -75,8 +87,26 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make check-root-factory RPC_URL=\$$SEPOLIA_RPC_URL"
-	@echo "  make deploy-sepolia PRIVATE_KEY=\$$PRIVATE_KEY"
+	@echo "  make deploy-sepolia SEPOLIA_RPC_URL=... ETHERSCAN_API_KEY=..."
+	@echo "  make deploy-base-sepolia ETHERSCAN_API_KEY=...   # uses default RPC https://sepolia.base.org"
+	@echo "  make deploy-arb-sepolia ETHERSCAN_API_KEY=...    # uses default RPC https://sepolia-rollup.arbitrum.io/rpc"
+	@echo "  make swap-healthcheck DEPLOYMENT_PROFILE=base-sepolia RPC_URL=\$$BASE_SEPOLIA_RPC_URL"
+	@echo "  make relayer-up   # bring up the on-demand Across relayer for cross-chain demos"
 	@echo "  make predict-wallet RPC_URL=\$$BASE_RPC_URL ACCOUNT_FACTORY=0x... WALLET_ID=0x... VALIDATOR=0x... PASSKEY_ID_RAW=0x... PASSKEY_PX=... PASSKEY_PY=... WALLET_INDEX=0"
+	@echo ""
+	@echo "Testnet deploy prerequisites:"
+	@echo "  - cast wallet import trezo-testnet-deployer --interactive   # once"
+	@echo "  - Fund deployer address with ~0.1 ETH on each testnet"
+	@echo "  - Set ETHERSCAN_API_KEY (Etherscan v2 multichain) in .env"
+	@echo "  - Set PIMLICO_API_KEY in apps/mobile/.env (for bundler/paymaster URLs)"
+
+.PHONY: bootstrap
+bootstrap:
+	@echo "Initializing git submodules..."
+	git -C .. submodule update --init --recursive
+	@echo "Installing modulekit pnpm deps (required for forge build)..."
+	@echo "Note: --node-linker=hoisted + --package-import-method=copy are required when running pnpm against a Windows-mounted drive (/mnt/d) from WSL; plain pnpm install fails with ERR_PNPM_EACCES on DrvFs."
+	cd lib/modulekit && pnpm install --frozen-lockfile --config.node-linker=hoisted --config.package-import-method=copy
 
 .PHONY: build
 build:
@@ -101,19 +131,20 @@ deploy-email-local: build
 	$(MAKE) sync-mobile CHAIN_ID=$(CHAIN_ID_LOCAL)
 	$(MAKE) sync-abi
 
-.PHONY: deploy-sepolia
-deploy-sepolia:
-	@echo "deploy-sepolia is a compatibility alias for the canonical portable infra flow."
-	@echo "For the full Sepolia stack, run make deploy-sepolia then make deploy-email-sepolia."
-	$(MAKE) deploy-infra-sepolia PRIVATE_KEY=$(PRIVATE_KEY) $(OPTIONAL_ENTRYPOINT_MAKE)
-
 .PHONY: deploy-email-sepolia
 deploy-email-sepolia: build
-	@echo "Deploying email recovery after canonical infra deployment on Sepolia."
+	@[ -n "$(KILL_SWITCH_AUTHORIZER)" ] || (echo "❌ Set KILL_SWITCH_AUTHORIZER=0x... (typically the deployer EOA for testnet)" && exit 1)
+	@echo "Deploying EmailRecovery to Sepolia (recipe muted)..."
+	@KILL_SWITCH_AUTHORIZER=$(KILL_SWITCH_AUTHORIZER) \
+	DKIM_SIGNER=$(if $(DKIM_SIGNER),$(DKIM_SIGNER),$(KILL_SWITCH_AUTHORIZER)) \
+	DEPLOYMENT_PROFILE=sepolia \
 	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
 		--rpc-url $(SEPOLIA_RPC_URL) \
-		--account sepKey \
-		--broadcast -vvv
+		$(KEYSTORE_FLAGS) \
+		--sender $(if $(SENDER),$(SENDER),$(KILL_SWITCH_AUTHORIZER)) \
+		--broadcast \
+		$(VERIFY_FLAGS) \
+		$(SCRIPT_VERBOSITY)
 
 .PHONY: ping-anvil
 ping-anvil:
@@ -148,9 +179,12 @@ predict-infra:
 
 .PHONY: deploy-infra
 deploy-infra: build
-	$(DEPLOY_SCRIPT_ENV) forge script script/DeployInfra.s.sol:DeployInfra \
+	@echo "Deploying infra to $(RPC_URL) (recipe muted to prevent ETHERSCAN_API_KEY echo)..."
+	@$(DEPLOY_SCRIPT_ENV) forge script script/DeployInfra.s.sol:DeployInfra \
 		--rpc-url $(RPC_URL) \
+		$(if $(USE_KEYSTORE),$(KEYSTORE_FLAGS),--private-key $(PRIVATE_KEY)) \
 		--broadcast \
+		$(VERIFY_FLAGS) \
 		$(SCRIPT_VERBOSITY)
 
 .PHONY: verify-infra
@@ -233,6 +267,9 @@ sync-abi:
 	jq '{abi: .abi}' out/EmailRecovery.sol/EmailRecovery.json \
 		> $(MOBILE_DIR)/abi/EmailRecovery.json
 
+	jq '{abi: .abi}' out/CrossChainExecutor.sol/CrossChainExecutor.json \
+		> $(MOBILE_DIR)/abi/CrossChainExecutor.json
+
 # ---------- Sync deployment JSON to indexer ----------
 
 # Copies deployment JSON into the indexer directory so addresses.ts can read them.
@@ -259,8 +296,60 @@ deploy-fork-base:
 		DEPLOYMENT_PROFILE=$(BASE_FORK_PROFILE) \
 		ENTRYPOINT=$(ENTRYPOINT)
 	$(MAKE) verify-infra RPC_URL=$(BASE_FORK_RPC_URL) ENTRYPOINT=$(ENTRYPOINT)
+	$(MAKE) deploy-email-fork-base
+	$(MAKE) fund-bundler-fork-base
 	$(MAKE) sync-mobile CHAIN_ID=$(BASE_FORK_CHAIN_ID) DEPLOYMENT_PROFILE=$(BASE_FORK_PROFILE)
 	$(MAKE) sync-abi
+
+# Deploy email recovery contracts to the Base fork.
+# Uses Anvil default account as both DKIM signer and kill-switch authorizer — fine for dev.
+# sync-mobile + sync-abi are intentionally omitted here; deploy-fork-base runs them after.
+.PHONY: deploy-email-fork-base
+deploy-email-fork-base: build
+	@echo "Deploying EmailRecovery to Base mainnet fork at $(BASE_FORK_RPC_URL)"
+	KILL_SWITCH_AUTHORIZER=$(DEFAULT_ANVIL_ACCOUNT) \
+	DKIM_SIGNER=$(DEFAULT_ANVIL_ACCOUNT) \
+	DEPLOYMENT_PROFILE=$(BASE_FORK_PROFILE) \
+	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
+		--rpc-url $(BASE_FORK_RPC_URL) \
+		--private-key $(LOCAL_PRIVATE_KEY) \
+		--broadcast \
+		-vvvv
+
+# Fund the Alto bundler executor on the Base fork so it can submit UserOperations.
+# Alto uses Anvil key #0 by default (address 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266).
+ALTO_EXECUTOR_ADDRESS ?= 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+BUNDLER_FUND_ETH     ?= 10
+
+.PHONY: fund-bundler-fork-base
+fund-bundler-fork-base:
+	@echo "Funding Alto bundler executor $(ALTO_EXECUTOR_ADDRESS) with $(BUNDLER_FUND_ETH) ETH on fork..."
+	@WEI_HEX=$$(python3 -c "print(hex(int($(BUNDLER_FUND_ETH) * 10**18)))"); \
+	cast rpc anvil_setBalance $(ALTO_EXECUTOR_ADDRESS) $$WEI_HEX \
+		--rpc-url $(BASE_FORK_RPC_URL)
+	@echo "✅ Bundler executor funded:"
+	@cast balance $(ALTO_EXECUTOR_ADDRESS) --rpc-url $(BASE_FORK_RPC_URL) --ether
+
+# Verify ETH / USDC / WETH balances for any address on the Base fork.
+# Usage: make check-balance-fork-base ACCOUNT=0x...
+BASE_FORK_USDC ?= 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+BASE_FORK_WETH ?= 0x4200000000000000000000000000000000000006
+
+.PHONY: check-balance-fork-base
+check-balance-fork-base:
+	@[ -n "$(ACCOUNT)" ] || (echo "❌ Set ACCOUNT=0x... to check balances" && exit 1)
+	@echo "══════════════════════════════════════"
+	@echo "  Balances for $(ACCOUNT) on Base fork"
+	@echo "══════════════════════════════════════"
+	@echo "ETH:"
+	@cast balance $(ACCOUNT) --rpc-url $(BASE_FORK_RPC_URL) --ether
+	@echo "USDC (raw):"
+	@cast call $(BASE_FORK_USDC) "balanceOf(address)(uint256)" $(ACCOUNT) \
+		--rpc-url $(BASE_FORK_RPC_URL)
+	@echo "WETH (raw):"
+	@cast call $(BASE_FORK_WETH) "balanceOf(address)(uint256)" $(ACCOUNT) \
+		--rpc-url $(BASE_FORK_RPC_URL)
+	@echo "══════════════════════════════════════"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ---------- Local dev harness targets ----------
@@ -306,3 +395,152 @@ mock-complete-email-recovery-local: build
 	@echo "Optional env: RECOVERY_HARNESS=<override> PASSKEY_VALIDATOR=<override> NEW_PASSKEY_ID=<bytes32> ANVIL_RPC_URL=<override>"
 	forge script script/dev/MockCompleteEmailRecovery.s.sol:MockCompleteEmailRecovery \
 	$(ANVIL_NETWORK_ARGS)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ---------- Testnet deploy targets (Sepolia / Base Sepolia / Arbitrum Sepolia)
+# These run the canonical portable Safe-root flow with the encrypted keystore
+# and Etherscan v2 verification baked in. Required env:
+#   ETHERSCAN_API_KEY    — one Etherscan v2 multichain key
+#   PIMLICO_API_KEY      — for the mobile-side bundler/paymaster URLs
+#   The DEPLOYER_KEYSTORE (default `trezo-testnet-deployer`) must exist.
+
+.PHONY: check-spokepool
+check-spokepool:
+	@[ -n "$(RPC_URL)" ] || (echo "❌ Set RPC_URL" && exit 1)
+	forge script script/CheckSpokePool.s.sol:CheckSpokePool --rpc-url $(RPC_URL) $(SCRIPT_VERBOSITY)
+
+.PHONY: swap-healthcheck
+swap-healthcheck:
+	@[ -n "$(DEPLOYMENT_PROFILE)" ] || (echo "❌ Set DEPLOYMENT_PROFILE=sepolia|base-sepolia|arb-sepolia" && exit 1)
+	@[ -n "$(RPC_URL)" ] || (echo "❌ Set RPC_URL" && exit 1)
+	DEPLOYMENT_PROFILE=$(DEPLOYMENT_PROFILE) forge script script/CheckSwapPools.s.sol:CheckSwapPools \
+		--rpc-url $(RPC_URL) $(SCRIPT_VERBOSITY)
+
+.PHONY: seed-swap-liquidity
+seed-swap-liquidity:
+	@[ -n "$(DEPLOYMENT_PROFILE)" ] || (echo "❌ Set DEPLOYMENT_PROFILE" && exit 1)
+	@[ -n "$(RPC_URL)" ] || (echo "❌ Set RPC_URL" && exit 1)
+	DEPLOYMENT_PROFILE=$(DEPLOYMENT_PROFILE) forge script script/SeedSwapLiquidity.s.sol:SeedSwapLiquidity \
+		--rpc-url $(RPC_URL) $(SCRIPT_VERBOSITY)
+
+.PHONY: deploy-sepolia
+deploy-sepolia:
+	@[ -n "$(SEPOLIA_RPC_URL)" ] || (echo "❌ Set SEPOLIA_RPC_URL in env" && exit 1)
+	$(MAKE) check-root-factory RPC_URL=$(SEPOLIA_RPC_URL)
+	$(MAKE) check-chain-support RPC_URL=$(SEPOLIA_RPC_URL)
+	$(MAKE) check-spokepool RPC_URL=$(SEPOLIA_RPC_URL)
+	$(MAKE) predict-infra RPC_URL=$(SEPOLIA_RPC_URL)
+	-$(MAKE) deploy-infra \
+		RPC_URL=$(SEPOLIA_RPC_URL) \
+		USE_KEYSTORE=1 \
+		DEPLOYMENT_PROFILE=sepolia \
+		DEPLOYMENT_NAMESPACE=sepolia
+	$(MAKE) verify-infra RPC_URL=$(SEPOLIA_RPC_URL)
+	@echo "Skipping deploy-email-sepolia: ZK Email hosted relayer is Base Sepolia only (ADR-0006)."
+	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=sepolia
+	$(MAKE) sync-abi
+
+.PHONY: deploy-base-sepolia
+deploy-base-sepolia:
+	$(MAKE) check-root-factory RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	$(MAKE) check-chain-support RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	$(MAKE) check-spokepool RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	$(MAKE) predict-infra RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	-$(MAKE) deploy-infra \
+		RPC_URL=$(BASE_SEPOLIA_RPC_URL) \
+		USE_KEYSTORE=1 \
+		DEPLOYMENT_PROFILE=base-sepolia \
+		DEPLOYMENT_NAMESPACE=base-sepolia
+	$(MAKE) verify-infra RPC_URL=$(BASE_SEPOLIA_RPC_URL)
+	-$(MAKE) deploy-email-base-sepolia
+	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=base-sepolia
+	$(MAKE) sync-abi
+
+# ── ZK Email hosted infra on Base Sepolia ────────────────────────────────────
+# Pinned from https://docs.zk.email/account-recovery/deployed-contracts
+# Reusing these means our EmailRecovery wrapper deploys ONLY itself (1 contract,
+# not 5) and is compatible with the hosted ZK Email relayer at
+# https://auth-base-sepolia-staging.prove.email/api.
+ZK_EMAIL_VERIFIER_BASE_SEPOLIA        ?= 0x3E5f29a7cCeb30D5FCD90078430CA110c2985716
+ZK_EMAIL_DKIM_REGISTRY_BASE_SEPOLIA   ?= 0x3D3935B3C030893f118a84C92C66dF1B9E4169d6
+ZK_EMAIL_AUTH_IMPL_BASE_SEPOLIA       ?= 0x2721a8eB83Ef105f7B30DAB4e8A4da97cD54f970
+ZK_EMAIL_COMMAND_HANDLER_BASE_SEPOLIA ?= 0x6f114A2628F358eaE4b798aC8803eF7b6F6C4257
+
+.PHONY: deploy-email-base-sepolia
+deploy-email-base-sepolia: build
+	@[ -n "$(KILL_SWITCH_AUTHORIZER)" ] || (echo "❌ Set KILL_SWITCH_AUTHORIZER=0x... (typically the deployer EOA for testnet)" && exit 1)
+	@echo "Deploying EmailRecovery to Base Sepolia (reusing ZK Email hosted infra; recipe muted)..."
+	@KILL_SWITCH_AUTHORIZER=$(KILL_SWITCH_AUTHORIZER) \
+	DKIM_SIGNER=$(if $(DKIM_SIGNER),$(DKIM_SIGNER),$(KILL_SWITCH_AUTHORIZER)) \
+	VERIFIER=$(ZK_EMAIL_VERIFIER_BASE_SEPOLIA) \
+	DKIM_REGISTRY=$(ZK_EMAIL_DKIM_REGISTRY_BASE_SEPOLIA) \
+	EMAIL_AUTH_IMPL=$(ZK_EMAIL_AUTH_IMPL_BASE_SEPOLIA) \
+	COMMAND_HANDLER=$(ZK_EMAIL_COMMAND_HANDLER_BASE_SEPOLIA) \
+	DEPLOYMENT_PROFILE=base-sepolia \
+	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
+		--rpc-url $(BASE_SEPOLIA_RPC_URL) \
+		$(KEYSTORE_FLAGS) \
+		--sender $(if $(SENDER),$(SENDER),$(KILL_SWITCH_AUTHORIZER)) \
+		--broadcast \
+		$(VERIFY_FLAGS) \
+		$(SCRIPT_VERBOSITY)
+
+.PHONY: deploy-arb-sepolia
+deploy-arb-sepolia:
+	$(MAKE) check-root-factory RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	$(MAKE) check-chain-support RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	$(MAKE) check-spokepool RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	$(MAKE) predict-infra RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	-$(MAKE) deploy-infra \
+		RPC_URL=$(ARB_SEPOLIA_RPC_URL) \
+		USE_KEYSTORE=1 \
+		DEPLOYMENT_PROFILE=arb-sepolia \
+		DEPLOYMENT_NAMESPACE=arb-sepolia
+	$(MAKE) verify-infra RPC_URL=$(ARB_SEPOLIA_RPC_URL)
+	@echo "Skipping deploy-email-arb-sepolia: ZK Email hosted relayer is Base Sepolia only (ADR-0006)."
+	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=arb-sepolia
+	$(MAKE) sync-abi
+
+.PHONY: deploy-email-arb-sepolia
+deploy-email-arb-sepolia: build
+	@[ -n "$(KILL_SWITCH_AUTHORIZER)" ] || (echo "❌ Set KILL_SWITCH_AUTHORIZER=0x... (typically the deployer EOA for testnet)" && exit 1)
+	@echo "Deploying EmailRecovery to Arbitrum Sepolia (recipe muted)..."
+	@KILL_SWITCH_AUTHORIZER=$(KILL_SWITCH_AUTHORIZER) \
+	DKIM_SIGNER=$(if $(DKIM_SIGNER),$(DKIM_SIGNER),$(KILL_SWITCH_AUTHORIZER)) \
+	DEPLOYMENT_PROFILE=arb-sepolia \
+	forge script script/DeployEmailRecovery.s.sol:DeployEmailRecovery \
+		--rpc-url $(ARB_SEPOLIA_RPC_URL) \
+		$(KEYSTORE_FLAGS) \
+		--sender $(if $(SENDER),$(SENDER),$(KILL_SWITCH_AUTHORIZER)) \
+		--broadcast \
+		$(VERIFY_FLAGS) \
+		$(SCRIPT_VERBOSITY)
+
+.PHONY: verify-chain
+verify-chain:
+	@[ -n "$(CHAIN)" ] || (echo "❌ Set CHAIN=sepolia|base-sepolia|arb-sepolia" && exit 1)
+	@[ -n "$(ETHERSCAN_API_KEY)" ] || (echo "❌ Set ETHERSCAN_API_KEY" && exit 1)
+	$(MAKE) verify-infra RPC_URL=$($(shell echo $(CHAIN) | tr 'a-z-' 'A-Z_')_RPC_URL)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ---------- Across relayer (on-demand) ----------------------------------------
+
+RELAYER_DIR ?= ../infra/relayer
+
+.PHONY: relayer-up
+relayer-up:
+	docker compose -f $(RELAYER_DIR)/docker-compose.yml up -d
+	@echo "✅ Relayer up. Tail logs with: make relayer-logs"
+
+.PHONY: relayer-down
+relayer-down:
+	docker compose -f $(RELAYER_DIR)/docker-compose.yml down
+	@echo "✅ Relayer down."
+
+.PHONY: relayer-logs
+relayer-logs:
+	docker compose -f $(RELAYER_DIR)/docker-compose.yml logs -f --tail=100
+
+.PHONY: relayer-status
+relayer-status:
+	docker compose -f $(RELAYER_DIR)/docker-compose.yml ps

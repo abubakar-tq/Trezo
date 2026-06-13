@@ -19,6 +19,7 @@ export type AuthStackParamList = {
   VerifyEmail: { email: string; flow: AuthVerificationFlow };
   ResetPassword: { email: string; flow: AuthVerificationFlow };
   AuthResult: { type: "account-created" | "password-updated"; email: string };
+  LinkDevice: undefined;
 };
 
 // Main Tab Navigation Types
@@ -39,13 +40,14 @@ export type RootStackParamList = {
   BrowserSettings: undefined;
   BackupRecovery: undefined;
   DevicesPasskeys: undefined;
+  LinkDevice: undefined;
   PairDevice: { requestId?: string; secret?: string } | undefined;
   CompromisedWallet: undefined;
   GuardianRecovery: undefined;
   EmailRecovery: undefined;
   EmailRecoveryStart: undefined;
-  EmailRecoveryGroupStatus: { groupId: string };
-  RecoveryEntry: undefined;
+  RecoveryAttemptStatus: { attemptId: string };
+  RecoveryEntry: { reason?: "no_local_passkey" | "user_initiated" } | undefined;
   CreateRecoveryRequest: { walletAddress?: string } | undefined;
   ShareRecoveryRequest: { requestId: string };
   RecoveryProgress: { requestId: string };
@@ -55,6 +57,7 @@ export type RootStackParamList = {
     smartAccountAddress: string;
   };
   ProfileEdit: undefined;
+  ConnectedDApps: undefined;
   ContactList: undefined;
   AddContact: undefined;
   ContactDetail: { contactId: string };
@@ -62,17 +65,16 @@ export type RootStackParamList = {
   AADebug: undefined;
   DeployAccount: undefined;
   DevCreateAccount: undefined;
-  SecurityPrivacy: undefined;
-  ConnectedDevices: undefined;
   Notifications: undefined;
   NotificationSettings: undefined;
-  Settings: undefined;
   AddGuardian: undefined;
   GuardianManagement: undefined;
   SecurityCenter: undefined;
   ThresholdConfiguration: undefined;
+  IncomingRecoveryApprovals: undefined;
   Buy: undefined;
   Receive: undefined;
+  ReceiveChain: { chainId: number };
   Send: undefined;
   TransactionHistory: { walletAddress?: Address; chainId?: number } | undefined;
   TransactionStatus: { transactionId: string };

@@ -1,12 +1,8 @@
-/**
- * Badge Component
- * Status indicators: Active, Pending, Inactive, Warning, Danger, Neutral
- */
-
 import React from "react";
 import { View, ViewProps } from "react-native";
+import { useAppTheme } from "@theme";
+import { BorderRadius } from "../TokenRegistry";
 import { OverlineText } from "./Text";
-import { BorderRadius, Colors } from "../TokenRegistry";
 
 type BadgeStatus =
   | "active"
@@ -15,58 +11,66 @@ type BadgeStatus =
   | "warning"
   | "danger"
   | "neutral"
-  | "success";
+  | "success"
+  | "accent";
 
 interface BadgeProps extends Omit<ViewProps, "style"> {
   status: BadgeStatus;
   label: string;
-  isDark?: boolean;
   icon?: React.ReactNode;
+  dot?: boolean;  // show a leading dot indicator instead of icon
 }
 
-const getStatusStyles = (status: BadgeStatus, isDark: boolean) => {
-  const styles: Record<BadgeStatus, { bg: string; text: string }> = {
-    active: {
-      bg: Colors.success,
-      text: "#ffffff",
-    },
-    pending: {
-      bg: Colors.warning,
-      text: "#ffffff",
-    },
-    inactive: {
-      bg: isDark ? "#4b5563" : "#cbd5e0",
-      text: isDark ? "#e2e8f0" : "#2d3748",
-    },
-    warning: {
-      bg: Colors.warning,
-      text: "#ffffff",
-    },
-    danger: {
-      bg: Colors.danger,
-      text: "#ffffff",
-    },
-    neutral: {
-      bg: isDark ? Colors.surfaceMid : Colors.lightCard,
-      text: isDark ? Colors.textSecondary : Colors.lightTextSecondary,
-    },
-    success: {
-      bg: Colors.success,
-      text: "#ffffff",
-    },
+export const Badge: React.FC<BadgeProps> = ({ status, label, icon, dot, ...props }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+
+  // Soft backgrounds + bordered color text — more refined than filled-background badges
+  const getStatusColors = (): { bg: string; text: string; border: string; dotColor: string } => {
+    switch (status) {
+      case "active":
+      case "success":
+        return {
+          bg: colors.successSoft,
+          text: colors.success,
+          border: `${colors.success}30`,
+          dotColor: colors.success,
+        };
+      case "pending":
+      case "warning":
+        return {
+          bg: colors.warningSoft,
+          text: colors.warning,
+          border: `${colors.warning}30`,
+          dotColor: colors.warning,
+        };
+      case "danger":
+        return {
+          bg: colors.dangerSoft,
+          text: colors.danger,
+          border: `${colors.danger}30`,
+          dotColor: colors.danger,
+        };
+      case "accent":
+        return {
+          bg: colors.accentSoft,
+          text: colors.accent,
+          border: `${colors.accent}30`,
+          dotColor: colors.accent,
+        };
+      case "inactive":
+      case "neutral":
+      default:
+        return {
+          bg: colors.surfaceMuted,
+          text: colors.textSecondary,
+          border: colors.borderMuted,
+          dotColor: colors.textMuted,
+        };
+    }
   };
 
-  return styles[status];
-};
-
-export const Badge: React.FC<BadgeProps> = ({
-  status,
-  label,
-  isDark = true,
-  icon,
-  ...props
-}) => {
-  const { bg, text } = getStatusStyles(status, isDark);
+  const { bg, text, border, dotColor } = getStatusColors();
 
   return (
     <View
@@ -76,42 +80,35 @@ export const Badge: React.FC<BadgeProps> = ({
         justifyContent: "center",
         backgroundColor: bg,
         paddingVertical: 4,
-        paddingHorizontal: 8,
+        paddingHorizontal: 10,
         borderRadius: BorderRadius.full,
-        gap: 4,
+        borderWidth: 1,
+        borderColor: border,
+        gap: 5,
         alignSelf: "flex-start",
       }}
       {...props}
     >
-      {icon}
+      {dot && !icon && (
+        <View
+          style={{
+            width: 5,
+            height: 5,
+            borderRadius: 3,
+            backgroundColor: dotColor,
+          }}
+        />
+      )}
+      {icon && !dot && icon}
       <OverlineText color={text}>{label}</OverlineText>
     </View>
   );
 };
 
-/**
- * Convenience factories
- */
-export const ActiveBadge: React.FC<Omit<BadgeProps, "status">> = (props) => (
-  <Badge status="active" {...props} />
-);
-
-export const PendingBadge: React.FC<Omit<BadgeProps, "status">> = (props) => (
-  <Badge status="pending" {...props} />
-);
-
-export const InactiveBadge: React.FC<Omit<BadgeProps, "status">> = (props) => (
-  <Badge status="inactive" {...props} />
-);
-
-export const WarningBadge: React.FC<Omit<BadgeProps, "status">> = (props) => (
-  <Badge status="warning" {...props} />
-);
-
-export const DangerBadge: React.FC<Omit<BadgeProps, "status">> = (props) => (
-  <Badge status="danger" {...props} />
-);
-
-export const NeutralBadge: React.FC<Omit<BadgeProps, "status">> = (props) => (
-  <Badge status="neutral" {...props} />
-);
+export const ActiveBadge: React.FC<Omit<BadgeProps, "status">> = (props) => <Badge status="active" {...props} />;
+export const PendingBadge: React.FC<Omit<BadgeProps, "status">> = (props) => <Badge status="pending" {...props} />;
+export const InactiveBadge: React.FC<Omit<BadgeProps, "status">> = (props) => <Badge status="inactive" {...props} />;
+export const WarningBadge: React.FC<Omit<BadgeProps, "status">> = (props) => <Badge status="warning" {...props} />;
+export const DangerBadge: React.FC<Omit<BadgeProps, "status">> = (props) => <Badge status="danger" {...props} />;
+export const NeutralBadge: React.FC<Omit<BadgeProps, "status">> = (props) => <Badge status="neutral" {...props} />;
+export const AccentBadge: React.FC<Omit<BadgeProps, "status">> = (props) => <Badge status="accent" {...props} />;

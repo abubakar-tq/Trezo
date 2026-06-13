@@ -1,456 +1,595 @@
 /**
  * BuyScreen.tsx
- * 
- * Minimalistic Buy Crypto Screen
- * Single-screen layout, no scrolling
- * Clean, sophisticated design matching home tab aesthetic
+ *
+ * On-Ramp Buy Screen — provider-agnostic, multi-network
+ *
+ * Modes (set via EXPO_PUBLIC_RAMP_MODE in .env):
+ *   "auto"    → chainId 31337 = mock (Anvil), else = transak
+ *   "mock"    → always local Anvil (for FYP demo)
+ *   "transak" → always Transak widget (testnet or mainnet)
+ *
+ * Flow:
+ *   1. User enters USD amount + selects asset
+ *   2. BuyScreen calls onramp-session edge function
+ *   3a. Mock:    status card appears, "Complete Mock Order" triggers Anvil tx
+ *   3b. Transak: Transak widget opens in browser, user does KYC + card
+ *                Transak webhook → onramp-webhook → (hybrid) → Anvil tx
+ *   4. UI polls ramp_orders table every 3s until terminal status
  */
 
-import { Feather, FontAwesome5 } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Dimensions,
-  Image,
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useWalletData } from "@hooks/useWalletData";
 import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal";
 import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
-import { useWalletStore } from "../store/useWalletStore";
+import { NetworkPickerModal, type Network } from "@shared/components/modals/NetworkPickerModal";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+import { useUserStore } from "@/src/store/useUserStore";
+import { useWalletStore } from "../store/useWalletStore";
+import { RampService } from "@/src/services/RampService";
+import { type RampOrder, type RampProvider, type TransakNetwork, TRANSAK_NETWORKS } from "@/src/types/ramp";
+import { CHAIN_CONFIG } from "@/src/core/network/chain";
+import { getChainConfig, getEnabledChains } from "@/src/integration/chains";
+
+import { BuyAmountForm } from "../components/ramp/BuyAmountForm";
+import { OrderStatusCard } from "../components/ramp/OrderStatusCard";
+import { TransakWebViewModal } from "../components/ramp/TransakWebViewModal";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Testnet demo hard cap per purchase — must match the backend default in
+ * TestnetFulfillmentService (TESTNET_DEMO_MAX_ETH). Keep both in sync.
+ */
+const MAX_BUY_ETH = 0.025;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const TERMINAL_STATUSES = ["completed", "failed", "local_mock_completed", "expired", "refunded"] as const;
+const POLL_INTERVAL_MS = 3000;
+
+function resolveProvider(rampMode: string, chainId: number): RampProvider {
+  if (rampMode === "mock") return "mock";
+  if (rampMode === "transak") return "transak";
+  // auto mode: local Anvil → mock, everything else → transak
+  return chainId === 31337 ? "mock" : "transak";
+}
+
+function estimateCrypto(fiatUsd: number, symbol: string): string {
+  if (!fiatUsd || fiatUsd <= 0) return "0.0000";
+  const prices: Record<string, number> = {
+    ETH: 2500,
+    BTC: 65000,
+    USDC: 1,
+    USDT: 1,
+    MATIC: 0.85,
+    BNB: 580,
+  };
+  const price = prices[symbol.toUpperCase()] ?? 2500;
+  return (fiatUsd / price).toFixed(4);
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export const BuyScreen: React.FC = () => {
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const isDark = resolvedMode === 'dark';
 
-  const { tokens } = useWalletData();
-  const { accounts, activeAccountId, setActiveAccount } = useWalletStore();
-  
+  // ── Store access ──────────────────────────────────────────────────────────
+  const smartAccountAddress = useUserStore((s) => s.smartAccountAddress);
+  const aaAccount = useWalletStore((s) => s.aaAccount);
+  const accounts = useWalletStore((s) => s.accounts);
+  const activeAccountId = useWalletStore((s) => s.activeAccountId);
+  const setActiveAccount = useWalletStore((s) => s.setActiveAccount);
+
+  const activeAccount = accounts.find((a) => a.id === activeAccountId) ?? accounts[0];
+
+  // The actual address we fund (priority: smart account > aaAccount predicted > EOA)
+  const targetAddress = smartAccountAddress || aaAccount?.predictedAddress || activeAccount?.address || "";
+
+  // ── Ramp mode: read from env, default to "auto" ───────────────────────────
+  const rampMode = process.env.EXPO_PUBLIC_RAMP_MODE ?? "auto";
+
+  // ── Network selection — defaults to the active wallet chain ──────────────
+  // We read from walletStore.activeChainId (canonical wallet state) rather than
+  // CHAIN_CONFIG.chainId (which reads EXPO_PUBLIC_DEFAULT_CHAIN_ID — inlined at
+  // bundle time, so stale after .env changes until a full Metro restart).
+  const walletActiveChainId = useWalletStore((s) => s.activeChainId);
+  const enabledChains = useMemo(() => getEnabledChains(), []);
+  const defaultChainId =
+    walletActiveChainId && enabledChains.some((c) => c.id === walletActiveChainId)
+      ? walletActiveChainId
+      : CHAIN_CONFIG.chainId;
+  const [selectedChainId, setSelectedChainId] = useState<number>(defaultChainId);
+  const [isNetworkPickerOpen, setIsNetworkPickerOpen] = useState(false);
+
+  const selectedChain = useMemo(
+    () => getChainConfig(selectedChainId as any) ?? enabledChains[0],
+    [selectedChainId, enabledChains]
+  );
+
+  // Provider is resolved automatically — never shown to the user
+  const provider = resolveProvider(rampMode, selectedChainId);
+
+  // ── Local state ───────────────────────────────────────────────────────────
   const [amount, setAmount] = useState("");
-  const [isAssetPickerVisible, setIsAssetPickerVisible] = useState(false);
-  const [isAccountPickerVisible, setIsAccountPickerVisible] = useState(false);
-  
-  const activeAccount = accounts.find(a => a.id === activeAccountId) || accounts[0];
-
   const [selectedAsset, setSelectedAsset] = useState<Asset>({
-    symbol: 'ETH',
-    name: 'Ethereum',
-    logo: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
+    symbol: "ETH",
+    name: "Ethereum",
+    logo: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
   });
+  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
+  const [isAccountPickerOpen, setIsAccountPickerOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [activeOrder, setActiveOrder] = useState<RampOrder | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [transakUrl, setTransakUrl] = useState<string | null>(null);
+  // transakNetwork is derived from selectedChainId when provider === "transak"
+  const transakNetwork = useMemo<TransakNetwork>(() => {
+    const entry = (Object.entries(TRANSAK_NETWORKS) as [TransakNetwork, typeof TRANSAK_NETWORKS[TransakNetwork]][])
+      .find(([, cfg]) => cfg.chainId === selectedChainId);
+    return entry ? entry[0] : "ethereum";
+  }, [selectedChainId]);
 
-  // Calculate crypto amount
-  const estimatedCrypto = useMemo(() => {
-    const val = parseFloat(amount || "0");
-    if (isNaN(val) || val <= 0) return "0.0000";
-    
-    const basePrice = selectedAsset.symbol === 'ETH' ? 2500 : 
-                      selectedAsset.symbol === 'BTC' ? 45000 : 
-                      selectedAsset.symbol === 'USDC' ? 1 : 100;
-    
-    return (val / basePrice).toFixed(4);
-  }, [amount, selectedAsset]);
+  // Transak-supported crypto assets for the active network — replaces the user's
+  // owned-tokens list so the Buy picker offers what's actually buyable.
+  const [transakAssets, setTransakAssets] = useState<Asset[]>([]);
+  const [transakAssetsLoading, setTransakAssetsLoading] = useState<boolean>(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    setTransakAssetsLoading(true);
+    void RampService.fetchTransakCryptoCurrencies({
+      network: transakNetwork,
+      isTestnet: selectedChain?.environment !== "mainnet",
+    })
+      .then((list) => {
+        if (cancelled) return;
+        const mapped: Asset[] = list.map((a) => ({
+          symbol: a.symbol,
+          name: a.name,
+          logo: a.image,
+          chainId: a.chainId ?? selectedChainId,
+        }));
+        setTransakAssets(mapped);
+        // If currently-selected asset isn't in the list, default to first (usually ETH).
+        if (mapped.length > 0 && !mapped.some((m) => m.symbol === selectedAsset.symbol)) {
+          setSelectedAsset(mapped[0]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTransakAssetsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [transakNetwork, selectedChain?.environment, selectedChainId, selectedAsset.symbol]);
+
+  // Quick-amount chips are capped so none exceeds MAX_BUY_ETH at the $2 500/ETH
+  // rate used by estimateCrypto. Max spend = 0.025 × $2 500 = $62.50 USD.
+  const QUICK_AMOUNTS = useMemo(() => ["10", "25", "40", "60"], []);
+
+  // Derived
+  const fiatAmount = parseFloat(amount || "0");
+  const estimatedCrypto = useMemo(
+    () => estimateCrypto(fiatAmount, selectedAsset.symbol),
+    [fiatAmount, selectedAsset.symbol]
+  );
+  const displayAddress = targetAddress
+    ? `${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)}`
+    : "No wallet";
+  const isOverCap = parseFloat(estimatedCrypto) > MAX_BUY_ETH;
+  const isValidAmount = fiatAmount > 0 && !isOverCap;
+
+  // ── Polling ───────────────────────────────────────────────────────────────
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    setIsPolling(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isPolling || !activeOrder?.id) return;
+
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        // For Transak, each tick pulls the real status from Transak and fulfills
+        // on completion (status can lag the widget's success event). Mock just
+        // reads the DB row.
+        const updated = activeOrder.provider === "transak"
+          ? await RampService.verifyOrder(activeOrder.id)
+          : await RampService.getOrder(activeOrder.id);
+        setActiveOrder(updated);
+        if (TERMINAL_STATUSES.includes(updated.internalStatus as any)) {
+          stopPolling();
+          if (updated.internalStatus === "local_mock_completed" || updated.internalStatus === "completed") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        }
+      } catch (err) {
+        console.error("[BuyScreen] Polling error:", err);
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, [isPolling, activeOrder?.id, stopPolling]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleAmountChange = (value: string) => {
-    const cleaned = value.replace(/[^0-9.]/g, '');
-    const parts = cleaned.split('.');
+    const cleaned = value.replace(/[^0-9.]/g, "");
+    const parts = cleaned.split(".");
     if (parts.length > 2) return;
     if (parts[1]?.length > 2) return;
     setAmount(cleaned);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const handleReviewPurchase = async () => {
-    const val = parseFloat(amount || "0");
-    if (val <= 0) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  const handleBuy = async () => {
+    if (!isValidAmount) return;
+    if (!targetAddress) {
+      Alert.alert(
+        "No Wallet Found",
+        "Please go to the Wallet tab and create or import a wallet first.",
+        [{ text: "OK" }]
+      );
       return;
     }
-    
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    
-    const banxaUrl = `https://checkout.banxa.com/?fiatAmount=${amount}&fiatCode=USD&coinCode=${selectedAsset.symbol}&walletAddress=${activeAccount?.address || ''}`;
-    
-    await WebBrowser.openBrowserAsync(banxaUrl);
-  };
 
-  const handleAccountSelect = (account: any) => {
-    setActiveAccount(account);
-    setIsAccountPickerVisible(false);
+    // Enforce testnet demo cap before hitting the backend — prevents silent
+    // infinite load when the user picks an amount above the treasury limit.
+    if (parseFloat(estimatedCrypto) > MAX_BUY_ETH) {
+      Alert.alert(
+        "Amount too high",
+        `The testnet demo caps purchases at ${MAX_BUY_ETH} ETH. Lower the amount and try again.`
+      );
+      return;
+    }
+
+    setIsProcessing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      const effectiveChainId = provider === "transak"
+        ? TRANSAK_NETWORKS[transakNetwork].chainId
+        : selectedChainId;
+
+      const session = await RampService.createSession({
+        walletAddress: targetAddress,
+        chainId: effectiveChainId,
+        fiatCurrency: "USD",
+        fiatAmount,
+        cryptoCurrency: selectedAsset.symbol,
+        provider,
+        transakNetwork: provider === "transak" ? transakNetwork : undefined,
+      });
+
+      const order = await RampService.getOrder(session.orderId);
+      setActiveOrder(order);
+      setIsPolling(true);
+
+      // Open the Transak widget in an in-app Chrome Custom Tab (expo-web-browser),
+      // NOT a raw WebView: Transak's account auth (Google OAuth + captcha) cannot
+      // complete inside react-native-webview (white screen after login). Custom
+      // Tabs use Chrome's engine and handle the auth popups/redirects correctly —
+      // the same mechanism this app already uses for its own Google sign-in.
+      // Completion is detected by the pull-verify poll loop (no postMessage needed).
+      if (session.provider === "transak" && session.widgetUrl) {
+        WebBrowser.openBrowserAsync(session.widgetUrl, {
+          showTitle: true,
+          enableBarCollapsing: true,
+          dismissButtonStyle: "close",
+        })
+          .then(async () => {
+            // Tab dismissed → kick an immediate verify; the poll loop also runs.
+            try {
+              const updated = await RampService.verifyOrder(session.orderId);
+              setActiveOrder(updated);
+            } catch (e) {
+              console.log("[BuyScreen] post-tab verify non-fatal:", e);
+            }
+          })
+          .catch((e) => console.log("[BuyScreen] openBrowserAsync error:", e));
+      }
+    } catch (err: any) {
+      console.error("[BuyScreen] handleBuy error:", err);
+      Alert.alert("Error", err.message ?? "Failed to create on-ramp session");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const displayAddress = activeAccount?.address 
-    ? `${activeAccount.address.slice(0, 6)}...${activeAccount.address.slice(-4)}`
-    : 'No wallet';
+  const handleTransakEvent = useCallback(async (eventId: string, data: any) => {
+    if (eventId === "TRANSAK_ORDER_SUCCESSFUL") {
+      setTransakUrl(null);
+      // Kick an immediate server-side verification (authoritative, pulls real
+      // status from Transak + delivers funds). The poll loop keeps verifying
+      // until Transak reports COMPLETED. notifyWebhook stays only as a harmless
+      // optimistic hint (ignored server-side unless signed by Transak).
+      try {
+        if (activeOrder?.id) {
+          void RampService.notifyWebhook(activeOrder.id, data);
+          const updated = await RampService.verifyOrder(activeOrder.id);
+          setActiveOrder(updated);
+        }
+      } catch (err) {
+        console.log("[BuyScreen] verifyOrder kick non-fatal:", err);
+      }
+    } else if (
+      eventId === "TRANSAK_ORDER_FAILED" ||
+      eventId === "TRANSAK_ORDER_CANCELLED"
+    ) {
+      setTransakUrl(null);
+      stopPolling();
+      setActiveOrder(null);
+    }
+  }, [activeOrder?.id, stopPolling]);
 
-  const isValidAmount = amount && parseFloat(amount) > 0;
+  // When user closes the Transak WebView via the X button (not via a Transak event),
+  // bail out cleanly: stop polling and clear the order if it never reached a terminal
+  // state. Without this, the order spinner runs forever on a stuck 'created' status.
+  const handleTransakClose = useCallback(() => {
+    setTransakUrl(null);
+    if (
+      activeOrder &&
+      !TERMINAL_STATUSES.includes(activeOrder.internalStatus as any)
+    ) {
+      stopPolling();
+      setActiveOrder(null);
+    }
+  }, [activeOrder, stopPolling]);
 
+  const handleCompleteMock = async () => {
+    if (!activeOrder) return;
+    setIsProcessing(true);
+    try {
+      await RampService.completeMockOrder(activeOrder.id);
+      // Immediately refresh order state — don't wait for the poll tick
+      const updated = await RampService.getOrder(activeOrder.id);
+      setActiveOrder(updated);
+      stopPolling(); // terminal state reached — stop the interval
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err: any) {
+      Alert.alert("Error", err.message ?? "Failed to complete mock order");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleReset = () => {
+    setActiveOrder(null);
+    setAmount("");
+    stopPolling();
+  };
+
+  const handleNetworkSelect = (network: Network) => {
+    setSelectedChainId(network.chainId);
+    setIsNetworkPickerOpen(false);
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle="light-content" />
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* Minimal Header */}
+        {/* Header */}
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
-          <TouchableOpacity 
+          <TouchableOpacity
+            style={styles.backBtn}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               navigation.goBack();
-            }} 
-            style={styles.backButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            }}
           >
-            <Feather name="x" size={24} color={colors.textPrimary} />
+            <Feather name="chevron-left" size={28} color={colors.textPrimary} />
           </TouchableOpacity>
-          
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-            Buy
-          </Text>
-          
-          <TouchableOpacity 
-            onPress={() => setIsAccountPickerVisible(true)}
-            style={styles.walletChip}
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Buy Crypto</Text>
+          {/* Network badge — shows chain name; tap opens network picker */}
+          <TouchableOpacity
+            style={[styles.networkBadge, { backgroundColor: colors.surfaceCard }]}
+            onPress={() => setIsNetworkPickerOpen(true)}
           >
-            <View style={[styles.walletDot, { backgroundColor: colors.success }]} />
-            <Text style={[styles.walletChipText, { color: colors.textSecondary }]}>
-              {activeAccount?.name || 'Primary Wallet'}
+            <View
+              style={[
+                styles.networkDot,
+                { backgroundColor: selectedChain?.environment === "local" ? colors.warning : colors.success },
+              ]}
+            />
+            <Text style={[styles.networkText, { color: colors.textMuted }]}>
+              {selectedChain?.name ?? "Select Network"}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Main Content - No Scroll, Single Screen */}
-        <View style={styles.content}>
-          
-          {/* Token Selector Card - Compact */}
-          <TouchableOpacity 
-            style={[styles.tokenCard, { backgroundColor: colors.surfaceCard }]}
-            onPress={() => setIsAssetPickerVisible(true)}
-            activeOpacity={0.9}
-          >
-            <View style={styles.tokenLeft}>
-              {selectedAsset.logo ? (
-                <Image 
-                  source={{ uri: selectedAsset.logo }} 
-                  style={styles.tokenIcon}
-                />
-              ) : (
-                <View style={[styles.tokenAvatar, { backgroundColor: withAlpha(colors.accent, 0.12) }]}>
-                  <Text style={[styles.tokenAvatarText, { color: colors.accent }]}>
-                    {selectedAsset.symbol[0]}
-                  </Text>
-                </View>
-              )}
-              <View style={styles.tokenDetails}>
-                <Text style={[styles.tokenSymbol, { color: colors.textPrimary }]}>
-                  {selectedAsset.symbol}
-                </Text>
-                <Text style={[styles.tokenName, { color: colors.textMuted }]}>
-                  {selectedAsset.name}
-                </Text>
-              </View>
-            </View>
-            <Feather name="chevron-down" size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
+        {/* Body */}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {!activeOrder ? (
+            <BuyAmountForm
+              amount={amount}
+              selectedAsset={selectedAsset}
+              estimatedCrypto={estimatedCrypto}
+              targetAddress={targetAddress}
+              displayAddress={displayAddress}
+              onAmountChange={handleAmountChange}
+              onAssetPress={() => setIsAssetPickerOpen(true)}
+              onAccountPress={() => setIsAccountPickerOpen(true)}
+              quickAmounts={QUICK_AMOUNTS}
+              onQuickAmount={(v) => setAmount(v)}
+              assetLoading={transakAssetsLoading}
+              maxHint={`Max ${MAX_BUY_ETH} ETH (~$${Math.floor(MAX_BUY_ETH * 2500)})`}
+              capError={isOverCap ? `Exceeds testnet cap of ${MAX_BUY_ETH} ETH. Lower your amount.` : undefined}
+            />
+          ) : (
+            <OrderStatusCard
+              order={activeOrder}
+              chainName={selectedChain?.name ?? "Anvil"}
+              displayAddress={displayAddress}
+              isProcessing={isProcessing}
+              onCompleteMock={handleCompleteMock}
+              onDone={handleReset}
+            />
+          )}
+        </ScrollView>
 
-          {/* Amount Input Section */}
-          <View style={[styles.amountCard, { backgroundColor: colors.surfaceCard }]}>
-            <Text style={[styles.amountLabel, { color: colors.textMuted }]}>
-              Enter amount in USD
-            </Text>
-            <View style={styles.amountInputRow}>
-              <Text style={[styles.dollarSign, { color: colors.textPrimary }]}>$</Text>
-              <TextInput
-                style={[styles.amountInput, { color: colors.textPrimary }]}
-                value={amount}
-                onChangeText={handleAmountChange}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor={withAlpha(colors.textPrimary, 0.15)}
-                maxLength={7}
-                selectionColor={colors.accent}
-                autoFocus
-              />
-            </View>
-            
-            {/* Conversion Display */}
-            <View style={[styles.conversionRow, { borderTopColor: withAlpha(colors.border, 0.08) }]}>
-              <View style={styles.conversionLeft}>
-                <Feather name="arrow-down" size={14} color={colors.accent} />
-                <Text style={[styles.conversionText, { color: colors.textSecondary }]}>
-                  You get
-                </Text>
-              </View>
-              <Text style={[styles.conversionAmount, { color: colors.textPrimary }]}>
-                {estimatedCrypto} {selectedAsset.symbol}
-              </Text>
-            </View>
-          </View>
-
-          {/* Banxa Info - Subtle text style */}
-          <View style={styles.banxaInfo}>
-            <View style={styles.banxaLeft}>
-              <FontAwesome5 name="bolt" size={12} color={colors.accent} />
-              <Text style={[styles.banxaTitle, { color: colors.textPrimary }]}>
-                Banxa
-              </Text>
-            </View>
-            <Text style={[styles.banxaSubtitle, { color: colors.textMuted }]}>
-              2% fee • 5-10 min
-            </Text>
-          </View>
-
-          {/* Spacer to push button down */}
-          <View style={styles.spacer} />
-        </View>
-
-        {/* Fixed Bottom Action */}
-        <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <TouchableOpacity 
-            activeOpacity={0.9}
-            onPress={handleReviewPurchase}
-            disabled={!isValidAmount}
-          >
-            <LinearGradient
-              colors={isValidAmount ? [colors.accent, colors.accent] : ['#ccc', '#bbb']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[styles.actionButton, { opacity: isValidAmount ? 1 : 0.5 }]}
+        {/* CTA */}
+        {!activeOrder && (
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={handleBuy}
+              disabled={!isValidAmount || isProcessing}
             >
-              <Text style={styles.actionText}>
-                {isValidAmount ? `Buy ${estimatedCrypto} ${selectedAsset.symbol}` : 'Enter Amount'}
-              </Text>
-              <Feather name="arrow-right" size={18} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
-          
-          <Text style={[styles.termsText, { color: colors.textMuted }]}>
-            Powered by Banxa • Prices include fees
-          </Text>
-        </View>
-
+              <LinearGradient
+                colors={isValidAmount ? [colors.accent, colors.accent] : [colors.border, colors.border]}
+                style={[styles.ctaBtn, { opacity: isValidAmount ? 1 : 0.45 }]}
+              >
+                {isProcessing ? (
+                  <ActivityIndicator color={colors.textOnAccent} />
+                ) : (
+                  <>
+                    <Text style={[styles.ctaBtnText, { color: colors.textOnAccent }]}>
+                      Buy {selectedAsset.symbol}
+                    </Text>
+                    <Feather name="arrow-right" size={20} color={colors.textOnAccent} />
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* Modals */}
       <AccountPickerModal
-        isVisible={isAccountPickerVisible}
-        onClose={() => setIsAccountPickerVisible(false)}
-        onSelect={handleAccountSelect}
+        isVisible={isAccountPickerOpen}
+        onClose={() => setIsAccountPickerOpen(false)}
+        onSelect={(acc) => {
+          setActiveAccount(acc);
+          setIsAccountPickerOpen(false);
+        }}
         accounts={accounts}
         selectedAddress={activeAccount?.address}
       />
-
       <AssetPickerModal
-        isVisible={isAssetPickerVisible}
-        onClose={() => setIsAssetPickerVisible(false)}
-        onSelect={(asset) => setSelectedAsset(asset)}
-        assets={tokens}
+        isVisible={isAssetPickerOpen}
+        onClose={() => setIsAssetPickerOpen(false)}
+        onSelect={(asset) => {
+          setSelectedAsset(asset);
+          setIsAssetPickerOpen(false);
+        }}
+        assets={transakAssets}
+        title="Select crypto to buy"
       />
+      <NetworkPickerModal
+        isVisible={isNetworkPickerOpen}
+        onClose={() => setIsNetworkPickerOpen(false)}
+        onSelect={handleNetworkSelect}
+        selectedNetworkId={String(selectedChainId)}
+      />
+
+      {transakUrl && (
+        <TransakWebViewModal
+          visible
+          url={transakUrl}
+          onClose={handleTransakClose}
+          onOrderEvent={handleTransakEvent}
+        />
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
+  root: { flex: 1 },
+  flex: { flex: 1 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingBottom: 20,
-    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 10,
   },
-  backButton: {
+  backBtn: {
     width: 44,
     height: 44,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
   },
-  walletChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'transparent',
+  networkBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
   },
-  walletDot: {
+  networkDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
   },
-  walletChipText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 16,
-  },
-  tokenCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 16,
-  },
-  tokenLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  tokenIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  tokenAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tokenAvatarText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  tokenDetails: {
-    gap: 2,
-  },
-  tokenSymbol: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  tokenName: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  amountCard: {
-    padding: 20,
-    borderRadius: 20,
-  },
-  amountLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  amountInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  dollarSign: {
-    fontSize: 32,
-    fontWeight: '600',
-    marginRight: 4,
-  },
-  amountInput: {
-    fontSize: 40,
-    fontWeight: '700',
-    flex: 1,
-    letterSpacing: -0.5,
-    padding: 0,
-    margin: 0,
-  },
-  conversionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  conversionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  conversionText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  conversionAmount: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  banxaInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
-  banxaLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  banxaTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  banxaSubtitle: {
+  networkText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: "600",
   },
-  spacer: {
-    flex: 1,
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 120,
   },
-  bottomContainer: {
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 24,
     paddingTop: 16,
   },
-  actionButton: {
-    height: 60,
-    borderRadius: 20,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
+  ctaBtn: {
+    height: 64,
+    borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
   },
-  actionText: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#fff',
-  },
-  termsText: {
-    fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 12,
+  ctaBtnText: {
+    fontSize: 18,
+    fontWeight: "800",
   },
 });
 

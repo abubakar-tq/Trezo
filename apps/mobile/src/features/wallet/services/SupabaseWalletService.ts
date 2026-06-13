@@ -39,6 +39,10 @@ const inferWalletNetworkKey = (chainId: number, networkKey?: string): string => 
       return 'anvil-local';
     case 11155111:
       return 'ethereum-sepolia';
+    case 84532:
+      return 'base-sepolia';
+    case 421614:
+      return 'arbitrum-sepolia';
     case 8453:
       return 'base-mainnet-fork';
     default:

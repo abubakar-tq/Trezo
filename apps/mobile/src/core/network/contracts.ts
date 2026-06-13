@@ -1,4 +1,5 @@
 import anvilDeployment from "../../integration/contracts/deployment.31337.json";
+import baseSepoliaDeployment from "../../integration/contracts/deployment.base-sepolia.json";
 
 /**
  * Minimal set of contract addresses the app actually uses.
@@ -23,10 +24,8 @@ type DeploymentContractAddresses = {
 };
 
 const anvilDeploymentContracts = anvilDeployment as DeploymentContractAddresses;
+const baseSepoliaDeploymentContracts = baseSepoliaDeployment as DeploymentContractAddresses;
 
-/**
- * Contract addresses for local Anvil (read from the shared deployment json)
- */
 export const ANVIL_CONTRACTS: ContractAddresses = {
   entryPoint: anvilDeploymentContracts.entryPoint,
   accountFactory: anvilDeploymentContracts.accountFactory,
@@ -34,6 +33,15 @@ export const ANVIL_CONTRACTS: ContractAddresses = {
   accountImplementation: anvilDeploymentContracts.smartAccountImpl,
   passkeyValidator: anvilDeploymentContracts.passkeyValidator,
   emailRecovery: anvilDeploymentContracts.emailRecovery,
+};
+
+export const BASE_SEPOLIA_CONTRACTS: ContractAddresses = {
+  entryPoint: baseSepoliaDeploymentContracts.entryPoint,
+  accountFactory: baseSepoliaDeploymentContracts.accountFactory,
+  proxyFactory: baseSepoliaDeploymentContracts.proxyFactory,
+  accountImplementation: baseSepoliaDeploymentContracts.smartAccountImpl,
+  passkeyValidator: baseSepoliaDeploymentContracts.passkeyValidator,
+  emailRecovery: baseSepoliaDeploymentContracts.emailRecovery,
 };
 
 /**
@@ -54,10 +62,12 @@ export const SEPOLIA_CONTRACTS: ContractAddresses = {
  */
 export function getContractAddresses(chainId: number): ContractAddresses {
   switch (chainId) {
-    case 31337: // Anvil
+    case 31337:
       return ANVIL_CONTRACTS;
-    case 11155111: // Sepolia
+    case 11155111:
       return SEPOLIA_CONTRACTS;
+    case 84532:
+      return BASE_SEPOLIA_CONTRACTS;
     default:
       throw new Error(`Unsupported chainId: ${chainId}`);
   }
@@ -108,4 +118,5 @@ export default {
   areContractsReady,
   ANVIL_CONTRACTS,
   SEPOLIA_CONTRACTS,
+  BASE_SEPOLIA_CONTRACTS,
 };

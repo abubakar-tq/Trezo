@@ -1,14 +1,13 @@
 import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Svg, { Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
-import { withAlpha } from '@utils/color';
 import { useAppTheme } from '@theme';
 
 interface MeshBackgroundProps {
   intensity?: number;
 }
 
-export const MeshBackground = React.memo<MeshBackgroundProps>(({ intensity = 1 }) => {
+export const MeshBackground = React.memo<MeshBackgroundProps>(function MeshBackground({ intensity = 1 }) {
   const { theme } = useAppTheme();
   const { colors, mode } = theme;
   const { width, height } = useWindowDimensions();

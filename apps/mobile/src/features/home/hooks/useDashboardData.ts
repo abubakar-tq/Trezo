@@ -4,6 +4,8 @@ import { useUserStore } from "@store/useUserStore";
 import { useMarketStore } from "@store/useMarketStore";
 import { PortfolioService } from "@/src/features/portfolio/services/PortfolioService";
 import { MARKET_CHAIN_OPTIONS, fetchTokenMarketDetail, type MarketToken, type TokenMarketDetail, type EvmChain } from "@lib/api/web3Data";
+import type { Address } from "viem";
+import type { SupportedChainId } from "@/src/integration/chains";
 
 export const useDashboardData = () => {
   const { aaAccount } = useWalletStore();
@@ -34,7 +36,10 @@ export const useDashboardData = () => {
 
       setPortfolioLoading(true);
       try {
-        const portfolioData = await PortfolioService.getPortfolio(aaAccount.predictedAddress);
+        const portfolioData = await PortfolioService.getPortfolio(
+          aaAccount.predictedAddress as Address,
+          aaAccount.chainId as SupportedChainId,
+        );
         setPortfolio(portfolioData);
         setPortfolioBalance(portfolioData.totalValue);
       } catch (err) {
@@ -47,7 +52,7 @@ export const useDashboardData = () => {
     loadBalance();
     const interval = setInterval(loadBalance, 30000);
     return () => clearInterval(interval);
-  }, [aaAccount?.predictedAddress]);
+  }, [aaAccount?.predictedAddress, aaAccount?.chainId]);
 
   useEffect(() => {
     fetchMarketData({ chain: activeChain }).catch(() => undefined);

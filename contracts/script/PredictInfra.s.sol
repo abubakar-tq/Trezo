@@ -3,11 +3,13 @@ pragma solidity ^0.8.30;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
+import {AcrossConfig} from "./common/AcrossConfig.sol";
 import {DeployConstants} from "./common/DeployConstants.sol";
 import {DeployUtils} from "./common/DeployUtils.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 import {SocialRecovery} from "src/modules/SocialRecovery/SocialRecovery.sol";
+import {CrossChainExecutor} from "src/modules/CrossChainExecutor.sol";
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 
@@ -18,6 +20,7 @@ contract PredictInfra is Script {
         address proxyFactory;
         address passkeyValidator;
         address socialRecovery;
+        address crossChainExecutor;
     }
 
     function run() external view returns (InfraAddresses memory predicted) {
@@ -31,6 +34,7 @@ contract PredictInfra is Script {
         console2.log("MinimalProxyFactory:", predicted.proxyFactory);
         console2.log("PasskeyValidator:", predicted.passkeyValidator);
         console2.log("SocialRecovery:", predicted.socialRecovery);
+        console2.log("CrossChainExecutor:", predicted.crossChainExecutor);
     }
 
     function predict() public view returns (InfraAddresses memory predicted) {
@@ -76,6 +80,15 @@ contract PredictInfra is Script {
             rootFactory,
             DeployConstants.SOCIAL_RECOVERY_SALT,
             type(SocialRecovery).creationCode
+        );
+
+        predicted.crossChainExecutor = DeployUtils.predict(
+            rootFactory,
+            DeployConstants.CROSS_CHAIN_EXECUTOR_SALT,
+            abi.encodePacked(
+                type(CrossChainExecutor).creationCode,
+                abi.encode(AcrossConfig.spokePool(block.chainid), AcrossConfig.swapRouter(block.chainid))
+            )
         );
     }
 }

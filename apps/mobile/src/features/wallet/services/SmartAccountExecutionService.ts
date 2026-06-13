@@ -158,7 +158,12 @@ export class SmartAccountExecutionService {
     userId: string,
     prepared: PreparedUserOperation,
   ): Promise<SignedUserOperation> {
-    const signature = await LocalPasskeyService.signWithPasskey(userId, prepared.userOpHash);
+    // Pass wallet + chain so the picker is restricted to THIS wallet's on-chain
+    // registered passkey(s) instead of every passkey for the RP on the device.
+    const signature = await LocalPasskeyService.signWithPasskey(userId, prepared.userOpHash, {
+      smartAccountAddress: prepared.account,
+      chainId: prepared.chainId,
+    });
     const encodedSignature = LocalPasskeyService.encodeSignatureForContract(signature) as Hex;
 
     return {

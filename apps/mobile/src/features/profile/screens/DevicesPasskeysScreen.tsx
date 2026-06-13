@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 
-import { DEFAULT_CHAIN_ID } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, getChainConfig, type SupportedChainId } from "@/src/integration/chains";
+import { getPublicClient } from "@/src/integration/viem/clients";
 import DevicePairingService, {
   type DevicePairingRequest,
   type WalletDevice,
@@ -22,20 +23,19 @@ import { PasskeyAccountService } from "@/src/features/wallet/services/PasskeyAcc
 import PasskeyService from "@/src/features/wallet/services/PasskeyService";
 import { SupabaseWalletService } from "@/src/features/wallet/services/SupabaseWalletService";
 import WalletSyncService from "@/src/features/wallet/services/WalletSyncService";
-import { CardSkeleton, EmptyState, Skeleton } from "@shared/components/ui";
+import { CardSkeleton } from "@shared/components/ui";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useWalletStore, type PasskeyInfo } from "@/src/features/wallet/store/useWalletStore";
 import type { Address, Hex } from "viem";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
-import { withAlpha } from "@utils/color";
 
-const statusTone = (status: string, colors: ThemeColors) => {
-  if (status === "active") return colors.success;
-  if (status === "pending_removal") return colors.warning;
-  if (status === "removed") return colors.danger;
-  return colors.textMuted;
+const statusConfig = (status: string, colors: ThemeColors) => {
+  if (status === "active") return { color: colors.success, bg: colors.successSoft, label: "Active" };
+  if (status === "pending_removal") return { color: colors.warning, bg: colors.warningSoft, label: "Pending removal" };
+  if (status === "removed") return { color: colors.danger, bg: colors.dangerSoft, label: "Removed" };
+  return { color: colors.textMuted, bg: `${colors.textMuted}18`, label: status };
 };
 
 const requestStatusLabel = (status: string) => {
@@ -48,10 +48,50 @@ const requestStatusLabel = (status: string) => {
   return status;
 };
 
+// Selectors come from keccak256 of the error signatures defined in
+// contracts/src/modules/passkey/PasskeyValidator.sol. The bundler / paymaster
+// surfaces these as the inner revert bytes when a UserOp simulation reverts.
+const PASSKEY_VALIDATOR_ERRORS: Record<
+  string,
+  { friendly: string; autoRefresh: boolean }
+> = {
+  "0x84f7de53": {
+    friendly: "Cannot remove the last passkey on this wallet. Add another device first.",
+    autoRefresh: false,
+  },
+  "0xdcc10551": {
+    friendly: "This passkey isn't registered on-chain — it may already be removed.",
+    autoRefresh: true,
+  },
+  "0x61c9401a": {
+    friendly: "A removal is already scheduled for this passkey — refreshing status.",
+    autoRefresh: true,
+  },
+  "0x6ab276fc": {
+    friendly: "No pending removal to act on for this passkey — refreshing status.",
+    autoRefresh: true,
+  },
+  "0x00ed0147": {
+    friendly: "The 1-day timelock hasn't elapsed yet — try again later.",
+    autoRefresh: true,
+  },
+};
+
+const decodePasskeyValidatorError = (
+  err: unknown,
+): { friendly: string; autoRefresh: boolean } | null => {
+  const haystack = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  for (const [selector, info] of Object.entries(PASSKEY_VALIDATOR_ERRORS)) {
+    if (haystack.includes(selector.slice(2))) return info;
+  }
+  return null;
+};
+
 const DevicesPasskeysScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.colors), [theme.colors]);
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const user = useUserStore((state) => state.user);
   const walletFromStore = useUserStore((state) => state.smartAccountAddress);
@@ -66,13 +106,16 @@ const DevicesPasskeysScreen: React.FC = () => {
   const [checkingLocalSigner, setCheckingLocalSigner] = useState(true);
   const [canSignForWallet, setCanSignForWallet] = useState(false);
 
-  const { passkeys, setPasskeys, addPasskey, removePasskey, aaAccount, activeChainId } = useWalletStore();
+  const { passkeys, addPasskey, removePasskey, aaAccount, activeChainId } = useWalletStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  // Tracks which device row currently has a removal/cancel/finalize in flight,
+  // so we can render a spinner on that specific button instead of a global one.
+  const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
 
-  const resolvedChainId = useMemo(() => 
-    (aaAccount?.chainId || activeChainId || DEFAULT_CHAIN_ID), 
-    [aaAccount?.chainId, activeChainId]
+  const resolvedChainId = useMemo<SupportedChainId>(
+    () => (aaAccount?.chainId || activeChainId || DEFAULT_CHAIN_ID) as SupportedChainId,
+    [aaAccount?.chainId, activeChainId],
   );
 
   useEffect(() => {
@@ -85,32 +128,26 @@ const DevicesPasskeysScreen: React.FC = () => {
 
       const loadSignerStatus = async () => {
         if (!user?.id) {
-          if (active) {
-            setCanSignForWallet(false);
-            setCheckingLocalSigner(false);
-          }
+          if (active) { setCanSignForWallet(false); setCheckingLocalSigner(false); }
           return;
         }
-
         const signerStatus = await LocalSignerService.getWalletSignerStatus({
           userId: user.id,
           smartAccountAddress: (walletAddress ?? walletFromStore ?? null) as `0x${string}` | null,
-          chainId: DEFAULT_CHAIN_ID,
+          chainId: resolvedChainId,
+          // Without this, canSignForWallet trusts ANY local passkey — so a new
+          // device holding a stray/local-only key is treated as authorized and
+          // never sees the inbound "Pair this device" scanner. Matching the
+          // wallet owner makes the gate reflect real signing authority.
+          expectedPasskeyId: aaAccount?.ownerAddress ?? null,
         });
-
-        if (active) {
-          setCanSignForWallet(signerStatus.canSignForWallet);
-          setCheckingLocalSigner(false);
-        }
+        if (active) { setCanSignForWallet(signerStatus.canSignForWallet); setCheckingLocalSigner(false); }
       };
 
       setCheckingLocalSigner(true);
       void loadSignerStatus();
-
-      return () => {
-        active = false;
-      };
-    }, [user?.id, walletAddress, walletFromStore]),
+      return () => { active = false; };
+    }, [user?.id, walletAddress, walletFromStore, resolvedChainId]),
   );
 
   const loadData = useCallback(async () => {
@@ -120,7 +157,7 @@ const DevicesPasskeysScreen: React.FC = () => {
     if (!address) {
       const hydratedWallet = await WalletSyncService.hydrateWalletForUser({
         userId: user.id,
-        preferredChainId: DEFAULT_CHAIN_ID,
+        preferredChainId: resolvedChainId,
       }).catch(() => null);
       address = hydratedWallet?.predictedAddress ?? null;
       if (!address) {
@@ -131,11 +168,7 @@ const DevicesPasskeysScreen: React.FC = () => {
       setWalletAddress(address);
     }
 
-    if (!address) {
-      setRequests([]);
-      setDevices([]);
-      return;
-    }
+    if (!address) { setRequests([]); setDevices([]); return; }
 
     const localPasskey = await PasskeyService.getPasskey(user.id);
     setCurrentPasskeyId(localPasskey?.credentialIdRaw ?? null);
@@ -154,34 +187,25 @@ const DevicesPasskeysScreen: React.FC = () => {
         createdAt: cp.createdAt,
       }));
       const currentStorePasskeys = useWalletStore.getState().passkeys;
-      const localOnly = currentStorePasskeys.filter(lp => !lp.isOnChain && !formattedPasskeys.find(fp => fp.id === lp.id));
+      const localOnly = currentStorePasskeys.filter(
+        (lp) => !lp.isOnChain && !formattedPasskeys.find((fp) => fp.id === lp.id),
+      );
       useWalletStore.getState().setPasskeys([...formattedPasskeys, ...localOnly]);
-    } catch (error) {
-      console.error("Failed to load passkeys:", error);
+    } catch (err) {
+      console.error("Failed to load passkeys:", err);
     }
-    await DevicePairingService.ensureLocalDeviceSynced({
-      userId: user.id,
-      walletAddress: address,
-      chainId: DEFAULT_CHAIN_ID,
-    });
-    await DevicePairingService.syncWalletDevicesFromChain({
-      userId: user.id,
-      walletAddress: address,
-      chainId: DEFAULT_CHAIN_ID,
-    });
+
+    await DevicePairingService.ensureLocalDeviceSynced({ userId: user.id, walletAddress: address, chainId: resolvedChainId });
+    await DevicePairingService.syncWalletDevicesFromChain({ userId: user.id, walletAddress: address, chainId: resolvedChainId });
 
     const [pendingRequests, walletDevices] = await Promise.all([
       DevicePairingService.listPendingApprovals(user.id),
-      DevicePairingService.listWalletDevices({
-        userId: user.id,
-        walletAddress: address,
-        chainId: DEFAULT_CHAIN_ID,
-      }),
+      DevicePairingService.listWalletDevices({ userId: user.id, walletAddress: address, chainId: resolvedChainId }),
     ]);
 
     setRequests(pendingRequests);
     setDevices(walletDevices);
-  }, [user?.id, walletAddress]);
+  }, [user?.id, walletAddress, resolvedChainId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -193,26 +217,17 @@ const DevicesPasskeysScreen: React.FC = () => {
 
   useEffect(() => {
     if (!user?.id) return;
-
-    const timer = setInterval(() => {
-      void loadData().catch(() => {});
-    }, 5000);
-
+    const timer = setInterval(() => { void loadData().catch(() => {}); }, 5000);
     return () => clearInterval(timer);
   }, [loadData, user?.id]);
 
   const handleAddPasskey = async () => {
-    if (!user?.id) {
-      Alert.alert("Error", "User not found. Please sign in again.");
-      return;
-    }
-
+    if (!user?.id) { Alert.alert("Error", "User not found. Please sign in again."); return; }
     try {
       setIsSubmitting(true);
-      const metadata = await PasskeyService.createPasskey(user.id);
-      
+      // Intentionally mints a NEW passkey to add as an additional on-chain signer.
+      const metadata = await PasskeyService.createPasskey(user.id, { allowReplace: true });
       await PasskeyAccountService.enqueuePendingPasskey(user.id, metadata);
-      
       addPasskey({
         id: metadata.credentialId,
         credentialId: metadata.credentialId,
@@ -224,11 +239,10 @@ const DevicesPasskeysScreen: React.FC = () => {
         py: metadata.publicKeyY as Hex,
         createdAt: metadata.createdAt,
       });
-
       Alert.alert("Passkey Created", "A new passkey has been added locally. You can now sync it to the blockchain.");
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("User cancelled")) return;
-      console.error("Failed to create passkey:", error);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("User cancelled")) return;
+      console.error("Failed to create passkey:", err);
       Alert.alert("Error", "Failed to create passkey. Please try again.");
     } finally {
       setIsSubmitting(false);
@@ -236,40 +250,24 @@ const DevicesPasskeysScreen: React.FC = () => {
   };
 
   const handleRegisterOnChain = async (pk: PasskeyInfo) => {
-    if (!user?.id || !walletAddress) {
-      Alert.alert("Error", "Smart account not found.");
-      return;
-    }
-
-    const signingPasskey = passkeys.find(p => p.isOnChain);
+    if (!user?.id || !walletAddress) { Alert.alert("Error", "Smart account not found."); return; }
+    const signingPasskey = passkeys.find((p) => p.isOnChain);
     if (!signingPasskey) {
-      Alert.alert("Error", "No on-chain passkey found to sign this transaction. Please use your initial setup passkey.");
+      Alert.alert("Error", "No on-chain passkey found to sign this transaction.");
       return;
     }
-
     try {
       setProcessingId(pk.id);
-      
       const { userOp, userOpHash } = await PasskeyAccountService.buildAddPasskeyUserOp({
         smartAccountAddress: walletAddress as Address,
-        pendingPasskey: {
-          idRaw: pk.idRaw!,
-          credentialId: pk.id,
-          px: pk.px!, 
-          py: pk.py!,
-          createdAt: pk.createdAt,
-        },
+        pendingPasskey: { idRaw: pk.idRaw!, credentialId: pk.id, px: pk.px!, py: pk.py!, createdAt: pk.createdAt },
         signingPasskeyId: signingPasskey.idRaw!,
         chainId: resolvedChainId as any,
         usePaymaster: true,
       });
-
       const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
       const encodedSignature = PasskeyService.encodeSignatureForContract(signature) as Hex;
-      const signedUserOp = { ...userOp, signature: encodedSignature };
-
-      await PasskeyAccountService.submitAddPasskeyUserOp(signedUserOp as any, resolvedChainId as any);
-
+      await PasskeyAccountService.submitAddPasskeyUserOp({ ...userOp, signature: encodedSignature } as any, resolvedChainId as any);
       if (aaAccount?.id) {
         await PasskeyService.syncPasskeyToCloud(user.id, aaAccount.id, {
           credentialId: pk.id,
@@ -277,61 +275,140 @@ const DevicesPasskeysScreen: React.FC = () => {
           publicKeyX: pk.px || "0x",
           publicKeyY: pk.py || "0x",
           deviceName: pk.deviceName,
-          deviceType: (pk.deviceType as 'ios' | 'android') || 'ios',
+          deviceType: (pk.deviceType as "ios" | "android") || "ios",
           createdAt: pk.createdAt,
           rpId: "",
         });
       }
-
       removePasskey(pk.id);
       addPasskey({ ...pk, isOnChain: true });
-
-      Alert.alert("Success", "Passkey registration submitted on-chain and synced to cloud!");
-    } catch (error) {
-      console.error("On-chain registration failed:", error);
+      Alert.alert("Success", "Passkey registered on-chain and synced to cloud.");
+    } catch (err) {
+      console.error("On-chain registration failed:", err);
       Alert.alert("Error", "Failed to register passkey on-chain.");
     } finally {
       setProcessingId(null);
     }
   };
 
+  const removeLocalPasskeyArtifacts = useCallback(
+    async (pk: PasskeyInfo) => {
+      if (!user?.id) return;
+      removePasskey(pk.id);
+      if (pk.idRaw) {
+        await PasskeyAccountService.removePendingPasskey(user.id, pk.idRaw).catch(() => {});
+      }
+      // If this entry happens to be the device's stored credential metadata, scrub it
+      // so the app does not keep referencing a passkey the user thinks they deleted.
+      if (pk.idRaw && currentPasskeyId && pk.idRaw === currentPasskeyId) {
+        await PasskeyService.deletePasskey(user.id).catch(() => {});
+        setCurrentPasskeyId(null);
+      }
+    },
+    [currentPasskeyId, removePasskey, user?.id],
+  );
+
   const handleRemovePasskey = (pk: PasskeyInfo) => {
+    if (pk.isOnChain) {
+      const matchingDevice = devices.find((d) => d.passkey_id === pk.idRaw);
+      if (matchingDevice?.status === "pending_removal") {
+        Alert.alert(
+          "Removal already scheduled",
+          matchingDevice.removal_execute_after
+            ? `On-chain removal is already scheduled and finalizes after ${new Date(matchingDevice.removal_execute_after).toLocaleString()}. Use the actions in Wallet Devices to cancel or finalize.`
+            : "On-chain removal is already scheduled for this passkey. Use the actions in Wallet Devices to cancel or finalize.",
+        );
+        return;
+      }
+      const activeOnChain = devices.filter((d) => d.status === "active").length;
+      if (activeOnChain <= 1) {
+        Alert.alert(
+          "Cannot remove last passkey",
+          "At least one active passkey must remain on-chain. Add another device first, then remove this one.",
+        );
+        return;
+      }
+      Alert.alert(
+        "Remove Passkey",
+        "This passkey is registered on-chain. We'll schedule an on-chain removal — after a 1-day timelock you can finalize it, which will permanently revoke this passkey on-chain and remove its off-chain record.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Schedule removal",
+            style: "destructive",
+            onPress: () => {
+              if (!pk.idRaw) return;
+              void (async () => {
+                setProcessingId(pk.id);
+                setError(null);
+                try {
+                  await submitRemovalAction(pk.idRaw as Hex);
+                  await loadData();
+                  Alert.alert(
+                    "Removal scheduled",
+                    "The passkey is now pending removal on-chain. Finalize it after the timelock expires from the Wallet Devices section.",
+                  );
+                } catch (err) {
+                  console.warn("[DevicesPasskeys] schedule removal failed", err);
+                  const decoded = decodePasskeyValidatorError(err);
+                  if (decoded) {
+                    setError(decoded.friendly);
+                    if (decoded.autoRefresh) {
+                      await loadData().catch(() => {});
+                    }
+                  } else {
+                    setError(err instanceof Error ? err.message : "Failed to schedule on-chain removal");
+                  }
+                } finally {
+                  setProcessingId(null);
+                }
+              })();
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     Alert.alert(
       "Remove Passkey",
-      pk.isOnChain 
-        ? "This passkey is registered on-chain. Removing it locally won't remove it on-chain."
-        : "Are you sure you want to remove this passkey from this device?",
+      pk.idRaw && currentPasskeyId && pk.idRaw === currentPasskeyId
+        ? "This is the passkey your device uses to sign. Removing it will sign you out of on-chain actions until you re-pair — continue?"
+        : "Remove this local-only passkey from this device? It has not been registered on-chain, so this is a local cleanup only.",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Remove", 
-          style: "destructive", 
-          onPress: async () => {
-            try {
-              removePasskey(pk.id);
-              Alert.alert("Success", "Passkey removed.");
-            } catch (error) {
-              Alert.alert("Error", "Failed to remove passkey.");
-            }
-          }
-        }
-      ]
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            setProcessingId(pk.id);
+            void removeLocalPasskeyArtifacts(pk)
+              .catch((err) => setError(err instanceof Error ? err.message : "Failed to remove local passkey"))
+              .finally(() => setProcessingId(null));
+          },
+        },
+      ],
     );
   };
 
   const handleCreatePairing = useCallback(async () => {
-    if (!user?.id || !walletAddress) {
+    if (!user?.id) {
       setError("Wallet address is required before creating a pairing request");
       return;
     }
-
     setBusy(true);
     setError(null);
     try {
+      const pairingChainId = (activeChainId || DEFAULT_CHAIN_ID) as SupportedChainId;
+      const walletService = new SupabaseWalletService();
+      const chainWallet = await walletService.getAAWalletForChain(user.id, pairingChainId);
+      if (!chainWallet?.predicted_address) {
+        const name = getChainConfig(pairingChainId)?.name ?? `chain ${pairingChainId}`;
+        setError(`Your wallet isn't active on ${name}. Switch to a chain where your wallet is deployed, then pair.`);
+        return;
+      }
       const created = await DevicePairingService.createPairingRequest({
-        userId: user.id,
-        walletAddress,
-        chainId: DEFAULT_CHAIN_ID,
+        userId: user.id, walletAddress: chainWallet.predicted_address, chainId: pairingChainId,
       });
       setActiveLink(created.deepLink);
       await loadData();
@@ -340,36 +417,57 @@ const DevicesPasskeysScreen: React.FC = () => {
     } finally {
       setBusy(false);
     }
-  }, [loadData, user?.id, walletAddress]);
+  }, [activeChainId, loadData, user?.id]);
 
   const signAndSubmit = useCallback(
-    async (userOpHash: `0x${string}`, userOp: any) => {
+    async (userOpHash: `0x${string}`, userOp: any, chainId: SupportedChainId) => {
       if (!user?.id) throw new Error("Missing user session");
       const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
       const encoded = PasskeyService.encodeSignatureForContract(signature) as `0x${string}`;
-      return PasskeyAccountService.submitAddPasskeyUserOp({ ...userOp, signature: encoded });
+      // Submit on the SAME chain the UserOp was built+sponsored for. Without the
+      // explicit chainId, submitAddPasskeyUserOp defaulted to DEFAULT_CHAIN_ID
+      // (Base Sepolia) and an Eth-Sepolia op was sent to the Base-Sepolia bundler.
+      return PasskeyAccountService.submitAddPasskeyUserOp({ ...userOp, signature: encoded }, chainId);
     },
     [user?.id],
   );
 
   const handleApproveRequest = useCallback(
     async (request: DevicePairingRequest) => {
-      if (!user?.id || !walletAddress) return;
+      if (!user?.id) return;
       if (!request.new_passkey_id || !request.new_public_key_x || !request.new_public_key_y) {
         Alert.alert("Missing passkey payload", "The new device has not submitted passkey metadata yet.");
         return;
       }
-
       setBusy(true);
       setError(null);
       try {
-        const currentPasskey = await PasskeyService.getPasskey(user.id);
-        if (!currentPasskey?.credentialIdRaw) {
-          throw new Error("Current trusted passkey is required to approve pairing");
+        // Use the chain + address baked into the request itself — this is the chain
+        // the new device created the request for, which is where the wallet is deployed.
+        const requestChainId = request.chain_id as SupportedChainId;
+        const requestWalletAddress = request.wallet_address as `0x${string}`;
+
+        // Guard: verify the account is actually deployed on-chain before building a UserOp.
+        // If the wallet has no bytecode the bundler will reject with AA20 / account not deployed.
+        try {
+          const publicClient = getPublicClient(requestChainId);
+          const code = await publicClient.getBytecode({ address: requestWalletAddress });
+          if (!code || code === "0x") {
+            const chainName = getChainConfig(requestChainId)?.name ?? `chain ${requestChainId}`;
+            setError(
+              `This pairing request targets ${chainName} where your wallet isn't deployed. It's stale — reject it and create a new one.`,
+            );
+            return;
+          }
+        } catch (guardErr) {
+          console.warn("[DevicesPasskeys] bytecode guard failed (non-fatal):", guardErr);
+          // If we can't reach the RPC, proceed and let the bundler surface the error.
         }
 
+        const currentPasskey = await PasskeyService.getPasskey(user.id);
+        if (!currentPasskey?.credentialIdRaw) throw new Error("Current trusted passkey is required to approve pairing");
         const built = await PasskeyAccountService.buildAddPasskeyUserOp({
-          smartAccountAddress: walletAddress as `0x${string}`,
+          smartAccountAddress: requestWalletAddress,
           pendingPasskey: {
             idRaw: request.new_passkey_id as `0x${string}`,
             credentialId: request.new_credential_id ?? request.new_passkey_id,
@@ -380,40 +478,35 @@ const DevicesPasskeysScreen: React.FC = () => {
             createdAt: request.created_at,
           },
           signingPasskeyId: currentPasskey.credentialIdRaw as `0x${string}`,
-          chainId: DEFAULT_CHAIN_ID,
+          chainId: requestChainId,
           usePaymaster: true,
         });
-
-        const submittedHash = await signAndSubmit(built.userOpHash, built.userOp);
-        const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, DEFAULT_CHAIN_ID);
-
+        const submittedHash = await signAndSubmit(built.userOpHash, built.userOp, requestChainId);
+        const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, requestChainId);
         const success = Boolean((receipt as { success?: boolean }).success);
         if (!success) {
           await DevicePairingService.markFailed(request.id, user.id, "UserOperation reverted", submittedHash);
           throw new Error("addPasskey UserOperation reverted");
         }
-
         await DevicePairingService.markApprovedAfterReceipt({
           requestId: request.id,
           userId: user.id,
           operationHash: submittedHash,
-          walletAddress,
-          chainId: DEFAULT_CHAIN_ID,
+          walletAddress: requestWalletAddress,
+          chainId: requestChainId,
           passkeyId: request.new_passkey_id,
           credentialId: request.new_credential_id,
           deviceName: request.new_device_name,
           platform: request.new_device_platform,
         });
-
         await loadData();
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to approve pairing request";
-        setError(message);
+        setError(err instanceof Error ? err.message : "Failed to approve pairing request");
       } finally {
         setBusy(false);
       }
     },
-    [loadData, signAndSubmit, user?.id, walletAddress],
+    [loadData, signAndSubmit, user?.id],
   );
 
   const handleRejectRequest = useCallback(
@@ -433,225 +526,518 @@ const DevicesPasskeysScreen: React.FC = () => {
     [loadData, user?.id],
   );
 
-  const submitRemovalAction = useCallback(
-    async (device: WalletDevice) => {
-      if (!user?.id || !walletAddress) return;
+  const buildRemovalPayload = useCallback(
+    async (targetPasskeyId: Hex) => {
+      if (!user?.id || !walletAddress) throw new Error("Wallet session unavailable");
       const passkey = await PasskeyService.getPasskey(user.id);
-      if (!passkey?.credentialIdRaw) {
-        throw new Error("Current passkey is required to authorize this action");
-      }
-
-      const payload = {
+      if (!passkey?.credentialIdRaw) throw new Error("Current passkey is required to authorize this action");
+      return {
         smartAccountAddress: walletAddress as `0x${string}`,
-        targetPasskeyId: device.passkey_id as `0x${string}`,
+        targetPasskeyId,
         signingPasskeyId: passkey.credentialIdRaw as `0x${string}`,
-        chainId: DEFAULT_CHAIN_ID,
+        chainId: resolvedChainId,
         usePaymaster: true,
       };
+    },
+    [user?.id, walletAddress, resolvedChainId],
+  );
 
-      const built = await PasskeyAccountService.buildRemovePasskeyUserOp(payload);
-
+  const signAndSubmitRemovalUserOp = useCallback(
+    async (built: { userOp: any; userOpHash: `0x${string}` }, errorLabel: string) => {
+      if (!user?.id || !walletAddress) throw new Error("Wallet session unavailable");
       const signature = await PasskeyService.signWithPasskey(user.id, built.userOpHash);
       const encoded = PasskeyService.encodeSignatureForContract(signature) as `0x${string}`;
       const submittedHash = await PasskeyAccountService.submitAddPasskeyUserOp(
         { ...built.userOp, signature: encoded },
-        DEFAULT_CHAIN_ID,
+        resolvedChainId,
       );
-      const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, DEFAULT_CHAIN_ID);
-      const success = Boolean((receipt as { success?: boolean }).success);
-      if (!success) {
-        throw new Error("Passkey removal operation reverted");
-      }
-      await DevicePairingService.syncWalletDevicesFromChain({
-        userId: user.id,
-        walletAddress,
-        chainId: DEFAULT_CHAIN_ID,
-      });
+      const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, resolvedChainId);
+      if (!Boolean((receipt as { success?: boolean }).success)) throw new Error(`${errorLabel} reverted on-chain`);
+      await DevicePairingService.syncWalletDevicesFromChain({ userId: user.id, walletAddress, chainId: resolvedChainId });
     },
-    [user?.id, walletAddress],
+    [user?.id, walletAddress, resolvedChainId],
+  );
+
+  const submitRemovalAction = useCallback(
+    async (targetPasskeyId: Hex) => {
+      const payload = await buildRemovalPayload(targetPasskeyId);
+      const built = await PasskeyAccountService.buildRemovePasskeyUserOp(payload);
+      await signAndSubmitRemovalUserOp(built, "Passkey removal scheduling");
+    },
+    [buildRemovalPayload, signAndSubmitRemovalUserOp],
+  );
+
+  const executeRemovalAction = useCallback(
+    async (targetPasskeyId: Hex, credentialId?: string | null) => {
+      const payload = await buildRemovalPayload(targetPasskeyId);
+      const built = await PasskeyAccountService.buildExecuteRemovePasskeyUserOp(payload);
+      await signAndSubmitRemovalUserOp(built, "Passkey removal execution");
+      // Off-chain cleanup once the on-chain entry is gone.
+      if (user?.id && credentialId) {
+        await PasskeyService.deleteCloudPasskey(user.id, credentialId).catch(() => {});
+      }
+    },
+    [buildRemovalPayload, signAndSubmitRemovalUserOp, user?.id],
+  );
+
+  const cancelRemovalAction = useCallback(
+    async (targetPasskeyId: Hex) => {
+      const payload = await buildRemovalPayload(targetPasskeyId);
+      const built = await PasskeyAccountService.buildCancelRemovePasskeyUserOp(payload);
+      await signAndSubmitRemovalUserOp(built, "Passkey removal cancellation");
+    },
+    [buildRemovalPayload, signAndSubmitRemovalUserOp],
+  );
+
+  const runDeviceAction = useCallback(
+    async (
+      device: WalletDevice,
+      action: () => Promise<void>,
+      defaultErrorMessage: string,
+    ) => {
+      if (deviceActionId) return; // already running another row's action
+      setDeviceActionId(device.id);
+      setError(null);
+      try {
+        await action();
+        await loadData();
+      } catch (err) {
+        console.warn("[DevicesPasskeys] device action failed", err);
+        const decoded = decodePasskeyValidatorError(err);
+        if (decoded) {
+          setError(decoded.friendly);
+          if (decoded.autoRefresh) {
+            await loadData().catch(() => {});
+          }
+        } else {
+          setError(err instanceof Error ? err.message : defaultErrorMessage);
+        }
+      } finally {
+        setDeviceActionId(null);
+      }
+    },
+    [deviceActionId, loadData],
   );
 
   const handleRemoveDevice = useCallback(
-    async (device: WalletDevice) => {
-      if (devices.filter((item) => item.status === "active").length <= 1) {
-        Alert.alert("Cannot remove last passkey", "At least one active passkey must stay on-chain.");
+    (device: WalletDevice) => {
+      if (devices.filter((d) => d.status === "active").length <= 1) {
+        Alert.alert("Cannot remove last passkey", "At least one active passkey must remain on-chain.");
         return;
       }
-      setBusy(true);
-      setError(null);
-      try {
-        await submitRemovalAction(device);
-        await loadData();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to remove device");
-      } finally {
-        setBusy(false);
+      // The chain already tracks pending_removal — if we somehow have a stale
+      // local view, treat the click as a no-op and force a refresh.
+      if (device.status !== "active") {
+        void loadData();
+        return;
       }
+      void runDeviceAction(
+        device,
+        () => submitRemovalAction(device.passkey_id as Hex),
+        "Failed to remove device",
+      );
     },
-    [devices, loadData, submitRemovalAction],
+    [devices, loadData, runDeviceAction, submitRemovalAction],
+  );
+
+  const handleFinalizeRemoval = useCallback(
+    (device: WalletDevice) => {
+      const matchingPasskey = passkeys.find((p) => p.idRaw === device.passkey_id);
+      const credentialId = matchingPasskey?.credentialId ?? matchingPasskey?.id ?? null;
+      void runDeviceAction(
+        device,
+        () => executeRemovalAction(device.passkey_id as Hex, credentialId),
+        "Failed to finalize removal",
+      );
+    },
+    [executeRemovalAction, passkeys, runDeviceAction],
+  );
+
+  const handleCancelRemoval = useCallback(
+    (device: WalletDevice) => {
+      void runDeviceAction(
+        device,
+        () => cancelRemovalAction(device.passkey_id as Hex),
+        "Failed to cancel removal",
+      );
+    },
+    [cancelRemovalAction, runDeviceAction],
   );
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={24} color={theme.colors.textPrimary} />
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.headerBackBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-left" size={18} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Devices & Passkeys</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.headerTitleBlock}>
+          <Text style={styles.headerKicker}>SECURITY</Text>
+          <Text style={styles.headerTitle}>Linked Devices</Text>
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        {(checkingLocalSigner || !canSignForWallet) ? (
-          <View style={{ gap: 14 }}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+        {checkingLocalSigner || !canSignForWallet ? (
+          <View>
             {checkingLocalSigner ? (
               <CardSkeleton height={160} />
             ) : (
-              <EmptyState
-                icon="shield-off"
-                title="Authorization Required"
-                description="This device is not yet registered to authorize security changes. Use a trusted device to approve this pairing, or use recovery if you lost your primary device."
-                actionLabel="Open recovery options"
-                onAction={() => navigation.navigate("RecoveryEntry")}
-                style={{ backgroundColor: withAlpha(theme.colors.surfaceCard, 0.8) }}
-              />
+              <View style={[styles.authRequiredCard, { backgroundColor: `${colors.surfaceCard}CC`, borderColor: colors.border }]}>
+                <View style={[styles.authRequiredIcon, { backgroundColor: `${colors.warning}1A`, borderColor: `${colors.warning}40` }]}>
+                  <Feather name="shield-off" size={20} color={colors.warning} />
+                </View>
+                <Text style={[styles.authRequiredTitle, { color: colors.textPrimary }]}>This device isn&apos;t authorized yet</Text>
+                <Text style={[styles.authRequiredBody, { color: colors.textSecondary }]}>
+                  Pair with a trusted device that has your wallet, or recover if you no longer can.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.addDeviceBtn, { backgroundColor: colors.accent, marginTop: 4 }]}
+                  onPress={() => navigation.navigate("LinkDevice")}
+                  activeOpacity={0.88}
+                >
+                  <View style={[styles.addDeviceIconWrap, { backgroundColor: `${colors.textOnAccent}2E` }]}>
+                    <Feather name="link-2" size={16} color={colors.textOnAccent} />
+                  </View>
+                  <Text style={[styles.addDeviceLabel, { color: colors.textOnAccent }]}>Pair this device</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.authRequiredSecondaryBtn, { borderColor: colors.border }]}
+                  onPress={() => navigation.navigate("RecoveryEntry")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.authRequiredSecondaryLabel, { color: colors.textPrimary }]}>Use recovery instead</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         ) : (
           <>
-        <TouchableOpacity
-          style={[styles.primaryButton, busy && styles.disabledButton]}
-          onPress={handleCreatePairing}
-          disabled={busy || !walletAddress}
-          activeOpacity={0.9}
-        >
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonLabel}>Add device</Text>}
-        </TouchableOpacity>
-
-        {activeLink && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Scan on new device</Text>
-            <View style={styles.qrWrap}>
-              <QRCode value={activeLink} size={180} />
-            </View>
-            <Text style={styles.linkHelp}>
-              Open this QR or link on the new device. If that device is logged out, Trezo now jumps straight to sign-in and resumes pairing after authentication.
-            </Text>
-            <Text style={styles.linkText} selectable>
-              {activeLink}
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Pending pairing requests</Text>
-          {requests.length === 0 ? (
-            <Text style={styles.muted}>No pending requests.</Text>
-          ) : (
-            requests.map((request) => (
-              <View key={request.id} style={styles.requestRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.deviceTitle}>{request.new_device_name ?? "New device"}</Text>
-                  <Text style={styles.muted}>{requestStatusLabel(request.status)}</Text>
-                </View>
-                {request.status === "passkey_submitted" ? (
-                  <View style={styles.actionsRow}>
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.approveButton]}
-                      onPress={() => void handleApproveRequest(request)}
-                    >
-                      <Text style={styles.actionLabel}>Approve</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.rejectButton]}
-                      onPress={() => void handleRejectRequest(request)}
-                    >
-                      <Text style={styles.actionLabel}>Reject</Text>
-                    </TouchableOpacity>
+            {/* Add device CTA */}
+            <TouchableOpacity
+              style={[
+                styles.addDeviceBtn,
+                {
+                  backgroundColor: colors.accent,
+                  opacity: busy ? 0.5 : 1,
+                },
+              ]}
+              onPress={handleCreatePairing}
+              disabled={busy}
+              activeOpacity={0.88}
+            >
+              {busy ? (
+                <ActivityIndicator color={colors.textOnAccent} />
+              ) : (
+                <>
+                  <View style={[styles.addDeviceIconWrap, { backgroundColor: `${colors.textOnAccent}2E` }]}>
+                    <Feather name="plus" size={16} color={colors.textOnAccent} />
                   </View>
-                ) : null}
-              </View>
-            ))
-          )}
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>My Passkeys</Text>
-            <TouchableOpacity onPress={handleAddPasskey} disabled={isSubmitting}>
-              {isSubmitting ? <ActivityIndicator size="small" /> : <Feather name="plus-circle" size={24} color={theme.colors.accentAlt} />}
+                  <Text style={[styles.addDeviceLabel, { color: colors.textOnAccent }]}>Add a Device</Text>
+                </>
+              )}
             </TouchableOpacity>
-          </View>
-          {passkeys.length === 0 ? (
-            <Text style={styles.muted}>No passkeys set up yet.</Text>
-          ) : (
-            passkeys.map(pk => (
-              <View key={pk.id} style={styles.deviceRow}>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <Text style={styles.deviceTitle}>{pk.deviceName}</Text>
-                  <Text style={styles.muted}>
-                    {pk.isOnChain ? "Synced to Trezo Network" : "Local Passkey (Not Synced)"}
-                  </Text>
-                </View>
-                <View style={styles.actionsRow}>
-                  {!pk.isOnChain && (
-                    <TouchableOpacity 
-                      onPress={() => handleRegisterOnChain(pk)}
-                      disabled={processingId === pk.id}
-                      style={[styles.actionButton, processingId === pk.id && styles.disabledButton]}
-                    >
-                      <Feather name="upload-cloud" size={16} color={theme.colors.textPrimary} />
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity onPress={() => handleRemovePasskey(pk)} style={styles.actionButton}>
-                    <Feather name="trash-2" size={16} color={theme.colors.danger} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Wallet devices</Text>
-          {devices.length === 0 ? (
-            <Text style={styles.muted}>No synced devices yet.</Text>
-          ) : (
-            devices.map((device) => (
-              <View key={device.id} style={styles.deviceRow}>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <View style={styles.deviceTitleRow}>
-                    <Text style={styles.deviceTitle}>{device.device_name ?? "Unnamed device"}</Text>
-                    {currentPasskeyId && device.passkey_id === currentPasskeyId ? (
-                      <Text style={styles.thisDeviceBadge}>This device</Text>
-                    ) : null}
+            {/* QR pairing card */}
+            {activeLink && (
+              <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: `${colors.accent}1A` }]}>
+                    <Feather name="smartphone" size={15} color={colors.accent} />
                   </View>
-                  <Text style={[styles.badge, { color: statusTone(device.status, theme.colors) }]}>{device.status}</Text>
-                  <Text style={styles.muted}>
-                    {device.platform ? `${device.platform.toUpperCase()} • ` : ""}
-                    {device.passkey_id.slice(0, 12)}...
+                  <Text style={styles.cardTitle}>
+                    Scan on New Device
                   </Text>
-                  {device.status === "pending_removal" && device.removal_execute_after ? (
-                    <Text style={styles.mutedStrong}>
-                      Removal executes after {new Date(device.removal_execute_after).toLocaleString()}
-                    </Text>
-                  ) : null}
                 </View>
-                {device.status === "active" ? (
-                  <TouchableOpacity style={styles.actionButton} onPress={() => void handleRemoveDevice(device)}>
-                    <Text style={styles.actionLabel}>Remove device</Text>
-                  </TouchableOpacity>
-                ) : null}
+                <View style={styles.qrWrapper}>
+                  <QRCode value={activeLink} size={180} />
+                </View>
+                <Text style={[styles.cardHint, { color: colors.textSecondary }]}>
+                  Scan on the new device — pairing resumes automatically after sign-in.
+                </Text>
+                <Text style={[styles.cardMono, { color: colors.textMuted }]} selectable>{activeLink}</Text>
               </View>
-            ))
-          )}
-        </View>
+            )}
 
-        {error && <Text style={styles.error}>{error}</Text>}
+            {/* Pending pairing requests */}
+            {requests.length > 0 && (
+              <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: `${colors.warning}1A` }]}>
+                    <Feather name="clock" size={15} color={colors.warning} />
+                  </View>
+                  <Text style={styles.cardTitle}>Pending Requests</Text>
+                </View>
 
-        <Text style={styles.footnote}>
-          TODO Level 2/3: Compromised-wallet reset stays guardian/email-based and should not be passkey-only.
-        </Text>
+                {requests.map((request, i) => (
+                  <View
+                    key={request.id}
+                    style={[
+                      styles.listRow,
+                      i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderMuted },
+                    ]}
+                  >
+                    <View style={[styles.deviceAvatarWrap, { backgroundColor: colors.surfaceMuted }]}>
+                      <Feather name="smartphone" size={14} color={colors.textSecondary} />
+                    </View>
+                    <View style={styles.listRowContent}>
+                      <Text style={[styles.listRowTitle, { color: colors.textPrimary }]}>
+                        {request.new_device_name ?? "New device"}
+                      </Text>
+                      <Text style={[styles.listRowSub, { color: colors.textMuted }]}>
+                        {requestStatusLabel(request.status)}
+                      </Text>
+                    </View>
+                    {request.status === "passkey_submitted" && (
+                      <View style={styles.actionPair}>
+                        <TouchableOpacity
+                          style={[styles.pillBtn, { backgroundColor: `${colors.success}22`, borderColor: `${colors.success}47` }]}
+                          onPress={() => void handleApproveRequest(request)}
+                        >
+                          <Text style={[styles.pillBtnText, { color: colors.success }]}>Approve</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.pillBtn, { backgroundColor: `${colors.danger}1A`, borderColor: `${colors.danger}40` }]}
+                          onPress={() => void handleRejectRequest(request)}
+                        >
+                          <Text style={[styles.pillBtnText, { color: colors.danger }]}>Reject</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* My passkeys */}
+            <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.cardIconWrap, { backgroundColor: `${colors.accent}1A` }]}>
+                  <Feather name="key" size={15} color={colors.accent} />
+                </View>
+                <Text style={styles.cardTitle}>My Passkeys</Text>
+                <TouchableOpacity
+                  onPress={handleAddPasskey}
+                  disabled={isSubmitting}
+                  style={[styles.addPasskeyBtn, { backgroundColor: `${colors.accent}18`, borderColor: `${colors.accent}40` }]}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator size="small" color={colors.accent} />
+                  ) : (
+                    <Feather name="plus" size={15} color={colors.accent} />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {passkeys.length === 0 ? (
+                <Text style={[styles.emptyHint, { color: colors.textMuted }]}>No passkeys set up yet.</Text>
+              ) : (
+                passkeys.map((pk, i) => (
+                  <View
+                    key={pk.id}
+                    style={[
+                      styles.listRow,
+                      i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderMuted },
+                    ]}
+                  >
+                    <View style={[styles.deviceAvatarWrap, { backgroundColor: `${colors.accent}1A` }]}>
+                      <Feather name="key" size={14} color={colors.accent} />
+                    </View>
+                    <View style={styles.listRowContent}>
+                      <Text style={[styles.listRowTitle, { color: colors.textPrimary }]}>{pk.deviceName}</Text>
+                      <View style={styles.statusPillRow}>
+                        {pk.isOnChain ? (
+                          <View style={[styles.statusPill, { backgroundColor: `${colors.success}18`, borderColor: `${colors.success}40` }]}>
+                            <Feather name="check-circle" size={10} color={colors.success} />
+                            <Text style={[styles.statusPillText, { color: colors.success }]}>On-chain</Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.statusPill, { backgroundColor: `${colors.warning}18`, borderColor: `${colors.warning}40` }]}>
+                            <Feather name="cloud-off" size={10} color={colors.warning} />
+                            <Text style={[styles.statusPillText, { color: colors.warning }]}>Local only</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    <View style={styles.actionPair}>
+                      {!pk.isOnChain && (
+                        <TouchableOpacity
+                          onPress={() => handleRegisterOnChain(pk)}
+                          disabled={processingId === pk.id}
+                          style={[styles.iconBtn, { backgroundColor: `${colors.accent}18`, borderColor: `${colors.accent}40`, opacity: processingId === pk.id ? 0.5 : 1 }]}
+                        >
+                          {processingId === pk.id ? (
+                            <ActivityIndicator size="small" color={colors.accent} />
+                          ) : (
+                            <Feather name="upload-cloud" size={14} color={colors.accent} />
+                          )}
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        onPress={() => handleRemovePasskey(pk)}
+                        disabled={processingId === pk.id}
+                        style={[styles.iconBtn, { backgroundColor: `${colors.danger}18`, borderColor: `${colors.danger}33`, opacity: processingId === pk.id ? 0.5 : 1 }]}
+                      >
+                        {processingId === pk.id ? (
+                          <ActivityIndicator size="small" color={colors.danger} />
+                        ) : (
+                          <Feather name="trash-2" size={14} color={colors.danger} />
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+
+            {/* Wallet devices */}
+            <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.cardIconWrap, { backgroundColor: `${colors.success}1A` }]}>
+                  <Feather name="shield" size={15} color={colors.success} />
+                </View>
+                <Text style={styles.cardTitle}>Wallet Devices</Text>
+              </View>
+
+              {devices.length === 0 ? (
+                <Text style={[styles.emptyHint, { color: colors.textMuted }]}>No synced devices yet.</Text>
+              ) : (
+                devices.map((device, i) => {
+                  const sc = statusConfig(device.status, colors);
+                  const isThis = currentPasskeyId && device.passkey_id === currentPasskeyId;
+                  const removalReadyAt = device.removal_execute_after
+                    ? new Date(device.removal_execute_after)
+                    : null;
+                  const removalReady =
+                    removalReadyAt !== null && removalReadyAt.getTime() <= Date.now();
+                  return (
+                    <View
+                      key={device.id}
+                      style={[
+                        styles.listRow,
+                        i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderMuted },
+                      ]}
+                    >
+                      <View style={[styles.deviceAvatarWrap, { backgroundColor: `${colors.success}1A` }]}>
+                        <Feather name="smartphone" size={14} color={colors.success} />
+                      </View>
+                      <View style={styles.listRowContent}>
+                        <View style={styles.deviceTitleRow}>
+                          <Text style={[styles.listRowTitle, { color: colors.textPrimary }]}>
+                            {device.device_name ?? "Unnamed device"}
+                          </Text>
+                          {isThis && (
+                            <View style={[styles.thisDevicePill, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderMuted }]}>
+                              <Text style={[styles.thisDevicePillText, { color: colors.textSecondary }]}>This device</Text>
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.statusPillRow}>
+                          <View style={[styles.statusPill, { backgroundColor: sc.bg, borderColor: `${sc.color}47` }]}>
+                            <Text style={[styles.statusPillText, { color: sc.color }]}>{sc.label}</Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.deviceMeta, { color: colors.textMuted }]}>
+                          {device.platform ? `${device.platform.toUpperCase()} · ` : ""}
+                          {device.passkey_id.slice(0, 12)}…
+                        </Text>
+                        {device.status === "pending_removal" && removalReadyAt && (
+                          <Text style={[styles.deviceMeta, { color: colors.warning }]}>
+                            {removalReady
+                              ? "Removal timelock elapsed — finalize to permanently revoke this passkey."
+                              : `Finalize available after ${removalReadyAt.toLocaleString()}`}
+                          </Text>
+                        )}
+                      </View>
+                      {device.status === "active" && (
+                        <TouchableOpacity
+                          style={[
+                            styles.pillBtn,
+                            {
+                              backgroundColor: `${colors.danger}1A`,
+                              borderColor: `${colors.danger}40`,
+                              opacity: deviceActionId && deviceActionId !== device.id ? 0.4 : 1,
+                            },
+                          ]}
+                          onPress={() => handleRemoveDevice(device)}
+                          disabled={Boolean(deviceActionId)}
+                        >
+                          {deviceActionId === device.id ? (
+                            <ActivityIndicator size="small" color={colors.danger} />
+                          ) : (
+                            <Text style={[styles.pillBtnText, { color: colors.danger }]}>Remove</Text>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                      {device.status === "pending_removal" && (
+                        <View style={styles.actionPair}>
+                          <TouchableOpacity
+                            style={[
+                              styles.pillBtn,
+                              {
+                                backgroundColor: `${colors.textMuted}18`,
+                                borderColor: `${colors.textMuted}40`,
+                                opacity: deviceActionId && deviceActionId !== device.id ? 0.4 : 1,
+                              },
+                            ]}
+                            onPress={() => handleCancelRemoval(device)}
+                            disabled={Boolean(deviceActionId)}
+                          >
+                            {deviceActionId === device.id ? (
+                              <ActivityIndicator size="small" color={colors.textPrimary} />
+                            ) : (
+                              <Text style={[styles.pillBtnText, { color: colors.textPrimary }]}>Cancel</Text>
+                            )}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.pillBtn,
+                              {
+                                backgroundColor: removalReady ? `${colors.danger}22` : `${colors.danger}0A`,
+                                borderColor: `${colors.danger}47`,
+                                opacity:
+                                  (deviceActionId && deviceActionId !== device.id) || !removalReady
+                                    ? 0.4
+                                    : 1,
+                              },
+                            ]}
+                            onPress={() => handleFinalizeRemoval(device)}
+                            disabled={Boolean(deviceActionId) || !removalReady}
+                          >
+                            {deviceActionId === device.id ? (
+                              <ActivityIndicator size="small" color={colors.danger} />
+                            ) : (
+                              <Text style={[styles.pillBtnText, { color: colors.danger }]}>Finalize</Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+
+            {/* Error */}
+            {error && (
+              <View style={[styles.errorCard, { backgroundColor: `${colors.danger}12`, borderColor: `${colors.danger}40` }]}>
+                <Feather name="alert-circle" size={14} color={colors.danger} />
+                <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
+              </View>
+            )}
+
+            {/* Disclaimer */}
+            <View style={[styles.disclaimerCard, { backgroundColor: `${colors.accent}0A`, borderColor: `${colors.accent}20` }]}>
+              <Feather name="info" size={13} color={colors.textMuted} />
+              <Text style={[styles.disclaimerText, { color: colors.textMuted }]}>
+                If you lose access to all trusted devices, use guardian or email recovery to regain control of your wallet.
+              </Text>
+            </View>
           </>
         )}
       </ScrollView>
@@ -670,149 +1056,264 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: 20,
-      paddingTop: 60,
-      paddingBottom: 20,
-      borderBottomWidth: 1,
+      paddingTop: 58,
+      paddingBottom: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.borderMuted,
     },
-    headerTitle: {
-      color: colors.textPrimary,
-      fontSize: 20,
+    headerBackBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+    },
+    headerTitleBlock: {
+      alignItems: "center",
+    },
+    headerKicker: {
+      fontSize: 10,
       fontWeight: "700",
+      letterSpacing: 1.8,
+      color: colors.textMuted,
+      marginBottom: 2,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.textPrimary,
+      letterSpacing: -0.3,
     },
     scroll: {
       flex: 1,
     },
-    content: {
+    body: {
       padding: 20,
-      gap: 14,
-      paddingBottom: 40,
+      gap: 16,
+      paddingBottom: 48,
     },
-    primaryButton: {
-      backgroundColor: colors.accentAlt,
-      borderRadius: 12,
-      paddingVertical: 14,
+    addDeviceBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      borderRadius: 16,
+      paddingVertical: 15,
+    },
+    addDeviceIconWrap: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
       alignItems: "center",
       justifyContent: "center",
     },
-    primaryButtonLabel: {
-      color: "#fff",
-      fontWeight: "700",
+    addDeviceLabel: {
       fontSize: 15,
-    },
-    disabledButton: {
-      opacity: 0.7,
+      fontWeight: "700",
     },
     card: {
-      backgroundColor: colors.surfaceCard,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: colors.borderMuted,
-      padding: 14,
-      gap: 12,
+      padding: 16,
+      gap: 14,
     },
     cardHeader: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
+      gap: 10,
     },
-    cardTitle: {
-      color: colors.textPrimary,
-      fontSize: 16,
-      fontWeight: "700",
-    },
-    qrWrap: {
+    cardIconWrap: {
+      width: 32,
+      height: 32,
+      borderRadius: 9,
       alignItems: "center",
       justifyContent: "center",
-      paddingVertical: 6,
-      backgroundColor: "#fff",
-      borderRadius: 10,
-      alignSelf: "center",
-      paddingHorizontal: 6,
     },
-    linkText: {
-      color: colors.textMuted,
-      fontSize: 12,
-    },
-    linkHelp: {
-      color: colors.textMuted,
-      fontSize: 12,
-      lineHeight: 18,
-    },
-    requestRow: {
-      borderTopWidth: 1,
-      borderTopColor: withAlpha(colors.border, 0.4),
-      paddingTop: 10,
-      gap: 8,
-    },
-    deviceRow: {
-      borderTopWidth: 1,
-      borderTopColor: withAlpha(colors.border, 0.4),
-      paddingTop: 10,
-      gap: 8,
-    },
-    deviceTitle: {
+    cardTitle: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: "700",
       color: colors.textPrimary,
+    },
+    addPasskeyBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 9,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+    },
+    qrWrapper: {
+      alignSelf: "center",
+      backgroundColor: "#FFFFFF",
+      borderRadius: 12,
+      padding: 12,
+    },
+    cardHint: {
+      fontSize: 13,
+      lineHeight: 19,
+    },
+    cardMono: {
+      fontSize: 11,
+      lineHeight: 16,
+    },
+    emptyHint: {
+      fontSize: 13,
+      textAlign: "center",
+      paddingVertical: 8,
+    },
+    listRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingTop: 12,
+    },
+    deviceAvatarWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+    listRowContent: {
+      flex: 1,
+      gap: 4,
+    },
+    listRowTitle: {
       fontSize: 14,
-      fontWeight: "600",
+      fontWeight: "700",
+    },
+    listRowSub: {
+      fontSize: 12,
     },
     deviceTitleRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
       flexWrap: "wrap",
+      gap: 6,
     },
-    thisDeviceBadge: {
-      color: colors.accentAlt,
+    statusPillRow: {
+      flexDirection: "row",
+    },
+    statusPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
+      borderWidth: 1,
+    },
+    statusPillText: {
       fontSize: 11,
       fontWeight: "700",
-      textTransform: "uppercase",
     },
-    muted: {
-      color: colors.textMuted,
-      fontSize: 12,
+    thisDevicePill: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
+      borderWidth: 1,
     },
-    mutedStrong: {
-      color: colors.textSecondary,
-      fontSize: 12,
-      lineHeight: 18,
-    },
-    badge: {
-      fontSize: 12,
+    thisDevicePillText: {
+      fontSize: 10,
       fontWeight: "700",
       textTransform: "uppercase",
-      marginTop: 2,
+      letterSpacing: 0.5,
     },
-    actionsRow: {
+    deviceMeta: {
+      fontSize: 11,
+      lineHeight: 16,
+    },
+    actionPair: {
       flexDirection: "row",
-      gap: 8,
-      flexWrap: "wrap",
+      gap: 6,
+      flexShrink: 0,
     },
-    actionButton: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.15),
+    pillBtn: {
       borderRadius: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+      borderWidth: 1,
+      paddingHorizontal: 11,
+      paddingVertical: 7,
+      alignItems: "center",
+      justifyContent: "center",
     },
-    approveButton: {
-      backgroundColor: withAlpha(colors.success, 0.18),
-    },
-    rejectButton: {
-      backgroundColor: withAlpha(colors.danger, 0.18),
-    },
-    actionLabel: {
-      color: colors.textPrimary,
+    pillBtnText: {
       fontSize: 12,
-      fontWeight: "600",
+      fontWeight: "700",
     },
-    error: {
-      color: colors.danger,
+    iconBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 9,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    errorCard: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+      borderRadius: 13,
+      borderWidth: 1,
+      paddingHorizontal: 13,
+      paddingVertical: 11,
+    },
+    errorText: {
+      flex: 1,
       fontSize: 13,
+      fontWeight: "600",
+      lineHeight: 19,
     },
-    footnote: {
-      color: colors.textMuted,
+    disclaimerCard: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+      borderRadius: 13,
+      borderWidth: 1,
+      paddingHorizontal: 13,
+      paddingVertical: 11,
+    },
+    disclaimerText: {
+      flex: 1,
       fontSize: 12,
       lineHeight: 18,
+    },
+    authRequiredCard: {
+      borderRadius: 20,
+      borderWidth: 1,
+      padding: 18,
+      gap: 12,
+      alignItems: "stretch",
+    },
+    authRequiredIcon: {
+      alignSelf: "flex-start",
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    authRequiredTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      letterSpacing: -0.2,
+    },
+    authRequiredBody: {
+      fontSize: 13,
+      lineHeight: 19,
+    },
+    authRequiredSecondaryBtn: {
+      borderRadius: 14,
+      borderWidth: 1,
+      paddingVertical: 13,
+      alignItems: "center",
+    },
+    authRequiredSecondaryLabel: {
+      fontSize: 13,
+      fontWeight: "700",
     },
   });
 

@@ -10,12 +10,17 @@ import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { isStrongPassword, suggestPasswordRules } from "@utils/password";
 import { getUsernameError, isValidUsername } from "@utils/validation";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 type ResetPasswordRoute = RouteProp<AuthStackParamList, "ResetPassword">;
 
 const ResetPasswordScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<AuthStackParamList>>();
   const { email, flow } = useRoute<ResetPasswordRoute>().params;
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { setProfile, setIsOnboarded } = useUserStore();
   const pendingEmail = useAuthFlowStore((state) => state.pendingEmail);
   const pendingFlow = useAuthFlowStore((state) => state.pendingFlow);
@@ -146,7 +151,7 @@ const ResetPasswordScreen: React.FC = () => {
               value={username}
               onChangeText={setUsername}
               placeholder="Choose a username"
-              placeholderTextColor="#666"
+              placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
               style={styles.input}
@@ -162,7 +167,7 @@ const ResetPasswordScreen: React.FC = () => {
           value={password}
           onChangeText={setPassword}
           placeholder="New password"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textMuted}
           style={styles.input}
           returnKeyType="next"
           textContentType="newPassword"
@@ -172,7 +177,7 @@ const ResetPasswordScreen: React.FC = () => {
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           placeholder="Confirm password"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textMuted}
           style={styles.input}
           returnKeyType="done"
           textContentType="password"
@@ -190,22 +195,22 @@ const ResetPasswordScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   formSpacing: {
     rowGap: 16,
   },
   input: {
-    backgroundColor: "#171419",
-    borderColor: "#333333",
+    backgroundColor: colors.inputBackground,
+    borderColor: colors.inputBorder,
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 16,
   },
   validationText: {
-    color: "#f87171",
+    color: colors.danger,
     fontSize: 12,
     textAlign: "center",
   },

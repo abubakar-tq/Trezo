@@ -1,6 +1,7 @@
 import { NavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Clipboard, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import * as ExpoClipboard from 'expo-clipboard';
 
 import { RootStackParamList } from "@/src/types/navigation";
 import { useAppTheme } from "@theme";
@@ -25,7 +26,9 @@ const ShareRecoveryScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const link = `https://trezo.app/recovery/guardian/${route.params.requestId}`;
+  const guardianPortalBaseUrl =
+    process.env.EXPO_PUBLIC_GUARDIAN_PORTAL_URL ?? "https://guardian-approval.vercel.app";
+  const link = `${guardianPortalBaseUrl}/${route.params.requestId}`;
 
   const loadState = useCallback(async () => {
     const [nextRequest, nextApprovals] = await Promise.all([
@@ -110,8 +113,8 @@ const ShareRecoveryScreen: React.FC = () => {
   }, [request?.deadline]);
 
   const handleCopy = () => {
-    Clipboard.setString(link);
-    Alert.alert("Link copied", "Share the guardian approval link with your configured guardians.");
+    ExpoClipboard.setStringAsync(link);
+    Alert.alert("Link copied", "Send it to your guardians to approve recovery.");
   };
 
   const handleShare = async () => {
@@ -210,7 +213,7 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: "center",
     },
     card: {
-      borderRadius: 28,
+      borderRadius: 24,
       padding: 24,
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -225,9 +228,9 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     title: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 26,
-      fontWeight: "800",
+      fontWeight: "600",
       lineHeight: 32,
     },
     body: {
@@ -241,7 +244,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     summaryBox: {
-      borderRadius: 18,
+      borderRadius: 16,
       padding: 16,
       backgroundColor: colors.surfaceMuted,
       gap: 4,
@@ -253,7 +256,7 @@ const createStyles = (colors: ThemeColors) =>
       letterSpacing: 1.2,
     },
     summaryValue: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 16,
       fontWeight: "700",
     },
@@ -262,12 +265,12 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
     },
     sectionTitle: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 16,
       fontWeight: "700",
     },
     guardianRow: {
-      borderRadius: 14,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.background,
@@ -278,7 +281,7 @@ const createStyles = (colors: ThemeColors) =>
       gap: 10,
     },
     guardianAddress: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 13,
       flexShrink: 1,
       fontWeight: "600",
@@ -295,7 +298,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     primaryButton: {
       paddingVertical: 16,
-      borderRadius: 18,
+      borderRadius: 16,
       backgroundColor: colors.accent,
       alignItems: "center",
     },
@@ -306,14 +309,14 @@ const createStyles = (colors: ThemeColors) =>
     secondaryButton: {
       flex: 1,
       paddingVertical: 14,
-      borderRadius: 18,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surfaceMuted,
       alignItems: "center",
     },
     secondaryButtonText: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontWeight: "700",
       fontSize: 15,
     },

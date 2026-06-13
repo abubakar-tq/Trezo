@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 type AvatarProps = {
   size?: number;
@@ -20,6 +22,9 @@ const getInitials = (label?: string) => {
 };
 
 const Avatar: React.FC<AvatarProps> = ({ size = 44, uri, label }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const initials = getInitials(label);
 
   return (
@@ -46,16 +51,16 @@ const Avatar: React.FC<AvatarProps> = ({ size = 44, uri, label }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
-    backgroundColor: "rgba(0, 255, 255, 0.15)",
+    backgroundColor: `${colors.accentAlt}26`,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(0, 255, 255, 0.2)",
+    borderColor: `${colors.accentAlt}33`,
   },
   initials: {
-    color: "#f9fafb",
+    color: colors.textPrimary,
     fontWeight: "700",
   },
 });

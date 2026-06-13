@@ -10,11 +10,12 @@ import ContactDetailScreen from "@features/contacts/screens/ContactDetailScreen"
 import ContactListScreen from "@features/contacts/screens/ContactListScreen";
 import BackupRecoveryScreen from "@features/profile/screens/BackupRecoveryScreen";
 import BrowserSettingsScreen from "@features/profile/screens/BrowserSettingsScreen";
+import { ConnectedDAppsScreen } from "@features/profile/screens/ConnectedDAppsScreen";
 import CompromisedWalletScreen from "@features/profile/screens/CompromisedWalletScreen";
-import ConnectedDevicesScreen from "@features/profile/screens/ConnectedDevicesScreen";
 import DevicesPasskeysScreen from "@features/profile/screens/DevicesPasskeysScreen";
+import { LinkDeviceScreen } from "@features/auth/screens/LinkDeviceScreen";
 import EmailRecoveryScreen from "@features/profile/screens/EmailRecoveryScreen";
-import EmailRecoveryGroupStatusScreen from "@features/profile/screens/EmailRecoveryGroupStatusScreen";
+import RecoveryAttemptStatusScreen from "@features/profile/screens/RecoveryAttemptStatusScreen";
 import EmailRecoveryStartScreen from "@features/profile/screens/EmailRecoveryStartScreen";
 import GuardianRecoveryScreen from "@features/profile/screens/GuardianRecoveryScreen";
 import NotificationCenterScreen from "@features/notifications/screens/NotificationCenterScreen";
@@ -22,7 +23,6 @@ import NotificationSettingsScreen from "@features/profile/screens/NotificationSe
 import PairDeviceScreen from "@features/profile/screens/PairDeviceScreen";
 import ProfileEditScreen from "@features/profile/screens/ProfileEditScreen";
 import RecoveryKitExportScreen from "@features/profile/screens/RecoveryKitExportScreen";
-import SecurityPrivacyScreen from "@features/profile/screens/SecurityPrivacyScreen";
 import AddGuardianScreen from "@features/recovery/screens/AddGuardianScreen";
 import CreateRecoveryRequestScreen from "@features/recovery/screens/CreateRecoveryRequestScreen";
 import GuardianManagementScreen from "@features/recovery/screens/GuardianManagementScreen";
@@ -31,8 +31,8 @@ import RecoveryEntryScreen from "@features/recovery/screens/RecoveryEntryScreen"
 import RecoveryProgressScreen from "@features/recovery/screens/RecoveryProgressScreen";
 import SecurityCenterScreen from "@features/recovery/screens/SecurityCenterScreen";
 import ShareRecoveryScreen from "@features/recovery/screens/ShareRecoveryScreen";
+import IncomingRecoveryApprovalsScreen from "@features/recovery/screens/IncomingRecoveryApprovalsScreen";
 import ThresholdConfigurationScreen from "@features/recovery/screens/ThresholdConfigurationScreen";
-import SettingsScreen from "@features/settings/screens/SettingsScreen";
 import TransactionDetailScreen from "@features/transactions/screens/TransactionDetailScreen";
 import TransactionHistoryScreen from "@features/transactions/screens/TransactionHistoryScreen";
 import TransactionStatusScreen from "@features/transactions/screens/TransactionStatusScreen";
@@ -42,7 +42,11 @@ import BuyScreen from "@features/wallet/screens/BuyScreen";
 import DeployAccountScreen from "@features/wallet/screens/DeployAccountScreen";
 import DevCreateAccountScreen from "@features/wallet/screens/DevCreateAccountScreen";
 import ReceiveScreen from "@features/wallet/screens/ReceiveScreen";
+import ReceiveChainScreen from "@features/wallet/screens/ReceiveChainScreen";
 import SendScreen from "@features/wallet/screens/SendScreen";
+import { useLazyPasskeyBackfill } from "@features/wallet/hooks/useLazyPasskeyBackfill";
+import { useDevicePairingDeepLink } from "@features/wallet/hooks/useDevicePairingDeepLink";
+import PasskeyService from "@features/wallet/services/PasskeyService";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
@@ -58,55 +62,84 @@ const RootNavigation = () => {
   );
   const { theme } = useAppTheme();
   const [showingSplash, setShowingSplash] = useState(true);
-  const splashTarget = isLoggedIn ? "DeviceVerification" : "AuthNavigation";
-  // Keep a ref so the timer callback always reads the latest value without
-  // being a dependency (which would cancel + restart the timer on every auth event).
+  const [splashTarget, setSplashTarget] = useState<"DeviceVerification" | "AuthNavigation" | "RecoveryEntry">(
+    isLoggedIn ? "DeviceVerification" : "AuthNavigation",
+  );
   const splashTargetRef = useRef(splashTarget);
+
+  const userId = useUserStore((state) => state.user?.id);
+  const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
+
   useEffect(() => {
     splashTargetRef.current = splashTarget;
   }, [splashTarget]);
 
-  console.log(
-    "🔄 [RootNavigation] Rendering, isLoggedIn:",
-    isLoggedIn,
-    "showingSplash:",
-    showingSplash,
-  );
+  // Re-resolve target when auth changes; on logged-in, also probe local passkey.
+  useEffect(() => {
+    let cancelled = false;
+    if (!isLoggedIn) {
+      setSplashTarget("AuthNavigation");
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!userId) {
+      setSplashTarget("DeviceVerification");
+      return () => {
+        cancelled = true;
+      };
+    }
+    // Tight timeout: if AsyncStorage is slow, fall through to DeviceVerification
+    // (the inline "Recover account" link still gives the user an exit).
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500));
+    Promise.race([PasskeyService.getPasskey(userId), timeout])
+      .then((passkey) => {
+        if (cancelled) return;
+        const hasLocal = Boolean(passkey && (passkey as { credentialIdRaw?: string }).credentialIdRaw);
+        // Only offer recovery when there is actually a deployed account to recover.
+        // Without a deployed account, no passkey was ever registered — route normally.
+        if (hasLocal || !smartAccountDeployed) {
+          setSplashTarget("DeviceVerification");
+        } else {
+          setSplashTarget("RecoveryEntry");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSplashTarget("DeviceVerification");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, userId, smartAccountDeployed]);
 
   useEffect(() => {
     setGuardNavigation(isLoggedIn);
   }, [isLoggedIn, setGuardNavigation]);
 
   useEffect(() => {
-    // Fire once on mount. splashTargetRef is read at fire time so it always
-    // reflects the settled auth state, even if isLoggedIn changed mid-timer.
-    console.log("⏱️ [RootNavigation] Starting splash timer");
     const timer = setTimeout(() => {
-      console.log("✅ [RootNavigation] Splash complete, hiding splash");
       setShowingSplash(false);
       if (navigationRef.isReady()) {
-        navigationRef.resetRoot({
-          index: 0,
-          routes: [{ name: splashTargetRef.current }],
-        });
+        const target = splashTargetRef.current;
+        const route =
+          target === "RecoveryEntry"
+            ? { name: "RecoveryEntry" as const, params: { reason: "no_local_passkey" as const } }
+            : { name: target };
+        navigationRef.resetRoot({ index: 0, routes: [route] });
       }
-    }, 2500);
-
+    }, 1300);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useLazyPasskeyBackfill();
+  useDevicePairingDeepLink();
 
   return (
     <NavigationContainer
       ref={navigationRef}
       theme={theme.navigation}
-      onReady={() => console.log("✅ [Navigation] NavigationContainer ready")}
-      onStateChange={(state) =>
-        console.log(
-          "📍 [Navigation] State changed:",
-          JSON.stringify(state?.routes[state.index], null, 2),
-        )
-      }
     >
       <Stack.Navigator
         initialRouteName="AppSplash"
@@ -121,7 +154,6 @@ const RootNavigation = () => {
         <Stack.Screen
           name="AppSplash"
           component={SplashScreen}
-          initialParams={{ redirectTo: { name: splashTarget } }}
         />
         <Stack.Screen
           name="DeviceVerification"
@@ -181,6 +213,14 @@ const RootNavigation = () => {
           }}
         />
         <Stack.Screen
+          name="LinkDevice"
+          component={LinkDeviceScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
           name="CompromisedWallet"
           component={CompromisedWalletScreen}
           options={{
@@ -204,6 +244,13 @@ const RootNavigation = () => {
             animation: "slide_from_right",
           }}
         />
+        {/*
+          ADR-0011 (updated 2026-06-02): the new-device recovery initiator is a
+          real production entry (email recovery is live on Base Sepolia), so the
+          route is registered unconditionally. The same-device "Start Email
+          Recovery" shortcut and the forceNewPasskey toggle remain __DEV__-only
+          inside the screens themselves.
+        */}
         <Stack.Screen
           name="EmailRecoveryStart"
           component={EmailRecoveryStartScreen}
@@ -213,8 +260,8 @@ const RootNavigation = () => {
           }}
         />
         <Stack.Screen
-          name="EmailRecoveryGroupStatus"
-          component={EmailRecoveryGroupStatusScreen}
+          name="RecoveryAttemptStatus"
+          component={RecoveryAttemptStatusScreen}
           options={{
             headerShown: false,
             animation: "slide_from_right",
@@ -261,6 +308,14 @@ const RootNavigation = () => {
           }}
         />
         <Stack.Screen
+          name="IncomingRecoveryApprovals"
+          component={IncomingRecoveryApprovalsScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
           name="RecoveryKitExport"
           component={RecoveryKitExportScreen}
           options={{
@@ -274,6 +329,14 @@ const RootNavigation = () => {
         <Stack.Screen
           name="ProfileEdit"
           component={ProfileEditScreen}
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="ConnectedDApps"
+          component={ConnectedDAppsScreen}
           options={{
             headerShown: false,
             animation: "slide_from_right",
@@ -298,22 +361,6 @@ const RootNavigation = () => {
         <Stack.Screen
           name="ContactDetail"
           component={ContactDetailScreen}
-          options={{
-            headerShown: false,
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
-          name="SecurityPrivacy"
-          component={SecurityPrivacyScreen}
-          options={{
-            headerShown: false,
-            animation: "slide_from_right",
-          }}
-        />
-        <Stack.Screen
-          name="ConnectedDevices"
-          component={ConnectedDevicesScreen}
           options={{
             headerShown: false,
             animation: "slide_from_right",
@@ -372,11 +419,6 @@ const RootNavigation = () => {
           }}
         />
         <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{ headerShown: false, animation: "slide_from_right" }}
-        />
-        <Stack.Screen
           name="AddGuardian"
           component={AddGuardianScreen}
           options={{ headerShown: false, animation: "slide_from_right" }}
@@ -404,6 +446,11 @@ const RootNavigation = () => {
         <Stack.Screen
           name="Receive"
           component={ReceiveScreen}
+          options={{ headerShown: false, animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="ReceiveChain"
+          component={ReceiveChainScreen}
           options={{ headerShown: false, animation: "slide_from_right" }}
         />
         <Stack.Screen

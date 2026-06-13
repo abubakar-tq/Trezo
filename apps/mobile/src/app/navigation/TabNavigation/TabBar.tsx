@@ -1,7 +1,3 @@
-/**
- * Custom TabBar with brighter accent and sliding indicator.
- * Visually prominent, animated, no infinite scroll.
- */
 import { Feather } from "@expo/vector-icons";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import React, { useEffect, useMemo, useRef } from "react";
@@ -18,21 +14,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 
 const TAB_ICON_MAP: Record<
   string,
   React.ComponentProps<typeof Feather>["name"]
 > = {
   Home: "home",
-  Browser: "globe",
+  Browser: "compass",
   Portfolio: "pie-chart",
   Dex: "repeat",
   Profile: "user",
 };
 
-const INDICATOR_HORIZONTAL_MARGIN = 6;
-const INDICATOR_VERTICAL_MARGIN = 6;
+const INDICATOR_WIDTH = 30;
 
 const TabBar: React.FC<BottomTabBarProps> = ({
   state,
@@ -40,15 +34,34 @@ const TabBar: React.FC<BottomTabBarProps> = ({
   navigation,
 }) => {
   const { theme } = useAppTheme();
-  const { colors, mode } = theme;
+  const { colors, gradients } = theme;
   const insets = useSafeAreaInsets();
 
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  // Keyboard slide-away
   const visibility = useRef(new Animated.Value(0)).current;
+
+  // Indicator horizontal position (springs between tabs)
   const indicatorLeft = useRef(new Animated.Value(0)).current;
-  const indicatorWidth = useRef(new Animated.Value(0)).current;
+
+  // Per-tab icon scale for fluid tap feedback
+  const tabScales = useRef(
+    state.routes.map((_, i) =>
+      new Animated.Value(i === state.index ? 1 : 0.86),
+    ),
+  ).current;
+
+  // Per-tab halo opacity — fades in behind the active icon
+  const tabGlows = useRef(
+    state.routes.map((_, i) =>
+      new Animated.Value(i === state.index ? 1 : 0),
+    ),
+  ).current;
+
   const tabLayouts = useRef<Record<string, { x: number; width: number }>>({});
 
+  // Keyboard hide/show
   useEffect(() => {
     const showEvent =
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -62,7 +75,6 @@ const TabBar: React.FC<BottomTabBarProps> = ({
         useNativeDriver: true,
       }).start();
     });
-
     const hideSub = Keyboard.addListener(hideEvent, () => {
       Animated.timing(visibility, {
         toValue: 0,
@@ -77,41 +89,37 @@ const TabBar: React.FC<BottomTabBarProps> = ({
     };
   }, [visibility]);
 
+  // Slide indicator + animate icon scales + fade glows
   useEffect(() => {
     const routeKey = state.routes[state.index]?.key;
-    if (!routeKey) {
-      return;
-    }
+    if (!routeKey) return;
     const layout = tabLayouts.current[routeKey];
-    if (!layout) {
-      return;
-    }
-    Animated.spring(indicatorLeft, {
-      toValue: layout.x + INDICATOR_HORIZONTAL_MARGIN,
-      useNativeDriver: false,
-      stiffness: 220,
-      damping: 22,
-      mass: 0.7,
-    }).start();
-    Animated.spring(indicatorWidth, {
-      toValue: Math.max(layout.width - INDICATOR_HORIZONTAL_MARGIN * 2, 0),
-      useNativeDriver: false,
-      stiffness: 240,
-      damping: 26,
-      mass: 0.7,
-    }).start();
-  }, [state.index, state.routes, indicatorLeft, indicatorWidth]);
+    if (!layout) return;
 
-  const glass = useMemo(
-    () => ({
-      background: withAlpha(colors.surfaceElevated, 0.96),
-      border: withAlpha(colors.borderMuted, mode === "dark" ? 0.65 : 0.35),
-      separator: withAlpha(colors.borderMuted, mode === "dark" ? 0.5 : 0.28),
-      accentFill: withAlpha(colors.accent, 0.2),
-      accentBorder: withAlpha(colors.accent, mode === "dark" ? 0.55 : 0.34),
-    }),
-    [colors, mode],
-  );
+    Animated.spring(indicatorLeft, {
+      toValue: layout.x + (layout.width - INDICATOR_WIDTH) / 2,
+      useNativeDriver: false,
+      stiffness: 300,
+      damping: 26,
+      mass: 0.55,
+    }).start();
+
+    state.routes.forEach((_, i) => {
+      Animated.spring(tabScales[i], {
+        toValue: i === state.index ? 1 : 0.86,
+        useNativeDriver: true,
+        stiffness: 280,
+        damping: 22,
+        mass: 0.55,
+      }).start();
+
+      Animated.timing(tabGlows[i], {
+        toValue: i === state.index ? 1 : 0,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [state.index, state.routes, indicatorLeft, tabScales, tabGlows]);
 
   const animatedContainerStyle = useMemo(
     () => ({
@@ -119,7 +127,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({
         {
           translateY: visibility.interpolate({
             inputRange: [0, 1],
-            outputRange: [0, 96 + insets.bottom],
+            outputRange: [0, 90 + insets.bottom],
           }),
         },
       ],
@@ -139,33 +147,38 @@ const TabBar: React.FC<BottomTabBarProps> = ({
         {
           paddingBottom: Math.max(
             insets.bottom,
-            Platform.OS === "ios" ? 18 : 12,
+            Platform.OS === "ios" ? 16 : 10,
           ),
-          shadowColor: withAlpha(colors.textPrimary, 0.45),
+          shadowColor: colors.accent,
         },
       ]}
       pointerEvents={Platform.OS === "ios" ? undefined : "box-none"}
     >
+      {/* Ink-dark glass surface with ghost-violet top border */}
       <View
         style={[
           styles.glassBackground,
-          { backgroundColor: glass.background, borderColor: glass.border },
+          {
+            backgroundColor: gradients.tabBar[0],
+            borderColor: colors.border,
+          },
         ]}
       />
 
       <View style={styles.row}>
+        {/* Sliding top-pill indicator with violet glow */}
         <Animated.View
           pointerEvents="none"
           style={[
-            styles.activeMask,
+            styles.activeIndicator,
             {
               left: indicatorLeft,
-              width: indicatorWidth,
-              backgroundColor: glass.accentFill,
-              borderColor: glass.accentBorder,
+              backgroundColor: colors.accent,
+              shadowColor: colors.accent,
             },
           ]}
         />
+
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
           const { options } = descriptors[route.key] ?? {};
@@ -181,7 +194,6 @@ const TabBar: React.FC<BottomTabBarProps> = ({
               target: route.key,
               canPreventDefault: true,
             });
-
             if (!isFocused && !event.defaultPrevented) {
               navigation.navigate(route.name as never);
             }
@@ -199,52 +211,54 @@ const TabBar: React.FC<BottomTabBarProps> = ({
               accessibilityRole="button"
               accessibilityState={isFocused ? { selected: true } : {}}
               accessibilityLabel={options?.tabBarAccessibilityLabel}
-              onLayout={(event) => {
+              onLayout={(e) => {
                 tabLayouts.current[route.key] = {
-                  x: event.nativeEvent.layout.x,
-                  width: event.nativeEvent.layout.width,
+                  x: e.nativeEvent.layout.x,
+                  width: e.nativeEvent.layout.width,
                 };
                 if (state.index === index) {
                   indicatorLeft.setValue(
-                    event.nativeEvent.layout.x + INDICATOR_HORIZONTAL_MARGIN,
+                    e.nativeEvent.layout.x +
+                      (e.nativeEvent.layout.width - INDICATOR_WIDTH) / 2,
                   );
-                  indicatorWidth.setValue(
-                    Math.max(
-                      event.nativeEvent.layout.width -
-                        INDICATOR_HORIZONTAL_MARGIN * 2,
-                      0,
-                    ),
-                  );
+                  tabScales[index].setValue(1);
+                  tabGlows[index].setValue(1);
                 }
               }}
               style={styles.tab}
             >
-              <View style={styles.iconRow}>
+              <Animated.View
+                style={[
+                  styles.iconWrap,
+                  { transform: [{ scale: tabScales[index] }] },
+                ]}
+              >
+                {/* Circular violet halo behind active icon */}
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.iconGlow,
+                    {
+                      opacity: tabGlows[index],
+                      backgroundColor: colors.glass,
+                    },
+                  ]}
+                />
                 <Feather
                   name={iconName}
-                  size={21}
-                  color={isFocused ? colors.accent : colors.textSecondary}
-                  style={{ transform: [{ scale: isFocused ? 1 : 0.96 }] }}
+                  size={22}
+                  color={isFocused ? colors.textPrimary : colors.textSecondary}
                 />
-              </View>
+              </Animated.View>
               <Text
                 style={[
                   styles.label,
-                  { color: isFocused ? colors.accent : colors.textMuted },
+                  { color: isFocused ? colors.textPrimary : colors.textMuted },
                 ]}
                 numberOfLines={1}
               >
                 {label}
               </Text>
-              {index < state.routes.length - 1 ? (
-                <View
-                  pointerEvents="none"
-                  style={[
-                    styles.separator,
-                    { backgroundColor: glass.separator },
-                  ]}
-                />
-              ) : null}
             </Pressable>
           );
         })}
@@ -260,16 +274,20 @@ function createStyles(_colors: ThemeColors) {
       left: 0,
       right: 0,
       bottom: 0,
-      paddingTop: 6,
-      paddingHorizontal: 12,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
+      paddingTop: 3,
+      paddingHorizontal: 10,
+      borderTopLeftRadius: 18,
+      borderTopRightRadius: 18,
       overflow: "hidden",
+      shadowOpacity: 0.22,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: -4 },
+      elevation: 14,
     },
     glassBackground: {
       ...StyleSheet.absoluteFillObject,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
+      borderTopLeftRadius: 18,
+      borderTopRightRadius: 18,
       borderWidth: StyleSheet.hairlineWidth,
     },
     row: {
@@ -277,41 +295,42 @@ function createStyles(_colors: ThemeColors) {
       flexDirection: "row",
       alignItems: "stretch",
       justifyContent: "space-between",
-      paddingVertical: 6,
-      paddingHorizontal: Platform.select({ ios: 4, default: 2 }),
+      paddingVertical: 2,
+      paddingHorizontal: Platform.select({ ios: 2, default: 0 }),
     },
     tab: {
       flex: 1,
-      position: "relative",
       alignItems: "center",
       justifyContent: "center",
-      paddingVertical: 8,
-      borderRadius: 18,
+      paddingVertical: 10,
       zIndex: 1,
     },
-    iconRow: {
-      marginBottom: 2,
+    iconWrap: {
       alignItems: "center",
       justifyContent: "center",
+      marginBottom: 3,
+    },
+    iconGlow: {
+      position: "absolute",
+      width: 40,
+      height: 40,
+      borderRadius: 20,
     },
     label: {
-      fontSize: 12,
-      fontWeight: "600",
-      marginTop: 2,
+      fontSize: 11,
+      fontWeight: "500",
+      letterSpacing: 0.5,
     },
-    separator: {
+    activeIndicator: {
       position: "absolute",
-      top: 12,
-      right: -2,
-      width: StyleSheet.hairlineWidth,
-      height: "52%",
-    },
-    activeMask: {
-      position: "absolute",
-      top: INDICATOR_VERTICAL_MARGIN,
-      bottom: INDICATOR_VERTICAL_MARGIN,
-      borderRadius: 16,
-      borderWidth: 1,
+      top: 0,
+      width: INDICATOR_WIDTH,
+      height: 3,
+      borderRadius: 2,
+      shadowOpacity: 0.65,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 6,
     },
   });
 }

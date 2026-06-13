@@ -7,8 +7,10 @@ Trezo now uses an initializer-bound deployment model.
 - Current release: `TREZO_INFRA_V2`
 - Canonical root factory: `0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7`
 - EntryPoint: `0x0000000071727De22E5E9d8BAf0edAc6f37da032`
-- Portable chains: Ethereum, Sepolia, Optimism, Base, Arbitrum, Polygon
-- Non-portable for now: zkSync Era and zkSync Sepolia
+- Portable chains: Ethereum, Ethereum Sepolia, Optimism, Base, Base Sepolia (84532), Arbitrum, Polygon
+  - Base Sepolia is the demo testnet and is portable: a wallet there shares its address with the same wallet on every other portable chain.
+- Non-portable for now: zkSync Era and zkSync Sepolia (different CREATE2 derivation)
+- Code source of truth: `apps/mobile/src/integration/chains.ts` `PORTABLE_CHAIN_IDS`
 
 ## Wallet Address Rules
 
@@ -23,13 +25,16 @@ Trezo now uses an initializer-bound deployment model.
 
 ```bash
 forge script script/CheckRootFactory.s.sol:CheckRootFactory --rpc-url <rpc>
-forge script script/PredictInfra.s.sol:PredictInfra --rpc-url <rpc>
-forge script script/DeployInfra.s.sol:DeployInfra --rpc-url <rpc> --broadcast
-forge script script/VerifyInfra.s.sol:VerifyInfra --rpc-url <rpc>
+forge script script/CheckSpokePool.s.sol:CheckSpokePool   --rpc-url <rpc>  # pre-flight before any chain that ships CrossChainExecutor
+forge script script/PredictInfra.s.sol:PredictInfra       --rpc-url <rpc>
+forge script script/DeployInfra.s.sol:DeployInfra         --rpc-url <rpc> --broadcast
+forge script script/VerifyInfra.s.sol:VerifyInfra         --rpc-url <rpc>
 forge script script/CheckChainSupport.s.sol:CheckChainSupport --rpc-url <rpc>
 ```
 
 `DeployInfra` expects `PRIVATE_KEY`. `ENTRYPOINT` is the only optional override.
+
+`DeployInfra` deploys six contracts in one shot through the Safe singleton factory: `SmartAccount`, `PasskeyValidator`, `SocialRecovery`, `MinimalProxyFactory`, `AccountFactory`, and `CrossChainExecutor`. The first five are bytecode-only deterministic; `CrossChainExecutor` takes `(spokePool, swapRouter)` from `script/common/AcrossConfig.sol`, so its predicted address only matches across chains that have the same Across V3 SpokePool + Uniswap V3 SwapRouter02 pinned there.
 
 ## Canonical Portable/Release Flow
 

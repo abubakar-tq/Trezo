@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,13 @@ import {
   FlatList,
   StyleSheet,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { TokenIcon } from '../visuals/TokenIcon';
+import { getEnabledChains } from '@/src/integration/chains';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -24,16 +25,41 @@ export interface Network {
   isMainnet?: boolean;
 }
 
-const NETWORKS: Network[] = [
-  { id: 'ethereum', name: 'Ethereum', chainId: 1, color: '#627EEA', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png' },
-  { id: 'polygon', name: 'Polygon', chainId: 137, color: '#8247E5', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png' },
-  { id: 'arbitrum', name: 'Arbitrum', chainId: 42161, color: '#28A0F0', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png' },
-  { id: 'optimism', name: 'Optimism', chainId: 10, color: '#FF0420', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png' },
-  { id: 'base', name: 'Base', chainId: 8453, color: '#0052FF', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png' },
-  { id: 'scroll', name: 'Scroll', chainId: 534352, color: '#FFDBB0', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/scroll/info/logo.png' },
-  { id: 'zksync', name: 'zkSync Era', chainId: 324, color: '#8C8DFC', isMainnet: true, icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/zksync/info/logo.png' },
-  { id: 'anvil', name: 'Anvil', chainId: 31337, color: '#4f46e5', isMainnet: false },
-];
+/** Map a chain ID to a TrustWallet icon URL, or undefined for chains without one. */
+function chainIconUrl(chainId: number): string | undefined {
+  switch (chainId) {
+    case 1:       return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
+    case 11155111: return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
+    case 137:     return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png';
+    case 42161:   return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png';
+    case 421614:  return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png';
+    case 10:      return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png';
+    case 8453:    return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png';
+    case 84532:   return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png';
+    case 534352:  return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/scroll/info/logo.png';
+    case 324:     return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/zksync/info/logo.png';
+    default:      return undefined;
+  }
+}
+
+/** Map a chain ID to a brand colour for the fallback icon. */
+function chainColor(chainId: number): string {
+  switch (chainId) {
+    case 1:       return '#627EEA';
+    case 11155111: return '#627EEA';
+    case 137:     return '#8247E5';
+    case 42161:   return '#28A0F0';
+    case 421614:  return '#28A0F0';
+    case 10:      return '#FF0420';
+    case 8453:    return '#0052FF';
+    case 84532:   return '#0052FF';
+    case 534352:  return '#FFDBB0';
+    case 324:     return '#8C8DFC';
+    case 300:     return '#8C8DFC';
+    case 31337:   return '#4f46e5';
+    default:      return '#888888';
+  }
+}
 
 interface NetworkPickerModalProps {
   isVisible: boolean;
@@ -48,10 +74,22 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
   onSelect,
   selectedNetworkId,
 }) => {
-  const { theme } = useAppTheme();
+  const { theme, resolvedMode } = useAppTheme();
   const { colors } = theme;
+  const isDark = resolvedMode === 'dark';
 
-  if (!isVisible) return null;
+  const networks = useMemo<Network[]>(
+    () =>
+      getEnabledChains().map((c) => ({
+        id: String(c.id),
+        name: c.name,
+        chainId: c.id,
+        color: chainColor(c.id),
+        icon: chainIconUrl(c.id),
+        isMainnet: c.environment === 'mainnet',
+      })),
+    [],
+  );
 
   const renderItem = ({ item }: { item: Network }) => {
     const isSelected = item.id === selectedNetworkId;
@@ -61,7 +99,7 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
         style={[
           styles.networkItem,
           { 
-            backgroundColor: isSelected ? withAlpha(colors.accent, 0.1) : withAlpha(colors.surfaceCard, 0.5),
+            backgroundColor: isSelected ? `${colors.accent}1A` : colors.surfaceMuted,
             borderColor: isSelected ? colors.accent : colors.border
           }
         ]}
@@ -97,41 +135,47 @@ export const NetworkPickerModal: React.FC<NetworkPickerModalProps> = ({
   };
 
   return (
-    <View style={styles.overlay}>
-      <TouchableOpacity 
-        style={styles.backdrop} 
-        activeOpacity={1} 
-        onPress={onClose} 
-      />
-      <View style={[styles.content, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-        <View style={[styles.handle, { backgroundColor: colors.border }]} />
-        
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Select Network</Text>
-          <TouchableOpacity onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.surfaceMuted }]}>
-            <Feather name="x" size={18} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-
-        <FlatList
-          data={NETWORKS}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          ListHeaderComponent={
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>AVAILABLE NETWORKS</Text>
-          }
+    <Modal
+      visible={isVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
         />
+        <View style={[styles.content, { backgroundColor: colors.surfaceCard, borderTopColor: colors.border }]}>
+          <View style={[styles.handle, { backgroundColor: colors.border }]} />
+
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>Select Network</Text>
+            <TouchableOpacity onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.surfaceMuted }]}>
+              <Feather name="x" size={18} color={colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={networks}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.list}
+            ListHeaderComponent={
+              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>AVAILABLE NETWORKS</Text>
+            }
+          />
+        </View>
       </View>
-    </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     justifyContent: 'flex-end',
-    zIndex: 1000,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -143,6 +187,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     maxHeight: SCREEN_HEIGHT * 0.8,
     borderTopWidth: 1,
+    elevation: 16,
   },
   handle: {
     width: 40,
@@ -203,7 +248,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   networkInitial: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 18,
   },

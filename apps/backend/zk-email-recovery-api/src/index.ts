@@ -1,9 +1,7 @@
 import "dotenv/config";
-import express from "express";
-import cors from "cors";
 import { RecoveryStore } from "./recovery-store.js";
-import { createRecoveryRouter } from "./recovery-router.js";
 import type { ZkEmailRelayerConfig } from "./zk-email-relayer-client.js";
+import { createApp } from "./app.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -24,8 +22,10 @@ async function main() {
   const relayerConfig: ZkEmailRelayerConfig = {
     baseUrl: relayerUrl,
     apiKey: process.env.ZK_EMAIL_RELAYER_API_KEY || undefined,
+    // Both templates resolve to idx=0 on the canonical EmailRecoveryCommandHandler;
+    // the handler reverts with InvalidTemplateIndex for any other value.
     acceptanceTemplateIdx: Number(process.env.ZK_EMAIL_ACCEPTANCE_TEMPLATE_IDX ?? "0"),
-    recoveryTemplateIdx: Number(process.env.ZK_EMAIL_RECOVERY_TEMPLATE_IDX ?? "1"),
+    recoveryTemplateIdx: Number(process.env.ZK_EMAIL_RECOVERY_TEMPLATE_IDX ?? "0"),
     proofMode: process.env.ZK_EMAIL_PROOF_MODE === "reusable" ? "reusable" : "per_chain_hosted",
   };
 
@@ -34,21 +34,7 @@ async function main() {
     serviceRoleKey: supabaseServiceKey,
   });
 
-  const app = express();
-
-  app.use(cors());
-  app.use(express.json());
-
-  app.get("/health", (_req, res) => {
-    res.json({
-      status: "ok",
-      version: "0.1.0",
-      relayer: relayerConfig.baseUrl,
-      proofMode: relayerConfig.proofMode,
-    });
-  });
-
-  app.use("/", createRecoveryRouter(store, relayerConfig));
+  const app = createApp({ store, relayerConfig });
 
   app.listen(PORT, () => {
     console.log(`ZK Email Recovery API listening on port ${PORT}`);

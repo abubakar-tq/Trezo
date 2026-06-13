@@ -313,6 +313,13 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+[functions.onramp-webhook]
+verify_jwt = false
+
+# Public read-only news feed (RSS aggregator). No secrets, no auth required.
+[functions.news]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

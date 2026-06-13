@@ -1,117 +1,313 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as LocalAuthentication from "expo-local-authentication";
-import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
 import type { RootStackParamList } from "@/src/types/navigation";
 import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
 import { getSupabaseClient } from "@lib/supabase";
+import PinKeypad from "@shared/components/PinKeypad";
+import { useAppLockStore } from "@store/useAppLockStore";
+import { APP_PIN_LENGTH, useAppPinStore } from "@store/useAppPinStore";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
 
+const AnimatedView = Animated.createAnimatedComponent(View);
+
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type VerifyMode = "biometric" | "pin-entry" | "pin-setup";
 
 export const DeviceVerificationScreen = () => {
   const { theme } = useAppTheme();
+  const { colors, gradients } = theme;
+  const styles = useMemo(() => createStyles(), []);
   const navigation = useNavigation<NavigationProp>();
   const logout = useUserStore((state) => state.logout);
   const setGuardNavigation = useAuthFlowStore((state) => state.setGuardNavigation);
+
+  // Source of truth for biometric availability lives in the lock store so the
+  // post-login guard and the in-app lock screen never disagree.
+  const isBiometricAvailable = useAppLockStore((state) => state.isBiometricAvailable);
+  const hasLockInitialized = useAppLockStore((state) => state.hasInitialized);
+  const initializeLock = useAppLockStore((state) => state.initialize);
+  const refreshSecurityLevel = useAppLockStore((state) => state.refreshSecurityLevel);
+  const securityLevel = useAppLockStore((state) => state.securityLevel);
+
+  const hasPin = useAppPinStore((state) => state.hasPin);
+  const hasPinInitialized = useAppPinStore((state) => state.hasInitialized);
+  const initializePin = useAppPinStore((state) => state.initialize);
+  const verifyPin = useAppPinStore((state) => state.verifyPin);
+  const setupPin = useAppPinStore((state) => state.setupPin);
+
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
   const [showReLoginModal, setShowReLoginModal] = useState(false);
   const [hasPendingPairing, setHasPendingPairing] = useState(false);
 
-  // On mount: check for a pending pairing link — if so, show a bypass CTA
+  const [verifyMode, setVerifyMode] = useState<VerifyMode>("biometric");
+  const [enteredPin, setEnteredPin] = useState("");
+  const [setupStep, setSetupStep] = useState<"first" | "confirm">("first");
+  const [setupFirstPin, setSetupFirstPin] = useState<string | null>(null);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
+
+  const autoAttemptedRef = useRef(false);
+  const hasNoScreenLock = securityLevel === LocalAuthentication.SecurityLevel.NONE;
+
+  const pulse = useSharedValue(0);
+
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withTiming(1, { duration: 1800, easing: Easing.out(Easing.quad) }),
+      -1,
+      false,
+    );
+  }, [pulse]);
+
+  const haloStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.5]) }],
+    opacity: interpolate(pulse.value, [0, 1], [0.55, 0]),
+  }));
+
+  useEffect(() => {
+    initializeLock();
+    void initializePin();
+  }, [initializeLock, initializePin]);
+
   useEffect(() => {
     DevicePairingService.getPendingDeepLink()
       .then((link) => setHasPendingPairing(Boolean(link)))
       .catch(() => {});
   }, []);
 
-  const handleContinuePairing = useCallback(() => {
+  // Mode-decision matrix (mirrors LockScreen — see policy comment there):
+  //   hasPin  bio          → biometric
+  //   hasPin  !bio         → pin-entry
+  //   !hasPin device-has-lock → biometric (native prompt handles device cred)
+  //   no security          → pin-setup
+  useEffect(() => {
+    if (!hasLockInitialized || !hasPinInitialized) return;
+    if (hasPin) {
+      setVerifyMode(isBiometricAvailable ? "biometric" : "pin-entry");
+    } else if (!hasNoScreenLock) {
+      setVerifyMode("biometric");
+    } else {
+      setVerifyMode("pin-setup");
+    }
+  }, [hasLockInitialized, hasNoScreenLock, hasPin, hasPinInitialized, isBiometricAvailable]);
+
+  // Reset PIN scratch state whenever we leave a PIN mode.
+  useEffect(() => {
+    if (verifyMode !== "pin-entry" && verifyMode !== "pin-setup") {
+      setEnteredPin("");
+      setPinError(null);
+      setSetupStep("first");
+      setSetupFirstPin(null);
+    }
+  }, [verifyMode]);
+
+  const proceedAfterAuth = useCallback(async () => {
     setGuardNavigation(false);
-    navigation.reset({ index: 0, routes: [{ name: "PairDevice" }] });
+    try {
+      const pendingLink = await DevicePairingService.getPendingDeepLink();
+      if (pendingLink) {
+        navigation.reset({ index: 0, routes: [{ name: "PairDevice" }] });
+        return;
+      }
+    } catch {
+      // fall through to TabNavigation
+    }
+    navigation.reset({ index: 0, routes: [{ name: "TabNavigation" }] });
   }, [navigation, setGuardNavigation]);
 
-
   const handleBiometricAuth = useCallback(async () => {
+    if (hasNoScreenLock) {
+      setLastError("Set up a screen lock on your device, or use the app PIN.");
+      return;
+    }
     try {
+      setLastError(null);
       setIsAuthenticating(true);
 
-      // Check if device supports biometric authentication
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      if (!hasHardware) {
-        Alert.alert(
-          "Not Supported",
-          "Your device doesn't support biometric authentication. Please use re-login option.",
-          [{ text: "OK" }]
-        );
-        setIsAuthenticating(false);
-        return;
-      }
-
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!isEnrolled) {
-        Alert.alert(
-          "No Biometrics Found",
-          "Please set up biometric authentication in your device settings or use re-login option.",
-          [{ text: "OK" }]
-        );
-        setIsAuthenticating(false);
-        return;
-      }
-
-      // Authenticate
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: "Verify your identity",
-        fallbackLabel: "Use passcode",
+        fallbackLabel: "Use device PIN",
         cancelLabel: "Cancel",
         disableDeviceFallback: false,
       });
 
       if (result.success) {
-        // Authentication successful — check if we have a pending device-pairing link
-        setGuardNavigation(false);
-        try {
-          const pendingLink = await DevicePairingService.getPendingDeepLink();
-          if (pendingLink) {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "PairDevice" }],
-            });
-            return;
-          }
-        } catch {
-          // ignore — fall through to TabNavigation
-        }
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "TabNavigation" }],
-        });
+        await proceedAfterAuth();
       } else {
-        Alert.alert(
-          "Authentication Failed",
-          "Unable to verify your identity. Please try again.",
-          [{ text: "OK" }]
-        );
+        setLastError("Authentication cancelled. Try again or use your app PIN.");
       }
-    } catch (error) {
-      console.error("Biometric auth error:", error);
-      Alert.alert(
-        "Error",
-        "An error occurred during authentication. Please try again.",
-        [{ text: "OK" }]
-      );
+    } catch {
+      setLastError("An error occurred. Please try again.");
     } finally {
       setIsAuthenticating(false);
+      autoAttemptedRef.current = true;
     }
+  }, [hasNoScreenLock, proceedAfterAuth]);
+
+  // Auto-fire only when biometric is actually enrolled. On a device that
+  // only has a screen-lock PIN, we wait for an explicit user tap so the
+  // native prompt is anchored to a gesture (avoids the empty-prompt flicker
+  // on some Android OEMs).
+  useEffect(() => {
+    if (verifyMode !== "biometric") return;
+    if (autoAttemptedRef.current) return;
+    if (!isBiometricAvailable) return;
+    const timer = setTimeout(() => {
+      handleBiometricAuth();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [handleBiometricAuth, isBiometricAvailable, verifyMode]);
+
+  const handleSwitchToPin = useCallback(() => {
+    setLastError(null);
+    setVerifyMode(hasPin ? "pin-entry" : "pin-setup");
+  }, [hasPin]);
+
+  const handleSwitchToBiometric = useCallback(() => {
+    if (!isBiometricAvailable) return;
+    setPinError(null);
+    setEnteredPin("");
+    autoAttemptedRef.current = false;
+    setVerifyMode("biometric");
+  }, [isBiometricAvailable]);
+
+  const handleStartOverSetup = useCallback(() => {
+    setPinError(null);
+    setEnteredPin("");
+    setSetupStep("first");
+    setSetupFirstPin(null);
+  }, []);
+
+  const handleRecheckSecurityLevel = useCallback(async () => {
+    await refreshSecurityLevel();
+  }, [refreshSecurityLevel]);
+
+  const handleContinuePairing = useCallback(() => {
+    setGuardNavigation(false);
+    navigation.reset({ index: 0, routes: [{ name: "PairDevice" }] });
   }, [navigation, setGuardNavigation]);
+
+  const handlePinDigit = useCallback(
+    (digit: string) => {
+      if (pinBusy) return;
+      setPinError(null);
+      setEnteredPin((prev) => {
+        if (prev.length >= APP_PIN_LENGTH) return prev;
+        return prev + digit;
+      });
+    },
+    [pinBusy],
+  );
+
+  const handlePinBackspace = useCallback(() => {
+    if (pinBusy) return;
+    setPinError(null);
+    setEnteredPin((prev) => prev.slice(0, -1));
+  }, [pinBusy]);
+
+  // Auto-submit when the user reaches APP_PIN_LENGTH digits.
+  useEffect(() => {
+    if (enteredPin.length !== APP_PIN_LENGTH) return;
+
+    if (verifyMode === "pin-entry") {
+      let cancelled = false;
+      setPinBusy(true);
+      void (async () => {
+        try {
+          const ok = await verifyPin(enteredPin);
+          if (cancelled) return;
+          if (ok) {
+            await proceedAfterAuth();
+          } else {
+            setPinError("Incorrect PIN. Try again.");
+            setEnteredPin("");
+          }
+        } catch (err) {
+          if (cancelled) return;
+          setPinError(err instanceof Error ? err.message : "Could not verify PIN");
+          setEnteredPin("");
+        } finally {
+          if (!cancelled) setPinBusy(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (verifyMode === "pin-setup") {
+      if (setupStep === "first") {
+        setSetupFirstPin(enteredPin);
+        setEnteredPin("");
+        setSetupStep("confirm");
+        return;
+      }
+      if (setupFirstPin && enteredPin === setupFirstPin) {
+        let cancelled = false;
+        setPinBusy(true);
+        void (async () => {
+          try {
+            await setupPin(enteredPin);
+            if (cancelled) return;
+            await proceedAfterAuth();
+          } catch (err) {
+            if (cancelled) return;
+            setPinError(err instanceof Error ? err.message : "Could not save PIN");
+            setEnteredPin("");
+            setSetupStep("first");
+            setSetupFirstPin(null);
+          } finally {
+            if (!cancelled) setPinBusy(false);
+          }
+        })();
+        return () => {
+          cancelled = true;
+        };
+      }
+      setPinError("PINs didn't match. Start over.");
+      setEnteredPin("");
+      setSetupStep("first");
+      setSetupFirstPin(null);
+    }
+  }, [enteredPin, proceedAfterAuth, setupFirstPin, setupPin, setupStep, verifyMode, verifyPin]);
 
   const handleReLogin = useCallback(() => {
     setShowReLoginModal(true);
   }, []);
+
+  const handleRecover = useCallback(() => {
+    setGuardNavigation(false);
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "RecoveryEntry", params: { reason: "user_initiated" } }],
+    });
+  }, [navigation, setGuardNavigation]);
 
   const handleCancelReLogin = useCallback(() => {
     setShowReLoginModal(false);
@@ -119,316 +315,528 @@ export const DeviceVerificationScreen = () => {
 
   const handleConfirmReLogin = useCallback(async () => {
     try {
-      setIsAuthenticating(true);
+      setIsLoggingOut(true);
       setShowReLoginModal(false);
-
-      // Sign out from Supabase first
       const supabase = getSupabaseClient();
       await supabase.auth.signOut();
-
-      // Clear all local state and storage
       await logout();
-
-      // Reset guard navigation
       setGuardNavigation(false);
-
-      // Small delay to ensure storage is synced
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Navigate to auth flow with complete reset
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "AuthNavigation" }],
-      });
-    } catch (error) {
-      console.error("Logout error:", error);
-      setShowReLoginModal(false);
-      setIsAuthenticating(false);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      navigation.reset({ index: 0, routes: [{ name: "AuthNavigation" }] });
+    } catch {
+      setIsLoggingOut(false);
     }
   }, [logout, navigation, setGuardNavigation]);
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-      justifyContent: "center",
-      alignItems: "center",
-      paddingHorizontal: 24,
-    },
-    header: {
-      alignItems: "center",
-      marginBottom: 48,
-    },
-    iconContainer: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: theme.colors.accent + "20",
-      justifyContent: "center",
-      alignItems: "center",
-      marginBottom: 24,
-    },
-    title: {
-      fontSize: 28,
-      fontWeight: "700",
-      color: theme.colors.textPrimary,
-      marginBottom: 12,
-      textAlign: "center",
-    },
-    subtitle: {
-      fontSize: 16,
-      color: theme.colors.textSecondary,
-      textAlign: "center",
-      lineHeight: 24,
-    },
-    optionsContainer: {
-      width: "100%",
-      gap: 16,
-    },
-    optionButton: {
-      backgroundColor: theme.colors.surfaceCard,
-      borderRadius: 16,
-      padding: 20,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 16,
-    },
-    primaryOption: {
-      backgroundColor: theme.colors.accent + "15",
-      borderColor: theme.colors.accent,
-    },
-    optionIconContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: theme.colors.background,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    primaryIconContainer: {
-      backgroundColor: theme.colors.accent + "20",
-    },
-    optionContent: {
-      flex: 1,
-    },
-    optionTitle: {
-      fontSize: 18,
-      fontWeight: "600",
-      color: theme.colors.textPrimary,
-      marginBottom: 4,
-    },
-    optionDescription: {
-      fontSize: 14,
-      color: theme.colors.textSecondary,
-      lineHeight: 20,
-    },
-    optionArrow: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
-      backgroundColor: theme.colors.background,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.7)",
-      justifyContent: "center",
-      alignItems: "center",
-      paddingHorizontal: 24,
-    },
-    modalContainer: {
-      backgroundColor: theme.colors.surfaceCard,
-      borderRadius: 24,
-      padding: 24,
-      width: "100%",
-      maxWidth: 400,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    modalIconContainer: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: theme.colors.warning + "20",
-      justifyContent: "center",
-      alignItems: "center",
-      alignSelf: "center",
-      marginBottom: 20,
-    },
-    modalTitle: {
-      fontSize: 24,
-      fontWeight: "700",
-      color: theme.colors.textPrimary,
-      textAlign: "center",
-      marginBottom: 12,
-    },
-    modalMessage: {
-      fontSize: 16,
-      color: theme.colors.textSecondary,
-      textAlign: "center",
-      lineHeight: 24,
-      marginBottom: 24,
-    },
-    modalButtons: {
-      flexDirection: "row",
-      gap: 12,
-    },
-    modalButton: {
-      flex: 1,
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      borderRadius: 12,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    modalButtonCancel: {
-      backgroundColor: theme.colors.surfaceMuted,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    modalButtonConfirm: {
-      backgroundColor: theme.colors.danger,
-    },
-    modalButtonText: {
-      fontSize: 16,
-      fontWeight: "600",
-      color: theme.colors.textPrimary,
-    },
-    modalButtonTextConfirm: {
-      color: "#ffffff",
-    },
-  });
+  const biometricType = Platform.OS === "ios" ? "Face ID" : "Fingerprint";
+  const inPinMode = verifyMode === "pin-entry" || verifyMode === "pin-setup";
+
+  const iconName: keyof typeof MaterialCommunityIcons.glyphMap =
+    verifyMode === "pin-setup"
+      ? "shield-key-outline"
+      : verifyMode === "pin-entry"
+        ? "lock-outline"
+        : Platform.OS === "ios"
+          ? "face-recognition"
+          : "fingerprint";
+
+  const title =
+    verifyMode === "pin-setup"
+      ? setupStep === "first"
+        ? "Create your Trezo PIN"
+        : "Confirm your Trezo PIN"
+      : verifyMode === "pin-entry"
+        ? "Enter your Trezo PIN"
+        : "Verify Your Identity";
+
+  const subtitle =
+    verifyMode === "pin-setup"
+      ? setupStep === "first"
+        ? `Pick a ${APP_PIN_LENGTH}-digit PIN. You'll use it whenever Trezo locks.`
+        : "Enter the same PIN again to confirm it."
+      : verifyMode === "pin-entry"
+        ? `Enter your ${APP_PIN_LENGTH}-digit Trezo PIN to continue.`
+        : isBiometricAvailable
+          ? `Use ${biometricType} to continue.`
+          : "Verify with your device PIN, pattern or password.";
+
+  const showNoDeviceLockBanner = hasNoScreenLock && verifyMode === "pin-setup";
 
   return (
-    <View style={styles.container}>
-      {/* Pending pairing banner — shown when a pairing link was detected on mount */}
-      {hasPendingPairing && (
-        <TouchableOpacity
-          onPress={handleContinuePairing}
-          activeOpacity={0.85}
-          style={{
-            width: '100%',
-            marginBottom: 20,
-            borderRadius: 16,
-            padding: 16,
-            backgroundColor: theme.colors.accent + '18',
-            borderWidth: 1,
-            borderColor: theme.colors.accent + '60',
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-          }}
-        >
-          <Ionicons name="phone-portrait-outline" size={24} color={theme.colors.accent} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 15 }}>
-              Continue Device Pairing
-            </Text>
-            <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 2 }}>
-              You have a pending pairing request. Tap to add this device.
-            </Text>
-          </View>
-          <Ionicons name="arrow-forward" size={20} color={theme.colors.accent} />
-        </TouchableOpacity>
-      )}
+    <>
+      <LinearGradient colors={gradients.hero} style={styles.root}>
 
-      <View style={styles.header}>
-        <View style={styles.iconContainer}>
-          <Ionicons name="shield-checkmark" size={40} color={theme.colors.accent} />
+        {/* Pending pairing banner */}
+        {hasPendingPairing && (
+          <TouchableOpacity
+            onPress={handleContinuePairing}
+            activeOpacity={0.85}
+            style={[styles.pairingBanner, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
+          >
+            <View style={[styles.pairingIconWrap, { backgroundColor: colors.surfaceMuted }]}>
+              <Ionicons name="phone-portrait-outline" size={18} color={colors.textSecondary} />
+            </View>
+            <View style={styles.pairingTextBlock}>
+              <Text style={[styles.pairingTitle, { color: colors.textPrimary }]}>Continue Device Pairing</Text>
+              <Text style={[styles.pairingSubtitle, { color: colors.textSecondary }]}>Tap to add this device to your wallet</Text>
+            </View>
+            <Ionicons name="arrow-forward" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+
+        <View style={styles.content}>
+          {/* Animated icon badge */}
+          <View style={[styles.haloContainer, { shadowColor: colors.accent }]}>
+            <AnimatedView
+              style={[styles.halo, haloStyle, { backgroundColor: colors.accent }]}
+            />
+            <View style={[styles.iconBadge, { backgroundColor: colors.surfaceElevated, borderColor: colors.glassBorder }]}>
+              <MaterialCommunityIcons name={iconName} size={44} color={colors.accent} />
+            </View>
+          </View>
+
+          <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
+
+          {/* Setup progress dots */}
+          {verifyMode === "pin-setup" ? (
+            <View style={styles.stepRow}>
+              <View
+                style={[
+                  styles.stepDot,
+                  { backgroundColor: setupStep === "first" ? colors.accent : colors.accentSoft },
+                ]}
+              />
+              <View
+                style={[
+                  styles.stepDot,
+                  { backgroundColor: setupStep === "confirm" ? colors.accent : colors.borderMuted },
+                ]}
+              />
+            </View>
+          ) : null}
+
+          {/* Error state */}
+          {!inPinMode && lastError ? (
+            <View style={[styles.errorPill, { backgroundColor: colors.dangerSoft, borderColor: colors.danger }]}>
+              <Text style={[styles.errorText, { color: colors.danger }]}>{lastError}</Text>
+            </View>
+          ) : null}
+          {inPinMode && pinError ? (
+            <View style={[styles.errorPill, { backgroundColor: colors.dangerSoft, borderColor: colors.danger }]}>
+              <Text style={[styles.errorText, { color: colors.danger }]}>{pinError}</Text>
+            </View>
+          ) : null}
+
+          {/* Action region */}
+          {inPinMode ? (
+            <>
+              <PinKeypad
+                pin={enteredPin}
+                length={APP_PIN_LENGTH}
+                onDigit={handlePinDigit}
+                onBackspace={handlePinBackspace}
+                disabled={pinBusy}
+              />
+
+              {isBiometricAvailable && verifyMode === "pin-entry" ? (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[
+                    styles.secondaryBtn,
+                    { backgroundColor: colors.surfaceMuted, borderColor: colors.border, marginTop: 12 },
+                  ]}
+                  onPress={handleSwitchToBiometric}
+                  disabled={pinBusy}
+                >
+                  <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>
+                    Use {biometricType} instead
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {verifyMode === "pin-setup" && setupStep === "confirm" ? (
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={styles.startOverBtn}
+                  onPress={handleStartOverSetup}
+                  disabled={pinBusy}
+                >
+                  <MaterialCommunityIcons
+                    name="arrow-u-left-top"
+                    size={16}
+                    color={colors.accent}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.startOverLabel, { color: colors.accent }]}>
+                    Start over and re-enter first PIN
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {showNoDeviceLockBanner ? (
+                <View
+                  style={[
+                    styles.advisoryBanner,
+                    { backgroundColor: colors.warningSoft, borderColor: colors.warning },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="shield-alert-outline"
+                    size={18}
+                    color={colors.warning}
+                    style={{ marginRight: 8 }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.advisoryTitle, { color: colors.textPrimary }]}>
+                      Add a device screen lock too
+                    </Text>
+                    <Text style={[styles.advisoryBody, { color: colors.textSecondary }]}>
+                      Your phone has no screen lock. Add one in {Platform.OS === "ios" ? "iOS Settings" : "Android Settings"} to keep Trezo safer.
+                    </Text>
+                    <TouchableOpacity onPress={handleRecheckSecurityLevel} activeOpacity={0.7} style={{ marginTop: 6 }}>
+                      <Text style={[styles.advisoryLink, { color: colors.accent }]}>
+                        I&apos;ve set one — recheck
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <View style={styles.actions}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
+                onPress={handleBiometricAuth}
+                disabled={isAuthenticating}
+              >
+                {isAuthenticating ? (
+                  <ActivityIndicator size="small" color={colors.textOnAccent} />
+                ) : (
+                  <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>
+                    {isBiometricAvailable ? `Use ${biometricType}` : "Verify with device PIN"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[styles.secondaryBtn, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}
+                onPress={handleSwitchToPin}
+                disabled={isAuthenticating}
+              >
+                <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>
+                  {hasPin ? "Unlock with app PIN" : "Use app PIN instead"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Recovery link */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.linkBtn}
+            onPress={handleRecover}
+            disabled={isAuthenticating || isLoggingOut}
+          >
+            <Text style={[styles.linkText, { color: colors.textSecondary }]}>
+              No passkey on this device? Recover account
+            </Text>
+          </TouchableOpacity>
+
+          {/* Re-login link */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.mutedLinkBtn}
+            onPress={handleReLogin}
+            disabled={isAuthenticating || isLoggingOut}
+          >
+            <Text style={[styles.mutedLinkText, { color: colors.textMuted }]}>
+              Re-login to a different account
+            </Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.title}>Welcome Back!</Text>
-        <Text style={styles.subtitle}>
-          Choose how you&apos;d like to continue with your secure wallet
-        </Text>
-      </View>
+      </LinearGradient>
 
-      <View style={styles.optionsContainer}>
-        <TouchableOpacity
-          style={[styles.optionButton, styles.primaryOption]}
-          onPress={handleBiometricAuth}
-          disabled={isAuthenticating}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.optionIconContainer, styles.primaryIconContainer]}>
-            <Ionicons name="finger-print" size={28} color={theme.colors.accent} />
-          </View>
-          <View style={styles.optionContent}>
-            <Text style={styles.optionTitle}>Device Verification</Text>
-            <Text style={styles.optionDescription}>
-              Use biometric or device PIN to securely access your wallet
-            </Text>
-          </View>
-          <View style={styles.optionArrow}>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.optionButton}
-          onPress={handleReLogin}
-          disabled={isAuthenticating}
-          activeOpacity={0.7}
-        >
-          <View style={styles.optionIconContainer}>
-            <Ionicons name="log-in-outline" size={28} color={theme.colors.textSecondary} />
-          </View>
-          <View style={styles.optionContent}>
-            <Text style={styles.optionTitle}>Re-login</Text>
-            <Text style={styles.optionDescription}>
-              Sign out and log in again with your credentials
-            </Text>
-          </View>
-          <View style={styles.optionArrow}>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* Re-login Confirmation Modal */}
+      {/* Re-login confirm modal */}
       <Modal
         visible={showReLoginModal}
         transparent
         animationType="fade"
         onRequestClose={handleCancelReLogin}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalIconContainer}>
-              <Ionicons name="warning" size={48} color={theme.colors.warning} />
+        <View style={styles.overlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+            <View style={[styles.modalIconBadge, { backgroundColor: colors.warningSoft }]}>
+              <MaterialCommunityIcons name="logout" size={30} color={colors.warning} />
             </View>
 
-            <Text style={styles.modalTitle}>Re-login Required</Text>
-            <Text style={styles.modalMessage}>
-              Your current session will be closed and all app data will be cleared. You will need to log in again with your credentials.
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Re-login Required</Text>
+            <Text style={[styles.modalBody, { color: colors.textSecondary }]}>
+              {"This clears all local data and signs you out — you'll need to log in again."}
             </Text>
 
-            <View style={styles.modalButtons}>
+            <View style={styles.modalBtns}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
+                style={[styles.modalBtn, { backgroundColor: colors.glass, borderColor: colors.border, borderWidth: 1 }]}
                 onPress={handleCancelReLogin}
-                disabled={isAuthenticating}
+                disabled={isLoggingOut}
                 activeOpacity={0.7}
               >
-                <Text style={styles.modalButtonText}>Cancel</Text>
+                <Text style={[styles.modalBtnText, { color: colors.textPrimary }]}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonConfirm]}
+                style={[styles.modalBtn, { backgroundColor: colors.danger, opacity: isLoggingOut ? 0.7 : 1 }]}
                 onPress={handleConfirmReLogin}
-                disabled={isAuthenticating}
+                disabled={isLoggingOut}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.modalButtonText, styles.modalButtonTextConfirm]}>
-                  {isAuthenticating ? "Logging out..." : "Continue"}
-                </Text>
+                {isLoggingOut ? (
+                  <ActivityIndicator size="small" color={colors.textOnAccent} />
+                ) : (
+                  <Text style={[styles.modalBtnText, { color: colors.textOnAccent }]}>Continue</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </View>
+    </>
   );
 };
+
+const createStyles = () =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+    },
+    pairingBanner: {
+      position: "absolute",
+      top: 56,
+      left: 20,
+      right: 20,
+      zIndex: 10,
+      borderRadius: 16,
+      padding: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      borderWidth: 1,
+    },
+    pairingIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    pairingTextBlock: {
+      flex: 1,
+    },
+    pairingTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    pairingSubtitle: {
+      fontSize: 12,
+      marginTop: 2,
+    },
+    content: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 32,
+      gap: 18,
+    },
+    haloContainer: {
+      width: 140,
+      height: 140,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowOpacity: 0.4,
+      shadowRadius: 28,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 0,
+    },
+    halo: {
+      position: "absolute",
+      width: 140,
+      height: 140,
+      borderRadius: 70,
+    },
+    iconBadge: {
+      width: 104,
+      height: 104,
+      borderRadius: 52,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+    },
+    title: {
+      fontSize: 27,
+      fontWeight: "600",
+      textAlign: "center",
+      letterSpacing: -0.3,
+    },
+    subtitle: {
+      fontSize: 14,
+      textAlign: "center",
+      lineHeight: 21,
+      opacity: 0.85,
+    },
+    stepRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: -8,
+    },
+    stepDot: {
+      width: 28,
+      height: 4,
+      borderRadius: 2,
+    },
+    errorPill: {
+      borderRadius: 8,
+      borderWidth: 1,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    errorText: {
+      fontSize: 13,
+      fontWeight: "600",
+      textAlign: "center",
+    },
+    actions: {
+      width: "100%",
+      gap: 10,
+    },
+    primaryBtn: {
+      borderRadius: 16,
+      paddingVertical: 16,
+      alignItems: "center",
+    },
+    primaryBtnText: {
+      fontSize: 15,
+      fontWeight: "700",
+    },
+    secondaryBtn: {
+      borderRadius: 16,
+      paddingVertical: 16,
+      alignItems: "center",
+      borderWidth: 1,
+    },
+    secondaryBtnText: {
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    advisoryBanner: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      width: "100%",
+      borderRadius: 14,
+      borderWidth: 1,
+      padding: 12,
+      marginTop: 4,
+    },
+    advisoryTitle: {
+      fontSize: 13,
+      fontWeight: "700",
+      marginBottom: 2,
+    },
+    advisoryBody: {
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    advisoryLink: {
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    startOverBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      marginTop: 10,
+    },
+    startOverLabel: {
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    linkBtn: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      alignItems: "center",
+      minHeight: 44,
+      justifyContent: "center",
+    },
+    linkText: {
+      fontSize: 13,
+      fontWeight: "600",
+      textDecorationLine: "underline",
+      textAlign: "center",
+    },
+    mutedLinkBtn: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      alignItems: "center",
+    },
+    mutedLinkText: {
+      fontSize: 12,
+      fontWeight: "500",
+      textDecorationLine: "underline",
+    },
+    overlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.7)",
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 24,
+    },
+    modalCard: {
+      borderRadius: 24,
+      padding: 24,
+      width: "100%",
+      maxWidth: 380,
+      borderWidth: 1,
+      alignItems: "center",
+      gap: 12,
+    },
+    modalIconBadge: {
+      width: 66,
+      height: 66,
+      borderRadius: 33,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 2,
+    },
+    modalTitle: {
+      fontSize: 21,
+      fontWeight: "600",
+      textAlign: "center",
+      letterSpacing: -0.3,
+    },
+    modalBody: {
+      fontSize: 14,
+      textAlign: "center",
+      lineHeight: 21,
+      opacity: 0.85,
+    },
+    modalBtns: {
+      flexDirection: "row",
+      gap: 10,
+      width: "100%",
+      marginTop: 6,
+    },
+    modalBtn: {
+      flex: 1,
+      paddingVertical: 14,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalBtnText: {
+      fontSize: 15,
+      fontWeight: "700",
+    },
+  });

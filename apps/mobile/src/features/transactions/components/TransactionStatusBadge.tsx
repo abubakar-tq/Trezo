@@ -1,5 +1,5 @@
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -66,8 +66,8 @@ export const TransactionStatusBadge: React.FC<{ status: WalletTransactionStatus 
       style={[
         styles.badge,
         {
-          borderColor: withAlpha(tone, 0.3),
-          backgroundColor: withAlpha(tone, 0.12),
+          borderColor: `${tone}4D`,
+          backgroundColor: `${tone}1F`,
         },
       ]}
     >

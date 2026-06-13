@@ -22,11 +22,11 @@ import {
 } from "@/src/features/swaps/config/swapProviders";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 import type { PreparedSmartAccountExecution } from "@/src/features/wallet/types/execution";
-import { getPublicClient } from "@/src/integration/viem/clients";
-import { getPublicClientForNetwork } from "@/src/integration/viem/clients";
+import { getPublicClient, getPublicClientForNetwork } from "@/src/integration/viem/clients";
 import type { SupportedChainId } from "@/src/integration/chains";
 import type { NetworkKey } from "@/src/integration/networks";
 import { encodeFunctionData, type Address, type Hex } from "viem";
+import { withTimeoutAndRetry } from "@/src/features/swaps/utils/withTimeoutAndRetry";
 
 const ERC20_ALLOWANCE_ABI = [
   {
@@ -96,12 +96,15 @@ export class AllowanceService {
       : { chainId: params.chainId! };
 
     const client = resolvePublicClient(resolver);
-    const raw = await client.readContract({
-      address: params.tokenAddress,
-      abi: ERC20_ALLOWANCE_ABI,
-      functionName: "allowance",
-      args: [params.owner, params.spender],
-    });
+    const raw = await withTimeoutAndRetry(
+      () => client.readContract({
+        address: params.tokenAddress,
+        abi: ERC20_ALLOWANCE_ABI,
+        functionName: "allowance",
+        args: [params.owner, params.spender],
+      }),
+      { timeoutMs: 8000 },
+    );
     return raw as bigint;
   }
 

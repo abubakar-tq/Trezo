@@ -14,6 +14,8 @@ import {
   isOTPDigit,
   maskEmail,
 } from "@utils/validation";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 type VerifyEmailRoute = RouteProp<AuthStackParamList, "VerifyEmail">;
 
@@ -35,6 +37,9 @@ const formatTimer = (value: number) => {
 const VerifyEmailScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<AuthStackParamList>>();
   const route = useRoute<VerifyEmailRoute>();
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const { email, flow } = route.params;
 
@@ -280,7 +285,7 @@ const VerifyEmailScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   formSpacing: {
     rowGap: 24,
   },
@@ -299,13 +304,13 @@ const styles = StyleSheet.create({
     minWidth: 42,
     maxWidth: 52,
     height: 64,
-    backgroundColor: "#171419",
-    borderColor: "#333333",
+    backgroundColor: colors.inputBackground,
+    borderColor: colors.inputBorder,
     borderWidth: 1,
     borderRadius: 18,
     marginHorizontal: 4,
     textAlign: "center",
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 22,
     fontWeight: "600",
   },
@@ -315,32 +320,32 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   timerText: {
-    color: "#9ca3af",
+    color: colors.textMuted,
     fontSize: 13,
   },
   timerStrong: {
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontWeight: "600",
   },
   resendText: {
-    color: "#60a5fa",
+    color: colors.accent,
     fontSize: 13,
     fontWeight: "600",
   },
   resendDisabled: {
-    color: "rgba(96,165,250,0.4)",
+    color: `${colors.accent}66`,
   },
   footerText: {
     textAlign: "center",
-    color: "#6b7280",
+    color: colors.textMuted,
     fontSize: 12,
     lineHeight: 18,
   },
   footerHighlight: {
-    color: "#93c5fd",
+    color: colors.accent,
   },
   magicLinkHelp: {
-    color: "#60a5fa",
+    color: colors.accent,
     fontSize: 12,
     textAlign: "center",
   },

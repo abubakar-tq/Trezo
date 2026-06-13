@@ -145,7 +145,7 @@ export class AccountDeploymentService {
     }
 
     let fundingTxHash: Hex | undefined;
-    if ((params.autoFundEntryPointDeposit ?? !usePaymaster) && !usePaymaster) {
+    if ((params.autoFundEntryPointDeposit ?? !usePaymaster) && !usePaymaster && chainId === 31337) {
       const { hash } = await fundEntryPointDeposit({
         chainId,
         account: sender,
@@ -208,6 +208,28 @@ export class AccountDeploymentService {
     const signedUserOp = { ...built.userOp, signature };
     const userOpHash = await submitConfiguredUserOp(signedUserOp, chainId, bundlerUrl);
     const receipt = await waitForUserOperationReceipt(userOpHash, chainId, bundlerUrl);
+
+    // Auto-sync the local onboarding passkey to Supabase now that we have a confirmed
+    // on-chain wallet. Non-fatal: a Supabase failure here must not block deployment.
+    try {
+      const localPasskey = await PasskeyService.getPasskey(userId);
+      if (localPasskey?.credentialId) {
+        // aa_wallet_id will be filled by useLazyPasskeyBackfill once the Supabase
+        // wallet record is persisted (we don't have the UUID here, only the hex walletId).
+        await PasskeyService.syncPasskeyToCloud(userId, null, {
+          credentialId: localPasskey.credentialId,
+          credentialIdRaw: localPasskey.credentialIdRaw ?? "0x",
+          publicKeyX: localPasskey.publicKeyX ?? "0x",
+          publicKeyY: localPasskey.publicKeyY ?? "0x",
+          deviceName: localPasskey.deviceName,
+          deviceType: localPasskey.deviceType,
+          createdAt: localPasskey.createdAt ?? new Date().toISOString(),
+          rpId: localPasskey.rpId ?? "",
+        });
+      }
+    } catch (err) {
+      console.warn("[AccountDeploymentService] passkey cloud sync failed (non-fatal):", err);
+    }
 
     return {
       accountAddress: built.sender,

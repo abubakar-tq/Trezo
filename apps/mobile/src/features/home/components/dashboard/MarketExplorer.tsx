@@ -1,17 +1,17 @@
 import React, { useMemo, useState, forwardRef, useImperativeHandle, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
-import { Sparkline, MeshBackground, TokenIcon } from '@shared/components';
+import { Sparkline, TokenIcon } from '@shared/components';
 import { useMarketData } from '@hooks/useMarketData';
+import type { TokenBalance } from '../../../portfolio/services/PortfolioService';
 
-const TokenItem = React.memo<{ token: any, colors: any }>(({ token, colors }) => {
+const TokenItem = React.memo<{ token: any, colors: any, onPress?: () => void }>(function TokenItem({ token, colors, onPress }) {
   const price = parseFloat(token.priceUsd);
   const change = parseFloat(token.changePercent24Hr);
-  
+
   return (
-    <TouchableOpacity style={styles.tokenItem} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.tokenItem, { borderBottomColor: colors.border }]} activeOpacity={0.7} onPress={onPress}>
       <View style={styles.tokenLeft}>
         <TokenIcon 
           symbol={token.symbol} 
@@ -47,15 +47,19 @@ const TokenItem = React.memo<{ token: any, colors: any }>(({ token, colors }) =>
   );
 });
 
-export const MarketExplorer = forwardRef<any, {}>((props, ref) => {
+interface MarketExplorerProps {
+  onTokenPress?: (token: TokenBalance) => void;
+}
+
+export const MarketExplorer = forwardRef<any, MarketExplorerProps>(function MarketExplorer({ onTokenPress }, ref) {
   const inputRef = useRef<TextInput>(null);
-  
+
   useImperativeHandle(ref, () => ({
     focusSearch: () => inputRef.current?.focus(),
   }));
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
-  const { assets, loading, refresh } = useMarketData(10);
+  const { assets, loading } = useMarketData(10);
   const [filter, setFilter] = useState<'all' | 'ethereum' | 'base' | 'polygon'>('all');
   const [search, setSearch] = useState('');
 
@@ -91,8 +95,6 @@ export const MarketExplorer = forwardRef<any, {}>((props, ref) => {
     });
   }, [assets, search, filter]);
 
-  const isDark = resolvedMode === 'dark';
-
   if (loading && assets.length === 0) {
     return (
       <View style={[styles.container, { padding: 40, alignItems: 'center' }]}>
@@ -105,7 +107,7 @@ export const MarketExplorer = forwardRef<any, {}>((props, ref) => {
   return (
     <View style={styles.container}>
       {/* Search Bar - Integrated in Section */}
-      <View style={[styles.searchContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : colors.surfaceMuted, borderColor: colors.border }]}>
+      <View style={[styles.searchContainer, { backgroundColor: colors.glass, borderColor: colors.border }]}>
         <Feather name="search" size={18} color={colors.textMuted} />
         <TextInput
           ref={inputRef}
@@ -151,11 +153,36 @@ export const MarketExplorer = forwardRef<any, {}>((props, ref) => {
           </View>
         ) : (
           filteredData.map((token) => (
-            <TokenItem key={token.id} token={token} colors={colors} />
+            <TokenItem
+              key={token.id}
+              token={token}
+              colors={colors}
+              onPress={() => onTokenPress?.({
+                symbol: token.symbol,
+                name: token.name,
+                amount: 0,
+                price: parseFloat(token.priceUsd),
+                value: 0,
+                change24h: parseFloat(token.changePercent24Hr),
+                address: token.id as `0x${string}`,
+                decimals: 18,
+              })}
+            />
           ))
         )}
         {/* End of list condition handled by ternary above */}
       </View>
+
+      {/* CoinGecko attribution — required by free-tier API terms */}
+      <TouchableOpacity
+        onPress={() => Linking.openURL('https://www.coingecko.com/en/api')}
+        style={styles.attributionRow}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.attributionText, { color: colors.textMuted }]}>
+          Data provided by CoinGecko
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 });
@@ -183,8 +210,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   attributionRow: {
-    marginBottom: 16,
-    flexDirection: 'row',
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  attributionText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   sourcePill: {
     paddingHorizontal: 12,
@@ -240,7 +271,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   tokenLeft: {
     flexDirection: 'row',
@@ -258,7 +288,7 @@ const styles = StyleSheet.create({
   iconText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFF',
+    color: '#FFFFFF',
   },
   tokenName: {
     fontSize: 15,

@@ -3,13 +3,20 @@
   "private": true,
   "scripts": {
     "android": "npm --workspace apps/mobile run android",
+    "ios": "npm --workspace apps/mobile run ios",
     "postinstall": "bash scripts/link-contract-node-modules.sh",
     "start": "npm --workspace apps/mobile run start"
   },
   "workspaces": [
     "apps/mobile",
     "apps/guardian-approval",
-    "apps/backend/*",
+    "apps/backend/indexer",
+    "apps/backend/zk-email-recovery-api",
     "contracts"
-  ]
+  ],
+  "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/jetbrains-mono": "^0.4.1",
+    "@expo-google-fonts/playfair-display": "^0.4.2"
+  }
 }

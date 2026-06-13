@@ -1,7 +1,7 @@
 let storage: any;
 try {
-  const { MMKV } = require('react-native-mmkv');
-  storage = new MMKV();
+  const { createMMKV } = require('react-native-mmkv');
+  storage = createMMKV();
 } catch (e) {
   console.warn('[StorageService] MMKV not available, using in-memory fallback');
   // Simple in-memory fallback for development/Expo Go

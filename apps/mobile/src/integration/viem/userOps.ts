@@ -5,7 +5,6 @@ import {
   keccak256,
   parseAbiParameters,
   http,
-  decodeAbiParameters,
   type Address,
   type Hex,
   createClient,
@@ -23,6 +22,7 @@ import { ABIS } from "./abis";
 import { getDeployment } from "./deployments";
 import { getPublicClient, getViemChain } from "./clients";
 import type { SupportedChainId } from "../chains";
+import { collectErrorData, decodeDelegateAndRevert, decodeFailedOp, decodeRevertString } from "./revertDecoding";
 
 export type PasskeyInit = {
   idRaw: Hex;
@@ -38,8 +38,6 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
 const BUNDLER_GAS_CAP = 20_000_000n; // many bundlers default to 20m max gas per UserOp
 const CREATE_ACCOUNT_MIN_VERIFICATION_GAS = 1_500_000n;
 const SMART_ACCOUNT_MIN_VERIFICATION_GAS = 500_000n;
-const DELEGATE_AND_REVERT_SELECTOR = "0x99410554";
-const FAILED_OP_SELECTOR = "0x220266b6";
 const VALIDATIONDATA_ALL_TIME_VALID_SENTINEL = "000000000000ffffffffffff0000000000000000000000000000000000000000";
 
 const debugLog = (...args: unknown[]) => {
@@ -65,61 +63,7 @@ const summarizeUserOp = (op: UserOperation<typeof ENTRY_POINT_VERSION>) => ({
   paymaster: op.paymaster,
 });
 
-// ------------ Error decoding helpers (for bundler delegateAndRevert) -------------
-const asHex = (v: any): Hex | undefined =>
-  typeof v === "string" && v.startsWith("0x") ? (v as Hex) : undefined;
-
-const collectErrorData = (err: any): Hex[] => {
-  const candidates = [
-    err?.data,
-    err?.error?.data,
-    err?.cause?.data,
-    err?.cause?.error?.data,
-    (() => {
-      try {
-        const parsed = JSON.parse(err?.body ?? "{}");
-        return parsed?.error?.data;
-      } catch {
-        return undefined;
-      }
-    })(),
-  ];
-  return candidates.map(asHex).filter(Boolean) as Hex[];
-};
-
-const decodeDelegateAndRevert = (raw: Hex) => {
-  if (!raw.startsWith(DELEGATE_AND_REVERT_SELECTOR) || raw.length < 10) return null;
-  try {
-    const data = ("0x" + raw.slice(10)) as Hex;
-    const [ok, inner] = decodeAbiParameters([{ type: "bool" }, { type: "bytes" }], data);
-    return { ok, inner: inner as Hex };
-  } catch {
-    return null;
-  }
-};
-
-const decodeFailedOp = (raw: Hex) => {
-  if (!raw.startsWith(FAILED_OP_SELECTOR) || raw.length < 10) return null;
-  try {
-    const data = ("0x" + raw.slice(10)) as Hex;
-    const [opIndex, reason] = decodeAbiParameters([{ type: "uint256" }, { type: "string" }], data);
-    return { opIndex: Number(opIndex), reason: reason as string };
-  } catch {
-    return null;
-  }
-};
-
-const decodeRevertString = (raw: Hex) => {
-  // Error(string) selector 0x08c379a0
-  if (!raw.startsWith("0x08c379a0") || raw.length < 10) return null;
-  try {
-    const data = ("0x" + raw.slice(10)) as Hex;
-    const [reason] = decodeAbiParameters([{ type: "string" }], data);
-    return reason as string;
-  } catch {
-    return null;
-  }
-};
+// ------------ Error decoding helpers (imported from revertDecoding) -------------
 
 const containsValidationDataSuccessSentinel = (raw: Hex) =>
   raw.toLowerCase().includes(VALIDATIONDATA_ALL_TIME_VALID_SENTINEL);
@@ -237,6 +181,26 @@ export type InstallRecoveryModuleUserOpParams = {
   operationLabel?: string;
 };
 
+export type GuardianUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  socialRecoveryAddress: Address;
+  guardians: readonly Address[];
+  threshold: bigint;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+  operationLabel?: string;
+};
+
 export type AddPasskeyUserOpParams = {
   chainId: SupportedChainId;
   bundlerUrl: string;
@@ -300,6 +264,37 @@ type RpcRequestClient = {
 type BundlerGasEstimate = RpcEstimateUserOperationGasReturnType<typeof ENTRY_POINT_VERSION> & {
   maxFeePerGas?: Hex;
   maxPriorityFeePerGas?: Hex;
+};
+
+/**
+ * Pimlico's pimlico_getUserOperationGasPrice — returns slow/standard/fast tiers
+ * the bundler will accept right now. Non-Pimlico bundlers (e.g. Alto on Anvil)
+ * don't implement this method; we silently fall back so the caller can use a
+ * sane default.
+ *
+ * Why this matters: Pimlico enforces a minimum maxFeePerGas that varies with
+ * network conditions. Sending below that minimum gets rejected with
+ * "max feePerGas must be at least <X>". Calling this method first guarantees
+ * the values we submit are above the floor.
+ */
+const fetchPimlicoGasPrice = async (
+  bundler: RpcRequestClient,
+): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } | null> => {
+  try {
+    const res = (await bundler.request({
+      method: "pimlico_getUserOperationGasPrice",
+      params: [],
+    })) as
+      | { standard?: { maxFeePerGas: Hex; maxPriorityFeePerGas: Hex } }
+      | null;
+    if (!res?.standard) return null;
+    return {
+      maxFeePerGas: toBigInt(res.standard.maxFeePerGas),
+      maxPriorityFeePerGas: toBigInt(res.standard.maxPriorityFeePerGas),
+    };
+  } catch {
+    return null;
+  }
 };
 
 const toBigInt = (value: bigint | number | string): bigint =>
@@ -625,6 +620,12 @@ const buildSmartAccountExecuteUserOp = async ({
     nonceKey,
   });
 
+  // Fetch the bundler's currently-acceptable gas price BEFORE constructing the
+  // userOp. Pimlico rejects userOps whose maxFeePerGas falls below its current
+  // minimum; this avoids the "max feePerGas must be at least X" failure.
+  const bundler = getBundlerClient(bundlerUrl, chainId);
+  const pimlicoGas = await fetchPimlicoGasPrice(bundler);
+
   const userOp: UserOperation<typeof ENTRY_POINT_VERSION> = {
     sender: smartAccountAddress,
     nonce: resolvedNonce,
@@ -632,12 +633,11 @@ const buildSmartAccountExecuteUserOp = async ({
     callGasLimit,
     verificationGasLimit,
     preVerificationGas,
-    maxFeePerGas: maxFeePerGas ?? 1_000_000_000n,
-    maxPriorityFeePerGas: maxPriorityFeePerGas ?? 1_000_000n,
+    maxFeePerGas: maxFeePerGas ?? pimlicoGas?.maxFeePerGas ?? 1_000_000_000n,
+    maxPriorityFeePerGas:
+      maxPriorityFeePerGas ?? pimlicoGas?.maxPriorityFeePerGas ?? 1_000_000n,
     signature: buildDummyPasskeySignature(passkeyId),
   };
-
-  const bundler = getBundlerClient(bundlerUrl, chainId);
   await ensureBundlerSupportsEntryPoint({ bundler, bundlerUrl, entryPoint, operationLabel });
 
   const userOpForEstimation = await maybeSponsorUserOp({
@@ -937,6 +937,12 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
   const dummySignature = buildDummyPasskeySignature(params.passkeyInit.idRaw);
   debugLog("[buildCreateAccountUserOp] Dummy signature bytes:", hexByteLength(dummySignature));
 
+  // Fetch Pimlico's acceptable gas price first so the create-account userOp
+  // is not rejected with "max feePerGas must be at least X" on chains where
+  // Pimlico enforces a floor above our default.
+  const bundler = getBundlerClient(params.bundlerUrl, params.chainId);
+  const pimlicoGas = await fetchPimlicoGasPrice(bundler);
+
   const userOp: UserOperation<typeof ENTRY_POINT_VERSION> = {
     sender,
     nonce: params.nonce ?? 0n,
@@ -946,13 +952,12 @@ export async function buildCreateAccountUserOp(params: CreateAccountParams) {
     callGasLimit: 1_000_000n,
     verificationGasLimit: 1_000_000n,
     preVerificationGas: 200_000n,
-    // Keep gas price low so total gas stays under common bundler caps (20m)
-    maxFeePerGas: params.maxFeePerGas ?? 10_000_000n,
-    maxPriorityFeePerGas: params.maxPriorityFeePerGas ?? 1_000_000n,
+    // Pimlico's standard tier when available, else low default for local Alto.
+    maxFeePerGas: params.maxFeePerGas ?? pimlicoGas?.maxFeePerGas ?? 10_000_000n,
+    maxPriorityFeePerGas:
+      params.maxPriorityFeePerGas ?? pimlicoGas?.maxPriorityFeePerGas ?? 1_000_000n,
     signature: dummySignature,
   };
-
-  const bundler = getBundlerClient(params.bundlerUrl, params.chainId);
 
   await ensureBundlerSupportsEntryPoint({
     bundler,
@@ -1098,6 +1103,179 @@ export async function buildInstallRecoveryModuleUserOp(params: InstallRecoveryMo
     verificationGasLimit: params.verificationGasLimit ?? 1_000_000n,
     preVerificationGas: params.preVerificationGas ?? 100_000n,
     operationLabel: params.operationLabel ?? "buildInstallRecoveryModuleUserOp",
+  });
+}
+
+export async function buildAddGuardiansUserOp(params: GuardianUserOpParams) {
+  if (!params.socialRecoveryAddress || params.socialRecoveryAddress === ZERO_ADDRESS) {
+    throw new Error("Social recovery address is required to build addGuardians UserOp");
+  }
+  const addCalldata = encodeFunctionData({
+    abi: ABIS.socialRecovery,
+    functionName: "addGuardians",
+    args: [params.smartAccountAddress, params.guardians as Address[], params.threshold],
+  });
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.socialRecoveryAddress, 0n, addCalldata],
+  });
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 600_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 800_000n,
+    preVerificationGas: params.preVerificationGas ?? 100_000n,
+    operationLabel: params.operationLabel ?? "buildAddGuardiansUserOp",
+  });
+}
+
+export async function buildRemoveGuardiansUserOp(params: GuardianUserOpParams) {
+  if (!params.socialRecoveryAddress || params.socialRecoveryAddress === ZERO_ADDRESS) {
+    throw new Error("Social recovery address is required to build removeGuardians UserOp");
+  }
+  const removeCalldata = encodeFunctionData({
+    abi: ABIS.socialRecovery,
+    functionName: "removeGuardians",
+    args: [params.smartAccountAddress, params.guardians as Address[], params.threshold],
+  });
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.socialRecoveryAddress, 0n, removeCalldata],
+  });
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 600_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 800_000n,
+    preVerificationGas: params.preVerificationGas ?? 100_000n,
+    operationLabel: params.operationLabel ?? "buildRemoveGuardiansUserOp",
+  });
+}
+
+export type ApproveHashUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  socialRecoveryAddress: Address;
+  digest: Hex;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+  operationLabel?: string;
+};
+
+export async function buildApproveHashUserOp(params: ApproveHashUserOpParams) {
+  if (!params.socialRecoveryAddress || params.socialRecoveryAddress === ZERO_ADDRESS) {
+    throw new Error("Social recovery address is required to build approveHash UserOp");
+  }
+  const innerCalldata = encodeFunctionData({
+    abi: ABIS.socialRecovery,
+    functionName: "approveHash",
+    args: [params.digest],
+  });
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.socialRecoveryAddress, 0n, innerCalldata],
+  });
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 400_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 800_000n,
+    preVerificationGas: params.preVerificationGas ?? 100_000n,
+    operationLabel: params.operationLabel ?? "buildApproveHashUserOp",
+  });
+}
+
+export type RawCallUserOpParams = {
+  chainId: SupportedChainId;
+  bundlerUrl: string;
+  smartAccountAddress: Address;
+  target: Address;
+  innerCalldata: Hex;
+  passkeyId: Hex;
+  nonce?: bigint;
+  nonceKey?: bigint;
+  usePaymaster?: boolean;
+  paymasterUrl?: string;
+  maxFeePerGas?: bigint;
+  maxPriorityFeePerGas?: bigint;
+  callGasLimit?: bigint;
+  verificationGasLimit?: bigint;
+  preVerificationGas?: bigint;
+  operationLabel?: string;
+};
+
+/**
+ * Build a UserOp that wraps an arbitrary contract call in smartAccount.execute().
+ * Used by recovery-schedule and recovery-execute flows where the caller is a
+ * guardian whose smart account is making a permissionless call to SocialRecovery.
+ * The inner calldata is supplied pre-encoded by the backend (which has access
+ * to all guardian signatures), avoiding the need to expose every guardian's
+ * signature to the client.
+ */
+export async function buildRawCallUserOp(params: RawCallUserOpParams) {
+  if (!params.target || params.target === ZERO_ADDRESS) {
+    throw new Error("Target address is required for buildRawCallUserOp");
+  }
+  const callData = encodeFunctionData({
+    abi: ABIS.smartAccount,
+    functionName: "execute",
+    args: [params.target, 0n, params.innerCalldata],
+  });
+  return buildSmartAccountExecuteUserOp({
+    chainId: params.chainId,
+    bundlerUrl: params.bundlerUrl,
+    smartAccountAddress: params.smartAccountAddress,
+    callData,
+    passkeyId: params.passkeyId,
+    nonce: params.nonce,
+    nonceKey: params.nonceKey,
+    usePaymaster: params.usePaymaster,
+    paymasterUrl: params.paymasterUrl,
+    maxFeePerGas: params.maxFeePerGas,
+    maxPriorityFeePerGas: params.maxPriorityFeePerGas,
+    callGasLimit: params.callGasLimit ?? 1_500_000n,
+    verificationGasLimit: params.verificationGasLimit ?? 1_000_000n,
+    preVerificationGas: params.preVerificationGas ?? 120_000n,
+    operationLabel: params.operationLabel ?? "buildRawCallUserOp",
   });
 }
 

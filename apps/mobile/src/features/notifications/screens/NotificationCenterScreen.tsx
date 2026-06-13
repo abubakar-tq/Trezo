@@ -2,7 +2,6 @@ import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { TabScreenContainer } from "@shared/components";
 import { useAppTheme, type ThemeColors } from "@theme";
-import { withAlpha } from "@utils/color";
 import React, { useCallback, useEffect, useMemo } from "react";
 import {
   FlatList,
@@ -50,7 +49,7 @@ const accentColor = (accent: string | null, colors: ThemeColors): string => {
     case "success":
       return colors.success;
     case "danger":
-      return colors.danger ?? colors.warning;
+      return colors.danger;
     case "warning":
       return colors.warning;
     case "accent":
@@ -74,6 +73,7 @@ const NotificationCenterScreen: React.FC = () => {
   const markRead = useNotificationStore((state) => state.markRead);
   const markAllRead = useNotificationStore((state) => state.markAllRead);
   const remove = useNotificationStore((state) => state.remove);
+  const clearAll = useNotificationStore((state) => state.clearAll);
 
   useEffect(() => {
     if (userId) {
@@ -88,7 +88,11 @@ const NotificationCenterScreen: React.FC = () => {
       }
       const deeplink = notification.payload?.deeplink;
       if (deeplink?.screen) {
-        navigation.navigate(deeplink.screen, deeplink.params ?? undefined);
+        try {
+          navigation.navigate(deeplink.screen as any, deeplink.params as any);
+        } catch {
+          // screen not registered in current navigator — mark-read is enough
+        }
       }
     },
     [markRead, navigation],
@@ -100,40 +104,50 @@ const NotificationCenterScreen: React.FC = () => {
       const tint = accentColor(item.accent, colors);
       const isUnread = item.status === "unread";
       return (
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => handlePress(item)}
-          onLongPress={() => remove(item.id).catch(() => undefined)}
+        <View
           style={[
             styles.item,
             { backgroundColor: colors.surfaceCard, borderColor: colors.borderMuted },
-            isUnread && { borderColor: withAlpha(tint, 0.3) },
+            isUnread && { borderColor: `${tint}4D` },
           ]}
         >
-          <View style={[styles.itemIcon, { backgroundColor: withAlpha(tint, 0.12) }]}>
-            <Feather name={iconName} size={20} color={tint} />
-          </View>
-          <View style={styles.itemBody}>
-            <View style={styles.itemTitleRow}>
-              <Text
-                numberOfLines={1}
-                style={[styles.itemTitle, { color: colors.textPrimary }]}
-              >
-                {item.title}
-              </Text>
-              {isUnread ? <View style={[styles.unreadDot, { backgroundColor: tint }]} /> : null}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => handlePress(item)}
+            style={styles.itemPressable}
+          >
+            <View style={[styles.itemIcon, { backgroundColor: `${tint}1F` }]}>
+              <Feather name={iconName} size={20} color={tint} />
             </View>
-            <Text
-              numberOfLines={2}
-              style={[styles.itemSubtitle, { color: colors.textSecondary }]}
-            >
-              {item.body}
-            </Text>
-            <Text style={[styles.itemTime, { color: colors.textSecondary }]}>
-              {formatRelativeTime(item.createdAt)}
-            </Text>
-          </View>
-        </TouchableOpacity>
+            <View style={styles.itemBody}>
+              <View style={styles.itemTitleRow}>
+                <Text
+                  numberOfLines={1}
+                  style={[styles.itemTitle, { color: colors.textPrimary }]}
+                >
+                  {item.title}
+                </Text>
+                {isUnread ? <View style={[styles.unreadDot, { backgroundColor: tint }]} /> : null}
+              </View>
+              <Text
+                numberOfLines={2}
+                style={[styles.itemSubtitle, { color: colors.textSecondary }]}
+              >
+                {item.body}
+              </Text>
+              <Text style={[styles.itemTime, { color: colors.textSecondary }]}>
+                {formatRelativeTime(item.createdAt)}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => remove(item.id).catch(() => undefined)}
+            style={styles.itemDeleteBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Feather name="trash-2" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
       );
     },
     [colors, handlePress, remove, styles],
@@ -175,6 +189,14 @@ const NotificationCenterScreen: React.FC = () => {
               style={[styles.headerActionBtn, { backgroundColor: colors.glass }]}
             >
               <Text style={[styles.headerActionLabel, { color: colors.accent }]}>Mark all read</Text>
+            </TouchableOpacity>
+          ) : null}
+          {notifications.length > 0 ? (
+            <TouchableOpacity
+              onPress={() => clearAll().catch(() => undefined)}
+              style={[styles.headerIconBtn, { backgroundColor: colors.glass }]}
+            >
+              <Feather name="trash-2" size={18} color={colors.danger} />
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity
@@ -260,11 +282,23 @@ const createStyles = (colors: ThemeColors) =>
     },
     item: {
       flexDirection: "row",
-      gap: 14,
-      padding: 14,
       borderRadius: 18,
       borderWidth: 1,
+      alignItems: "center",
+      overflow: "hidden",
+    },
+    itemPressable: {
+      flex: 1,
+      flexDirection: "row",
+      gap: 14,
+      padding: 14,
       alignItems: "flex-start",
+    },
+    itemDeleteBtn: {
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      alignItems: "center",
+      justifyContent: "center",
     },
     itemIcon: {
       width: 42,

@@ -1,27 +1,34 @@
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Clipboard } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import * as ExpoClipboard from 'expo-clipboard';
 import { Feather } from '@expo/vector-icons';
 import { useUserStore } from '@store/useUserStore';
+import { useAppTheme } from '@theme';
 import { isContractDeployed } from '../../../integration/viem';
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from '@/src/integration/chains';
 import PasskeyService from '../services/PasskeyService';
 import { AccountDeploymentService, deriveDefaultWalletId } from '../services/AccountDeploymentService';
+import { useWalletStore } from '../store/useWalletStore';
 import type { Hex } from 'viem';
 
 export const SmartAccountCard = () => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const authUser = useUserStore((state) => state.user);
   const userId = authUser?.id ?? null;
   const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
   const setSmartAccountAddress = useUserStore((state) => state.setSmartAccountAddress);
   const setSmartAccountDeployed = useUserStore((state) => state.setSmartAccountDeployed);
+  const aaAccount = useWalletStore((state) => state.aaAccount);
+  const activeChainId = useWalletStore((state) => state.activeChainId);
 
-  // Check deployment status on mount if we have an address but don't know if it's deployed
   useEffect(() => {
     const checkStatus = async () => {
       if (!userId) return;
-      
+
       try {
-        const chainId = 31337;
+        const chainId = (aaAccount?.chainId || activeChainId || DEFAULT_CHAIN_ID) as SupportedChainId;
         const walletId = deriveDefaultWalletId(userId);
         const passkey = await PasskeyService.getPasskey(userId);
         if (!passkey) return;
@@ -51,18 +58,18 @@ export const SmartAccountCard = () => {
     };
 
     checkStatus();
-  }, [userId]);
+  }, [userId, aaAccount?.chainId, activeChainId]);
 
   const handleCopyAddress = async () => {
     if (!smartAccountAddress) return;
     
-    Clipboard.setString(smartAccountAddress);
+    await ExpoClipboard.setStringAsync(smartAccountAddress);
     Alert.alert('Copied!', 'Smart account address copied to clipboard', [{ text: 'OK' }]);
   };
 
   if (!smartAccountAddress) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.surfaceCard }]}>
         <View style={styles.header}>
           <Feather name="shield" size={20} color="#666" />
           <Text style={styles.title}>Smart Account</Text>
@@ -78,7 +85,7 @@ export const SmartAccountCard = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.surfaceCard }]}>
       <View style={styles.header}>
         <Feather name="shield" size={20} color={smartAccountDeployed ? '#10b981' : '#f59e0b'} />
         <Text style={styles.title}>Smart Account</Text>
@@ -119,7 +126,6 @@ export const SmartAccountCard = () => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     margin: 16,

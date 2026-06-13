@@ -1,37 +1,42 @@
-/**
- * Surface Component
- * Card container with elevation levels
- */
-
 import React from "react";
 import { View, ViewProps } from "react-native";
-import { BorderRadius, Colors, Shadows } from "../TokenRegistry";
+import { useAppTheme } from "@theme";
+import { BorderRadius, Phi, Shadows } from "../TokenRegistry";
 
 type ElevationLevel = 1 | 2 | 3;
+type SurfaceVariant = "default" | "glass";
 
 interface SurfaceProps extends ViewProps {
   elevation?: ElevationLevel;
-  isDark?: boolean;
+  variant?: SurfaceVariant;
+  padding?: number;
   children: React.ReactNode;
 }
 
 export const Surface: React.FC<SurfaceProps> = ({
   elevation = 1,
-  isDark = true,
+  variant = "default",
+  padding,
   children,
   style,
   ...props
 }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const shadowConfig = Shadows[`level${elevation}` as keyof typeof Shadows];
-  const backgroundColor = isDark ? Colors.card : Colors.lightCard;
+  const resolvedPadding = padding ?? Phi.phi4;  // 20px default
+
+  const isGlass = variant === "glass";
 
   return (
     <View
       style={[
         {
-          backgroundColor,
+          backgroundColor: isGlass ? colors.glass : colors.surfaceCard,
           borderRadius: BorderRadius.lg,
-          padding: 16,
+          padding: resolvedPadding,
+          borderWidth: 1,
+          borderColor: isGlass ? colors.glassBorder : colors.border,
           ...shadowConfig,
         },
         style,
@@ -43,17 +48,7 @@ export const Surface: React.FC<SurfaceProps> = ({
   );
 };
 
-/**
- * Convenience factories
- */
-export const CardLevel1: React.FC<Omit<SurfaceProps, "elevation">> = (
-  props,
-) => <Surface elevation={1} {...props} />;
-
-export const CardLevel2: React.FC<Omit<SurfaceProps, "elevation">> = (
-  props,
-) => <Surface elevation={2} {...props} />;
-
-export const CardLevel3: React.FC<Omit<SurfaceProps, "elevation">> = (
-  props,
-) => <Surface elevation={3} {...props} />;
+export const CardLevel1: React.FC<Omit<SurfaceProps, "elevation">> = (props) => <Surface elevation={1} {...props} />;
+export const CardLevel2: React.FC<Omit<SurfaceProps, "elevation">> = (props) => <Surface elevation={2} {...props} />;
+export const CardLevel3: React.FC<Omit<SurfaceProps, "elevation">> = (props) => <Surface elevation={3} {...props} />;
+export const GlassSurface: React.FC<Omit<SurfaceProps, "variant">> = (props) => <Surface variant="glass" {...props} />;

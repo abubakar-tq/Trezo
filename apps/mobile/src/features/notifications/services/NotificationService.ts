@@ -105,6 +105,15 @@ export const NotificationService = {
     if (error) throw error;
   },
 
+  async clearAll(userId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("user_id", userId);
+    if (error) throw error;
+  },
+
   subscribe(
     userId: string,
     onChange: (event: { type: "INSERT" | "UPDATE" | "DELETE"; notification: AppNotification | null; id: string }) => void,

@@ -55,9 +55,125 @@ const UNISWAP_SWAP_ROUTER02_BASE = "0x2626664c2603336E57B271c5C0b26F421741e481" 
 // Uniswap V2 on Base — verify: cast code 0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24 --rpc-url $FORK_RPC_URL
 const UNISWAP_V2_ROUTER_BASE = "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24" as Address;
 
+// ─── Sepolia Addresses ────────────────────────────────────────────────────────
+// Uniswap V3 testnet deployments. Verify before mainnet rollout.
+const SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as Address;
+// Router-canonical Sepolia WETH: matches SwapRouter02.WETH9 immutable so
+// the router's pay() takes the auto-wrap-from-ETH branch. Verified on-chain.
+const SEPOLIA_WETH = "0xfff9976782d46cc05630d1f6ebab18b2324d6b14" as Address;
+const UNISWAP_V3_FACTORY_SEPOLIA = "0x0227628f3F023bb0B980b67D528571c95c6DaC1c" as Address;
+const UNISWAP_QUOTER_V2_SEPOLIA = "0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3" as Address;
+const UNISWAP_SWAP_ROUTER02_SEPOLIA = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E" as Address;
+
+// ─── Base Sepolia Addresses ───────────────────────────────────────────────────
+const BASE_SEPOLIA_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address;
+const BASE_SEPOLIA_WETH = "0x4200000000000000000000000000000000000006" as Address;
+const BASE_SEPOLIA_LINK = "0xE4aB69C077896252FAFBD49EFD26B5D171A32410" as Address;
+const UNISWAP_V3_FACTORY_BASE_SEPOLIA = "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24" as Address;
+const UNISWAP_QUOTER_V2_BASE_SEPOLIA = "0xC5290058841028F1614F3A6F0F5816cAd0df5E27" as Address;
+const UNISWAP_SWAP_ROUTER02_BASE_SEPOLIA = "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4" as Address;
+
+// ─── Arbitrum Sepolia Addresses ───────────────────────────────────────────────
+const ARB_SEPOLIA_USDC = "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d" as Address;
+const ARB_SEPOLIA_WETH = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73" as Address;
+const UNISWAP_V3_FACTORY_ARB_SEPOLIA = "0x248AB79Bbb9bC29bB72f7Cd42F17e054Fc40188e" as Address;
+const UNISWAP_QUOTER_V2_ARB_SEPOLIA = "0x2779a0CC1c3e0E44D2542EC3e79e3864Ae93Ef0B" as Address;
+const UNISWAP_SWAP_ROUTER02_ARB_SEPOLIA = "0x101F443B4d1b059569D643917553c771E1b9663E" as Address;
+
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 const DEX_CONFIGS: Partial<Record<NetworkKey, DexConfig>> = {
+  "ethereum-sepolia": {
+    networkKey: "ethereum-sepolia",
+    dexId: "uniswap_v3",
+    label: "Uniswap V3 on Sepolia",
+    factoryAddress: UNISWAP_V3_FACTORY_SEPOLIA,
+    quoterAddress: UNISWAP_QUOTER_V2_SEPOLIA,
+    routerAddress: UNISWAP_SWAP_ROUTER02_SEPOLIA,
+    wrappedNativeAddress: SEPOLIA_WETH,
+    trustedSpenders: [UNISWAP_SWAP_ROUTER02_SEPOLIA],
+    supportedPools: [
+      // 500-bps tier has the deepest liquidity on Sepolia by orders of
+      // magnitude (verified 2026-05-29: ~56T units vs ~872B at 3000 vs
+      // ~4.4B at 10000). Address pinned to skip the factory roundtrip.
+      // 500-bps pool on router-canonical WETH. Verified on-chain
+      // (2026-05-29): ~16.6 quintillion units of liquidity, ~295x deeper
+      // than the same tier on the old-WETH pool.
+      {
+        sellToken: SEPOLIA_USDC,
+        buyToken: SEPOLIA_WETH,
+        feeTier: 500,
+        poolAddress: "0x3289680dd4d6c10bb19b899729cda5eef58aeff1" as Address,
+        enabled: true,
+      },
+      {
+        sellToken: SEPOLIA_WETH,
+        buyToken: SEPOLIA_USDC,
+        feeTier: 500,
+        poolAddress: "0x3289680dd4d6c10bb19b899729cda5eef58aeff1" as Address,
+        enabled: true,
+      },
+    ],
+  },
+  "base-sepolia": {
+    networkKey: "base-sepolia",
+    dexId: "uniswap_v3",
+    label: "Uniswap V3 on Base Sepolia",
+    factoryAddress: UNISWAP_V3_FACTORY_BASE_SEPOLIA,
+    quoterAddress: UNISWAP_QUOTER_V2_BASE_SEPOLIA,
+    routerAddress: UNISWAP_SWAP_ROUTER02_BASE_SEPOLIA,
+    wrappedNativeAddress: BASE_SEPOLIA_WETH,
+    trustedSpenders: [UNISWAP_SWAP_ROUTER02_BASE_SEPOLIA],
+    supportedPools: [
+      // 3000 bps tier has the most liquidity on Base Sepolia (verified via swap-healthcheck).
+      // 500 bps and 10000 bps pools exist but have ~10^9x less liquidity.
+      {
+        sellToken: BASE_SEPOLIA_USDC,
+        buyToken: BASE_SEPOLIA_WETH,
+        feeTier: 3000,
+        poolAddress: "0x46880b404CD35c165EDdefF7421019F8dD25F4Ad" as Address,
+        enabled: true,
+      },
+      {
+        sellToken: BASE_SEPOLIA_WETH,
+        buyToken: BASE_SEPOLIA_USDC,
+        feeTier: 3000,
+        poolAddress: "0x46880b404CD35c165EDdefF7421019F8dD25F4Ad" as Address,
+        enabled: true,
+      },
+      // LINK / WETH 3000 bps pool on Base Sepolia — verified on-chain to have
+      // real liquidity (probe 2026-05-29). 10000 bps tier also exists with
+      // deeper liquidity but 3000 is fine for demo-sized swaps.
+      {
+        sellToken: BASE_SEPOLIA_WETH,
+        buyToken: BASE_SEPOLIA_LINK,
+        feeTier: 3000,
+        poolAddress: "0x78c470050f092ff228329c5267feda8a03d14d93" as Address,
+        enabled: true,
+      },
+      {
+        sellToken: BASE_SEPOLIA_LINK,
+        buyToken: BASE_SEPOLIA_WETH,
+        feeTier: 3000,
+        poolAddress: "0x78c470050f092ff228329c5267feda8a03d14d93" as Address,
+        enabled: true,
+      },
+    ],
+  },
+  "arbitrum-sepolia": {
+    networkKey: "arbitrum-sepolia",
+    dexId: "uniswap_v3",
+    label: "Uniswap V3 on Arbitrum Sepolia",
+    factoryAddress: UNISWAP_V3_FACTORY_ARB_SEPOLIA,
+    quoterAddress: UNISWAP_QUOTER_V2_ARB_SEPOLIA,
+    routerAddress: UNISWAP_SWAP_ROUTER02_ARB_SEPOLIA,
+    wrappedNativeAddress: ARB_SEPOLIA_WETH,
+    trustedSpenders: [UNISWAP_SWAP_ROUTER02_ARB_SEPOLIA],
+    supportedPools: [
+      { sellToken: ARB_SEPOLIA_USDC, buyToken: ARB_SEPOLIA_WETH, feeTier: 500, enabled: true },
+      { sellToken: ARB_SEPOLIA_WETH, buyToken: ARB_SEPOLIA_USDC, feeTier: 500, enabled: true },
+    ],
+  },
   "base-mainnet-fork": {
     networkKey: "base-mainnet-fork",
     dexId: "uniswap_v3",

@@ -53,9 +53,11 @@ const configurationError =
 export const isSupabaseConfigured = supabaseInstance !== null;
 export const supabaseConfigIssue = configurationError?.message ?? null;
 
+export const supabase = supabaseInstance as SupabaseClient;
+
 export const getSupabaseClient = (): SupabaseClient => {
-	if (supabaseInstance) {
-		return supabaseInstance;
+	if (supabase) {
+		return supabase;
 	}
 	throw configurationError ?? new SupabaseConfigurationError("Supabase client is not initialised.");
 };

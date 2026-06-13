@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { NavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import { CommonActions, NavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -15,7 +15,6 @@ import { navigate } from "@app/navigation/navigationRef";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
-import { withAlpha } from "@utils/color";
 
 const statusLabel = (status: string) => {
   if (status === "created") return "Waiting for passkey creation";
@@ -26,6 +25,8 @@ const statusLabel = (status: string) => {
   if (status === "failed") return "Failed";
   return status;
 };
+
+const TERMINAL_STATUSES: ReadonlyArray<string> = ["approved", "rejected", "expired", "failed"];
 
 type PairDeviceRoute = RouteProp<RootStackParamList, "PairDevice">;
 
@@ -48,6 +49,9 @@ const PairDeviceScreen: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approvedRequestHydrated, setApprovedRequestHydrated] = useState<string | null>(null);
+  const [hydrating, setHydrating] = useState(false);
+  const [hydrationError, setHydrationError] = useState<string | null>(null);
+  const [hydrationComplete, setHydrationComplete] = useState(false);
 
   const loadRequest = useCallback(
     async (params: PairingDeepLinkParams) => {
@@ -88,39 +92,56 @@ const PairDeviceScreen: React.FC = () => {
 
   useEffect(() => {
     if (!linkParams || !user?.id) return;
+    // Don't keep polling after the request reaches a terminal state — the
+    // status can no longer change from the new device's perspective.
+    if (request && TERMINAL_STATUSES.includes(request.status)) return;
 
     const timer = setInterval(() => {
       void loadRequest(linkParams).catch(() => {});
     }, 4000);
 
     return () => clearInterval(timer);
-  }, [linkParams, loadRequest, user?.id]);
+  }, [linkParams, loadRequest, request, user?.id]);
+
+  const runHydration = useCallback(async () => {
+    if (!user?.id || !request || request.status !== "approved") return;
+    setHydrating(true);
+    setHydrationError(null);
+    try {
+      await WalletSyncService.hydrateWalletForUser({
+        userId: user.id,
+        preferredChainId: request.chain_id as SupportedChainId,
+      });
+      await DevicePairingService.ensureLocalDeviceSynced({
+        userId: user.id,
+        walletAddress: request.wallet_address,
+        chainId: request.chain_id,
+      });
+      setHydrationComplete(true);
+    } catch (syncError) {
+      console.warn("[PairDevice] Failed to hydrate wallet after approval", syncError);
+      setHydrationError(
+        syncError instanceof Error
+          ? syncError.message
+          : "Could not sync your wallet on this device. Tap retry to try again.",
+      );
+    } finally {
+      setHydrating(false);
+    }
+  }, [request, user?.id]);
 
   useEffect(() => {
-    if (!user?.id || !request || request.status !== "approved") {
-      return;
-    }
-    if (approvedRequestHydrated === request.id) {
-      return;
-    }
-
+    if (!user?.id || !request || request.status !== "approved") return;
+    if (approvedRequestHydrated === request.id) return;
     setApprovedRequestHydrated(request.id);
-    void (async () => {
-      try {
-        await WalletSyncService.hydrateWalletForUser({
-          userId: user.id,
-          preferredChainId: request.chain_id as SupportedChainId,
-        });
-        await DevicePairingService.ensureLocalDeviceSynced({
-          userId: user.id,
-          walletAddress: request.wallet_address,
-          chainId: request.chain_id,
-        });
-      } catch (syncError) {
-        console.warn("[PairDevice] Failed to hydrate wallet after approval", syncError);
-      }
-    })();
-  }, [approvedRequestHydrated, request, user?.id]);
+    void runHydration();
+  }, [approvedRequestHydrated, request, runHydration, user?.id]);
+
+  const handleOpenWallet = useCallback(() => {
+    navigation.dispatch(
+      CommonActions.reset({ index: 0, routes: [{ name: "TabNavigation" }] }),
+    );
+  }, [navigation]);
 
   const handleCreateAndSubmitPasskey = useCallback(async () => {
     if (!user?.id || !linkParams) return;
@@ -137,7 +158,9 @@ const PairDeviceScreen: React.FC = () => {
     setBusy(true);
     setError(null);
     try {
-      const metadata = await PasskeyService.createPasskey(user.id);
+      // New device pairing: create this device's passkey if it has none, otherwise
+      // reuse the existing one. Never overwrite — that would change the AA address.
+      const metadata = await PasskeyService.getOrCreatePasskey(user.id);
       const updated = await DevicePairingService.submitNewDevicePasskey({
         requestId: linkParams.requestId,
         secret: linkParams.secret,
@@ -175,11 +198,18 @@ const PairDeviceScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={24} color={theme.colors.textPrimary} />
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.headerBackBtn, { backgroundColor: theme.colors.glass, borderColor: theme.colors.border }]}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-left" size={18} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Pair New Device</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.headerTitleBlock}>
+          <Text style={styles.headerKicker}>SECURITY</Text>
+          <Text style={styles.headerTitle}>Pair New Device</Text>
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.body}>
@@ -200,7 +230,60 @@ const PairDeviceScreen: React.FC = () => {
         ) : !linkParams ? (
           <>
             <Text style={styles.title}>No pairing link found</Text>
-            <Text style={styles.subtitle}>Open a pairing deep link from your trusted device QR code.</Text>
+            <Text style={styles.subtitle}>Scan the pairing QR code shown on a device you already use.</Text>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => navigation.navigate("LinkDevice")}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.primaryButtonLabel}>Scan pairing QR</Text>
+            </TouchableOpacity>
+          </>
+        ) : request?.status === "approved" ? (
+          <>
+            <View style={styles.successBadge}>
+              <Feather name="check" size={28} color={theme.colors.success} />
+            </View>
+            <Text style={styles.title}>Device paired successfully</Text>
+            <Text style={styles.subtitle}>
+              {hydrationComplete
+                ? "Your wallet is ready on this device. You can now sign on-chain actions from here."
+                : hydrating
+                  ? "Syncing your wallet from chain — this only takes a moment."
+                  : hydrationError
+                    ? "Pairing succeeded on-chain but your local wallet state didn't sync. Tap retry below."
+                    : "Finishing setup on this device…"}
+            </Text>
+            {hydrationError && (
+              <Text style={styles.errorText}>{hydrationError}</Text>
+            )}
+            {hydrationError ? (
+              <TouchableOpacity
+                style={[styles.primaryButton, hydrating && styles.disabledButton]}
+                onPress={() => void runHydration()}
+                disabled={hydrating}
+                activeOpacity={0.9}
+              >
+                {hydrating ? (
+                  <ActivityIndicator color={theme.colors.textOnAccent} />
+                ) : (
+                  <Text style={styles.primaryButtonLabel}>Retry sync</Text>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.primaryButton, (hydrating || !hydrationComplete) && styles.disabledButton]}
+                onPress={handleOpenWallet}
+                disabled={hydrating || !hydrationComplete}
+                activeOpacity={0.9}
+              >
+                {hydrating || !hydrationComplete ? (
+                  <ActivityIndicator color={theme.colors.textOnAccent} />
+                ) : (
+                  <Text style={styles.primaryButtonLabel}>Open wallet</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </>
         ) : (
           <>
@@ -208,7 +291,7 @@ const PairDeviceScreen: React.FC = () => {
             <View style={styles.introCard}>
               <Text style={styles.introTitle}>How pairing works</Text>
               <Text style={styles.introBody}>
-                This device becomes active only after the trusted device approves the request and the on-chain `addPasskey` transaction confirms.
+                This device becomes active only after the trusted device approves the request and the on-chain add-passkey transaction confirms.
               </Text>
             </View>
 
@@ -226,7 +309,7 @@ const PairDeviceScreen: React.FC = () => {
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Before you continue</Text>
               <Text style={styles.noteBody}>
-                Real passkeys should be created on a physical device in a native build. Emulator biometric fallback is only suitable for local UI testing.
+                Create passkeys on a physical device — emulator biometrics are for UI testing only.
               </Text>
             </View>
 
@@ -237,7 +320,7 @@ const PairDeviceScreen: React.FC = () => {
               activeOpacity={0.9}
             >
               {busy ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={theme.colors.textOnAccent} />
               ) : (
                 <Text style={styles.primaryButtonLabel}>{primaryActionLabel}</Text>
               )}
@@ -269,10 +352,29 @@ const createStyles = (colors: ThemeColors) =>
       borderBottomWidth: 1,
       borderBottomColor: colors.borderMuted,
     },
-    headerTitle: {
-      color: colors.textPrimary,
-      fontSize: 20,
+    headerBackBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+    },
+    headerTitleBlock: {
+      alignItems: "center",
+    },
+    headerKicker: {
+      fontSize: 10,
       fontWeight: "700",
+      letterSpacing: 1.8,
+      color: colors.textMuted,
+      marginBottom: 2,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.textPrimary,
+      letterSpacing: -0.3,
     },
     body: {
       flex: 1,
@@ -291,10 +393,10 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     introCard: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.12),
-      borderRadius: 14,
+      backgroundColor: colors.surfaceCard,
+      borderRadius: 16,
       borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.24),
+      borderColor: colors.borderMuted,
       padding: 14,
       gap: 6,
     },
@@ -317,10 +419,10 @@ const createStyles = (colors: ThemeColors) =>
       gap: 6,
     },
     noteCard: {
-      backgroundColor: withAlpha(colors.warning, 0.12),
-      borderRadius: 14,
+      backgroundColor: colors.warningSoft,
+      borderRadius: 16,
       borderWidth: 1,
-      borderColor: withAlpha(colors.warning, 0.28),
+      borderColor: colors.warning,
       padding: 14,
       gap: 6,
     },
@@ -351,10 +453,10 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 12,
     },
     primaryButton: {
-      marginTop: 10,
-      backgroundColor: colors.accentAlt,
-      borderRadius: 12,
-      paddingVertical: 14,
+      marginTop: 8,
+      backgroundColor: colors.accent,
+      borderRadius: 16,
+      paddingVertical: 16,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -362,7 +464,7 @@ const createStyles = (colors: ThemeColors) =>
       opacity: 0.6,
     },
     primaryButtonLabel: {
-      color: "#fff",
+      color: colors.textOnAccent,
       fontWeight: "700",
       fontSize: 14,
     },
@@ -371,9 +473,21 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
     },
     note: {
-      color: withAlpha(colors.textMuted, 0.85),
+      color: colors.textMuted,
       fontSize: 12,
       lineHeight: 18,
+    },
+    successBadge: {
+      alignSelf: "center",
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: colors.successSoft,
+      borderWidth: 1,
+      borderColor: colors.success,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 4,
     },
   });
 

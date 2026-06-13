@@ -125,9 +125,13 @@ export function createRecoveryRouter(store: RecoveryStore, relayerConfig: ZkEmai
       const approvals = await store.getApprovals(groupId);
       const chainRequests = await store.getChainRequests(groupId);
 
+      // Lowercase before substituting: the on-chain command handler decodes
+      // the recovery hash via StringUtils.hexToBytes32 which is intolerant of
+      // mixed-case; the account address is also compared via lowercased
+      // string match in the relayer. Mirrors mobile's normalization.
       const command = RECOVERY_COMMAND_TEMPLATE
-        .replace("{ethAddr}", group.smart_account_address)
-        .replace("{recoveryHash}", group.multichain_recovery_data_hash);
+        .replace("{ethAddr}", group.smart_account_address.toLowerCase())
+        .replace("{recoveryHash}", group.multichain_recovery_data_hash.toLowerCase());
 
       const results: Array<{
         approvalId: string;

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profile — remaining screens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#060608;--surface:rgba(18,15,24,0.66);--glass:rgba(244,241,234,0.02);--border:rgba(124,58,237,0.10);--border2:rgba(124,58,237,0.16);
+    --text:#F4F1EA;--text2:#8E8B85;--text3:#5C5A55;--accent:#7C3AED;--accentAlt:#06B6D4;--gain:#34D399;--success:#10B981;--loss:#E8654F;--warning:#F59E0B;--danger:#E8654F}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(120% 55% at 50% -8%, #0e0a16 0%, #060608 50%);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;padding:32px 20px 80px;-webkit-font-smoothing:antialiased}
+  .head{max-width:1180px;margin:0 auto 24px;text-align:center}.head h1{font-size:22px;font-weight:700;letter-spacing:-.3px}.head p{color:var(--text2);font-size:14px;margin-top:6px;max-width:800px;margin-inline:auto;line-height:1.5}
+  .stage{display:flex;gap:34px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1180px;margin:0 auto}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px;width:320px}
+  .tag{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2)}
+  .tagsub{font-size:12px;color:var(--text2);text-align:center;line-height:1.5;min-height:46px}
+  .phone{width:320px;border-radius:42px;background:var(--bg);border:1px solid rgba(124,58,237,.14);padding:14px 0 16px;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 10px #0b0910,0 0 0 11px rgba(124,58,237,.10);position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:114px;height:25px;background:#000;border-radius:0 0 16px 16px;z-index:5}
+  .scroll{flex:1;padding:0 17px;overflow-y:auto;max-height:716px}.scroll::-webkit-scrollbar{width:0}
+  .statusbar{display:flex;justify-content:space-between;padding:2px 4px 10px;font-size:11px;color:var(--text2);font-weight:600}
+  .mono{font-family:'JetBrains Mono',monospace}.row{display:flex;align-items:center}.between{justify-content:space-between}
+  .nav{display:flex;align-items:center;gap:12px;padding:6px 0 14px}.nav .back{font-size:20px;color:var(--text2)}.nav .ttl{font-size:20px;font-weight:600;letter-spacing:-.3px}
+  .glabel{font-size:11px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;color:var(--text3);margin:20px 2px 9px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+  .pad{padding:16px 15px}
+  .ic-chip{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;color:#b9a8e8;background:rgba(124,58,237,.07)}
+  .ok{font-size:11px;color:var(--text2);font-weight:500;display:inline-flex;align-items:center;gap:6px}.ok .d{width:6px;height:6px;border-radius:50%;background:var(--success);box-shadow:0 0 6px rgba(16,185,129,.5)}
+  .pend{font-size:11px;color:var(--warning);font-weight:600;display:inline-flex;align-items:center;gap:6px}.pend .d{width:6px;height:6px;border-radius:50%;background:var(--warning)}
+  .crow{display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid var(--border)}.crow:last-child{border-bottom:0}
+  .cav{width:34px;height:34px;border-radius:999px;background:rgba(124,58,237,.10);color:#b9a8e8;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+  .cmail{font-size:13.5px;font-weight:500}.csub{font-size:11px;color:var(--text2);margin-top:1px}
+  .h2{font-size:19px;font-weight:600;letter-spacing:-.3px;margin:8px 2px 6px;line-height:1.3}
+  .lede{font-size:13px;color:var(--text2);line-height:1.5;margin:0 2px 8px}
+  .cta{height:52px;border-radius:999px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;margin-top:18px}
+  .cta.ghost{background:var(--glass);border:1px solid var(--border);color:var(--text2);height:46px;margin-top:10px;font-weight:600}
+  .cta.danger{background:rgba(232,101,79,.12);border:1px solid rgba(232,101,79,.25);color:#f0a890}
+  .addlink{font-size:12px;color:var(--accent);font-weight:600;padding:13px 15px;border-top:1px solid var(--border)}
+  .swipe{font-size:11px;color:var(--loss);font-weight:600}
+  .adv{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);padding:13px 15px;border-top:1px solid var(--border)}
+  .note{max-width:1180px;margin:28px auto 0;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface);font-size:13px;color:var(--text2);line-height:1.65}
+  .note b{color:var(--text)}.note code{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c4b5fd}
+  .legend{display:flex;gap:9px;align-items:flex-start;margin-top:9px}.legend .k{color:var(--accent);font-weight:800;flex-shrink:0;width:88px}
+  .small{font-size:11px;color:var(--text3);margin-top:12px;padding:0 2px;line-height:1.5}
+  .delpill{font-size:10px;font-weight:800;letter-spacing:.5px;padding:2px 7px;border-radius:5px;background:rgba(232,101,79,.14);color:#f0a890;text-transform:uppercase;margin-left:6px}
+</style>
+</head>
+<body>
+  <div class="head"><h1>Remaining Profile screens to change</h1>
+    <p>Email Recovery — Manage <b>with remove-guardian + weights behind Advanced</b> (your two fixes) · Guardian Recovery cleaned (dev/test UI gated) · Compromised-wallet slimmed · Browser Settings tone fixed.</p></div>
+
+  <div class="stage">
+    <!-- ===== EMAIL RECOVERY — MANAGE (fixed) ===== -->
+    <div class="col">
+      <div class="tag">Email Recovery — Manage (fixed)</div>
+      <div class="tagsub">Each contact now has a Remove action (swipe or row action). Weights tucked under "Advanced", not on every row.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="nav"><span class="back">‹</span><span class="ttl">Email Recovery</span></div>
+
+          <div class="card pad" style="margin-bottom:2px">
+            <div class="row" style="gap:12px"><div class="ic-chip" style="width:38px;height:38px">✉</div>
+              <div style="flex:1"><div style="font-size:15px;font-weight:600">Email Recovery is on</div><div style="font-size:12px;color:var(--text2);margin-top:2px">2 of 3 approvals · 48h delay</div></div>
+              <span class="ok"><span class="d"></span></span></div>
+          </div>
+
+          <div class="glabel">Trusted contacts</div>
+          <div class="card">
+            <div class="crow"><div class="cav">M</div><div style="flex:1"><div class="cmail">mom@example.com</div><div class="csub">Accepted</div></div><span class="swipe">Remove</span></div>
+            <div class="crow"><div class="cav">J</div><div style="flex:1"><div class="cmail">jordan@example.com</div><div class="csub">Accepted</div></div><span class="swipe">Remove</span></div>
+            <div class="crow"><div class="cav">S</div><div style="flex:1"><div class="cmail">sam@example.com</div><div class="csub">Invite sent</div></div><span class="pend"><span class="d"></span>Resend</span></div>
+            <div class="addlink">+ Add a contact</div>
+          </div>
+
+          <div class="glabel">Settings</div>
+          <div class="card">
+            <div class="crow"><div class="ic-chip">⚙</div><div style="flex:1"><div class="cmail">Approvals &amp; timing</div><div class="csub">2 of 3 · 48h delay</div></div><span style="color:var(--text3)">›</span></div>
+            <div class="adv"><span class="ic-chip" style="width:26px;height:26px;font-size:13px">⋯</span>Advanced · per-contact weights<span style="margin-left:auto;color:var(--text3)">›</span></div>
+          </div>
+
+          <div class="cta danger" style="margin-top:18px">Turn off Email Recovery</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== GUARDIAN RECOVERY (cleaned) ===== -->
+    <div class="col">
+      <div class="tag">Guardians (cleaned)</div>
+      <div class="tagsub">Test/dev UI gated out of production. Guardians manageable incl. remove. No raw payload dumps or 5-min timelock picker.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="nav"><span class="back">‹</span><span class="ttl">Guardians</span></div>
+
+          <div class="card pad" style="margin-bottom:2px">
+            <div class="row" style="gap:12px"><div class="ic-chip" style="width:38px;height:38px">⛊</div>
+              <div style="flex:1"><div style="font-size:15px;font-weight:600">Social recovery is on</div><div style="font-size:12px;color:var(--text2);margin-top:2px">2 of 3 guardians required</div></div>
+              <span class="ok"><span class="d"></span></span></div>
+          </div>
+
+          <div class="glabel">Your guardians</div>
+          <div class="card">
+            <div class="crow"><div class="cav">0x</div><div style="flex:1"><div class="cmail mono" style="font-size:12.5px">0x9f…3aF1</div><div class="csub">Active</div></div><span class="swipe">Remove</span></div>
+            <div class="crow"><div class="cav">0x</div><div style="flex:1"><div class="cmail mono" style="font-size:12.5px">0x2c…7bD0</div><div class="csub">Active</div></div><span class="swipe">Remove</span></div>
+            <div class="crow"><div class="cav">0x</div><div style="flex:1"><div class="cmail mono" style="font-size:12.5px">0x88…1eA9</div><div class="csub">Pending</div></div><span class="pend"><span class="d"></span></span></div>
+            <div class="addlink">+ Add a guardian</div>
+          </div>
+
+          <div class="glabel">Settings</div>
+          <div class="card">
+            <div class="crow"><div class="ic-chip">⚙</div><div style="flex:1"><div class="cmail">Threshold</div><div class="csub">2 of 3 must approve</div></div><span style="color:var(--text3)">›</span></div>
+          </div>
+          <div class="small">A 24-hour safety delay applies before guardian changes take effect.</div>
+          <div style="margin-top:10px;padding:9px 12px;border:1px dashed var(--border2);border-radius:10px;font-size:10.5px;color:var(--text3)">⚙ Dev-only: timelock picker + UserOp payload <span class="delpill">__DEV__</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== COMPROMISED WALLET (slimmed) ===== -->
+    <div class="col">
+      <div class="tag">Wallet compromised (slimmed)</div>
+      <div class="tagsub">Crisis screen: one clear primary action, no wall of explanatory body copy.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="nav"><span class="back">‹</span><span class="ttl">Wallet compromised</span></div>
+
+          <div style="text-align:center;padding:18px 6px 6px">
+            <div style="width:62px;height:62px;border-radius:18px;margin:0 auto 16px;background:rgba(232,101,79,.10);border:1px solid rgba(232,101,79,.22);display:flex;align-items:center;justify-content:center;font-size:28px;color:#f0a890">⚠</div>
+            <div style="font-size:20px;font-weight:600;letter-spacing:-.3px">Secure your wallet</div>
+            <div style="font-size:13px;color:var(--text2);line-height:1.55;margin-top:8px;padding:0 6px">Start recovery to move control to a new key your guardians approve. Your funds stay put until it completes.</div>
+          </div>
+
+          <div class="cta danger" style="margin-top:18px">Start recovery now</div>
+          <div class="cta ghost">Review my recovery setup</div>
+
+          <div class="glabel">What happens</div>
+          <div class="card">
+            <div class="crow"><div class="ic-chip">①</div><div style="flex:1"><div class="cmail">Guardians approve</div></div></div>
+            <div class="crow"><div class="ic-chip">②</div><div style="flex:1"><div class="cmail">Safety delay</div></div></div>
+            <div class="crow"><div class="ic-chip">③</div><div style="flex:1"><div class="cmail">New key takes control</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== BROWSER SETTINGS (tone fixed) ===== -->
+    <div class="col">
+      <div class="tag">Browser Settings (tone fixed)</div>
+      <div class="tagsub">"GALACTIC CONFIGURATION / TAB QUANTUM STATE" → plain language. Dead "Clear All" button now actually works (or removed).</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="nav"><span class="back">‹</span><span class="ttl">Browser</span></div>
+
+          <div class="glabel">Tabs</div>
+          <div class="card">
+            <div class="crow"><div class="ic-chip">▦</div><div style="flex:1"><div class="cmail">Close tabs after</div><div class="csub">1 week of inactivity</div></div><span style="color:var(--text3)">›</span></div>
+          </div>
+
+          <div class="glabel">Search</div>
+          <div class="card">
+            <div class="crow"><div class="ic-chip">🔍</div><div style="flex:1"><div class="cmail">Search engine</div><div class="csub">Google</div></div><span style="color:var(--text3)">›</span></div>
+            <div class="crow"><div class="ic-chip">◷</div><div style="flex:1"><div class="cmail">History limit</div><div class="csub">Keep last 100</div></div><span style="color:var(--text3)">›</span></div>
+          </div>
+
+          <div class="glabel">Privacy</div>
+          <div class="card">
+            <div class="crow"><div class="ic-chip">🛡</div><div style="flex:1"><div class="cmail">Block pop-ups</div></div><span class="ok"><span class="d"></span></span></div>
+            <div class="crow"><div class="ic-chip">◍</div><div style="flex:1"><div class="cmail">Clear browsing data</div><div class="csub">History, cache, cookies</div></div><span class="swipe">Clear</span></div>
+          </div>
+          <div class="small">Plain language throughout — no "Purge journey logs / Quantum State" copy.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note"><b>Your two fixes + the remaining screens:</b>
+    <div class="legend"><span class="k">Remove guardian</span><span>Both <b>Email Recovery</b> (trusted contacts) and <b>Guardians</b> now show a clear <b>Remove</b> action per row. (Recon confirms the contract remove path exists; this just surfaces it cleanly.)</span></div>
+    <div class="legend"><span class="k">Weights</span><span>Per-contact weights moved to an <b>"Advanced" row</b> in Email Recovery settings (default: everyone equal). Out of the main flow, still reachable for power users.</span></div>
+    <div class="legend"><span class="k">Guardians</span><span>Cleaned: manage + remove + threshold. The currently-<b>ungated</b> 5-min timelock picker and raw UserOp/"Latest Module Payload" dumps (recon: GuardianRecoveryScreen 882-948) get wrapped in <code>__DEV__</code> — out of production.</span></div>
+    <div class="legend"><span class="k">Compromised</span><span>Crisis screen slimmed to one primary action + a 3-step "what happens" — no wall of technical body copy.</span></div>
+    <div class="legend"><span class="k">Browser</span><span>Sci-fi tone ("GALACTIC CONFIGURATION", "Quantum State", "Purge journey logs") → plain labels. The dead <code>onPress={() => {}}</code> "Clear All" wired to a real clear (or removed).</span></div>
+  </div>
+</body>
+</html>

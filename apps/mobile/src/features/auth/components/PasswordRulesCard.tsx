@@ -2,6 +2,8 @@ import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useMemo } from "react";
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 type RequirementState = "met" | "pending" | "unmet";
 
@@ -19,18 +21,20 @@ type Requirement = {
 
 const MIN_LENGTH = 8;
 
-const colorByState = {
-  met: "#34d399",
-  pending: "#fbbf24",
-  unmet: "#f87171",
-} as const;
-
 const getState = (met: boolean, hasInput: boolean): RequirementState => {
   if (met) return "met";
   return hasInput ? "unmet" : "pending";
 };
 
 const PasswordRulesCard: React.FC<PasswordRulesCardProps> = ({ password, confirmPassword, style }) => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const colorByState = {
+    met: colors.success,
+    pending: colors.warning,
+    unmet: colors.danger,
+  };
   const sanitizedPassword = password ?? "";
   const sanitizedConfirm = confirmPassword ?? "";
 
@@ -77,14 +81,14 @@ const PasswordRulesCard: React.FC<PasswordRulesCardProps> = ({ password, confirm
 
   return (
     <LinearGradient
-      colors={["rgba(37, 99, 235, 0.35)", "rgba(14, 165, 233, 0.2)"]}
+      colors={[`${colors.accent}59`, `${colors.accent}33`] as const}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[styles.card, style]}
     >
       <View style={styles.headerRow}>
         <View style={styles.titleIcon}>
-          <Feather name="shield" size={14} color="#bfdbfe" />
+          <Feather name="shield" size={14} color={`${colors.textPrimary}CC`} />
         </View>
         <Text style={styles.title}>Password requirements</Text>
       </View>
@@ -107,14 +111,14 @@ const PasswordRulesCard: React.FC<PasswordRulesCardProps> = ({ password, confirm
 
 export default PasswordRulesCard;
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   card: {
     borderRadius: 20,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: "rgba(125, 211, 252, 0.3)",
-    backgroundColor: "rgba(15, 23, 42, 0.88)",
+    borderColor: `${colors.accent}4D`,
+    backgroundColor: `${colors.surface}E0`,
     rowGap: 8,
   },
   headerRow: {
@@ -128,16 +132,16 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(59, 130, 246, 0.25)",
+    backgroundColor: `${colors.accent}40`,
   },
   title: {
-    color: "#e0f2fe",
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: "700",
     letterSpacing: 0.3,
   },
   subtitle: {
-    color: "#bfdbfe",
+    color: `${colors.textPrimary}CC`,
     fontSize: 12,
     opacity: 0.9,
   },
@@ -152,10 +156,10 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   ruleText: {
-    color: "#eff6ff",
+    color: colors.textPrimary,
     fontSize: 13,
   },
   ruleTextMet: {
-    color: "#d1fae5",
+    color: colors.success,
   },
 });

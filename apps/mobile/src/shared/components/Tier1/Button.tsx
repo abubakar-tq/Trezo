@@ -1,24 +1,27 @@
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
-import Animated, {
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-} from "react-native-reanimated";
-import { Colors, BorderRadius, OpacityStates } from "../TokenRegistry";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { useAppTheme } from "@theme";
+import {
+  BorderRadius,
+  CeremonialColors,
+  GlowShadows,
+  SpringConfig,
+  TouchTargets,
+} from "../TokenRegistry";
 
 interface ButtonProps {
   label: string;
   onPress?: () => void;
-  variant?: "primary" | "secondary" | "outline" | "gradient" | "ghost" | "tertiary";
+  variant?: "primary" | "secondary" | "tertiary" | "outline" | "ghost" | "danger" | "gradient" | "ceremonial";
   size?: "sm" | "md" | "lg";
   disabled?: boolean;
   isLoading?: boolean;
   icon?: React.ReactNode;
+  iconRight?: React.ReactNode;
   fullWidth?: boolean;
-  colors?: readonly [string, string, ...string[]];
-  isDark?: boolean;
+  gradientColors?: readonly [string, string, ...string[]];
 }
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -31,138 +34,152 @@ export const Button: React.FC<ButtonProps> = ({
   disabled = false,
   isLoading = false,
   icon,
+  iconRight,
   fullWidth = false,
-  colors,
-  isDark = true,
+  gradientColors,
 }) => {
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(1);
+  const { theme } = useAppTheme();
+  const { colors, gradients } = theme;
 
+  const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
-    opacity: opacity.value,
   }));
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.98);
-    opacity.value = withSpring(0.9);
+    scale.value = withSpring(0.97, SpringConfig.interaction);
   };
-
   const handlePressOut = () => {
-    scale.value = withSpring(1);
-    opacity.value = withSpring(1);
+    scale.value = withSpring(1, SpringConfig.interaction);
   };
 
-  const getSizeStyles = () => {
+  const getHeight = () => {
     switch (size) {
-      case "sm":
-        return { paddingVertical: 8, paddingHorizontal: 16, minHeight: 32 };
-      case "lg":
-        return { paddingVertical: 16, paddingHorizontal: 32, minHeight: 56 };
-      default:
-        return { paddingVertical: 12, paddingHorizontal: 24, minHeight: 44 };
+      case "sm": return TouchTargets.min;        // 44
+      case "lg": return 56;
+      default:   return TouchTargets.comfort;    // 52
     }
   };
 
-  const getTextSizeStyles = () => {
+  const getHorizontalPad = () => {
     switch (size) {
-      case "sm":
-        return { fontSize: 13 };
-      case "lg":
-        return { fontSize: 18 };
-      default:
-        return { fontSize: 15 };
+      case "sm": return 16;
+      case "lg": return 36;
+      default:   return 28;
     }
   };
 
-  const getVariantStyles = () => {
-    if (disabled || isLoading) {
-      return { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' };
-    }
-
-    switch (variant) {
-      case "secondary":
-        return { backgroundColor: isDark ? Colors.surface : Colors.lightSurface, borderWidth: 1, borderColor: Colors.primary };
-      case "tertiary":
-        return { backgroundColor: isDark ? Colors.surfaceMid : Colors.lightCard };
-      case "outline":
-        return { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: isDark ? '#ffffff' : Colors.primary };
-      case "ghost":
-        return { backgroundColor: 'transparent' };
-      case "gradient":
-        return {};
-      default:
-        return { backgroundColor: isDark ? Colors.primary : Colors.primary };
+  const getTextSize = () => {
+    switch (size) {
+      case "sm": return 13;
+      case "lg": return 17;
+      default:   return 15;
     }
   };
 
-  const getTextColor = () => {
-    if (disabled || isLoading) {
-      return isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)';
-    }
-
+  const getBorderRadius = () => {
     switch (variant) {
       case "primary":
       case "gradient":
-      case "secondary":
-        return "#ffffff";
-      case "outline":
-        return isDark ? '#ffffff' : Colors.primary;
+      case "ceremonial":
+        return BorderRadius.xl;   // 24 — pill-like for primary CTAs
       default:
-        return isDark ? Colors.textPrimary : Colors.lightTextPrimary;
+        return BorderRadius.lg;   // 16 — contained for secondary actions
     }
   };
 
-  const buttonContent = (
-    <View
-      style={[
-        styles.buttonContent,
-        getSizeStyles(),
-        fullWidth && styles.fullWidth,
-      ]}
-    >
-      {isLoading ? (
-        <ActivityIndicator color={getTextColor()} size="small" />
-      ) : (
-        <>
-          {icon && <View style={styles.iconContainer}>{icon}</View>}
-          <Text
-            style={[
-              styles.text,
-              getTextSizeStyles(),
-              { color: getTextColor() },
-            ]}
-          >
-            {label}
-          </Text>
-        </>
-      )}
-    </View>
+  const getVariantBg = (): string => {
+    if (disabled || isLoading) return colors.surfaceMuted;
+    switch (variant) {
+      case "primary":    return colors.accent;
+      case "secondary":  return colors.accentSoft;
+      case "tertiary":   return colors.surfaceCard;
+      case "danger":     return colors.dangerSoft;
+      case "ceremonial": return CeremonialColors.goldSoft;
+      default:           return "transparent";
+    }
+  };
+
+  const getTextColor = (): string => {
+    if (disabled || isLoading) return colors.textMuted;
+    switch (variant) {
+      case "primary":    return colors.textOnAccent;
+      case "secondary":  return colors.accent;
+      case "danger":     return colors.danger;
+      case "gradient":   return colors.textOnHero;
+      case "ceremonial": return CeremonialColors.gold;
+      default:           return colors.text;
+    }
+  };
+
+  const getBorderStyle = (): object => {
+    if (disabled || isLoading) return {};
+    switch (variant) {
+      case "secondary":  return { borderWidth: 1, borderColor: colors.border };
+      case "outline":    return { borderWidth: 1.5, borderColor: `${colors.text}33` };
+      case "danger":     return { borderWidth: 1, borderColor: colors.danger };
+      case "ceremonial": return { borderWidth: 1, borderColor: CeremonialColors.goldHairline };
+      case "ghost":      return { borderWidth: 1, borderColor: colors.borderMuted };
+      default:           return {};
+    }
+  };
+
+  const getGlowStyle = (): object => {
+    if (disabled || isLoading) return {};
+    switch (variant) {
+      case "primary":
+      case "gradient":   return GlowShadows.violet;
+      case "ceremonial": return GlowShadows.gold;
+      default:           return {};
+    }
+  };
+
+  const contentStyle = {
+    height: getHeight(),
+    paddingHorizontal: getHorizontalPad(),
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 8,
+  };
+
+  const labelStyle = {
+    fontSize: getTextSize(),
+    fontWeight: "600" as const,
+    color: getTextColor(),
+    letterSpacing: variant === "primary" || variant === "ceremonial" ? 0.5 : 0.3,
+  };
+
+  const innerContent = isLoading ? (
+    <ActivityIndicator color={getTextColor()} size="small" />
+  ) : (
+    <>
+      {icon && <View>{icon}</View>}
+      <Text style={labelStyle}>{label}</Text>
+      {iconRight && <View>{iconRight}</View>}
+    </>
   );
 
   if (variant === "gradient") {
-    const defaultColors: readonly [string, string, string] = [
-      "#1877f2",
-      "#6945ed",
-      "#8b5cf6",
-    ];
-    const gradientColors = colors || defaultColors;
-
+    const gc = gradientColors ?? (gradients.brand as readonly [string, string, ...string[]]);
     return (
       <AnimatedTouchableOpacity
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         disabled={disabled || isLoading}
-        style={[animatedStyle, fullWidth && styles.fullWidth]}
+        activeOpacity={1}
+        style={[animatedStyle, fullWidth && styles.fullWidth, getGlowStyle()]}
       >
         <LinearGradient
-          colors={gradientColors}
+          colors={gc}
           start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradient}
+          end={{ x: 1, y: 0 }}
+          style={[{ borderRadius: getBorderRadius() }, fullWidth && styles.fullWidth]}
         >
-          {buttonContent}
+          <View style={[contentStyle, fullWidth && styles.fullWidth]}>
+            {innerContent}
+          </View>
         </LinearGradient>
       </AnimatedTouchableOpacity>
     );
@@ -174,44 +191,31 @@ export const Button: React.FC<ButtonProps> = ({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled || isLoading}
+      activeOpacity={1}
       style={[
         animatedStyle,
-        styles.button,
-        getVariantStyles(),
+        {
+          backgroundColor: getVariantBg(),
+          borderRadius: getBorderRadius(),
+        },
+        getBorderStyle(),
+        getGlowStyle(),
         fullWidth && styles.fullWidth,
       ]}
     >
-      {buttonContent}
+      <View style={[contentStyle, fullWidth && styles.fullWidth]}>
+        {innerContent}
+      </View>
     </AnimatedTouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  fullWidth: {
-    width: '100%',
-  },
-  iconContainer: {
-    // marginRight is handled by gap
-  },
-  text: {
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  button: {
-    borderRadius: BorderRadius.lg,
-  },
-  gradient: {
-    borderRadius: BorderRadius.lg,
-  },
+  fullWidth: { width: "100%" },
 });
 
 export const PrimaryButton: React.FC<Omit<ButtonProps, "variant">> = (props) => <Button variant="primary" {...props} />;
 export const SecondaryButton: React.FC<Omit<ButtonProps, "variant">> = (props) => <Button variant="secondary" {...props} />;
 export const TertiaryButton: React.FC<Omit<ButtonProps, "variant">> = (props) => <Button variant="tertiary" {...props} />;
 export const GhostButton: React.FC<Omit<ButtonProps, "variant">> = (props) => <Button variant="ghost" {...props} />;
+export const CeremonialButton: React.FC<Omit<ButtonProps, "variant">> = (props) => <Button variant="ceremonial" {...props} />;

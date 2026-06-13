@@ -13,7 +13,7 @@ import {
 
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+import { FontFamilies } from "@shared/components/TokenRegistry";
 import { ContactService, type Contact } from "../index";
 
 const ContactListScreen: React.FC = () => {
@@ -320,7 +320,7 @@ const createStyles = (colors: ThemeColors) =>
       marginBottom: 16,
     },
     tagChip: {
-      backgroundColor: withAlpha(colors.textPrimary, 0.06),
+      backgroundColor: colors.glass,
       borderWidth: 1,
       borderColor: colors.borderMuted,
       borderRadius: 20,
@@ -338,7 +338,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "600",
     },
     tagChipTextActive: {
-      color: "#ffffff",
+      color: colors.textOnAccent,
     },
     resultsCount: {
       color: colors.textMuted,
@@ -360,7 +360,7 @@ const createStyles = (colors: ThemeColors) =>
       width: 48,
       height: 48,
       borderRadius: 24,
-      backgroundColor: withAlpha(colors.accentAlt, 0.15),
+      backgroundColor: `${colors.accentAlt}26`,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -381,7 +381,7 @@ const createStyles = (colors: ThemeColors) =>
     contactAddress: {
       color: colors.textSecondary,
       fontSize: 13,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
     contactTags: {
       flexDirection: "row",
@@ -390,7 +390,7 @@ const createStyles = (colors: ThemeColors) =>
       marginTop: 4,
     },
     contactTag: {
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: `${colors.accentAlt}1A`,
       borderRadius: 8,
       paddingHorizontal: 8,
       paddingVertical: 3,

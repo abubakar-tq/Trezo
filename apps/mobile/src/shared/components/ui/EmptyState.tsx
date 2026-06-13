@@ -3,7 +3,6 @@ import { StyleSheet, Text, TouchableOpacity, View, ViewStyle } from "react-nativ
 import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
-import { withAlpha } from "@utils/color";
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -45,7 +44,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           activeOpacity={0.8}
         >
           <Text style={styles.buttonText}>{actionLabel}</Text>
-          <Feather name="arrow-right" size={18} color="#FFF" style={{ marginLeft: 8 }} />
+          <Feather name="arrow-right" size={18} color={colors.textOnAccent} style={{ marginLeft: 8 }} />
         </TouchableOpacity>
       )}
     </View>
@@ -58,16 +57,16 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       padding: 30,
-      backgroundColor: withAlpha(colors.surfaceCard, 0.5),
+      backgroundColor: `${colors.surfaceCard}80`,
       borderRadius: 24,
       borderWidth: 1,
-      borderColor: withAlpha(colors.border, 0.5),
+      borderColor: `${colors.border}80`,
     },
     iconContainer: {
       width: 100,
       height: 100,
       borderRadius: 50,
-      backgroundColor: withAlpha(colors.accentAlt, 0.1),
+      backgroundColor: `${colors.accentAlt}1A`,
       alignItems: "center",
       justifyContent: "center",
       marginBottom: 20,
@@ -79,7 +78,7 @@ const createStyles = (colors: ThemeColors) =>
       height: 120,
       borderRadius: 60,
       borderWidth: 1,
-      borderColor: withAlpha(colors.accentAlt, 0.2),
+      borderColor: `${colors.accentAlt}33`,
       opacity: 0.5,
     },
     title: {
@@ -107,7 +106,7 @@ const createStyles = (colors: ThemeColors) =>
       width: "100%",
     },
     buttonText: {
-      color: "#FFF",
+      color: colors.textOnAccent,
       fontSize: 17,
       fontWeight: "700",
     },

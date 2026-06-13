@@ -4,3 +4,4 @@ export { useSupabaseAuth } from "./useSupabaseAuth";
 export { useTabContentBottomInset } from "./useTabContentInset";
 export { useWalletData } from "./useWalletData";
 export { useMarketData } from "./useMarketData";
+export { usePortfolioHistory } from "./usePortfolioHistory";

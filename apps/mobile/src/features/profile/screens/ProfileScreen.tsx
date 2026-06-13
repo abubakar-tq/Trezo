@@ -1,27 +1,46 @@
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Clipboard from "expo-clipboard";
 import { NavigationProp, useNavigation } from "@react-navigation/native";
 import { Avatar, TabScreenContainer } from "@shared/components";
-import { MeshBackground } from "@shared/components/MeshBackground";
-import { LinearGradient } from "expo-linear-gradient";
+import { LABELS } from "@shared/copy/labels";
 import React, { useCallback, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import {
+  Canvas,
+  Rect,
+  RadialGradient,
+  vec,
+} from "@shopify/react-native-skia";
 
 import { RootStackParamList } from "@/src/types/navigation";
 import { useTabContentBottomInset } from "@hooks";
 import { getSupabaseClient } from "@lib/supabase";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import PasskeyService from "@/src/features/wallet/services/PasskeyService";
+import { getDeployment, getPublicClient } from "@/src/integration/viem";
+import { RecoveryAttemptBanner } from "@shared/components/banners/RecoveryAttemptBanner";
+import { ABIS } from "@/src/integration/viem/abis";
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import { Alert } from "react-native";
+import type { Address, Hex } from "viem";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
+const { width: SCREEN_W } = Dimensions.get("window");
+const HERO_H = 196;
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -29,434 +48,648 @@ type SettingsItem = {
   label: string;
   icon: FeatherIconName;
   route?: keyof RootStackParamList;
+  statusDot?: boolean;
 };
 
-const baseSettingsItems: SettingsItem[] = [
-  { label: "Contacts", icon: "book", route: "ContactList" },
-  { label: "Browser settings", icon: "globe", route: "BrowserSettings" },
-  { label: "Devices & passkeys", icon: "smartphone", route: "DevicesPasskeys" },
-  { label: "Notifications", icon: "bell", route: "NotificationSettings" },
-  { label: "Backup & recovery", icon: "cloud", route: "BackupRecovery" },
-];
-
-const settingsItems: SettingsItem[] = [
-  ...baseSettingsItems,
-  // Dev-only quick link into the AA createAccount tester
-  ...(__DEV__
-    ? ([
-        {
-          label: "Dev Controls",
-          icon: "cpu",
-          route: "DevCreateAccount",
-        },
-      ] satisfies SettingsItem[])
-    : []),
-];
+type SettingsGroup = {
+  title: string;
+  items: SettingsItem[];
+};
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { theme, resolvedMode, setMode } = useAppTheme();
-  const { colors, gradients } = theme;
-  const styles = useMemo(() => createStyles(colors, resolvedMode), [colors, resolvedMode]);
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const contentBottomInset = useTabContentBottomInset();
 
   const user = useUserStore((state) => state.user);
   const profile = useUserStore((state) => state.profile);
   const resetUser = useUserStore((state) => state.reset);
-  const setGuardNavigation = useAuthFlowStore(
-    (state) => state.setGuardNavigation,
-  );
+  const setGuardNavigation = useAuthFlowStore((state) => state.setGuardNavigation);
 
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [checkingPasskey, setCheckingPasskey] = useState(false);
+
+  // DEV: paths used by Check Passkey Authority button.
+  const smartAccountAddress = useUserStore((s) => s.smartAccountAddress) as Address | null;
+  const activeChainId = useWalletStore((s) => s.activeChainId) as SupportedChainId | undefined;
+
+  const handleCheckPasskeyAuthority = useCallback(async () => {
+    if (checkingPasskey) return;
+    setCheckingPasskey(true);
+    try {
+      if (!user?.id) throw new Error("No signed-in user");
+      if (!smartAccountAddress) throw new Error("No smart account on record");
+
+      const chainId = (activeChainId ?? DEFAULT_CHAIN_ID) as SupportedChainId;
+      const local = await PasskeyService.getPasskey(user.id);
+      const deployment = getDeployment(chainId);
+      const validatorAddr = deployment?.passkeyValidator as Address | undefined;
+      if (!validatorAddr) throw new Error("No PasskeyValidator address in deployment");
+
+      const client = getPublicClient(chainId);
+
+      const lines: string[] = [];
+      lines.push(`Chain: ${chainId}`);
+      lines.push(`Wallet: ${smartAccountAddress.slice(0, 10)}…${smartAccountAddress.slice(-6)}`);
+      lines.push(`Validator: ${validatorAddr.slice(0, 10)}…${validatorAddr.slice(-6)}`);
+
+      // 1) Local passkey snapshot
+      if (!local) {
+        lines.push("");
+        lines.push("❌ No local passkey for this user on this device.");
+        lines.push("→ You cannot sign UserOps until a passkey is provisioned (or recovered).");
+        Alert.alert("Passkey Authority Check", lines.join("\n"));
+        return;
+      }
+      const credentialIdRaw = local.credentialIdRaw as Hex;
+      lines.push("");
+      lines.push("Local passkey:");
+      lines.push(`  credentialId: ${credentialIdRaw.slice(0, 14)}…${credentialIdRaw.slice(-10)}`);
+      lines.push(`  X: ${(local.publicKeyX ?? "0x").slice(0, 14)}…`);
+      lines.push(`  Y: ${(local.publicKeyY ?? "0x").slice(0, 14)}…`);
+
+      // 2) On-chain validator state
+      const [count, isInit, hasIt] = await Promise.all([
+        client.readContract({
+          address: validatorAddr,
+          abi: ABIS.passkeyValidator,
+          functionName: "passkeyCount",
+          args: [smartAccountAddress],
+        }).catch(() => 0n) as Promise<bigint>,
+        client.readContract({
+          address: validatorAddr,
+          abi: ABIS.passkeyValidator,
+          functionName: "isInitialized",
+          args: [smartAccountAddress],
+        }).catch(() => false) as Promise<boolean>,
+        client.readContract({
+          address: validatorAddr,
+          abi: ABIS.passkeyValidator,
+          functionName: "hasPasskey",
+          args: [smartAccountAddress, credentialIdRaw],
+        }).catch(() => false) as Promise<boolean>,
+      ]);
+
+      lines.push("");
+      lines.push("On-chain validator state:");
+      lines.push(`  isInitialized:    ${isInit}`);
+      lines.push(`  passkeyCount:     ${count.toString()}`);
+      lines.push(`  hasPasskey(local): ${hasIt}`);
+
+      // 3) If hasPasskey, fetch the record to verify px/py match
+      let matchPx: boolean | null = null;
+      let matchPy: boolean | null = null;
+      if (hasIt) {
+        try {
+          // getPasskeyRecord returns (px, py, signCounter, counterInitialized).
+          // 4 outputs, not 5 — no leading id field.
+          const record = (await client.readContract({
+            address: validatorAddr,
+            abi: ABIS.passkeyValidator,
+            functionName: "getPasskeyRecord",
+            args: [smartAccountAddress, credentialIdRaw],
+          })) as readonly [bigint, bigint, number, boolean];
+          const [onchainPx, onchainPy] = record;
+          const localPxBig = BigInt(local.publicKeyX ?? "0x0");
+          const localPyBig = BigInt(local.publicKeyY ?? "0x0");
+          matchPx = localPxBig === onchainPx;
+          matchPy = localPyBig === onchainPy;
+          lines.push(`  px match:          ${matchPx ? "✅" : "❌"}`);
+          lines.push(`  py match:          ${matchPy ? "✅" : "❌"}`);
+        } catch (recErr) {
+          lines.push(`  getPasskeyRecord error: ${(recErr as Error).message}`);
+        }
+      }
+
+      // 4) Verdict
+      lines.push("");
+      if (hasIt && matchPx && matchPy) {
+        lines.push("✅ AUTHORITATIVE — this passkey can sign UserOps for this wallet.");
+      } else if (hasIt) {
+        lines.push("⚠️  Credential ID is registered but public-key bytes differ. This shouldn't happen — possible data corruption.");
+      } else {
+        lines.push("❌ NOT authoritative — this credentialId is NOT registered on-chain.");
+        lines.push("→ Trying to sign a UserOp will be rejected by the validator.");
+        lines.push("→ Run guardian recovery to register the current passkey.");
+      }
+
+      Alert.alert("Passkey Authority Check", lines.join("\n"));
+    } catch (err: any) {
+      Alert.alert("Check Failed", err?.message ?? String(err));
+    } finally {
+      setCheckingPasskey(false);
+    }
+  }, [user?.id, smartAccountAddress, activeChainId, checkingPasskey]);
 
   const displayName =
     profile?.username ??
     user?.email?.split("@")[0]?.replace(/[^a-zA-Z0-9]/g, " ") ??
     "Explorer";
-
   const avatarUri = profile?.avatarUrl ?? null;
+  const hasPhoto = Boolean(avatarUri);
+
+  const heroEmail = user?.email ?? "wallet@trezo.app";
 
   const handleToggleTheme = useCallback(() => {
     setMode(resolvedMode === "dark" ? "light" : "dark");
   }, [resolvedMode, setMode]);
 
+  const handleCopyAddress = useCallback(async () => {
+    if (!smartAccountAddress) return;
+    await Clipboard.setStringAsync(smartAccountAddress);
+  }, [smartAccountAddress]);
+
   const executeSignOut = useCallback(async () => {
     if (isSigningOut) return;
     setIsSigningOut(true);
-
     try {
       const client = getSupabaseClient();
       await client.auth.signOut();
     } catch (error) {
-      // Log but don't block — if Supabase is unreachable (local dev), still clear local state
       console.warn("Supabase signOut failed (continuing locally):", error);
     }
-
-    // Always clear local state and navigate away
     resetUser();
     setGuardNavigation(false);
     setConfirmVisible(false);
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "AuthNavigation" }],
-    });
-
+    navigation.reset({ index: 0, routes: [{ name: "AuthNavigation" }] });
     setIsSigningOut(false);
   }, [isSigningOut, navigation, resetUser, setGuardNavigation]);
 
+  const settingsGroups: SettingsGroup[] = useMemo(
+    () => [
+      {
+        title: "Security",
+        items: [
+          { label: "Recovery & Backup", icon: "shield", route: "BackupRecovery", statusDot: true },
+          { label: LABELS.linkedDevices, icon: "smartphone", route: "DevicesPasskeys" },
+        ],
+      },
+      {
+        title: "Wallet",
+        items: [
+          { label: LABELS.connectedDApps, icon: "link-2", route: "ConnectedDApps" },
+          { label: "Contacts", icon: "book", route: "ContactList" },
+        ],
+      },
+      {
+        title: "Preferences",
+        items: [
+          { label: "Notifications", icon: "bell", route: "NotificationSettings" },
+          { label: "Browser", icon: "globe", route: "BrowserSettings" },
+          ...(__DEV__
+            ? [
+                {
+                  label: "Dev Controls",
+                  icon: "cpu" as FeatherIconName,
+                  route: "DevCreateAccount" as keyof RootStackParamList,
+                },
+              ]
+            : []),
+        ],
+      },
+    ],
+    [colors],
+  );
+
   return (
     <TabScreenContainer includeBottomInset>
-      <MeshBackground intensity={resolvedMode === "dark" ? 0.25 : 0.8} />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: contentBottomInset },
-        ]}
+        contentContainerStyle={{ paddingBottom: contentBottomInset + 24 }}
       >
-        <View style={styles.heroWrapper}>
-          <View style={styles.heroCard}>
-            <View style={styles.heroHeader}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate("ProfileEdit")}
-                activeOpacity={0.85}
-              >
-                <Avatar size={72} uri={avatarUri} label={displayName} />
-              </TouchableOpacity>
-              <View style={styles.heroInfo}>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("ProfileEdit")}
-                >
-                  <Text style={styles.name}>{displayName}</Text>
-                </TouchableOpacity>
-                <Text style={styles.email}>
-                  {user?.email ?? "wallet@trezo.app"}
-                </Text>
-                <Text style={styles.modeHint}>
-                  Theme: {resolvedMode === "dark" ? "Dark" : "Light"} mode
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={handleToggleTheme}
-                accessibilityRole="button"
-                accessibilityLabel="Toggle theme"
-                style={styles.themeToggle}
-                activeOpacity={0.85}
-              >
-                <Feather
-                  name={resolvedMode === "dark" ? "sun" : "moon"}
-                  size={18}
-                  color={colors.textPrimary}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.settingsCard}>
-            <Text style={styles.sectionTitle}>TECHNICAL PROFILE</Text>
-          {settingsItems.map((item, index) => (
-            <TouchableOpacity
-              key={item.label}
-              activeOpacity={0.85}
-              style={[
-                styles.settingRow,
-                index < settingsItems.length - 1 && styles.rowBorder,
-              ]}
-              onPress={() => {
-                if (item.route) {
-                  navigation.navigate(item.route as never);
-                }
-              }}
-            >
-              <View style={styles.settingInfo}>
-                <Feather name={item.icon as any} size={18} color={colors.accent} />
-                <Text style={styles.settingLabel}>{item.label}</Text>
-              </View>
-              <Feather
-                name="chevron-right"
-                size={18}
-                color={colors.textMuted}
+        {/* ── Hero ─────────────────────────────────────── */}
+        <View style={styles.hero}>
+          {/* Skia radial color bleed — toned way down in light mode */}
+          <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Rect x={0} y={0} width={SCREEN_W} height={HERO_H}>
+              <RadialGradient
+                c={vec(90, HERO_H * 0.54)}
+                r={SCREEN_W * 0.65}
+                colors={[
+                  resolvedMode === "dark"
+                    ? (hasPhoto ? "rgba(124,58,237,0.20)" : "rgba(124,58,237,0.24)")
+                    : (hasPhoto ? "rgba(124,58,237,0.07)" : "rgba(124,58,237,0.09)"),
+                  "transparent",
+                ]}
               />
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.signOutButton}
-          onPress={() => setConfirmVisible(true)}
-          disabled={isSigningOut}
-        >
-          {isSigningOut ? (
-            <ActivityIndicator size="small" color={colors.danger} />
-          ) : (
-            <>
-              <View style={styles.signOutIconWrap}>
-                <Feather name="log-out" size={18} color={colors.danger} />
-              </View>
-              <Text style={styles.signOutLabel}>Sign out</Text>
-            </>
-          )}
-        </TouchableOpacity>
-        <Modal
-          visible={confirmVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => {
-            if (!isSigningOut) setConfirmVisible(false);
-          }}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalIconBadge}>
-                <Feather
-                  name="alert-triangle"
-                  size={22}
-                  color={colors.danger}
-                />
-              </View>
-              <Text style={styles.modalTitle}>Sign out of Trezo Wallet?</Text>
-              <Text style={styles.modalBody}>
-                Youll need to authenticate again to access your wallet data.
-              </Text>
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalCancel]}
-                  onPress={() => setConfirmVisible(false)}
-                  disabled={isSigningOut}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.modalCancelLabel}>Stay signed in</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.modalButton,
-                    styles.modalDanger,
-                    isSigningOut && styles.modalButtonDisabled,
+            </Rect>
+            {!hasPhoto && (
+              <Rect x={0} y={0} width={SCREEN_W} height={HERO_H}>
+                <RadialGradient
+                  c={vec(90, HERO_H * 0.54)}
+                  r={SCREEN_W * 0.42}
+                  colors={[
+                    resolvedMode === "dark" ? "rgba(219,39,119,0.10)" : "rgba(219,39,119,0.04)",
+                    "transparent",
                   ]}
-                  onPress={executeSignOut}
-                  activeOpacity={0.85}
-                  disabled={isSigningOut}
+                />
+              </Rect>
+            )}
+          </Canvas>
+
+          {/* Theme toggle — absolute top-right */}
+          <TouchableOpacity
+            style={[styles.themeBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
+            onPress={handleToggleTheme}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle theme"
+          >
+            <Feather
+              name={resolvedMode === "dark" ? "sun" : "moon"}
+              size={16}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+
+          {/* Horizontal row: avatar left, meta right */}
+          <View style={styles.heroRow}>
+            {/* Avatar + camera chip */}
+            <TouchableOpacity
+              onPress={() => navigation.navigate("ProfileEdit")}
+              activeOpacity={0.85}
+              style={styles.avatarWrap}
+            >
+              {!avatarUri ? (
+                <LinearGradient
+                  colors={["#7C3AED", "#db2777"]}
+                  start={{ x: 0.1, y: 0.1 }}
+                  end={{ x: 0.9, y: 0.9 }}
+                  style={styles.avatarGradientWrap}
                 >
-                  {isSigningOut ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.modalDangerLabel}>Sign out</Text>
-                  )}
-                </TouchableOpacity>
+                  <Avatar size={82} uri={undefined} label={displayName} />
+                </LinearGradient>
+              ) : (
+                <Avatar size={88} uri={avatarUri} label={displayName} />
+              )}
+              <View style={styles.cameraChip}>
+                <Feather name="camera" size={13} color={colors.textOnAccent} />
               </View>
+            </TouchableOpacity>
+
+            {/* Name / email / address */}
+            <View style={styles.heroMeta}>
+              <Text style={styles.heroName} numberOfLines={1}>
+                {displayName}
+              </Text>
+              <Text style={styles.heroEmail} numberOfLines={1}>
+                {heroEmail}
+              </Text>
+              {smartAccountAddress ? (
+                <TouchableOpacity onPress={() => void handleCopyAddress()} activeOpacity={0.7}>
+                  <Text style={styles.heroAddress} numberOfLines={1}>
+                    {`${smartAccountAddress.slice(0, 6)}…${smartAccountAddress.slice(-4)}`}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
-        </Modal>
+        </View>
+
+        {/* ── Settings ─────────────────────────────────── */}
+        <View style={styles.body}>
+          {/* Sticky Recovery Attempt banner — no RPC, visible whenever an Attempt is active */}
+          <RecoveryAttemptBanner smartAccountAddress={smartAccountAddress as Address | undefined} sticky />
+          {settingsGroups.map((group) => (
+            <View key={group.title} style={styles.section}>
+              <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+                {group.title.toUpperCase()}
+              </Text>
+              <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                {group.items.map((item, idx) => (
+                  <TouchableOpacity
+                    key={item.label}
+                    style={[
+                      styles.row,
+                      idx < group.items.length - 1 && {
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderBottomColor: colors.borderMuted,
+                      },
+                    ]}
+                    onPress={() => item.route && navigation.navigate(item.route as never)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.iconWrap, { backgroundColor: colors.glass, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderMuted }]}>
+                      <Feather name={item.icon} size={17} color={colors.textSecondary} />
+                    </View>
+                    <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{item.label}</Text>
+                    {item.statusDot && (
+                      <View style={[styles.statusDot, { backgroundColor: colors.textMuted }]} />
+                    )}
+                    <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ))}
+
+          {/* ── DEV: Check Passkey Authority ──────────── */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={[
+                styles.signOutBtn,
+                { backgroundColor: `${colors.accent}1A`, borderColor: `${colors.accent}40` },
+              ]}
+              onPress={() => void handleCheckPasskeyAuthority()}
+              disabled={checkingPasskey}
+              activeOpacity={0.8}
+            >
+              {checkingPasskey ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <>
+                  <View style={[styles.signOutIconWrap, { backgroundColor: `${colors.accent}1A` }]}>
+                    <Feather name="key" size={16} color={colors.accent} />
+                  </View>
+                  <Text style={[styles.signOutLabel, { color: colors.accent }]}>
+                    Check Passkey Authority
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* ── My wallet is compromised ──────────────── */}
+          <TouchableOpacity
+            style={[styles.signOutBtn, { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}33` }]}
+            onPress={() => navigation.navigate("CompromisedWallet")}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.signOutIconWrap, { backgroundColor: `${colors.danger}1A` }]}>
+              <Feather name="alert-octagon" size={16} color={colors.danger} />
+            </View>
+            <Text style={[styles.signOutLabel, { color: colors.danger }]}>{LABELS.compromiseRowTitle}</Text>
+          </TouchableOpacity>
+
+          {/* ── Sign Out ──────────────────────────────── */}
+          <TouchableOpacity
+            style={[styles.signOutBtn, { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}33` }]}
+            onPress={() => setConfirmVisible(true)}
+            disabled={isSigningOut}
+            activeOpacity={0.8}
+          >
+            {isSigningOut ? (
+              <ActivityIndicator size="small" color={colors.danger} />
+            ) : (
+              <>
+                <View style={[styles.signOutIconWrap, { backgroundColor: `${colors.danger}1A` }]}>
+                  <Feather name="log-out" size={16} color={colors.danger} />
+                </View>
+                <Text style={[styles.signOutLabel, { color: colors.danger }]}>Sign Out</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <Text style={[styles.versionText, { color: colors.textMuted }]}>Trezo Wallet · v1.0.0</Text>
+        </View>
       </ScrollView>
+
+      {/* ── Confirm Modal ────────────────────────────── */}
+      <Modal
+        visible={confirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { if (!isSigningOut) setConfirmVisible(false); }}
+      >
+        <View style={styles.overlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surfaceCard, borderColor: `${colors.danger}26` }]}>
+            <View style={[styles.modalIconBadge, { backgroundColor: colors.dangerSoft }]}>
+              <Feather name="log-out" size={28} color={colors.danger} />
+            </View>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Sign out of Trezo?</Text>
+            <Text style={[styles.modalBody, { color: colors.textSecondary }]}>
+              {"You'll need to verify your identity again to access your wallet."}
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.glass, borderColor: colors.border, borderWidth: 1 }]}
+                onPress={() => setConfirmVisible(false)}
+                disabled={isSigningOut}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.modalBtnText, { color: colors.textPrimary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.danger, opacity: isSigningOut ? 0.6 : 1 }]}
+                onPress={executeSignOut}
+                disabled={isSigningOut}
+                activeOpacity={0.8}
+              >
+                {isSigningOut ? (
+                  <ActivityIndicator size="small" color={colors.textOnAccent} />
+                ) : (
+                  <Text style={[styles.modalBtnText, { color: colors.textOnAccent }]}>Sign out</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </TabScreenContainer>
   );
 };
 
-const createStyles = (colors: ThemeColors, mode: "dark" | "light") =>
+const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    screen: {
-      flex: 1,
+    hero: {
+      paddingTop: 74,
+      paddingBottom: 38,
+      paddingHorizontal: 22,
+      position: "relative",
+      overflow: "hidden",
       backgroundColor: colors.background,
     },
-    scrollContent: {
-      paddingHorizontal: 20,
-      paddingTop: 12,
-    },
-    heroWrapper: {
-      marginBottom: 20,
-    },
-    heroCard: {
-      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF',
-      padding: 24,
-      borderRadius: 28,
-      borderWidth: 1,
-      borderColor: colors.border,
-      // Zero Depth
-      shadowOpacity: 0,
-      elevation: 0,
-    },
-    heroHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 16,
-    },
-    heroInfo: {
-      flex: 1,
-    },
-    name: {
-      color: colors.textPrimary,
-      fontSize: 22,
-      fontWeight: "700",
-    },
-    email: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      marginTop: 4,
-    },
-    modeHint: {
-      color: colors.textMuted,
-      fontSize: 12,
-      marginTop: 8,
-    },
-    themeToggle: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+    themeBtn: {
+      position: "absolute",
+      top: 14,
+      right: 18,
+      width: 38,
+      height: 38,
+      borderRadius: 19,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,
-      borderColor: withAlpha(colors.textPrimary, 0.18),
-      backgroundColor: withAlpha(colors.textPrimary, 0.08),
+    },
+    heroRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 18,
+    },
+    avatarWrap: {
+      position: "relative",
+      width: 88,
+      height: 88,
+    },
+    avatarGradientWrap: {
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1.5,
+      borderColor: `${colors.accent}28`,
+      shadowColor: colors.accent,
+      shadowOpacity: 0.32,
+      shadowRadius: 20,
+      elevation: 10,
+    },
+    cameraChip: {
+      position: "absolute",
+      bottom: 0,
+      right: 0,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: colors.accent,
+      borderWidth: 2,
+      borderColor: colors.background,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    heroMeta: {
+      flex: 1,
+      minWidth: 0,
+    },
+    heroName: {
+      fontSize: 23,
+      fontWeight: "800",
+      letterSpacing: -0.6,
+      color: colors.textPrimary,
+      marginBottom: 4,
+    },
+    heroEmail: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginBottom: 6,
+    },
+    heroAddress: {
+      fontSize: 13,
+      color: colors.textMuted,
+      letterSpacing: 0.3,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    },
+    body: {
+      paddingHorizontal: 20,
+      paddingTop: 28,
+      gap: 20,
+    },
+    section: {
+      gap: 8,
+    },
+    sectionLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 1.2,
+      marginLeft: 4,
     },
     card: {
-      marginBottom: 20,
-    },
-    settingsCard: {
-      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF',
-      borderRadius: 24,
-      padding: 24,
+      borderRadius: 20,
       borderWidth: 1,
-      borderColor: colors.border,
-      // Zero Depth
-      shadowOpacity: 0,
-      elevation: 0,
+      overflow: "hidden",
     },
-    sectionTitle: {
-      color: colors.textPrimary,
-      fontSize: 18,
-      fontWeight: "800",
-      textTransform: 'uppercase',
-      letterSpacing: 2,
-      marginBottom: 16,
-    },
-    settingRow: {
+    row: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
       paddingVertical: 14,
+      paddingHorizontal: 16,
+      gap: 14,
     },
-    settingInfo: {
-      flexDirection: "row",
+    iconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
       alignItems: "center",
-      gap: 12,
+      justifyContent: "center",
     },
-    settingLabel: {
-      color: colors.textPrimary,
+    rowLabel: {
+      flex: 1,
       fontSize: 15,
       fontWeight: "600",
     },
-    rowBorder: {
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderMuted,
+    statusDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
     },
-    signOutButton: {
+    signOutBtn: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: 10,
-      paddingVertical: 16,
-      borderRadius: 20,
+      paddingVertical: 15,
+      borderRadius: 18,
       borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.3),
-      backgroundColor: mode === 'dark' ? 'rgba(220, 38, 38, 0.08)' : 'rgba(220, 38, 38, 0.04)',
-      marginTop: 8,
     },
     signOutIconWrap: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
+      width: 30,
+      height: 30,
+      borderRadius: 15,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.danger, 0.18),
-      borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.28),
     },
     signOutLabel: {
-      color: colors.danger,
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: "700",
     },
-    modalBackdrop: {
+    versionText: {
+      textAlign: "center",
+      fontSize: 12,
+      fontWeight: "500",
+      paddingBottom: 4,
+    },
+    overlay: {
       flex: 1,
-      backgroundColor: "rgba(4,3,10,0.78)",
+      backgroundColor: "rgba(0,0,0,0.65)",
       justifyContent: "center",
       alignItems: "center",
-      padding: 24,
+      paddingHorizontal: 24,
     },
     modalCard: {
       width: "100%",
       borderRadius: 28,
       borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.2),
-      backgroundColor: mode === 'dark' ? 'rgba(25, 25, 25, 0.95)' : '#FFFFFF',
-      paddingVertical: 28,
+      paddingVertical: 32,
       paddingHorizontal: 24,
       alignItems: "center",
-      gap: 16,
-      // Zero Depth
-      shadowOpacity: 0,
-      elevation: 0,
+      gap: 12,
     },
     modalIconBadge: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
+      width: 68,
+      height: 68,
+      borderRadius: 34,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: withAlpha(colors.danger, 0.12),
-      borderWidth: 1,
-      borderColor: withAlpha(colors.danger, 0.22),
+      marginBottom: 4,
     },
     modalTitle: {
-      color: colors.textPrimary,
-      fontSize: 20,
-      fontWeight: "700",
-      textAlign: "center",
+      fontSize: 22,
+      fontWeight: "800",
+      letterSpacing: -0.3,
     },
     modalBody: {
-      color: colors.textSecondary,
       fontSize: 14,
       textAlign: "center",
-      lineHeight: 20,
+      lineHeight: 21,
+      opacity: 0.85,
     },
     modalActions: {
       flexDirection: "row",
-      gap: 12,
+      gap: 10,
       width: "100%",
       marginTop: 8,
     },
-    modalButton: {
+    modalBtn: {
       flex: 1,
-      borderRadius: 16,
       paddingVertical: 14,
+      borderRadius: 14,
       alignItems: "center",
       justifyContent: "center",
-      borderWidth: 1,
     },
-    modalCancel: {
-      borderColor: withAlpha(colors.textPrimary, 0.18),
-      backgroundColor: withAlpha(colors.textPrimary, 0.06),
-    },
-    modalDanger: {
-      borderColor: withAlpha(colors.danger, 0.65),
-      backgroundColor: colors.danger,
-    },
-    modalButtonDisabled: {
-      opacity: 0.6,
-    },
-    modalCancelLabel: {
-      color: colors.textPrimary,
-      fontSize: 14,
-      fontWeight: "600",
-    },
-    modalDangerLabel: {
-      color: "#ffffff",
-      fontSize: 14,
+    modalBtnText: {
+      fontSize: 15,
       fontWeight: "700",
     },
   });

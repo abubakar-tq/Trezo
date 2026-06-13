@@ -1,87 +1,122 @@
-import { useQuery } from "@tanstack/react-query";
-import { MoralisService, type MoralisToken } from "../../integration/moralis/MoralisService";
-import { formatUnits } from "ethers";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Address } from "viem";
+
+import { PortfolioService, type TokenBalance } from "@/src/features/portfolio/services/PortfolioService";
+import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+
+export interface MoralisToken {
+  symbol: string;
+  name: string;
+  balance: string;
+  balance_formatted?: string;
+  decimals: number;
+  usd_price: number | null;
+  usd_value: number | null;
+  native_token?: boolean;
+  logo?: string;
+  token_address?: string;
+}
 
 export interface WalletDataState {
   ethBalance: number;
   tokens: MoralisToken[];
   totalBalanceUSD: number;
-  totalChange24h: number;
+  /**
+   * Removed: this field was hardcoded 0 and was never real data.
+   * Compute real 24h change at the call site by joining tokens to the
+   * market feed via computeTotalChange24h (see features/home/utils/portfolio24h.ts).
+   * @deprecated Do not use — use computeTotalChange24h instead.
+   */
+  totalChange24h: null;
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
+  missingPrices: string[];
   refetch: () => void;
 }
 
-export const useWalletData = (address?: string, chain: string = "0x1"): WalletDataState => {
-  // UI/UX DEVELOPMENT MODE: Using realistic mock data to ensure layouts look premium
-  // and predictable while iterating on designs.
-  
-  const { ethBalance, tokens, totalBalanceUSD } = useMemo(() => {
-    const mockTokens: any[] = [
-      { 
-        symbol: 'ETH', 
-        name: 'Ethereum', 
-        balance: '1.25', 
-        decimals: 18, 
-        usd_price: 2500,
-        usd_value: 3125.00, 
-        native_token: true,
-        logo: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png'
-      },
-      { 
-        symbol: 'USDC', 
-        name: 'USD Coin', 
-        balance: '120.5', 
-        decimals: 6, 
-        usd_price: 1,
-        usd_value: 120.50,
-        logo: 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png'
-      },
-      { 
-        symbol: 'LINK', 
-        name: 'Chainlink', 
-        balance: '14.2', 
-        decimals: 18, 
-        usd_price: 20.34,
-        usd_value: 288.82,
-        logo: 'https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png'
-      },
-      { 
-        symbol: 'USDT', 
-        name: 'Tether', 
-        balance: '45.0', 
-        decimals: 6, 
-        usd_price: 1,
-        usd_value: 45.00,
-        logo: 'https://assets.coingecko.com/coins/images/325/small/tether.png'
-      },
-      { 
-        symbol: 'MATIC', 
-        name: 'Polygon', 
-        balance: '150.00', 
-        decimals: 18, 
-        usd_price: 0.60,
-        usd_value: 90.00,
-        logo: 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png'
+const POLL_MS = 10_000;
+
+const toMoralisToken = (t: TokenBalance): MoralisToken => ({
+  symbol: t.symbol,
+  name: t.name,
+  balance: t.amount.toString(),
+  balance_formatted: t.amount.toFixed(6),
+  decimals: t.decimals,
+  usd_price: t.price,
+  usd_value: t.value,
+  native_token: t.address === "native",
+  token_address: t.address === "native" ? undefined : (t.address as string),
+});
+
+export const useWalletData = (address?: string, _chain: string = "0x1"): WalletDataState => {
+  const aaAccount = useWalletStore((s) => s.aaAccount);
+  const activeChainId = useWalletStore((s) => s.activeChainId);
+  // activeChainId is the user's CURRENT chain selection from the chain
+  // switcher and must take precedence. aaAccount is persisted across
+  // sessions, so on app launch it may point to a different (stale) chain
+  // than the chip shows. Using aaAccount first caused the portfolio to
+  // query the previous session's chain while the UI displayed the new one.
+  const chainId: SupportedChainId =
+    (activeChainId as SupportedChainId | undefined) ??
+    (aaAccount?.chainId as SupportedChainId | undefined) ??
+    DEFAULT_CHAIN_ID;
+
+  const [tokens, setTokens] = useState<MoralisToken[]>([]);
+  const [totalUsd, setTotalUsd] = useState<number>(0);
+  const [missingPrices, setMissingPrices] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<Error | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchPortfolio = useCallback(async () => {
+    if (!address) {
+      setTokens([]);
+      setTotalUsd(0);
+      setMissingPrices([]);
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setError(null);
+      const portfolio = await PortfolioService.getPortfolio(address as Address, chainId);
+      setTokens(portfolio.tokens.map(toMoralisToken));
+      setTotalUsd(portfolio.totalValue);
+      setMissingPrices(portfolio.missingPrices);
+    } catch (e) {
+      console.warn("[useWalletData] fetch failed:", e);
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [address, chainId]);
+
+  useEffect(() => {
+    fetchPortfolio();
+    pollRef.current = setInterval(fetchPortfolio, POLL_MS);
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
       }
-    ];
+    };
+  }, [fetchPortfolio]);
 
-    const totalBalanceUSD = mockTokens.reduce((sum, t) => sum + t.usd_value, 0);
-    const ethBalance = 1.25;
-
-    return { ethBalance, tokens: mockTokens, totalBalanceUSD };
-  }, []);
+  const ethBalance = useMemo(() => {
+    const native = tokens.find((t) => t.native_token);
+    return native ? parseFloat(native.balance) : 0;
+  }, [tokens]);
 
   return {
     ethBalance,
     tokens,
-    totalBalanceUSD,
-    totalChange24h: 2.45, // Adding a positive change for "WOW" factor
-    isLoading: false,
-    isError: false,
-    error: null,
-    refetch: () => console.log("Refetch triggered in mock mode"),
+    totalBalanceUSD: totalUsd,
+    totalChange24h: null,
+    isLoading,
+    isError: Boolean(error),
+    error,
+    missingPrices,
+    refetch: fetchPortfolio,
   };
 };

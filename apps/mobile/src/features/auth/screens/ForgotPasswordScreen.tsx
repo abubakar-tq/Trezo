@@ -8,6 +8,8 @@ import { AuthGradientButton, AuthScaffold } from "@features/auth/components";
 import { SupabaseConfigurationError, getSupabaseClient } from "@lib/supabase";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { isValidEmail as validateEmail } from "@utils/validation";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 type ForgotPasswordRoute = RouteProp<AuthStackParamList, "ForgotPassword">;
 
@@ -28,6 +30,9 @@ const formatCooldown = (value: number) => {
 const ForgotPasswordScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<AuthStackParamList>>();
   const route = useRoute<ForgotPasswordRoute>();
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const setPending = useAuthFlowStore((state) => state.setPending);
   const setLastSuccess = useAuthFlowStore((state) => state.setLastSuccess);
   const resendAvailableAt = useAuthFlowStore((state) => state.resendAvailableAt);
@@ -128,7 +133,7 @@ const ForgotPasswordScreen: React.FC = () => {
           value={email}
           onChangeText={setEmail}
           placeholder="Email address"
-          placeholderTextColor="#666"
+          placeholderTextColor={colors.textMuted}
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
@@ -161,22 +166,22 @@ const ForgotPasswordScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   formSpacing: {
     rowGap: 16,
   },
   input: {
-    backgroundColor: "#171419",
-    borderColor: "#333333",
+    backgroundColor: colors.inputBackground,
+    borderColor: colors.inputBorder,
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 16,
   },
   validationText: {
-    color: "#f87171",
+    color: colors.danger,
     fontSize: 12,
     textAlign: "center",
   },
@@ -184,11 +189,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: "center",
     fontSize: 12,
-    color: "#94a3b8",
+    color: colors.textMuted,
   },
   footerText: {
     textAlign: "center",
-    color: "#9ca3af",
+    color: colors.textMuted,
     fontSize: 13,
   },
 });

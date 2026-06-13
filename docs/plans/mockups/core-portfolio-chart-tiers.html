@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio chart — no seeding needed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#060608; --surface:rgba(18,15,24,0.70); --glass:rgba(244,241,234,0.02);
+    --border:rgba(124,58,237,0.10); --border2:rgba(124,58,237,0.18);
+    --text:#F4F1EA; --text2:#8E8B85; --text3:#5C5A55;
+    --accent:#7C3AED; --accentAlt:#06B6D4; --success:#10B981; --danger:#E8654F; --warning:#F59E0B;
+    --gain:#34D399; --loss:#E8654F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(120% 70% at 50% -10%, #120c1e 0%, #060608 55%);
+    color:var(--text); font-family:'Inter',system-ui,sans-serif; min-height:100vh; padding:32px 20px 80px; -webkit-font-smoothing:antialiased}
+  .head{max-width:1180px;margin:0 auto 28px;text-align:center}
+  .head h1{font-size:22px;font-weight:700;letter-spacing:-.3px}
+  .head p{color:var(--text2);font-size:14px;margin-top:6px;max-width:760px;margin-left:auto;margin-right:auto;line-height:1.5}
+  .stage{display:flex;gap:40px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1180px;margin:0 auto}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px;width:320px}
+  .tag{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase}
+  .t1{color:var(--warning)} .t2{color:var(--accentAlt)} .t3{color:var(--accent)}
+  .tagsub{font-size:12px;color:var(--text2);text-align:center;line-height:1.5;min-height:48px}
+
+  .phone{width:316px;border-radius:40px;background:var(--bg);border:1px solid rgba(124,58,237,.16);
+    padding:14px 0 16px;box-shadow:0 26px 70px rgba(0,0,0,.6),0 0 0 9px #0b0910,0 0 0 10px rgba(124,58,237,.12);
+    position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .notch{position:absolute;top:13px;left:50%;transform:translateX(-50%);width:108px;height:24px;background:#000;border-radius:0 0 15px 15px;z-index:5}
+  .scroll{flex:1;padding:0 15px}
+  .statusbar{display:flex;justify-content:space-between;align-items:center;padding:2px 6px 12px;font-size:11px;color:var(--text2);font-weight:600}
+  .mono{font-family:'JetBrains Mono',monospace}
+  .row{display:flex;align-items:center}.between{justify-content:space-between}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600}
+  .chip-chain{background:rgba(124,58,237,.12);color:#c4b5fd;border:1px solid var(--border2)}
+  .dot{width:7px;height:7px;border-radius:50%}
+  .a-title{font-size:21px;font-weight:600;letter-spacing:-.3px}
+  .vlabel{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2)}
+  .vnum{font-size:36px;font-weight:300;letter-spacing:-1.3px;line-height:1.05}
+  .vnum.zero{color:rgba(244,241,234,.55)}
+  .vchg{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;margin-top:8px}
+  .gain{color:var(--gain)} .loss{color:var(--loss)}
+  .vcard{border-radius:26px;padding:20px;border:1px solid var(--border2)}
+  .vcard.flat{background:linear-gradient(140deg,#241a36,#160f24 60%,#0d0916)}
+  .vcard.live{background:radial-gradient(130% 100% at 50% 0%, rgba(124,58,237,.12), rgba(124,58,237,.03)),var(--surface)}
+  .chart{margin:14px 0 4px;width:100%;display:block}
+  .pp{display:flex;gap:5px;background:var(--glass);border:1px solid var(--border);border-radius:11px;padding:4px;margin-top:8px}
+  .pp span{flex:1;text-align:center;font-size:11px;font-weight:700;padding:6px 0;border-radius:8px;color:var(--text2)}
+  .pp span.on{background:var(--accent);color:#fff}
+  .pp span.off{color:var(--text3);opacity:.4}
+  .pp span.lock{color:var(--text3);opacity:.55}
+  .hint{font-size:10.5px;color:var(--text3);margin-top:8px;text-align:center;line-height:1.4}
+  .fund{font-size:11px;color:var(--text3);margin-top:10px}
+
+  .note{max-width:1180px;margin:30px auto 0;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface);font-size:13px;color:var(--text2);line-height:1.65}
+  .note b{color:var(--text)} .note code{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c4b5fd}
+  .legend{display:flex;gap:9px;align-items:flex-start;margin-top:9px}
+  .legend .k{color:var(--accent);font-weight:800;flex-shrink:0;width:46px}
+  .scroll::-webkit-scrollbar{display:none}
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>The chart, with zero seeding — it tiers itself to the data that honestly exists</h1>
+    <p>Same card at three wallet ages. Nothing is ever faked or empty: day-one shows value + 24h change + a 1D sparkline (all instant from the price feed, no stored history). The long-range line unlocks on its own as daily snapshots accrue.</p>
+  </div>
+
+  <div class="stage">
+    <!-- ===== $0 wallet ===== -->
+    <div class="col">
+      <div class="tag t1">$0 wallet — no chart at all</div>
+      <div class="tagsub">Nothing to chart → the fund prompt takes the card's place. No empty axis, no flat line.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮</span></div>
+          <div class="row between" style="padding:2px 0 14px"><div class="a-title">Portfolio</div>
+            <div class="pill chip-chain"><span class="dot" style="background:#c4b5fd"></span>Base Sepolia</div></div>
+          <div class="vcard flat">
+            <div class="vlabel" style="margin-bottom:10px">Total Value</div>
+            <div class="vnum zero mono">$0.00</div>
+            <div class="fund">Fund your wallet to start tracking performance →</div>
+          </div>
+          <div style="text-align:center;color:var(--text3);font-size:11px;margin-top:18px">[ Fund prompt + Popular shelf below ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Day 1 funded ===== -->
+    <div class="col">
+      <div class="tag t2">Day 1 funded — looks complete</div>
+      <div class="tagsub">Value + 24h change + a 1D sparkline. All computed live from prices — no snapshots needed. Long ranges locked (no history yet).</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮</span></div>
+          <div class="row between" style="padding:2px 0 14px"><div class="a-title">Portfolio</div>
+            <div class="pill chip-chain"><span class="dot" style="background:#c4b5fd"></span>Base Sepolia</div></div>
+          <div class="vcard live">
+            <div class="vlabel" style="margin-bottom:8px">Total Value</div>
+            <div class="vnum mono">$1,240.18</div>
+            <div class="vchg gain"><span>▲ $40.18</span><span style="color:var(--text3)">·</span><span>3.3% today</span></div>
+            <!-- 1D sparkline only -->
+            <svg class="chart" viewBox="0 0 280 56" preserveAspectRatio="none" style="height:46px">
+              <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34D399" stop-opacity=".28"/><stop offset="1" stop-color="#34D399" stop-opacity="0"/></linearGradient></defs>
+              <path d="M0,40 L24,36 L48,38 L72,28 L96,32 L120,22 L144,26 L168,16 L192,20 L216,12 L240,16 L280,8" fill="none" stroke="#34D399" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M0,40 L24,36 L48,38 L72,28 L96,32 L120,22 L144,26 L168,16 L192,20 L216,12 L240,16 L280,8 L280,56 L0,56 Z" fill="url(#sg)"/>
+            </svg>
+            <div class="pp"><span class="on">1D</span><span class="lock">1W 🔒</span><span class="lock">1M 🔒</span><span class="lock">1Y 🔒</span><span class="lock">ALL 🔒</span></div>
+            <div class="hint">Longer ranges unlock as your history builds</div>
+          </div>
+          <div style="text-align:center;color:var(--text3);font-size:11px;margin-top:18px">[ Allocation · Holdings · Popular below ]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Matured ===== -->
+    <div class="col">
+      <div class="tag t3">Weeks later — full line, automatic</div>
+      <div class="tagsub">Snapshots have accrued → full historical line + unlocked periods. ALL = since inception. No migration, no seeding — it just filled in.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮</span></div>
+          <div class="row between" style="padding:2px 0 14px"><div class="a-title">Portfolio</div>
+            <div class="pill chip-chain"><span class="dot" style="background:#c4b5fd"></span>Base Sepolia</div></div>
+          <div class="vcard live">
+            <div class="vlabel" style="margin-bottom:8px">Total Value</div>
+            <div class="vnum mono">$3,884.50</div>
+            <div class="vchg gain"><span>▲ $612.00</span><span style="color:var(--text3)">·</span><span>18.7% · 1M</span></div>
+            <svg class="chart" viewBox="0 0 280 72" preserveAspectRatio="none" style="height:62px">
+              <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8B5CF6" stop-opacity=".30"/><stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/></linearGradient></defs>
+              <path d="M0,56 L24,52 L48,58 L72,44 L96,48 L120,34 L144,40 L168,26 L192,32 L216,18 L240,24 L264,12 L280,16" fill="none" stroke="#8B5CF6" stroke-width="2.2" stroke-linejoin="round"/>
+              <path d="M0,56 L24,52 L48,58 L72,44 L96,48 L120,34 L144,40 L168,26 L192,32 L216,18 L240,24 L264,12 L280,16 L280,72 L0,72 Z" fill="url(#cg)"/>
+              <circle cx="280" cy="16" r="3.5" fill="#fff"/>
+            </svg>
+            <div class="pp"><span>1D</span><span>1W</span><span class="on">1M</span><span class="lock">1Y 🔒</span><span>ALL</span></div>
+            <div class="hint">1Y unlocks once the wallet is a year old</div>
+          </div>
+          <div style="text-align:center;color:var(--text3);font-size:11px;margin-top:18px">[ Allocation · Holdings · Popular below ]</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Why this beats seeding — the data tiers:</b>
+    <div class="legend"><span class="k">24h #</span><span>current balances × <b>price 24h ago</b> (your market feed already gives the 24h delta). <b>Instant, zero storage, honest.</b> This is Phantom's home model — the number+change alone looks complete.</span></div>
+    <div class="legend"><span class="k">1D line</span><span>current holdings valued across <b>today's</b> price movement (price feed). Instant, no snapshots. Honest because balances barely move intraday.</span></div>
+    <div class="legend"><span class="k">1W+</span><span>needs daily <b>snapshots</b> (1 row/day) because your balances change over the window. Snapshots start silently at first launch; each period unlocks the day it has data. ALL = since inception.</span></div>
+    <div class="legend"><span class="k">$0</span><span>no chart at all — the fund prompt takes its place. Never an empty axis.</span></div>
+    <div class="legend"><span class="k">net</span><span><b>No seeding, no fake line, no empty chart — ever.</b> The chart degrades gracefully and fills in on its own. Demo on day one looks finished because the 24h+1D tier needs no history.</span></div>
+  </div>
+</body>
+</html>

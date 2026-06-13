@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "497760969946",
+    "project_id": "trezo-wallet-d4e62",
+    "storage_bucket": "trezo-wallet-d4e62.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:497760969946:android:f9fedcbaf5193d8c65f1e3",
+        "android_client_info": {
+          "package_name": "com.trezo.wallet"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCmdWla63fKPAwiS1-8OHyWOtBpaH_gU-Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

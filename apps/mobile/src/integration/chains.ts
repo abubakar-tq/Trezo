@@ -7,10 +7,14 @@ import { getDeployment } from "./viem/deployments";
 export type SupportedChainId =
   | 31337
   | 11155111
+  | 84532
+  | 421614
   | 1
   | 324
   | 300
-  | 8453;
+  | 8453
+  | 84532
+  | 421614;
 
 /** @deprecated Use ChainEnvironmentExtended from networks.ts which includes 'local_fork'. */
 export type ChainEnvironment = "local" | "local_fork" | "testnet" | "mainnet";
@@ -45,7 +49,7 @@ const DEFAULT_NATIVE_CURRENCY: NativeCurrency = {
 
 const parseSupportedChainId = (value?: string): SupportedChainId | undefined => {
   const parsed = Number(value);
-  if ([31337, 11155111, 1, 324, 300, 8453].includes(parsed)) {
+  if ([31337, 11155111, 84532, 421614, 1, 324, 300, 8453].includes(parsed)) {
     return parsed as SupportedChainId;
   }
   return undefined;
@@ -96,6 +100,8 @@ const withDeployment = (chainId: SupportedChainId) => {
 
 const localDeployment = withDeployment(31337);
 const sepoliaDeployment = withDeployment(11155111);
+const baseSepoliaDeployment = withDeployment(84532);
+const arbSepoliaDeployment = withDeployment(421614);
 
 export const CHAINS: Record<SupportedChainId, ChainConfig> = {
   31337: {
@@ -170,6 +176,38 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
     environment: "testnet",
     isEnabled: false,
   },
+  84532: {
+    id: 84532,
+    name: "Base Sepolia",
+    nativeCurrency: DEFAULT_NATIVE_CURRENCY,
+    rpcUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org",
+    bundlerUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_BUNDLER_URL ?? "",
+    paymasterUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_PAYMASTER_URL,
+    ...baseSepoliaDeployment,
+    blockExplorerUrl: "https://sepolia.basescan.org",
+    environment: "testnet",
+    isEnabled: Boolean(
+      process.env.EXPO_PUBLIC_BASE_SEPOLIA_BUNDLER_URL
+      && baseSepoliaDeployment.entryPoint
+      && baseSepoliaDeployment.accountFactory,
+    ),
+  },
+  421614: {
+    id: 421614,
+    name: "Arbitrum Sepolia",
+    nativeCurrency: DEFAULT_NATIVE_CURRENCY,
+    rpcUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_RPC_URL ?? "https://sepolia-rollup.arbitrum.io/rpc",
+    bundlerUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL ?? "",
+    paymasterUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_PAYMASTER_URL,
+    ...arbSepoliaDeployment,
+    blockExplorerUrl: "https://sepolia.arbiscan.io",
+    environment: "testnet",
+    isEnabled: Boolean(
+      process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL
+      && arbSepoliaDeployment.entryPoint
+      && arbSepoliaDeployment.accountFactory,
+    ),
+  },
   8453: {
     id: 8453,
     name: "Base Mainnet Fork",
@@ -180,24 +218,29 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
     bundlerUrl:
       process.env.EXPO_PUBLIC_BASE_FORK_BUNDLER_URL ??
       `http://${process.env.EXPO_PUBLIC_INFRA_IP ?? "192.168.100.68"}:4337`,
-    paymasterUrl: process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL,
+    paymasterUrl:
+      process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL ??
+      `http://${process.env.EXPO_PUBLIC_INFRA_IP ?? "192.168.100.68"}:3000`,
     ...withDeployment(8453 as never), // 8453 resolves via profile in deployments.ts
     blockExplorerUrl: "https://basescan.org",
     environment: "local_fork" as ChainEnvironment,
-    isEnabled: (() => {
-      // Enabled when the fork deployment manifest is present.
-      // (Use getDeployment so the manifest-resolution logic stays in one place;
-      // the previous inline require used the wrong relative path and always failed.)
-      const d = getDeployment("base-mainnet-fork");
-      return Boolean(d?.entryPoint && d?.accountFactory);
-    })(),
+    // Wallet-ops disabled per docs/plans/App-improvements-brief.md §4.1 — kept for read-only/dev use only.
+    isEnabled: false,
   },
 };
 
 export const DEFAULT_CHAIN_ID: SupportedChainId = resolveDefaultChainId();
 export const SUPPORTED_CHAIN_IDS = Object.keys(CHAINS).map(Number) as SupportedChainId[];
 
-export const PORTABLE_CHAIN_IDS = [1, 11155111, 10, 8453, 42161, 137] as const;
+// Chains that use the PORTABLE wallet salt → the same wallet resolves to the SAME
+// address on every chain (no block.chainid in the salt; see AccountFactory.portableWalletSalt
+// and contracts/DEPLOYMENTS.md, ADR-0006). Portability holds for any EVM chain where the
+// deterministic factory + validator sit at the canonical addresses — i.e. every supported
+// chain EXCEPT zkSync (Era/Sepolia), whose CREATE2 derivation differs.
+// 84532 (Base Sepolia) is our demo testnet and MUST be portable so a wallet there shares
+// its address with the same wallet on Ethereum Sepolia / Base mainnet. Omitting it forces
+// the chain-specific salt and breaks the portable-address story on the one chain we demo.
+export const PORTABLE_CHAIN_IDS = [1, 11155111, 10, 8453, 84532, 42161, 137] as const;
 
 export function isPortableChain(chainId: number): boolean {
   return (PORTABLE_CHAIN_IDS as readonly number[]).includes(chainId);

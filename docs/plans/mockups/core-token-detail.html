@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Detail + Discover segments</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#060608;--surface:rgba(18,15,24,0.70);--elevated:rgba(24,20,32,0.96);--glass:rgba(244,241,234,0.02);--border:rgba(124,58,237,0.10);--border2:rgba(124,58,237,0.18);
+    --text:#F4F1EA;--text2:#8E8B85;--text3:#5C5A55;--accent:#7C3AED;--accentAlt:#06B6D4;--gain:#34D399;--loss:#E8654F;--warning:#F59E0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(120% 70% at 50% -10%, #120c1e 0%, #060608 55%);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;padding:32px 20px 80px;-webkit-font-smoothing:antialiased}
+  .head{max-width:1120px;margin:0 auto 28px;text-align:center}.head h1{font-size:22px;font-weight:700;letter-spacing:-.3px}.head p{color:var(--text2);font-size:14px;margin-top:6px;max-width:760px;margin-left:auto;margin-right:auto;line-height:1.5}
+  .stage{display:flex;gap:38px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1120px;margin:0 auto}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px;width:320px}
+  .tag{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent)}
+  .tagsub{font-size:12px;color:var(--text2);text-align:center;line-height:1.5;min-height:44px}
+  .phone{width:320px;border-radius:42px;background:var(--bg);border:1px solid rgba(124,58,237,.16);padding:14px 0 16px;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 10px #0b0910,0 0 0 11px rgba(124,58,237,.12);position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:114px;height:25px;background:#000;border-radius:0 0 16px 16px;z-index:5}
+  .scroll{flex:1;padding:0 16px}.statusbar{display:flex;justify-content:space-between;padding:2px 6px 12px;font-size:11px;color:var(--text2);font-weight:600}
+  .mono{font-family:'JetBrains Mono',monospace}.row{display:flex;align-items:center}.between{justify-content:space-between}
+  .gain{color:var(--gain)}.loss{color:var(--loss)}.gtxt{color:var(--text2)}
+  .tok{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0}
+  .sec-label{font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text)}
+  .see{font-size:11px;color:var(--accent);font-weight:600}
+  /* ===== token detail modal (fade, centered card over dimmed bg) ===== */
+  .dimbg{flex:1;background:rgba(2,2,4,.55);display:flex;align-items:center;justify-content:center;padding:0 12px}
+  .modal{width:100%;background:var(--elevated);border:1px solid var(--border2);border-radius:28px;padding:18px 18px 16px;box-shadow:0 24px 70px rgba(0,0,0,.7)}
+  .mhead{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .mclose{margin-left:auto;width:32px;height:32px;border-radius:16px;background:var(--glass);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text2)}
+  .mname{font-size:17px;font-weight:600}.msym{font-size:12px;color:var(--text2);font-weight:500;margin-top:1px}
+  .mprice{font-size:32px;font-weight:300;letter-spacing:-1px;line-height:1.05}
+  .mchg{font-size:13px;font-weight:600;margin-top:6px}
+  .mchart{margin:14px 0 4px;width:100%;display:block}
+  .pp{display:flex;gap:5px;background:var(--glass);border:1px solid var(--border);border-radius:11px;padding:4px;margin-top:6px}
+  .pp span{flex:1;text-align:center;font-size:11px;font-weight:700;padding:6px 0;border-radius:8px;color:var(--text2)}.pp span.on{background:var(--accent);color:#fff}
+  .stats{display:flex;gap:10px;margin:14px 0}
+  .stat{flex:1;border:1px solid var(--border);border-radius:14px;padding:11px;background:var(--glass)}
+  .stat .l{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text2)}
+  .stat .v{font-size:14px;font-weight:600;margin-top:4px}
+  .acts{display:flex;gap:10px;margin-top:4px}
+  .act{flex:1;height:50px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:700}
+  .act.primary{background:var(--accent);color:#fff}
+  .act.soft{background:rgba(124,58,237,.14);border:1px solid var(--border2);color:#c4b5fd}
+  .act.ghost{background:var(--glass);border:1px solid var(--border);color:var(--text2)}
+  .act b{font-size:17px;font-weight:400}
+  .gated{font-size:10px;color:var(--text3);text-align:center;margin-top:10px}
+  /* ===== discover segments ===== */
+  .search{display:flex;align-items:center;gap:10px;height:44px;border-radius:999px;background:var(--surface);border:1px solid var(--border);padding:0 16px;color:var(--text3);font-size:12.5px;margin-bottom:4px;margin-top:4px}
+  .seg{display:flex;gap:5px;background:var(--glass);border:1px solid var(--border);border-radius:12px;padding:4px;margin:12px 0 4px}
+  .seg span{flex:1;text-align:center;font-size:12px;font-weight:700;padding:8px 0;border-radius:9px;color:var(--text2)}.seg span.on{background:var(--accent);color:#fff}
+  .chip{display:inline-block;padding:7px 13px;border-radius:999px;font-size:12px;font-weight:600;background:var(--glass);border:1px solid var(--border);color:var(--text2);margin-right:7px;margin-bottom:8px}
+  .chip.on{background:rgba(124,58,237,.16);border-color:var(--border2);color:#c4b5fd}
+  .appcard{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}.appcard:last-child{border-bottom:0}
+  .aicon{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:17px;background:rgba(124,58,237,.14);color:#c4b5fd;border:1px solid var(--border2);flex-shrink:0}
+  .open{padding:6px 14px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(124,58,237,.14);border:1px solid var(--border2);color:#c4b5fd}
+  .news{border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:10px;display:flex;gap:12px}
+  .nthumb{width:54px;height:54px;border-radius:10px;background:linear-gradient(140deg,#241a36,#16101f);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--text3)}
+  .nsrc{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--accentAlt)}
+  .ntitle{font-size:13px;font-weight:600;line-height:1.3;margin-top:3px}.ntime{font-size:11px;color:var(--text3);margin-top:4px}
+  .note{max-width:1120px;margin:30px auto 0;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface);font-size:13px;color:var(--text2);line-height:1.65}
+  .note b{color:var(--text)}.note code{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c4b5fd}
+  .legend{display:flex;gap:9px;align-items:flex-start;margin-top:9px}.legend .k{color:var(--accent);font-weight:800;flex-shrink:0;width:90px}
+  .scroll::-webkit-scrollbar{display:none}
+</style>
+</head>
+<body>
+  <div class="head"><h1>The screens I hadn't shown you</h1>
+    <p>1) <b>Token Detail</b> — where every coin tap (Home / Portfolio / Market) lands. 2) The <b>Apps</b> and <b>News</b> segments of Discover (you'd only seen Tokens).</p></div>
+
+  <div class="stage">
+    <!-- ===== TOKEN DETAIL ===== -->
+    <div class="col">
+      <div class="tag">Token Detail modal</div>
+      <div class="tagsub">Tap any coin → this. Full 1D/1W/1M/1Y (market price history exists for all periods — no young-wallet tiering here). Actions testnet-gated.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="dimbg">
+          <div class="modal">
+            <div class="mhead">
+              <div class="tok" style="width:44px;height:44px;background:rgba(98,126,234,.18);color:#9aacf0;font-size:16px">Ξ</div>
+              <div><div class="mname">Ethereum</div><div class="msym">ETH</div></div>
+              <div class="mclose">✕</div>
+            </div>
+            <div class="mprice mono">$2,402.18</div>
+            <div class="mchg gain">▲ $26.40 · 1.1% today</div>
+            <svg class="mchart" viewBox="0 0 280 84" preserveAspectRatio="none" style="height:74px">
+              <defs><linearGradient id="dg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34D399" stop-opacity=".28"/><stop offset="1" stop-color="#34D399" stop-opacity="0"/></linearGradient></defs>
+              <path d="M0,64 L24,58 L48,62 L72,48 L96,54 L120,40 L144,46 L168,30 L192,38 L216,22 L240,30 L264,16 L280,20" fill="none" stroke="#34D399" stroke-width="2.2" stroke-linejoin="round"/>
+              <path d="M0,64 L24,58 L48,62 L72,48 L96,54 L120,40 L144,46 L168,30 L192,38 L216,22 L240,30 L264,16 L280,20 L280,84 L0,84 Z" fill="url(#dg)"/>
+              <circle cx="280" cy="20" r="3.5" fill="#fff"/>
+            </svg>
+            <div class="pp"><span>1D</span><span class="on">1W</span><span>1M</span><span>1Y</span></div>
+            <div class="stats">
+              <div class="stat"><div class="l">Market cap</div><div class="v mono">$289B</div></div>
+              <div class="stat"><div class="l">24h volume</div><div class="v mono">$14.2B</div></div>
+            </div>
+            <!-- ETH: Buy available -->
+            <div class="acts">
+              <div class="act soft"><b>⬇</b>Receive</div>
+              <div class="act soft"><b>⬆</b>Send</div>
+              <div class="act primary"><b>＋</b>Buy</div>
+            </div>
+            <div class="gated">ETH is buyable via Transak · Send/Receive always available</div>
+          </div>
+        </div>
+      </div>
+      <div class="tagsub" style="min-height:0;margin-top:2px"><b style="color:var(--text)">LINK variant ↓</b> — non-buyable coin: Buy is replaced by Swap</div>
+      <div class="phone" style="padding-bottom:10px">
+        <div class="dimbg" style="padding-top:18px;padding-bottom:18px">
+          <div class="modal">
+            <div class="mhead">
+              <div class="tok" style="width:44px;height:44px;background:rgba(43,108,176,.20);color:#6aa6e8;font-size:16px">⬡</div>
+              <div><div class="mname">Chainlink</div><div class="msym">LINK · Base Sepolia</div></div>
+              <div class="mclose">✕</div>
+            </div>
+            <div class="mprice mono">$14.20</div>
+            <div class="mchg loss">▾ $0.06 · 0.4% today</div>
+            <div class="acts" style="margin-top:14px">
+              <div class="act soft"><b>⬇</b>Receive</div>
+              <div class="act soft"><b>⬆</b>Send</div>
+              <div class="act primary"><b>⇄</b>Swap</div>
+            </div>
+            <div class="gated">LINK isn't on Transak → Swap (you hold ETH). No dead Buy button.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== DISCOVER: APPS ===== -->
+    <div class="col">
+      <div class="tag">Discover · Apps segment</div>
+      <div class="tagsub">dApps/sites as a clean list with on-brand icons + category chips. Opens in the (untouched) in-app browser.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="search">🔍&nbsp; Search tokens, dApps, or enter a URL</div>
+          <div class="seg"><span>Tokens</span><span class="on">Apps</span><span>News</span></div>
+          <div style="margin:14px 0 6px"><span class="chip on">All</span><span class="chip">DeFi</span><span class="chip">NFT</span><span class="chip">Bridge</span></div>
+          <div class="appcard"><div class="aicon">U</div><div style="flex:1"><div style="font-size:14px;font-weight:600">Uniswap</div><div class="gtxt" style="font-size:12px">Swap tokens · DeFi</div></div><div class="open">Open</div></div>
+          <div class="appcard"><div class="aicon">A</div><div style="flex:1"><div style="font-size:14px;font-weight:600">Aave</div><div class="gtxt" style="font-size:12px">Lending · DeFi</div></div><div class="open">Open</div></div>
+          <div class="appcard"><div class="aicon">O</div><div style="flex:1"><div style="font-size:14px;font-weight:600">OpenSea</div><div class="gtxt" style="font-size:12px">NFT marketplace</div></div><div class="open">Open</div></div>
+          <div class="appcard"><div class="aicon">C</div><div style="flex:1"><div style="font-size:14px;font-weight:600">Compound</div><div class="gtxt" style="font-size:12px">Lending · DeFi</div></div><div class="open">Open</div></div>
+          <div class="appcard"><div class="aicon">⬡</div><div style="flex:1"><div style="font-size:14px;font-weight:600">Chainlink</div><div class="gtxt" style="font-size:12px">Oracles</div></div><div class="open">Open</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== DISCOVER: NEWS ===== -->
+    <div class="col">
+      <div class="tag">Discover · News segment</div>
+      <div class="tagsub">News lives here (NOT on Home). Real feed (NewsFeed component) with source + headline + time + thumb.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="search">🔍&nbsp; Search tokens, dApps, or enter a URL</div>
+          <div class="seg"><span>Tokens</span><span>Apps</span><span class="on">News</span></div>
+          <div style="height:14px"></div>
+          <div class="news"><div class="nthumb">📰</div><div><div class="nsrc">CoinDesk</div><div class="ntitle">Ethereum L2 activity hits new high as fees stay low</div><div class="ntime">2h ago</div></div></div>
+          <div class="news"><div class="nthumb">📈</div><div><div class="nsrc">The Block</div><div class="ntitle">Base sees record testnet deployments this week</div><div class="ntime">5h ago</div></div></div>
+          <div class="news"><div class="nthumb">🔗</div><div><div class="nsrc">Decrypt</div><div class="ntitle">Chainlink expands oracle coverage to more testnets</div><div class="ntime">8h ago</div></div></div>
+          <div class="news"><div class="nthumb">💱</div><div><div class="nsrc">CoinDesk</div><div class="ntitle">Stablecoin supply on L2s climbs amid lower gas</div><div class="ntime">1d ago</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note"><b>What these complete:</b>
+    <div class="legend"><span class="k">Token Detail</span><span>The shared destination for every coin tap across Home / Portfolio / Market. Full <b>1D/1W/1M/1Y</b> price chart (market history exists for all ranges — the young-wallet tiering is portfolio-only). Action row is <b>testnet-gated</b>: ETH shows Buy; non-buyable coins (LINK/USDC) show Swap instead — never a dead button.</span></div>
+    <div class="legend"><span class="k">Apps</span><span>dApp directory as a legible list with on-brand violet icons + category chips. "Open" launches the in-app browser (chrome untouched).</span></div>
+    <div class="legend"><span class="k">News</span><span>The News segment of Discover — the home for the existing <code>NewsFeed</code>, kept OFF Home per your earlier call.</span></div>
+    <div class="legend"><span class="k">Note</span><span>Token Detail today is a <b>fade-in centered modal</b> (matches current code). If you'd prefer it as a bottom-sheet (more standard mobile), that's a quick swap — tell me.</span></div>
+  </div>
+</body>
+</html>

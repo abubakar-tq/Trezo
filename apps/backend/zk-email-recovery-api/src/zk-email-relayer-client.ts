@@ -31,12 +31,14 @@ export class ZkEmailRelayerClient {
   async sendAcceptanceRequest(params: {
     controllerEthAddr: string;
     guardianEmailAddr: string;
+    accountCode: string;
     templateIdx?: number;
     command: string;
   }): Promise<RelayerRequestRef> {
     const body = {
       controller_eth_addr: params.controllerEthAddr,
       guardian_email_addr: params.guardianEmailAddr,
+      account_code: params.accountCode,
       template_idx: params.templateIdx ?? this.config.acceptanceTemplateIdx,
       command: params.command,
     };
@@ -88,11 +90,19 @@ export class ZkEmailRelayerClient {
 
   async completeRequest(params: {
     controllerEthAddr: string;
-    recoveryData: string;
+    accountEthAddr: string;
+    completeCalldata: string;
   }): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    // The hosted relayer expects three fields per the prove.email API spec:
+    //   controller_eth_addr — the EmailRecovery module
+    //   account_eth_addr    — the smart account being recovered
+    //   complete_calldata   — abi-encoded recoveryData (opaque to relayer)
+    // Earlier we sent `recovery_data` which the relayer ignores, and we
+    // omitted account_eth_addr entirely — both fatal for the hosted flow.
     const body = {
       controller_eth_addr: params.controllerEthAddr,
-      recovery_data: params.recoveryData,
+      account_eth_addr: params.accountEthAddr,
+      complete_calldata: params.completeCalldata,
     };
 
     try {
@@ -111,16 +121,56 @@ export class ZkEmailRelayerClient {
   }
 
   async getAccountSalt(params: {
-    controllerEthAddr: string;
+    accountCode: string;
     guardianEmailAddr: string;
   }): Promise<string | null> {
+    // getAccountSalt is a stateless Poseidon compute on the relayer:
+    //   salt = Poseidon(accountCode, emailCommitment)
+    // The canonical body shape per the prove.email API is `{account_code, email_addr}`.
+    //
+    // IMPORTANT: this endpoint returns Content-Type: text/plain with the raw
+    // hex salt as the body (e.g. "0x2106…"). It is NOT wrapped in JSON like
+    // every other endpoint. Earlier code used this.post<T>() which JSON.parsed
+    // the hex string and crashed with "Unexpected character x" on mobile.
+    const url = `${normalizeBaseUrl(this.config.baseUrl)}/getAccountSalt`;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.config.apiKey) {
+      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+    }
+
     const body = {
-      controller_eth_addr: params.controllerEthAddr,
-      guardian_email_addr: params.guardianEmailAddr,
+      account_code: params.accountCode,
+      email_addr: params.guardianEmailAddr,
     };
 
-    const resp = await this.post<RelayerSaltResponse>("getAccountSalt", body);
-    return resp.account_salt ?? null;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(RELAYER_TIMEOUT_MS),
+    });
+
+    const text = (await resp.text().catch(() => "")).trim();
+
+    if (!resp.ok) {
+      throw new Error(
+        `Relayer getAccountSalt returned ${resp.status}: ${text || resp.statusText}`,
+      );
+    }
+
+    if (!text) return null;
+
+    // Support older deployments that wrap in JSON, and new ones that return raw hex.
+    if (text.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(text) as RelayerSaltResponse;
+        return parsed.account_salt ?? null;
+      } catch {
+        return null;
+      }
+    }
+
+    return text.startsWith("0x") ? text : `0x${text}`;
   }
 
   private async post<T>(endpoint: string, body: unknown): Promise<T> {

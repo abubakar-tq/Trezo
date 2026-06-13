@@ -145,15 +145,6 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         return _scheduleRecovery(wallet, newPassKey, intent, scopes, sigs);
     }
 
-    function scheduleRecovery(address wallet, PasskeyTypes.PasskeyInit calldata newPassKey, GuardianSig[] calldata sigs)
-        external
-        returns (bytes32 recoveryId)
-    {
-        RecoveryTypes.ChainRecoveryScope[] memory scopes = _legacyScopes(wallet);
-        RecoveryTypes.RecoveryIntent memory intent = _legacyIntent(wallet, newPassKey, scopes[0].nonce, _hashChainScopesMemory(scopes));
-        return _scheduleRecovery(wallet, newPassKey, intent, scopes, sigs);
-    }
-
     function _scheduleRecovery(
         address wallet,
         PasskeyTypes.PasskeyInit calldata newPassKey,
@@ -236,16 +227,6 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
         return _getRecoveryDigest(intent);
     }
 
-    function getRecoveryDigest(address wallet, uint256 nonce, PasskeyTypes.PasskeyInit calldata newPassKey)
-        external
-        view
-        returns (bytes32)
-    {
-        RecoveryTypes.ChainRecoveryScope[] memory scopes = _legacyScopesWithNonce(wallet, nonce);
-        RecoveryTypes.RecoveryIntent memory intent = _legacyIntent(wallet, newPassKey, nonce, _hashChainScopesMemory(scopes));
-        return _getRecoveryDigest(intent);
-    }
-
     function _getRecoveryDigest(RecoveryTypes.RecoveryIntent memory intent) internal view returns (bytes32) {
         bytes32 structHash = keccak256(
             abi.encode(
@@ -316,19 +297,6 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
     //////////////////////////////////////////////////////////////*/
 
     function executeRecovery(address wallet) external override {
-        _executeRecovery(wallet);
-    }
-
-    function executeRecovery(address wallet, PasskeyTypes.PasskeyInit calldata newPassKey) external {
-        ActiveRecovery storage active = _activeRecoveries[wallet];
-        if (active.recoveryId != bytes32(0)) {
-            bytes32 storedHash = keccak256(
-                abi.encode(RecoveryTypes.PASSKEY_INIT_TYPEHASH, active.passkey.idRaw, active.passkey.px, active.passkey.py)
-            );
-            if (storedHash != RecoveryHash.hashPasskeyInit(newPassKey)) {
-                revert SocialRecovery_InvalidRecoveryId(active.recoveryId, bytes32(0));
-            }
-        }
         _executeRecovery(wallet);
     }
 
@@ -610,40 +578,6 @@ contract SocialRecovery is ISocialRecovery, ERC7579ModuleBase, EIP712("SocialRec
                 intent.metadataHash
             )
         );
-    }
-
-    function _legacyScopes(address wallet) internal view returns (RecoveryTypes.ChainRecoveryScope[] memory scopes) {
-        return _legacyScopesWithNonce(wallet, _recoveryDetails[wallet].nonce);
-    }
-
-    function _legacyScopesWithNonce(address wallet, uint256 nonce)
-        internal
-        view
-        returns (RecoveryTypes.ChainRecoveryScope[] memory scopes)
-    {
-        scopes = new RecoveryTypes.ChainRecoveryScope[](1);
-        scopes[0] = RecoveryTypes.ChainRecoveryScope({
-            chainId: block.chainid,
-            wallet: wallet,
-            socialRecovery: address(this),
-            nonce: nonce,
-            guardianSetHash: getGuardianSetHash(wallet),
-            policyHash: getPolicyHash(wallet)
-        });
-    }
-
-    function _legacyIntent(
-        address wallet,
-        PasskeyTypes.PasskeyInit calldata newPassKey,
-        uint256 nonce,
-        bytes32 chainScopeHash
-    ) internal pure returns (RecoveryTypes.RecoveryIntent memory intent) {
-        intent.requestId = keccak256(abi.encode(wallet, nonce, newPassKey.idRaw));
-        intent.newPasskeyHash = RecoveryHash.hashPasskeyInit(newPassKey);
-        intent.chainScopeHash = chainScopeHash;
-        intent.validAfter = 0;
-        intent.deadline = type(uint48).max;
-        intent.metadataHash = bytes32(0);
     }
 
     function _hashChainScopesMemory(RecoveryTypes.ChainRecoveryScope[] memory scopes) internal pure returns (bytes32) {

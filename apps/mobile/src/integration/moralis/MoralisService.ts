@@ -42,12 +42,10 @@ export class MoralisService {
     
     const cached = cache.get(url);
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      console.log(`📡 [Moralis] Cache HIT: ${endpoint}`);
       return cached.data;
     }
 
     try {
-      console.log(`🌐 [Moralis] API CALL: ${url}`);
       const response = await fetch(url, {
         method: "GET",
         headers: {

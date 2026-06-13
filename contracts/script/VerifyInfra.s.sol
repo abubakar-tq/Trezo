@@ -17,6 +17,7 @@ contract VerifyInfra is Script {
         _requireCode("MinimalProxyFactory", predicted.proxyFactory);
         _requireCode("PasskeyValidator", predicted.passkeyValidator);
         _requireCode("SocialRecovery", predicted.socialRecovery);
+        _requireCode("CrossChainExecutor", predicted.crossChainExecutor);
 
         console2.log("=== VerifyInfra ===");
         console2.log("chainId:", block.chainid);

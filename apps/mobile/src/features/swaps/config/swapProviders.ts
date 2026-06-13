@@ -15,50 +15,40 @@
 
 import type { SwapRouteProvider } from "@/src/features/swaps/providers/SwapRouteProvider";
 import { LocalMockSwapProvider } from "@/src/features/swaps/providers/LocalMockSwapProvider";
-import { DirectUniswapV3ForkProvider } from "@/src/features/swaps/providers/DirectUniswapV3ForkProvider";
+import { UniswapV3Provider } from "@/src/features/swaps/providers/UniswapV3Provider";
 import { UniswapV2BaseProvider } from "@/src/features/swaps/providers/UniswapV2BaseProvider";
 import type { SupportedChainId } from "@/src/integration/chains";
 import type { NetworkKey } from "@/src/integration/networks";
 import { getDeployment } from "@/src/integration/viem/deployments";
 import {
-  getTrustedSpendersForNetwork as getDexTrustedSpenders,
   isTrustedSpenderForNetwork as isDexTrustedSpender,
 } from "@/src/features/swaps/config/dexRegistry";
+import { isTrustedBridgeSpender } from "@/src/features/swaps/config/bridgeRegistry";
 import type { Address } from "viem";
 
 // ─── Provider instances ────────────────────────────────────────────────────────
+// Order matters for getProviderForNetwork: it picks the first provider whose
+// supportsPair() returns true. V2 (Base only) goes first because getAmountsOut
+// is a pure view call — cheaper than the V3 QuoterV2 simulation.
 
-const legacyProviders: readonly SwapRouteProvider[] = [
+const ALL_PROVIDERS: readonly SwapRouteProvider[] = [
   new LocalMockSwapProvider(),
-];
-
-const forkProviders: readonly SwapRouteProvider[] = [
-  // V2 first: getAmountsOut is a pure view call — faster and more reliable on remote RPCs
   new UniswapV2BaseProvider(),
-  // V3 fallback: higher precision quotes via QuoterV2 simulation
-  new DirectUniswapV3ForkProvider(),
+  new UniswapV3Provider(),
 ];
 
 // ─── Network-key-aware API ─────────────────────────────────────────────────────
 
-export const getSwapProvidersForNetwork = (networkKey: NetworkKey): SwapRouteProvider[] => {
-  if (networkKey === "base-mainnet-fork" || networkKey === "base-mainnet") {
-    return [...forkProviders];
-  }
-  // Fallback to legacy for anvil-local and other networks
-  return legacyProviders.filter((p) => {
-    // LocalMockSwapProvider only supports chain 31337
-    return (p as LocalMockSwapProvider).supportsChain?.(31337) ?? false;
-  });
-};
+export const getSwapProvidersForNetwork = (networkKey: NetworkKey): SwapRouteProvider[] =>
+  ALL_PROVIDERS.filter((provider) => provider.supportsNetwork(networkKey));
 
 export const isTrustedSpenderForNetwork = (networkKey: NetworkKey, spender: Address): boolean =>
-  isDexTrustedSpender(networkKey, spender);
+  isDexTrustedSpender(networkKey, spender) || isTrustedBridgeSpender(networkKey, spender);
 
 // ─── Legacy chain-id API (backwards compat) ────────────────────────────────────
 
 export const getSwapProvidersForChain = (chainId: SupportedChainId): SwapRouteProvider[] =>
-  legacyProviders.filter((provider) => provider.supportsChain(chainId));
+  ALL_PROVIDERS.filter((provider) => provider.supportsChain(chainId));
 
 export const getTrustedSpendersForChain = (chainId: SupportedChainId): Address[] => {
   const deployment = getDeployment(chainId as never);

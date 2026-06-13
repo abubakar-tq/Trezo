@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBrowserStore } from "@store/useBrowserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
 import { MeshBackground } from "@shared/components";
 
 export default function BrowserSettingsScreen() {
@@ -131,8 +130,7 @@ export default function BrowserSettingsScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
         <View style={styles.headerIndicator} />
-        <Text style={[styles.headerKicker, { color: colors.accent }]}>GALACTIC CONFIGURATION</Text>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>BROWSER CORE</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Browser Settings</Text>
       </View>
 
       <ScrollView
@@ -144,7 +142,7 @@ export default function BrowserSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>TAB QUANTUM STATE</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Tabs</Text>
           </View>
 
           <View style={styles.glassCard}>
@@ -158,7 +156,7 @@ export default function BrowserSettingsScreen() {
                   value={settings.persistTabs}
                   onValueChange={handleTogglePersistTabs}
                   trackColor={{
-                    false: withAlpha(colors.textMuted, 0.2),
+                    false: `${colors.textMuted}33`,
                     true: colors.accent,
                   }}
                   thumbColor="#ffffff"
@@ -167,7 +165,7 @@ export default function BrowserSettingsScreen() {
             />
 
             {tabCount > 0 && (
-              <View style={[styles.infoBox, { backgroundColor: withAlpha(colors.accent, 0.08) }]}>
+              <View style={[styles.infoBox, { backgroundColor: `${colors.accent}14` }]}>
                 <Feather name="info" size={14} color={colors.accent} />
                 <Text style={[styles.infoText, { color: colors.accent }]}>
                   {tabCount} active tab{tabCount === 1 ? "" : "s"} detected
@@ -181,7 +179,7 @@ export default function BrowserSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>NAVIGATION ENGINE</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Search</Text>
           </View>
 
           <View style={styles.glassCard}>
@@ -195,7 +193,7 @@ export default function BrowserSettingsScreen() {
             />
           </View>
 
-          <View style={[styles.helpBox, { backgroundColor: withAlpha(colors.accent, 0.05) }]}>
+          <View style={[styles.helpBox, { backgroundColor: colors.glass }]}>
             <Feather name="shield" size={14} color={colors.accent} />
             <Text style={[styles.helpText, { color: colors.textSecondary }]}>
               <Text style={{ fontWeight: "800", color: colors.accent }}>Hybrid Mode:</Text> Uses Web3Compass for dApp
@@ -208,7 +206,7 @@ export default function BrowserSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionDot, { backgroundColor: colors.accent }]} />
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>SECURITY PROTOCOLS</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Security</Text>
           </View>
 
           <View style={styles.glassCard}>
@@ -232,27 +230,8 @@ export default function BrowserSettingsScreen() {
               showChevron
             />
             
-            <View style={[styles.divider, { backgroundColor: colors.borderMuted }]} />
-            
-            <SettingRow
-              icon="database"
-              label="Clear Browser Cache"
-              description="Free up local storage space"
-              colors={colors}
-              onPress={() => {}} 
-              showChevron
-            />
           </View>
         </View>
-        
-        {/* Dangerous Actions */}
-        <TouchableOpacity 
-          style={[styles.clearAllButton, { borderColor: withAlpha(colors.danger, 0.3), backgroundColor: withAlpha(colors.danger, 0.05) }]}
-          activeOpacity={0.8}
-        >
-          <Feather name="alert-circle" size={18} color={colors.danger} />
-          <Text style={[styles.clearAllText, { color: colors.danger }]}>CLEAR ALL BROWSING DATA</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* History Limit Modal */}
@@ -266,7 +245,7 @@ export default function BrowserSettingsScreen() {
           style={styles.modalOverlay}
           onPress={() => setShowHistoryLimitModal(false)}
         >
-          <Pressable style={[styles.modalContent, { backgroundColor: isDark ? '#121212' : '#FFFFFF', borderColor: colors.border }]} onPress={() => {}}>
+          <Pressable style={[styles.modalContent, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>History Limit</Text>
               <Pressable onPress={() => setShowHistoryLimitModal(false)}>
@@ -292,11 +271,11 @@ export default function BrowserSettingsScreen() {
                 value={tempHistoryLimit}
                 onValueChange={handleHistoryLimitSliderChange}
                 minimumTrackTintColor={colors.accent}
-                maximumTrackTintColor={withAlpha(colors.textMuted, 0.1)}
+                maximumTrackTintColor={`${colors.textMuted}1A`}
                 thumbTintColor={colors.accent}
               />
 
-              <View style={[styles.inputContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : colors.background }]}>
+              <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground }]}>
                 <TextInput
                   style={[styles.input, { color: colors.textPrimary }]}
                   value={historyLimitInput}
@@ -310,7 +289,7 @@ export default function BrowserSettingsScreen() {
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: withAlpha(colors.textMuted, 0.1) }]}
+                style={[styles.modalButton, { backgroundColor: `${colors.textMuted}1A` }]}
                 onPress={() => setShowHistoryLimitModal(false)}
               >
                 <Text style={[styles.modalButtonText, { color: colors.textSecondary }]}>Cancel</Text>
@@ -319,7 +298,7 @@ export default function BrowserSettingsScreen() {
                 style={[styles.modalButton, { backgroundColor: colors.accent }]}
                 onPress={handleSaveHistoryLimit}
               >
-                <Text style={[styles.modalButtonText, { color: "#000" }]}>Save Changes</Text>
+                <Text style={[styles.modalButtonText, { color: colors.textOnAccent }]}>Save Changes</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -337,7 +316,7 @@ export default function BrowserSettingsScreen() {
           style={styles.modalOverlay}
           onPress={() => setShowSearchEngineModal(false)}
         >
-          <Pressable style={[styles.modalContent, { backgroundColor: isDark ? '#121212' : '#FFFFFF', borderColor: colors.border }]} onPress={() => {}}>
+          <Pressable style={[styles.modalContent, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Search Engine</Text>
               <Pressable onPress={() => setShowSearchEngineModal(false)}>
@@ -378,17 +357,17 @@ export default function BrowserSettingsScreen() {
       {/* Confirmation Modals */}
       <Modal visible={showClearHistoryModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-           <View style={[styles.modalContent, { backgroundColor: isDark ? '#121212' : '#FFFFFF', borderColor: withAlpha(colors.danger, 0.3) }]}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Purge History?</Text>
+           <View style={[styles.modalContent, { backgroundColor: colors.surfaceCard, borderColor: `${colors.danger}4D` }]}>
+              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Clear browsing data?</Text>
               <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
-                This will permanently delete {historyCount} journey logs. This action is irreversible.
+                This will permanently delete {historyCount} browsing history entries. This action cannot be undone.
               </Text>
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={styles.modalButton} onPress={() => setShowClearHistoryModal(false)}>
                   <Text style={{ color: colors.textMuted }}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.modalButton, { backgroundColor: colors.danger }]} onPress={handleConfirmClearHistory}>
-                  <Text style={{ color: '#FFF', fontWeight: '700' }}>Confirm Purge</Text>
+                  <Text style={{ color: colors.textOnAccent, fontWeight: '700' }}>Clear history</Text>
                 </TouchableOpacity>
               </View>
            </View>
@@ -405,8 +384,8 @@ function SearchOption({ title, description, selected, onPress, colors, styles }:
       style={[
         styles.optionRow, 
         { 
-          backgroundColor: selected ? withAlpha(colors.accent, 0.08) : 'transparent',
-          borderColor: selected ? colors.accent : withAlpha(colors.border, 0.1)
+          backgroundColor: selected ? `${colors.accent}14` : 'transparent',
+          borderColor: selected ? colors.accent : `${colors.border}1A`
         }
       ]}
     >
@@ -431,7 +410,7 @@ function SettingRow({ icon, label, description, colors, onPress, showChevron, ri
       activeOpacity={0.7}
       style={rowStyles.container}
     >
-      <View style={[rowStyles.iconBox, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
+      <View style={[rowStyles.iconBox, { backgroundColor: `${colors.accent}1A` }]}>
         <Feather name={icon} size={18} color={colors.accent} />
       </View>
 
@@ -460,15 +439,8 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       width: 40,
       height: 4,
       borderRadius: 2,
-      backgroundColor: withAlpha(colors.accent, 0.3),
+      backgroundColor: `${colors.accent}4D`,
       marginBottom: 16,
-    },
-    headerKicker: {
-      fontSize: 11,
-      fontWeight: "900",
-      letterSpacing: 3,
-      marginBottom: 6,
-      opacity: 0.8,
     },
     headerTitle: {
       fontSize: 28,
@@ -506,10 +478,10 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       letterSpacing: 2,
     },
     glassCard: {
-      backgroundColor: isDark ? 'rgba(20, 20, 20, 0.7)' : 'rgba(255, 255, 255, 0.85)',
+      backgroundColor: colors.surfaceCard,
       borderRadius: 32,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+      borderColor: colors.glassBorder,
       overflow: "hidden",
     },
     divider: {
@@ -540,22 +512,6 @@ function createStyles(colors: ThemeColors, isDark: boolean) {
       fontSize: 13,
       lineHeight: 18,
       flex: 1,
-    },
-    clearAllButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 10,
-      paddingVertical: 18,
-      borderRadius: 24,
-      borderWidth: 1,
-      marginTop: 10,
-      marginBottom: 20,
-    },
-    clearAllText: {
-      fontSize: 13,
-      fontWeight: '900',
-      letterSpacing: 1,
     },
     // Modal
     modalOverlay: {

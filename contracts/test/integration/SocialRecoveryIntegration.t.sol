@@ -13,6 +13,7 @@ import {PasskeyTypes} from "src/common/Types.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 import {SocialRecovery} from "src/modules/SocialRecovery/SocialRecovery.sol";
 import {ISocialRecovery} from "src/modules/SocialRecovery/interfaces/ISocialRecovery.sol";
+import {RecoveryTypes} from "src/recovery/RecoveryTypes.sol";
 
 import {PackedUserOperation} from "lib/account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
@@ -31,6 +32,8 @@ contract SocialRecoveryIntegrationTest is AccountFactoryTestHelper {
     address internal bundler;
 
     uint256 internal constant TIME_LOCK = 1 days;
+    bytes32 private constant PASSKEY_TYPE_HASH =
+        keccak256("PasskeyInit(bytes32 idRaw,uint256 px,uint256 py)");
 
     uint256 internal guardianKey1 = 0x111111;
     uint256 internal guardianKey2 = 0x222222;
@@ -76,7 +79,27 @@ contract SocialRecoveryIntegrationTest is AccountFactoryTestHelper {
         assertEq(passkeyValidator.passkeyCount(proxy), 1, "expected single passkey after deployment");
 
         PasskeyTypes.PasskeyInit memory recoveredPasskey = PassKeyDemo.getPasskeyInit(1);
-        bytes32 digest = recoveryModule.getRecoveryDigest(proxy, 0, recoveredPasskey);
+
+        RecoveryTypes.ChainRecoveryScope[] memory scopes = new RecoveryTypes.ChainRecoveryScope[](1);
+        scopes[0] = RecoveryTypes.ChainRecoveryScope({
+            chainId: block.chainid,
+            wallet: proxy,
+            socialRecovery: address(recoveryModule),
+            nonce: 0,
+            guardianSetHash: recoveryModule.getGuardianSetHash(proxy),
+            policyHash: recoveryModule.getPolicyHash(proxy)
+        });
+        RecoveryTypes.RecoveryIntent memory intent = RecoveryTypes.RecoveryIntent({
+            requestId: keccak256(abi.encode(proxy, uint256(0), recoveredPasskey.idRaw)),
+            newPasskeyHash: keccak256(
+                abi.encode(PASSKEY_TYPE_HASH, recoveredPasskey.idRaw, recoveredPasskey.px, recoveredPasskey.py)
+            ),
+            chainScopeHash: recoveryModule.getChainScopeHash(scopes),
+            validAfter: 0,
+            deadline: type(uint48).max,
+            metadataHash: bytes32(0)
+        });
+        bytes32 digest = recoveryModule.getRecoveryDigest(intent);
 
         (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(guardianKey1, digest);
         (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(guardianKey2, digest);
@@ -94,12 +117,12 @@ contract SocialRecoveryIntegrationTest is AccountFactoryTestHelper {
         });
 
         vm.prank(guardian1);
-        bytes32 recoveryId = recoveryModule.scheduleRecovery(proxy, recoveredPasskey, sigs);
+        bytes32 recoveryId = recoveryModule.scheduleRecovery(proxy, recoveredPasskey, intent, scopes, sigs);
         assertTrue(recoveryId != bytes32(0), "recovery id should be set");
 
         vm.warp(block.timestamp + TIME_LOCK + 1);
         vm.prank(guardian2);
-        recoveryModule.executeRecovery(proxy, recoveredPasskey);
+        recoveryModule.executeRecovery(proxy);
 
         // Passkey validator should now have two keys registered
         assertEq(passkeyValidator.passkeyCount(proxy), 2, "passkey count not incremented");

@@ -6,6 +6,8 @@ import { SigninIcon } from "@/assets/components";
 import { AuthStackParamList } from "@/src/types/navigation";
 import { AuthGradientButton, AuthScaffold } from "@features/auth/components";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 const messages = {
   "account-created": {
@@ -28,6 +30,9 @@ type AuthResultNavigation = NavigationProp<AuthStackParamList>;
 const AuthResultScreen: React.FC = () => {
   const navigation = useNavigation<AuthResultNavigation>();
   const route = useRoute<AuthResultRoute>();
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const setLastSuccess = useAuthFlowStore((state) => state.setLastSuccess);
   const { type, email } = route.params;
 
@@ -61,14 +66,14 @@ const AuthResultScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   content: {
     width: "100%",
     rowGap: 16,
   },
   helperText: {
     textAlign: "center",
-    color: "#9ca3af",
+    color: colors.textMuted,
     fontSize: 12,
   },
 });

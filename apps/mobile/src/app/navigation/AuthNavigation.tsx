@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React, { useEffect, useState } from "react";
+import { useAppTheme } from "@theme";
 
 import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
 import { AuthStackParamList } from "@/src/types/navigation";
@@ -13,10 +14,13 @@ import {
     SplashScreen,
     VerifyEmailScreen,
 } from "@features/auth";
+import { LinkDeviceScreen } from "@features/auth/screens/LinkDeviceScreen";
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 const AuthNavigation = () => {
+  const { theme } = useAppTheme();
+  const { colors } = theme;
   const [initialRouteName, setInitialRouteName] = useState<keyof AuthStackParamList>("Onboarding");
 
   useEffect(() => {
@@ -36,8 +40,6 @@ const AuthNavigation = () => {
     };
   }, []);
 
-  console.log('🔐 [AuthNavigation] Rendering, initialRoute:', initialRouteName);
-
   return (
 		<Stack.Navigator
 			initialRouteName={initialRouteName}
@@ -46,26 +48,19 @@ const AuthNavigation = () => {
 				animation: "slide_from_right",
 				gestureEnabled: true,
 				gestureDirection: "horizontal",
-				contentStyle: { backgroundColor: "#000000" },
+				contentStyle: { backgroundColor: colors.background },
 				animationTypeForReplace: "push",
 			}}
 		>
-      <Stack.Screen 
-      	name="Splash" 
-      	component={SplashScreen}
-      	listeners={{ focus: () => console.log('👀 [AuthNav] Splash focused') }}
-      />
-      <Stack.Screen 
-      	name="Onboarding" 
-      	component={OnboardingScreen}
-      	listeners={{ focus: () => console.log('👀 [AuthNav] Onboarding focused') }}
-      />
+      <Stack.Screen name="Splash" component={SplashScreen} />
+      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
 		<Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
 		<Stack.Screen name="AuthResult" component={AuthResultScreen} />
+      <Stack.Screen name="LinkDevice" component={LinkDeviceScreen} />
 	</Stack.Navigator>
   );
 };

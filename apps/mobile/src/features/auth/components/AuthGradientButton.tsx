@@ -1,6 +1,8 @@
 import { LinearGradient } from "expo-linear-gradient";
-import React from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 type GradientColors =
   | readonly [string, string]
@@ -23,6 +25,9 @@ const AuthGradientButton: React.FC<AuthGradientButtonProps> = ({
   colors = DEFAULT_GRADIENT,
   testID,
 }) => {
+  const { theme } = useAppTheme();
+  const { colors: themeColors } = theme;
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
   return (
     <TouchableOpacity
       testID={testID}
@@ -43,7 +48,7 @@ const AuthGradientButton: React.FC<AuthGradientButtonProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     borderRadius: 999,
     overflow: "hidden",
@@ -60,7 +65,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   text: {
-    color: "#ffffff",
+    color: colors.textOnAccent,
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",

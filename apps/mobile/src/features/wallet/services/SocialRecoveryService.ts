@@ -2,7 +2,11 @@ import { getBundlerUrl, getPaymasterUrl } from "@/src/core/network/chain";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import { ABIS } from "@/src/integration/viem/abis";
 import {
+  buildAddGuardiansUserOp as _buildAddGuardiansUserOp,
+  buildApproveHashUserOp as _buildApproveHashUserOp,
   buildInstallRecoveryModuleUserOp,
+  buildRawCallUserOp as _buildRawCallUserOp,
+  buildRemoveGuardiansUserOp as _buildRemoveGuardiansUserOp,
   encodeSocialRecoveryInitData,
   getDeployment,
   getPublicClient,
@@ -42,6 +46,21 @@ export type SocialRecoverySubmitRequest = {
   chainId?: SupportedChainId;
   bundlerUrl?: string;
 };
+
+export type GuardianUpdateRequest = {
+  smartAccountAddress: Address;
+  guardians: readonly Address[];
+  /** Pass 0n to keep current threshold; otherwise enforce this value. */
+  threshold: bigint;
+  passkeyId: Hex;
+  chainId?: SupportedChainId;
+  bundlerUrl?: string;
+  paymasterUrl?: string;
+  usePaymaster?: boolean;
+  nonce?: bigint;
+};
+
+export type GuardianUpdateResponse = SocialRecoveryInstallResponse;
 
 export type RecoveryHashes = {
   guardianSetHash: Hex;
@@ -117,6 +136,141 @@ export class SocialRecoveryService {
     });
 
     return { userOp, userOpHash };
+  }
+
+  static async buildAddGuardiansUserOp(
+    params: GuardianUpdateRequest,
+  ): Promise<GuardianUpdateResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const paymasterUrl = params.usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl()
+      : params.paymasterUrl;
+    const deployment = getDeployment(chainId);
+    if (!deployment?.socialRecovery) {
+      throw new Error(`No Social Recovery module configured for chain ${chainId}`);
+    }
+    const { userOp, userOpHash } = await _buildAddGuardiansUserOp({
+      chainId,
+      bundlerUrl,
+      smartAccountAddress: params.smartAccountAddress,
+      socialRecoveryAddress: deployment.socialRecovery as Address,
+      guardians: params.guardians,
+      threshold: params.threshold,
+      passkeyId: params.passkeyId,
+      usePaymaster: params.usePaymaster,
+      paymasterUrl,
+      nonce: params.nonce,
+    });
+    return { userOp, userOpHash };
+  }
+
+  static async buildRemoveGuardiansUserOp(
+    params: GuardianUpdateRequest,
+  ): Promise<GuardianUpdateResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const paymasterUrl = params.usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl()
+      : params.paymasterUrl;
+    const deployment = getDeployment(chainId);
+    if (!deployment?.socialRecovery) {
+      throw new Error(`No Social Recovery module configured for chain ${chainId}`);
+    }
+    const { userOp, userOpHash } = await _buildRemoveGuardiansUserOp({
+      chainId,
+      bundlerUrl,
+      smartAccountAddress: params.smartAccountAddress,
+      socialRecoveryAddress: deployment.socialRecovery as Address,
+      guardians: params.guardians,
+      threshold: params.threshold,
+      passkeyId: params.passkeyId,
+      usePaymaster: params.usePaymaster,
+      paymasterUrl,
+      nonce: params.nonce,
+    });
+    return { userOp, userOpHash };
+  }
+
+  static async buildApproveHashUserOp(params: {
+    smartAccountAddress: Address;
+    digest: Hex;
+    passkeyId: Hex;
+    chainId?: SupportedChainId;
+    bundlerUrl?: string;
+    paymasterUrl?: string;
+    usePaymaster?: boolean;
+    nonce?: bigint;
+  }): Promise<GuardianUpdateResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const paymasterUrl = params.usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl()
+      : params.paymasterUrl;
+    const deployment = getDeployment(chainId);
+    if (!deployment?.socialRecovery) {
+      throw new Error(`No Social Recovery module configured for chain ${chainId}`);
+    }
+    const { userOp, userOpHash } = await _buildApproveHashUserOp({
+      chainId,
+      bundlerUrl,
+      smartAccountAddress: params.smartAccountAddress,
+      socialRecoveryAddress: deployment.socialRecovery as Address,
+      digest: params.digest,
+      passkeyId: params.passkeyId,
+      usePaymaster: params.usePaymaster,
+      paymasterUrl,
+      nonce: params.nonce,
+    });
+    return { userOp, userOpHash };
+  }
+
+  /**
+   * Wrap an opaque target+calldata pair in a smart-account execute UserOp and
+   * build the signed-able payload. Used for paymaster-sponsored recovery
+   * scheduling / execution where the guardian's smart account is the caller.
+   */
+  static async buildRawCallUserOp(params: {
+    smartAccountAddress: Address;
+    target: Address;
+    innerCalldata: Hex;
+    passkeyId: Hex;
+    chainId?: SupportedChainId;
+    bundlerUrl?: string;
+    paymasterUrl?: string;
+    usePaymaster?: boolean;
+    nonce?: bigint;
+  }): Promise<GuardianUpdateResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const paymasterUrl = params.usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl()
+      : params.paymasterUrl;
+    const { userOp, userOpHash } = await _buildRawCallUserOp({
+      chainId,
+      bundlerUrl,
+      smartAccountAddress: params.smartAccountAddress,
+      target: params.target,
+      innerCalldata: params.innerCalldata,
+      passkeyId: params.passkeyId,
+      usePaymaster: params.usePaymaster,
+      paymasterUrl,
+      nonce: params.nonce,
+    });
+    return { userOp, userOpHash };
+  }
+
+  static submitGuardianUserOp(params: SocialRecoverySubmitRequest): Promise<Hex> {
+    return SocialRecoveryService.submitInstallModuleUserOp(params);
+  }
+
+  static waitForGuardianReceipt(
+    userOpHash: Hex,
+    chainId: SupportedChainId = DEFAULT_CHAIN_ID,
+    bundlerUrl?: string,
+    timeoutMs?: number,
+  ): Promise<UserOperationReceipt<"0.7">> {
+    return SocialRecoveryService.waitForInstallModuleReceipt(userOpHash, chainId, bundlerUrl, timeoutMs);
   }
 
   static async submitInstallModuleUserOp(params: SocialRecoverySubmitRequest): Promise<Hex> {
@@ -268,34 +422,41 @@ export class SocialRecoveryService {
     smartAccountAddress: Address,
     chainIds: readonly SupportedChainId[],
   ): Promise<MultiChainRecoveryState[]> {
+    // Helper: return a safe "nothing on this chain" snapshot for any chain
+    // that can't be reached. Recovery requests must be tolerant of a single
+    // chain RPC being down — otherwise an unreachable dev chain (e.g. local
+    // Anvil at localhost:8545 viewed from a physical device) kills the whole
+    // multi-chain read and prevents the user from recovering on a chain that
+    // IS reachable.
+    const emptyState = (chainId: SupportedChainId): MultiChainRecoveryState => ({
+      chainId,
+      accountDeployed: false,
+      moduleInstalled: false,
+      moduleConfigured: false,
+      guardians: [],
+      threshold: 0n,
+      timelockSeconds: DEFAULT_TIMELOCK_SECONDS,
+      nonce: 0n,
+      hashes: {
+        guardianSetHash: keccak256("0x"),
+        policyHash: keccak256(
+          encodeAbiParameters(
+            [{ type: "uint256" }, { type: "uint256" }],
+            [0n, DEFAULT_TIMELOCK_SECONDS],
+          ),
+        ),
+      },
+      activeRecovery: null,
+    });
+
     const states = await Promise.all(
       chainIds.map(async (chainId) => {
-        const publicClient = getPublicClient(chainId);
-        const bytecode = await publicClient.getBytecode({ address: smartAccountAddress });
-        const accountDeployed = Boolean(bytecode && bytecode !== "0x");
+        try {
+          const publicClient = getPublicClient(chainId);
+          const bytecode = await publicClient.getBytecode({ address: smartAccountAddress });
+          const accountDeployed = Boolean(bytecode && bytecode !== "0x");
 
-        if (!accountDeployed) {
-          return {
-            chainId,
-            accountDeployed: false,
-            moduleInstalled: false,
-            moduleConfigured: false,
-            guardians: [],
-            threshold: 0n,
-            timelockSeconds: DEFAULT_TIMELOCK_SECONDS,
-            nonce: 0n,
-            hashes: {
-              guardianSetHash: keccak256("0x"),
-              policyHash: keccak256(
-                encodeAbiParameters(
-                  [{ type: "uint256" }, { type: "uint256" }],
-                  [0n, DEFAULT_TIMELOCK_SECONDS],
-                ),
-              ),
-            },
-            activeRecovery: null,
-          } satisfies MultiChainRecoveryState;
-        }
+          if (!accountDeployed) return emptyState(chainId);
 
         const [moduleInstalled, details, nonce, hashes, activeRecovery] = await Promise.all([
           this.isModuleInstalled(smartAccountAddress, chainId),
@@ -305,28 +466,32 @@ export class SocialRecoveryService {
           this.getActiveRecovery(smartAccountAddress, chainId),
         ]);
 
-        return {
-          chainId,
-          accountDeployed,
-          moduleInstalled,
-          moduleConfigured: details.guardians.length > 0 && details.threshold > 0n,
-          guardians: details.guardians,
-          threshold: details.threshold,
-          timelockSeconds: details.timelockSeconds,
-          nonce,
-          activeRecovery,
-          hashes:
-            hashes ??
-            {
-              guardianSetHash: keccak256("0x"),
-              policyHash: keccak256(
-                encodeAbiParameters(
-                  [{ type: "uint256" }, { type: "uint256" }],
-                  [details.threshold, details.timelockSeconds],
+          return {
+            chainId,
+            accountDeployed,
+            moduleInstalled,
+            moduleConfigured: details.guardians.length > 0 && details.threshold > 0n,
+            guardians: details.guardians,
+            threshold: details.threshold,
+            timelockSeconds: details.timelockSeconds,
+            nonce,
+            activeRecovery,
+            hashes:
+              hashes ??
+              {
+                guardianSetHash: keccak256("0x"),
+                policyHash: keccak256(
+                  encodeAbiParameters(
+                    [{ type: "uint256" }, { type: "uint256" }],
+                    [details.threshold, details.timelockSeconds],
+                  ),
                 ),
-              ),
-            },
-        } satisfies MultiChainRecoveryState;
+              },
+          } satisfies MultiChainRecoveryState;
+        } catch (err) {
+          console.warn(`[SocialRecoveryService] chain ${chainId} unreachable, skipping:`, err);
+          return emptyState(chainId);
+        }
       }),
     );
 

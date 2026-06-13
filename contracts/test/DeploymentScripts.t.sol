@@ -71,6 +71,14 @@ contract DeploymentScriptsTest is SafeRootDeployFixture {
         assertEq(uint256(script.run()), uint256(CheckChainSupport.ChainMode.ChainSpecific));
     }
 
+    function testIsPortableChainIncludesBaseSepolia() public pure {
+        assertTrue(DeployConstants.isPortableChain(84_532), "Base Sepolia must be portable");
+    }
+
+    function testIsPortableChainIncludesArbitrumSepolia() public pure {
+        assertTrue(DeployConstants.isPortableChain(421_614), "Arbitrum Sepolia must be portable");
+    }
+
     function testPredictAndDeployInfraAgree() public {
         _installMockSafeSingletonFactory();
         PredictInfra predictor = new PredictInfra();

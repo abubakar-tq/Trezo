@@ -141,6 +141,17 @@ const RecoveryProgressScreen: React.FC = () => {
     setRequest(loadedRequest);
     setApprovals(loadedApprovals);
     setChainStatuses(loadedStatuses);
+
+    // Best-effort: also sync Supabase from on-chain truth for each chain.
+    // This recovers from cases where a guardian's schedule/execute tx
+    // succeeded on-chain but Supabase status was never updated (e.g., a
+    // previous record-tx call failed). Ignored on error — polling will still
+    // try again 6s later.
+    void Promise.all(
+      loadedStatuses.map((s) =>
+        service.syncRecoveryStateFromChain({ requestId, chainId: s.chain_id }).catch(() => null),
+      ),
+    );
   }, [requestId]);
 
   useEffect(() => {
@@ -215,17 +226,17 @@ const RecoveryProgressScreen: React.FC = () => {
       setSubmittingAction(action);
       setError(null);
       try {
+        // The recovering device has no on-chain authority to sign schedule /
+        // execute UserOps — only the guardian (whose passkey is registered on
+        // the wallet) can. Instead of trying the broken relayer-EOA path, we
+        // sync Supabase state from on-chain truth. If a guardian already
+        // submitted the tx via their inbox, this will pick it up. If not, the
+        // status won't change and the user will see a clear "ask guardian"
+        // hint in the UI.
         for (const status of targetChains) {
-          const chainConfig = CHAINS[status.chain_id as SupportedChainId];
-          if (!chainConfig?.rpcUrl) {
-            throw new Error(`Missing RPC URL for chain ${status.chain_id}.`);
-          }
-
-          await serviceRef.current.submitRecoveryOperation({
+          await serviceRef.current.syncRecoveryStateFromChain({
             requestId,
             chainId: status.chain_id,
-            action,
-            rpcUrl: chainConfig.rpcUrl,
           });
         }
 
@@ -282,12 +293,12 @@ const RecoveryProgressScreen: React.FC = () => {
 
         {/* Timelock countdown — shown when recovery is scheduled and waiting */}
         {timelockCountdown && (
-          <View style={[styles.statusBanner, { backgroundColor: theme.colors.accent + '14', borderColor: theme.colors.accent + '40' }]}>
+          <View style={[styles.statusBanner, { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.accent }]}>
             <Text style={[styles.statusBannerText, { color: theme.colors.accent }]}>
-              ⏳ New passkey activates in: {timelockCountdown}
+              New passkey activates in: {timelockCountdown}
             </Text>
             <Text style={[styles.rowMeta, { marginTop: 4 }]}>
-              Once the timelock expires you can execute recovery and the new passkey will become active on this device.
+              After the timelock expires, execute recovery to activate the new passkey here.
             </Text>
           </View>
         )}
@@ -388,29 +399,39 @@ const RecoveryProgressScreen: React.FC = () => {
           })
         )}
 
-        <TouchableOpacity
-          style={[
-            styles.primaryButton,
-            (!thresholdReached || schedulableChains.length === 0 || submittingAction !== null) && styles.disabledButton,
-          ]}
-          disabled={!thresholdReached || schedulableChains.length === 0 || submittingAction !== null}
-          onPress={() => void handleSubmitAction("schedule")}
-        >
-          <Text style={styles.primaryButtonText}>
-            {submittingAction === "schedule" ? "Scheduling..." : "Schedule Recovery"}
-          </Text>
-        </TouchableOpacity>
+        {/* Recovery actions happen on the guardian's device, not here. This
+            device (the recovering one) has no on-chain signing authority
+            until executeRecovery completes. Show clear guidance instead of a
+            broken button. */}
+        {thresholdReached && schedulableChains.length > 0 && (
+          <View style={[styles.statusBanner, { backgroundColor: theme.colors.warningSoft, borderColor: theme.colors.warning, marginTop: 16 }]}>
+            <Text style={[styles.statusBannerText, { color: theme.colors.warning }]}>
+              Ready to schedule
+            </Text>
+            <Text style={[styles.rowMeta, { marginTop: 4 }]}>
+              Ask your guardian to open Guardian Inbox and tap <Text style={{ fontWeight: "700" }}>Submit Schedule On-Chain</Text>.
+            </Text>
+          </View>
+        )}
+
+        {executableChains.length > 0 && (
+          <View style={[styles.statusBanner, { backgroundColor: theme.colors.successSoft, borderColor: theme.colors.success, marginTop: 12 }]}>
+            <Text style={[styles.statusBannerText, { color: theme.colors.success }]}>
+              Timelock expired — ready to execute
+            </Text>
+            <Text style={[styles.rowMeta, { marginTop: 4 }]}>
+              Ask your guardian to open Guardian Inbox and tap <Text style={{ fontWeight: "700" }}>Execute Recovery</Text> to activate your new passkey.
+            </Text>
+          </View>
+        )}
 
         <TouchableOpacity
-          style={[
-            styles.primaryButton,
-            (executableChains.length === 0 || submittingAction !== null) && styles.disabledButton,
-          ]}
-          disabled={executableChains.length === 0 || submittingAction !== null}
+          style={[styles.secondaryButton, { marginTop: 12 }]}
+          disabled={submittingAction !== null}
           onPress={() => void handleSubmitAction("execute")}
         >
-          <Text style={styles.primaryButtonText}>
-            {submittingAction === "execute" ? "Executing..." : "Execute Recovery"}
+          <Text style={styles.secondaryButtonText}>
+            {submittingAction !== null ? "Refreshing…" : "Refresh status from chain"}
           </Text>
         </TouchableOpacity>
 
@@ -477,7 +498,7 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.text,
       fontSize: 24,
       lineHeight: 30,
-      fontWeight: "800",
+      fontWeight: "600",
     },
     errorText: {
       color: colors.danger,
@@ -513,7 +534,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     statusBanner: {
-      borderRadius: 14,
+      borderRadius: 16,
       backgroundColor: colors.surfaceMuted,
       padding: 12,
       borderWidth: 1,
@@ -537,7 +558,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     row: {
-      borderRadius: 14,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.background,

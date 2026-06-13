@@ -1,14 +1,21 @@
 # apps/backend/bundler/docker-compose.fork.yml
 #
 # Bundler stack for the Base mainnet fork.
-# The fork RPC must be running externally (e.g., on the infra laptop at 192.168.100.68:8545).
+# The fork RPC must be running externally (e.g., on the infra laptop).
 # This compose file starts contract-deployer + mock-paymaster + Alto bundler.
 #
-# Usage:
+# Usage (anvil running locally on host):
+#   docker compose -f docker-compose.fork.yml up
+#
+# Usage (anvil on a remote machine):
 #   FORK_RPC_URL=http://192.168.100.68:8545 docker compose -f docker-compose.fork.yml up
 #
 # Or simply:
 #   make bundler-fork-base  (from repo root)
+#
+# NOTE: host.docker.internal resolves to the host machine from inside Docker containers.
+# On Linux this requires extra_hosts: host-gateway (already set on each service below).
+# This avoids hardcoding the host's LAN IP, which changes on network reconnects.
 
 services:
   # NOTE: We do NOT run pimlicolabs/mock-contract-deployer on the Base mainnet fork.
@@ -23,23 +30,27 @@ services:
     image: ghcr.io/pimlicolabs/mock-verifying-paymaster:main
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - ALTO_RPC=http://alto:4337
-      - ANVIL_RPC=${FORK_RPC_URL:-http://192.168.100.68:8545}
+      - ANVIL_RPC=${FORK_RPC_URL:-http://host.docker.internal:8545}
 
   # Alto ERC-4337 bundler
   alto:
     image: ghcr.io/pimlicolabs/alto:latest
     ports:
       - "4337:4337"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     entrypoint:
       - "node"
       - "src/lib/cli/alto.js"
       - "run"
       - "--rpc-url"
-      - "${FORK_RPC_URL:-http://192.168.100.68:8545}"
+      - "${FORK_RPC_URL:-http://host.docker.internal:8545}"
       - "--public-rpc-url"
-      - "${FORK_PUBLIC_RPC_URL:-http://192.168.100.68:8545}"
+      - "${FORK_PUBLIC_RPC_URL:-http://host.docker.internal:8545}"
       - "--entrypoints"
       - "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
       - "--executor-private-keys"

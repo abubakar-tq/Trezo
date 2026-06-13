@@ -77,6 +77,8 @@ export type WalletTransaction = {
   submittedAt: string | null;
   confirmedAt: string | null;
   failedAt: string | null;
+  gasUsed: string | null;
+  effectiveGasPriceWei: string | null;
 };
 
 export type CreateWalletTransactionInput = {

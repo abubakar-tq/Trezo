@@ -8,13 +8,65 @@ import {
   http,
   parseAbi,
   type Address,
+  type Chain,
   type Hex,
 } from 'viem';
-import { anvil } from 'viem/chains';
-import { Shield, CheckCircle, AlertCircle, Wallet, ArrowRight, ExternalLink, Clock, Users, RefreshCw } from 'lucide-react';
+import { anvil, baseSepolia, sepolia, arbitrumSepolia, base } from 'viem/chains';
+import { Shield, CheckCircle, AlertCircle, Wallet, ArrowRight, ExternalLink, Clock, Users, RefreshCw, Send, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
 import { buildRecoveryTypedData, type RecoveryIntent } from './lib/recovery';
+
+// Chain table — keyed by chainId returned by the recovery_request's chain_scopes_json.
+// The portal is chain-agnostic: when a request loads we look up the chain it
+// targets and wire all viem clients accordingly. Defaults to Base Sepolia (84532)
+// to match Trezo's primary testnet, but no chain is "hardcoded" in flow logic.
+const CHAIN_BY_ID: Record<number, Chain> = {
+  31337: anvil,
+  84532: baseSepolia,
+  8453: base,
+  11155111: sepolia,
+  421614: arbitrumSepolia,
+};
+
+// Optional RPC override at build time — useful if the user wants to point a chain
+// at a private RPC (e.g. Alchemy/Infura) instead of the public viem default.
+// Each env var is OPTIONAL; if missing, viem's built-in chain RPC is used.
+const ENV_RPC_OVERRIDES: Record<number, string | undefined> = {
+  31337: (import.meta as any).env?.VITE_ANVIL_RPC_URL,
+  84532: (import.meta as any).env?.VITE_BASE_SEPOLIA_RPC_URL,
+  8453: (import.meta as any).env?.VITE_BASE_RPC_URL,
+  11155111: (import.meta as any).env?.VITE_SEPOLIA_RPC_URL,
+  421614: (import.meta as any).env?.VITE_ARBITRUM_SEPOLIA_RPC_URL,
+};
+
+const FALLBACK_PUBLIC_RPCS: Record<number, string> = {
+  84532: "https://sepolia.base.org",
+  8453: "https://mainnet.base.org",
+  11155111: "https://rpc.sepolia.org",
+  421614: "https://sepolia-rollup.arbitrum.io/rpc",
+};
+
+function getChainForId(chainId: number): Chain {
+  const base = CHAIN_BY_ID[chainId];
+  if (!base) {
+    throw new Error(`Unsupported chainId ${chainId}. Add it to CHAIN_BY_ID in App.tsx.`);
+  }
+  const override = ENV_RPC_OVERRIDES[chainId] || FALLBACK_PUBLIC_RPCS[chainId];
+  if (!override) return base;
+  return {
+    ...base,
+    rpcUrls: {
+      default: { http: [override] },
+      public: { http: [override] },
+    },
+  };
+}
+
+function getRpcUrlForId(chainId: number): string {
+  const chain = getChainForId(chainId);
+  return chain.rpcUrls.default.http[0];
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,9 +106,94 @@ const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_URL
 const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_ANON_KEY
   || (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
 
+// Why this exists: in some browsers the portal threw
+// "Failed to execute 'set' on 'Headers': String contains non ISO-8859-1 code
+// point". The deployed Supabase URL + anon key are clean ASCII, and supabase-js
+// builds its own Headers (apikey/Authorization) with clean values — so the bad
+// code point is injected *after* we hand off to the global fetch, by a browser
+// extension that wraps window.fetch. A fetch-level value sanitizer can't help
+// because supabase-js calls Headers.set internally before our wrapper runs.
+//
+// Fix: don't use window.fetch for Supabase at all. Issue the request over
+// XMLHttpRequest, which extensions typically do not patch. We control every
+// header value (all pure ASCII) and strip stray non-Latin-1 code points anyway.
+const stripNonLatin1 = (value: string) => value.replace(/[^\x00-\xFF]/g, "");
+
+const headerEntries = (source: HeadersInit | undefined): Array<[string, string]> => {
+  if (!source) return [];
+  if (source instanceof Headers) return Array.from(source.entries());
+  if (Array.isArray(source)) return source as Array<[string, string]>;
+  return Object.entries(source as Record<string, string>);
+};
+
+const xhrFetch: typeof fetch = (input, init = {}) =>
+  new Promise<Response>((resolve, reject) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : (input as Request).url;
+    const method = (
+      init.method ||
+      (input instanceof Request ? input.method : undefined) ||
+      "GET"
+    ).toUpperCase();
+
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    xhr.responseType = "text";
+
+    const source = init.headers ?? (input instanceof Request ? input.headers : undefined);
+    for (const [name, value] of headerEntries(source)) {
+      try {
+        xhr.setRequestHeader(name, stripNonLatin1(String(value)));
+      } catch {
+        // ignore forbidden or malformed header names
+      }
+    }
+
+    xhr.onload = () => {
+      if (xhr.status === 0) {
+        reject(new TypeError("Network request failed (xhrFetch, status 0)"));
+        return;
+      }
+      const headers = new Headers();
+      const raw = xhr.getAllResponseHeaders().trim();
+      if (raw) {
+        for (const line of raw.split(/[\r\n]+/)) {
+          const idx = line.indexOf(":");
+          if (idx > 0) {
+            try {
+              headers.set(line.slice(0, idx).trim(), line.slice(idx + 1).trim());
+            } catch {
+              // skip headers the runtime rejects
+            }
+          }
+        }
+      }
+      const nullBody =
+        xhr.status === 101 || xhr.status === 204 || xhr.status === 205 || xhr.status === 304;
+      resolve(
+        new Response(nullBody ? null : (xhr.response ?? ""), {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          headers,
+        }),
+      );
+    };
+    xhr.onerror = () => reject(new TypeError("Network request failed (xhrFetch)"));
+    xhr.ontimeout = () => reject(new TypeError("Network request timed out (xhrFetch)"));
+
+    xhr.send((init.body ?? null) as XMLHttpRequestBodyInit | null);
+  });
+
 const supabase: SupabaseClient | null =
   supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } })
+    ? createClient(supabaseUrl, supabaseAnonKey, {
+        auth: { persistSession: false },
+        global: { fetch: xhrFetch },
+      })
     : null;
 
 const isFunctionsHttpError = (error: unknown): error is {
@@ -391,6 +528,8 @@ const GuardianApproval: React.FC = () => {
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isApproved, setIsApproved] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
   const [address, setAddress] = useState<Address | null>(null);
 
   // ── Fetch request from Supabase ──────────────────────────────────────────
@@ -436,13 +575,32 @@ const GuardianApproval: React.FC = () => {
     void load();
   }, [address, requestId]);
 
+  // Resolve the recovery's target chain BEFORE any effect/derived value reads
+  // it. These must be declared above the approval-mode effect that lists them
+  // in its dependency array — otherwise referencing them there throws a TDZ
+  // "Cannot access 'targetChain' before initialization" and the render crashes.
+  const primaryScope = request?.chain_scopes_json?.[0] ?? null;
+  const targetChainId = primaryScope?.chainId ?? null;
+  const targetChain: Chain | null = useMemo(
+    () => (targetChainId != null ? getChainForId(targetChainId) : null),
+    [targetChainId],
+  );
+  const targetRpcUrl: string | null = useMemo(
+    () => (targetChainId != null ? getRpcUrlForId(targetChainId) : null),
+    [targetChainId],
+  );
+
   // ── Determine approval mode (EOA vs contract wallet) ────────────────────
   useEffect(() => {
     if (!address || !request) { setApprovalMode(null); return; }
 
     const resolve = async () => {
       try {
-        const publicClient = createPublicClient({ chain: anvil, transport: http() });
+        if (!targetChain || !targetRpcUrl) {
+          setApprovalMode('EOA_ECDSA');
+          return;
+        }
+        const publicClient = createPublicClient({ chain: targetChain, transport: http(targetRpcUrl) });
         const code = await publicClient.getBytecode({ address });
         setApprovalMode(code && code !== '0x' ? 'APPROVE_HASH' : 'EOA_ECDSA');
       } catch {
@@ -450,7 +608,7 @@ const GuardianApproval: React.FC = () => {
       }
     };
     void resolve();
-  }, [address, request]);
+  }, [address, request, targetChain, targetRpcUrl]);
 
   // ── Check if this guardian has already approved ──────────────────────────
   useEffect(() => {
@@ -480,8 +638,6 @@ const GuardianApproval: React.FC = () => {
       (g) => g.toLowerCase() === address.toLowerCase(),
     );
   }, [address, request]);
-
-  const primaryScope = request?.chain_scopes_json?.[0] ?? null;
 
   const typedIntent = useMemo<RecoveryIntent | null>(() => {
     if (!request) return null;
@@ -518,17 +674,87 @@ const GuardianApproval: React.FC = () => {
 
   // ── Wallet connection ────────────────────────────────────────────────────
   const connectWallet = async () => {
-    if (typeof (window as any).ethereum === 'undefined') {
+    const eth = (window as any).ethereum;
+    if (typeof eth === 'undefined') {
       toast.error('Please install a wallet like MetaMask');
       return;
     }
     try {
-      const wc = createWalletClient({ chain: anvil, transport: custom((window as any).ethereum) });
-      const [account] = await wc.requestAddresses();
+      // eth_requestAccounts reuses whatever account was already permitted for
+      // this site and won't re-prompt — so switching the active account in
+      // MetaMask does nothing. Force the account picker so the user can grant
+      // the correct guardian account.
+      try {
+        await eth.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] });
+      } catch {
+        // User dismissed the permission dialog — fall through and use whatever
+        // is currently authorized.
+      }
+
+      // Use the recovery request's target chain as the connection context.
+      // If no request loaded yet, fall back to Base Sepolia.
+      const chain = targetChain ?? baseSepolia;
+      const wc = createWalletClient({ chain, transport: custom(eth) });
+      const accounts = await wc.requestAddresses();
+
+      // If several accounts are shared, prefer the one that is actually a
+      // guardian for this request so the user isn't left on a non-guardian.
+      const guardianMatch = request
+        ? accounts.find((a) =>
+            request.guardian_addresses.some((g) => g.toLowerCase() === a.toLowerCase()),
+          )
+        : undefined;
+      const account = guardianMatch ?? accounts[0];
+
       setAddress(account);
-      toast.success('Wallet connected!');
+      toast.success(
+        guardianMatch ? 'Guardian wallet connected!' : 'Wallet connected!',
+      );
     } catch {
       toast.error('Failed to connect wallet');
+    }
+  };
+
+  // Prompt MetaMask to switch to the recovery's target chain. Required before
+  // approval signing (so EIP-712 chainId matches) and before submitting any
+  // on-chain tx (so the user pays gas on the right network).
+  const ensureChain = async (): Promise<boolean> => {
+    if (!targetChain) return false;
+    const eth = (window as any).ethereum;
+    if (!eth) return false;
+    try {
+      const current = await eth.request({ method: 'eth_chainId' });
+      const currentId = typeof current === 'string' ? parseInt(current, 16) : Number(current);
+      if (currentId === targetChain.id) return true;
+      try {
+        await eth.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x' + targetChain.id.toString(16) }],
+        });
+        return true;
+      } catch (err: any) {
+        // Chain not added to wallet — try adding it.
+        if (err?.code === 4902) {
+          await eth.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x' + targetChain.id.toString(16),
+              chainName: targetChain.name,
+              nativeCurrency: targetChain.nativeCurrency,
+              rpcUrls: targetChain.rpcUrls.default.http,
+              blockExplorerUrls: targetChain.blockExplorers?.default?.url
+                ? [targetChain.blockExplorers.default.url]
+                : undefined,
+            }],
+          });
+          return true;
+        }
+        throw err;
+      }
+    } catch (err) {
+      console.warn('ensureChain failed:', err);
+      toast.error(`Please switch to ${targetChain.name} in MetaMask`);
+      return false;
     }
   };
 
@@ -539,19 +765,27 @@ const GuardianApproval: React.FC = () => {
 
   // ── Submit approval ──────────────────────────────────────────────────────
   const handleApprove = async () => {
-    if (!supabase || !request || !address || !typedIntent || !primaryScope || !approvalMode) return;
+    if (!supabase || !request || !address || !typedIntent || !primaryScope || !approvalMode || !targetChain) return;
 
     setIsSubmitting(true);
     setMessage('Submitting approval...');
 
     try {
+      // Make sure MetaMask is on the right chain before signing — EIP-712
+      // signatures bind to chainId, and an on-chain approveHash needs to send
+      // a tx on the wallet's recovery chain.
+      const switched = await ensureChain();
+      if (!switched) {
+        throw new Error(`Please switch MetaMask to ${targetChain.name} and try again.`);
+      }
+
       let signature = '0x';
       let approvalTxHash: string | undefined;
 
       if (approvalMode === 'EOA_ECDSA') {
         // Sign typed data with the guardian's EOA
         const typedData = buildRecoveryTypedData(typedIntent, primaryScope.socialRecovery as Address);
-        const wc = createWalletClient({ account: address, chain: anvil, transport: custom((window as any).ethereum) });
+        const wc = createWalletClient({ account: address, chain: targetChain, transport: custom((window as any).ethereum) });
         signature = await wc.signTypedData({
           account: address,
           domain: typedData.domain,
@@ -561,7 +795,7 @@ const GuardianApproval: React.FC = () => {
         });
       } else {
         // Contract wallet: send approveHash on-chain
-        const wc = createWalletClient({ account: address, chain: anvil, transport: custom((window as any).ethereum) });
+        const wc = createWalletClient({ account: address, chain: targetChain, transport: custom((window as any).ethereum) });
         approvalTxHash = await wc.sendTransaction({
           to: primaryScope.socialRecovery as Address,
           data: encodeFunctionData({
@@ -605,6 +839,144 @@ const GuardianApproval: React.FC = () => {
       toast.error(msg);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // ── Refresh request from DB (used after schedule/execute submits) ────────
+  const refreshRequest = async () => {
+    if (!supabase || !requestId) return;
+    try {
+      const { data } = await supabase.rpc('get_recovery_request_for_guardian', {
+        p_request_id: requestId,
+        p_guardian_address: address ?? ZERO_ADDRESS,
+      });
+      const row = Array.isArray(data) ? (data[0] as GuardianRequest | undefined) : undefined;
+      if (row) setRequest(row);
+    } catch (err) {
+      console.warn('refreshRequest failed:', err);
+    }
+  };
+
+  // ── Submit Schedule on-chain (MetaMask sends the tx, guardian pays gas) ──
+  // Permissionless on the contract — anyone can call scheduleRecovery as long
+  // as they pass valid guardian signatures. We fetch the prepared calldata
+  // (with all guardian sigs baked in) from the backend, then MetaMask submits.
+  const handleSchedule = async () => {
+    if (!supabase || !request || !address || !targetChain || !primaryScope) return;
+    setIsScheduling(true);
+    setMessage('Preparing schedule transaction…');
+    try {
+      const switched = await ensureChain();
+      if (!switched) {
+        throw new Error(`Please switch MetaMask to ${targetChain.name} and try again.`);
+      }
+
+      // 1. Ask backend to build the scheduleRecovery calldata (it reads all
+      //    guardian signatures from Supabase; we can't see them due to RLS).
+      const { data: prep, error: prepErr } = await supabase.functions.invoke('submit-recovery-operation', {
+        body: { requestId: request.id, chainId: primaryScope.chainId, action: 'prepare-schedule' },
+      });
+      if (prepErr || !prep?.success) {
+        const reason = (prep as any)?.error ?? prepErr?.message ?? 'prepare-schedule failed';
+        throw new Error(reason);
+      }
+
+      // 2. MetaMask submits the call directly to the SocialRecovery contract.
+      //    Guardian pays gas (testnet faucet is fine; mainnet ~$0.01).
+      setMessage('Submitting schedule transaction via MetaMask…');
+      const wc = createWalletClient({
+        account: address,
+        chain: targetChain,
+        transport: custom((window as any).ethereum),
+      });
+      const txHash = await wc.sendTransaction({
+        to: prep.socialRecoveryAddress as Address,
+        data: prep.calldata as Hex,
+      });
+      setMessage(`Schedule tx broadcast: ${txHash.slice(0, 10)}… waiting for confirmation`);
+
+      // 3. Tell backend to confirm + record. Backend reads receipt + on-chain
+      //    state + updates recovery_chain_statuses.
+      const { data: rec, error: recErr } = await supabase.functions.invoke('submit-recovery-operation', {
+        body: {
+          requestId: request.id,
+          chainId: primaryScope.chainId,
+          action: 'record-tx',
+          recordAction: 'schedule',
+          txHash,
+        },
+      });
+      if (recErr || !rec?.success) {
+        const reason = (rec as any)?.error ?? recErr?.message ?? 'record-tx failed';
+        throw new Error(reason);
+      }
+
+      toast.success('Recovery scheduled on-chain. Timelock has started.');
+      setMessage('Schedule confirmed. Wait for the timelock, then return to execute.');
+      await refreshRequest();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to schedule recovery.';
+      setMessage(msg);
+      toast.error(msg);
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  // ── Execute the scheduled recovery once timelock expires ─────────────────
+  const handleExecute = async () => {
+    if (!supabase || !request || !address || !targetChain || !primaryScope) return;
+    setIsExecuting(true);
+    setMessage('Preparing execute transaction…');
+    try {
+      const switched = await ensureChain();
+      if (!switched) {
+        throw new Error(`Please switch MetaMask to ${targetChain.name} and try again.`);
+      }
+
+      const { data: prep, error: prepErr } = await supabase.functions.invoke('submit-recovery-operation', {
+        body: { requestId: request.id, chainId: primaryScope.chainId, action: 'prepare-execute' },
+      });
+      if (prepErr || !prep?.success) {
+        const reason = (prep as any)?.error ?? prepErr?.message ?? 'prepare-execute failed';
+        throw new Error(reason);
+      }
+
+      setMessage('Submitting execute transaction via MetaMask…');
+      const wc = createWalletClient({
+        account: address,
+        chain: targetChain,
+        transport: custom((window as any).ethereum),
+      });
+      const txHash = await wc.sendTransaction({
+        to: prep.socialRecoveryAddress as Address,
+        data: prep.calldata as Hex,
+      });
+      setMessage(`Execute tx broadcast: ${txHash.slice(0, 10)}… waiting for confirmation`);
+
+      const { data: rec, error: recErr } = await supabase.functions.invoke('submit-recovery-operation', {
+        body: {
+          requestId: request.id,
+          chainId: primaryScope.chainId,
+          action: 'record-tx',
+          recordAction: 'execute',
+          txHash,
+        },
+      });
+      if (recErr || !rec?.success) {
+        const reason = (rec as any)?.error ?? recErr?.message ?? 'record-tx failed';
+        throw new Error(reason);
+      }
+
+      toast.success('Recovery executed — passkey rotated on-chain.');
+      setMessage('Recovery complete. The recovering user can now sign with their new passkey.');
+      await refreshRequest();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to execute recovery.';
+      setMessage(msg);
+      toast.error(msg);
+    } finally {
+      setIsExecuting(false);
     }
   };
 
@@ -769,13 +1141,83 @@ const GuardianApproval: React.FC = () => {
                   key="approved"
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="p-6 rounded-2xl bg-green-500/10 border border-green-500/20 text-center"
+                  className="space-y-4"
                 >
-                  <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                  <h3 className="text-lg font-bold text-green-500">Authorized</h3>
-                  <p className="text-sm text-secondary mt-1">
-                    Your approval has been recorded. {request && `${request.approval_count}/${request.threshold} approvals collected.`}
-                  </p>
+                  <div className="p-6 rounded-2xl bg-green-500/10 border border-green-500/20 text-center">
+                    <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                    <h3 className="text-lg font-bold text-green-500">Authorized</h3>
+                    <p className="text-sm text-secondary mt-1">
+                      Your approval has been recorded. {request && `${request.approval_count}/${request.threshold} approvals collected.`}
+                    </p>
+                  </div>
+
+                  {/* On-chain submission step — only relevant when the threshold is reached. */}
+                  {request && (request.status === 'threshold_reached' || request.status === 'scheduling') && (
+                    <div className="p-4 rounded-2xl bg-surface border border-white/5 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Send className="w-4 h-4 text-primary" />
+                        <h4 className="text-sm font-semibold">Threshold reached</h4>
+                      </div>
+                      <p className="text-xs text-secondary leading-relaxed">
+                        Submit the schedule transaction on-chain. Your MetaMask pays the gas (cheap on testnet, faucet ETH is fine). This starts the recovery timelock.
+                      </p>
+                      <button
+                        onClick={() => void handleSchedule()}
+                        disabled={isScheduling || !targetChain}
+                        className="w-full py-3 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-40 transition-all font-semibold flex items-center justify-center gap-2 group text-sm"
+                      >
+                        {isScheduling ? 'Submitting…' : `Submit Schedule on ${targetChain?.name ?? '…'}`}
+                        {!isScheduling && <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+                      </button>
+                    </div>
+                  )}
+
+                  {request && (request.status === 'scheduled' || request.status === 'ready_to_execute' || request.status === 'executing') && (
+                    <div className="p-4 rounded-2xl bg-surface border border-white/5 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Play className="w-4 h-4 text-primary" />
+                        <h4 className="text-sm font-semibold">
+                          {request.status === 'ready_to_execute' || request.status === 'executing'
+                            ? 'Ready to execute'
+                            : 'Recovery scheduled — wait for timelock'}
+                        </h4>
+                      </div>
+                      <p className="text-xs text-secondary leading-relaxed">
+                        {request.status === 'ready_to_execute' || request.status === 'executing'
+                          ? 'Timelock has elapsed. Submit the execute transaction to install the new passkey on the wallet. Your MetaMask pays gas.'
+                          : 'The recovery is scheduled on-chain. Wait for the timelock to expire, then refresh and execute.'}
+                      </p>
+                      <button
+                        onClick={() => void handleExecute()}
+                        disabled={isExecuting || !targetChain || (request.status !== 'ready_to_execute' && request.status !== 'executing')}
+                        className="w-full py-3 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-40 transition-all font-semibold flex items-center justify-center gap-2 group text-sm"
+                      >
+                        {isExecuting ? 'Executing…' : `Execute Recovery on ${targetChain?.name ?? '…'}`}
+                        {!isExecuting && <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+                      </button>
+                      <button
+                        onClick={() => void refreshRequest()}
+                        className="w-full py-2 rounded-xl border border-white/10 hover:bg-surface transition-colors text-xs text-secondary flex items-center justify-center gap-2"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Refresh status
+                      </button>
+                    </div>
+                  )}
+
+                  {request && request.status === 'executed' && (
+                    <div className="p-4 rounded-2xl bg-green-500/20 border border-green-500/40 text-center">
+                      <CheckCircle className="w-10 h-10 text-green-400 mx-auto mb-2" />
+                      <h4 className="text-base font-bold text-green-400">Recovery complete</h4>
+                      <p className="text-xs text-secondary mt-1">
+                        The recovering user's new passkey is now registered on-chain.
+                      </p>
+                    </div>
+                  )}
+
+                  {message && (
+                    <p className="text-xs text-secondary text-center">{message}</p>
+                  )}
                 </motion.div>
               ) : fetchState === 'ready' && guardianIndex >= 0 ? (
                 <motion.div key="action" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">

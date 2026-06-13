@@ -1,4 +1,4 @@
-import { keccak256, stringToHex } from "viem";
+import { keccak256, stringToHex, type Hex } from "viem";
 import type {
   AcceptanceRequestParams,
   ChainSubmissionResult,
@@ -43,7 +43,9 @@ export class MockZkEmailRelayer implements ZkEmailRelayerAdapter {
       baseUrl: "mock://local",
       proofMode: config?.proofMode ?? "per_chain",
       acceptanceTemplateIdx: config?.acceptanceTemplateIdx ?? 0,
-      recoveryTemplateIdx: config?.recoveryTemplateIdx ?? 1,
+      // Both templates must be 0 — EmailRecoveryCommandHandler reverts otherwise
+      // (see contracts/lib/email-recovery/src/handlers/EmailRecoveryCommandHandler.sol).
+      recoveryTemplateIdx: config?.recoveryTemplateIdx ?? 0,
     };
   }
 
@@ -139,6 +141,14 @@ export class MockZkEmailRelayer implements ZkEmailRelayerAdapter {
     };
   }
 
+  async getAccountSalt(_accountCode: Hex, guardianEmailAddr: string): Promise<Hex | null> {
+    // Mock salt must match `buildMockProof`'s accountSalt so install-time guardian
+    // addresses align with the proof's accountSalt. The real relayer applies
+    // Poseidon(accountCode, emailCommitment); the mock ignores accountCode and
+    // hashes only the email so the result is stable across runs.
+    return keccak256(stringToHex(guardianEmailAddr.trim().toLowerCase()));
+  }
+
   private generateRequestId(prefix: string, addr: string): string {
     MockZkEmailRelayer.requestCounter += 1;
     const hash = keccak256(
@@ -153,7 +163,7 @@ export class MockZkEmailRelayer implements ZkEmailRelayerAdapter {
     command: string,
   ): EmailAuthMsgData {
     const emailNullifier = keccak256(stringToHex(`nullifier-${guardianEmail}-${Date.now()}`));
-    const accountSalt = keccak256(stringToHex(guardianEmail));
+    const accountSalt = keccak256(stringToHex(guardianEmail.trim().toLowerCase()));
     const publicKeyHash = keccak256(stringToHex(`dkim-${guardianEmail}`));
     const mockProofBytes = keccak256(stringToHex(`zk-proof-${guardianEmail}-${Date.now()}`));
 

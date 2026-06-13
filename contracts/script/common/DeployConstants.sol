@@ -12,10 +12,11 @@ library DeployConstants {
     bytes32 internal constant SOCIAL_RECOVERY_SALT = keccak256("TREZO_SOCIAL_RECOVERY_V2");
     bytes32 internal constant MINIMAL_PROXY_FACTORY_SALT = keccak256("TREZO_MINIMAL_PROXY_FACTORY_V2");
     bytes32 internal constant ACCOUNT_FACTORY_SALT = keccak256("TREZO_ACCOUNT_FACTORY_V2");
+    bytes32 internal constant CROSS_CHAIN_EXECUTOR_SALT = keccak256("TREZO_CROSS_CHAIN_EXECUTOR_V2");
 
     function isPortableChain(uint256 chainId) internal pure returns (bool) {
         return chainId == 1 || chainId == 11_155_111 || chainId == 10 || chainId == 8453
-            || chainId == 42_161 || chainId == 137;
+            || chainId == 42_161 || chainId == 137 || chainId == 84_532 || chainId == 421_614;
     }
 
     function isNonPortableChain(uint256 chainId) internal pure returns (bool) {

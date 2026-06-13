@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profile — refined (warmer)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#060608;--surface:rgba(18,15,24,0.66);--glass:rgba(244,241,234,0.02);--border:rgba(124,58,237,0.10);--border2:rgba(124,58,237,0.16);
+    --text:#F4F1EA;--text2:#8E8B85;--text3:#5C5A55;--accent:#7C3AED;--accentAlt:#06B6D4;--gain:#34D399;--success:#10B981;--loss:#E8654F;--warning:#F59E0B;--danger:#E8654F}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(120% 60% at 50% -8%, #0e0a16 0%, #060608 52%);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;padding:32px 20px 80px;-webkit-font-smoothing:antialiased}
+  .head{max-width:1120px;margin:0 auto 24px;text-align:center}.head h1{font-size:22px;font-weight:700;letter-spacing:-.3px}.head p{color:var(--text2);font-size:14px;margin-top:6px;max-width:760px;margin-inline:auto;line-height:1.5}
+  .stage{display:flex;gap:38px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1120px;margin:0 auto}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px;width:330px}
+  .tag{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2)}
+  .tagsub{font-size:12px;color:var(--text2);text-align:center;line-height:1.5;min-height:32px}
+  .phone{width:330px;border-radius:42px;background:var(--bg);border:1px solid rgba(124,58,237,.14);padding:14px 0 16px;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 10px #0b0910,0 0 0 11px rgba(124,58,237,.10);position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:118px;height:26px;background:#000;border-radius:0 0 16px 16px;z-index:5}
+  .scroll{flex:1;padding:0 18px;overflow-y:auto;max-height:712px}.scroll::-webkit-scrollbar{width:0}
+  .statusbar{display:flex;justify-content:space-between;padding:2px 4px 10px;font-size:11px;color:var(--text2);font-weight:600}
+  .mono{font-family:'JetBrains Mono',monospace}.row{display:flex;align-items:center}.between{justify-content:space-between}
+  .nav{display:flex;align-items:center;gap:12px;padding:6px 0 16px}.nav .back{font-size:20px;color:var(--text2)}.nav .ttl{font-size:21px;font-weight:600;letter-spacing:-.3px}
+  /* hero */
+  .hero{display:flex;align-items:center;gap:14px;padding:6px 2px 4px;margin-bottom:6px}
+  .avatar{width:56px;height:56px;border-radius:999px;background:linear-gradient(150deg,#8B5CF6,#6D28D9);display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:700;color:#fff;flex-shrink:0}
+  .hname{font-size:18px;font-weight:600;letter-spacing:-.2px}.hmail{font-size:12px;color:var(--text2);margin-top:2px}
+  .hedit{font-size:11px;color:var(--text2);margin-top:7px;border:1px solid var(--border);border-radius:999px;padding:3px 10px;display:inline-block}
+  .glabel{font-size:11px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;color:var(--text3);margin:22px 2px 9px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+  .r{display:flex;align-items:center;gap:13px;padding:14px 15px;border-bottom:1px solid var(--border)}.r:last-child{border-bottom:0}
+  /* WARMER: icons get a faint accent-tinted chip (subtle, not full color) */
+  .r .ic{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;color:#b9a8e8;background:rgba(124,58,237,.07)}
+  .r .lab{flex:1;min-width:0}.r .lab .t{font-size:14.5px;font-weight:500}.r .lab .s{font-size:11.5px;color:var(--text2);margin-top:2px}
+  .r .chev{color:var(--text3);font-size:15px}.r .meta{font-size:12px;color:var(--text2);margin-right:2px}
+  /* WARMER: active dot gets a soft success tint; label stays quiet grey */
+  .ok{font-size:11px;color:var(--text2);font-weight:500;margin-right:2px;display:inline-flex;align-items:center;gap:6px}
+  .ok .d{width:6px;height:6px;border-radius:50%;background:var(--success);box-shadow:0 0 6px rgba(16,185,129,.5)}
+  .attn{font-size:11px;color:var(--warning);font-weight:600;margin-right:2px;display:inline-flex;align-items:center;gap:6px}
+  .attn .d{width:6px;height:6px;border-radius:50%;background:var(--warning)}
+  .danger-t{color:var(--danger)}
+  .danger-ic{color:#f0a890 !important;background:rgba(232,101,79,.09) !important}
+  .footer{text-align:center;font-size:11px;color:var(--text3);margin-top:20px}
+  /* hub summary — single accent, warm */
+  .summary{padding:4px 2px 2px;margin-bottom:6px}.summary .big{font-size:15px;font-weight:600}
+  .summary .seg{display:flex;gap:5px;margin-top:10px}.summary .seg i{flex:1;height:5px;border-radius:999px;background:rgba(244,241,234,.07)}
+  .summary .seg i.on{background:linear-gradient(90deg,#8B5CF6,#34D399)}
+  .summary .cap{font-size:11.5px;color:var(--text2);margin-top:9px}
+  .note{max-width:1120px;margin:28px auto 0;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface);font-size:13px;color:var(--text2);line-height:1.65}
+  .note b{color:var(--text)}.note code{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c4b5fd}
+  .legend{display:flex;gap:9px;align-items:flex-start;margin-top:9px}.legend .k{color:var(--accent);font-weight:800;flex-shrink:0;width:72px}
+</style>
+</head>
+<body>
+  <div class="head"><h1>Profile — warmer (between austere &amp; lively)</h1>
+    <p>A touch more life than the last pass: faint accent-tinted icon chips + a soft glow on active dots. Still restrained — color is structured, not sprayed. The healthy state has warmth without shouting.</p></div>
+
+  <div class="stage">
+    <!-- ROOT -->
+    <div class="col">
+      <div class="tag">Profile root</div>
+      <div class="tagsub">Faint violet icon chips bring warmth; status stays a quiet glowing dot.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="nav"><span class="ttl">Profile</span><span style="margin-left:auto;font-size:17px;color:var(--text2)">☾</span></div>
+          <div class="hero">
+            <div class="avatar">A</div>
+            <div style="flex:1"><div class="hname">Abubakar</div><div class="hmail">adeel…@gmail.com</div><div class="hedit">Edit profile</div></div>
+            <span style="color:var(--text3);font-size:15px">›</span>
+          </div>
+          <div class="glabel">Security</div>
+          <div class="card">
+            <div class="r"><div class="ic">⛉</div><div class="lab"><div class="t">Recovery &amp; Backup</div><div class="s">3 of 3 methods on</div></div><span class="ok"><span class="d"></span></span><span class="chev">›</span></div>
+            <div class="r"><div class="ic">▢</div><div class="lab"><div class="t">Devices &amp; Passkeys</div></div><span class="meta">2 devices</span><span class="chev">›</span></div>
+          </div>
+          <div class="glabel">Wallet</div>
+          <div class="card">
+            <div class="r"><div class="ic">◇</div><div class="lab"><div class="t">Connected Apps</div></div><span class="meta">3</span><span class="chev">›</span></div>
+            <div class="r"><div class="ic">⊚</div><div class="lab"><div class="t">Contacts</div></div><span class="chev">›</span></div>
+          </div>
+          <div class="glabel">Preferences</div>
+          <div class="card">
+            <div class="r"><div class="ic">◔</div><div class="lab"><div class="t">Notifications</div></div><span class="chev">›</span></div>
+            <div class="r"><div class="ic">◍</div><div class="lab"><div class="t">Browser</div></div><span class="chev">›</span></div>
+          </div>
+          <div class="glabel">&nbsp;</div>
+          <div class="card">
+            <div class="r"><div class="ic danger-ic">⚠</div><div class="lab"><div class="t danger-t">My wallet is compromised</div></div><span class="chev">›</span></div>
+            <div class="r"><div class="ic">⎋</div><div class="lab"><div class="t">Sign out</div></div></div>
+          </div>
+          <div class="footer">Trezo Wallet · v1.0.0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HUB healthy -->
+    <div class="col">
+      <div class="tag">Recovery hub — healthy</div>
+      <div class="tagsub">Soft glowing dots give warmth; one accent bar. Not a green field.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="nav"><span class="back">‹</span><span class="ttl">Recovery &amp; Backup</span></div>
+          <div class="summary">
+            <div class="big">Your wallet is fully recoverable</div>
+            <div class="seg"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+            <div class="cap">3 of 3 recovery methods active</div>
+          </div>
+          <div class="glabel">Methods</div>
+          <div class="card">
+            <div class="r"><div class="ic">⛊</div><div class="lab"><div class="t">Guardians</div><div class="s">Social recovery · 2-of-3</div></div><span class="ok"><span class="d"></span>On</span><span class="chev">›</span></div>
+            <div class="r"><div class="ic">✉</div><div class="lab"><div class="t">Email Recovery</div><div class="s">3 trusted contacts</div></div><span class="ok"><span class="d"></span>On</span><span class="chev">›</span></div>
+            <div class="r"><div class="ic">▢</div><div class="lab"><div class="t">Linked Devices</div><div class="s">Recover from a paired device</div></div><span class="ok"><span class="d"></span>On</span><span class="chev">›</span></div>
+          </div>
+          <div class="glabel">Activity</div>
+          <div class="card">
+            <div class="r"><div class="ic">◷</div><div class="lab"><div class="t">Recovery Status</div><div class="s">No active recovery</div></div><span class="chev">›</span></div>
+            <div class="r"><div class="ic">↘</div><div class="lab"><div class="t">Incoming Approvals</div><div class="s">Guardian for 1 wallet</div></div><span class="meta">1</span><span class="chev">›</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HUB attention -->
+    <div class="col">
+      <div class="tag">Recovery hub — needs action</div>
+      <div class="tagsub">Amber is the only loud color, and only here.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="nav"><span class="back">‹</span><span class="ttl">Recovery &amp; Backup</span></div>
+          <div class="summary">
+            <div class="big">Add one more way to recover</div>
+            <div class="seg"><i class="on"></i><i></i><i></i></div>
+            <div class="cap" style="color:var(--warning)">Only 1 of 3 methods active</div>
+          </div>
+          <div class="glabel">Methods</div>
+          <div class="card">
+            <div class="r"><div class="ic">⛊</div><div class="lab"><div class="t">Guardians</div><div class="s">Not set up</div></div><span class="attn"><span class="d"></span>Set up</span><span class="chev">›</span></div>
+            <div class="r"><div class="ic">✉</div><div class="lab"><div class="t">Email Recovery</div><div class="s">Not set up</div></div><span class="attn"><span class="d"></span>Set up</span><span class="chev">›</span></div>
+            <div class="r"><div class="ic">▢</div><div class="lab"><div class="t">Linked Devices</div><div class="s">Recover from a paired device</div></div><span class="ok"><span class="d"></span>On</span><span class="chev">›</span></div>
+          </div>
+          <div class="glabel">Activity</div>
+          <div class="card">
+            <div class="r"><div class="ic">◷</div><div class="lab"><div class="t">Recovery Status</div><div class="s">No active recovery</div></div><span class="chev">›</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note"><b>Warmer, still restrained:</b>
+    <div class="legend"><span class="k">Warmth</span><span>Added back: faint <b>violet-tinted icon chips</b> (7% accent bg, soft glyph) and a <b>soft glow on active dots</b>. Enough life that it doesn't feel austere.</span></div>
+    <div class="legend"><span class="k">Discipline</span><span>Still no color spray: "On" labels stay grey (only the dot glows), one accent bar on the hub, amber reserved for the needs-action state. Color is structured, not decorative.</span></div>
+    <div class="legend"><span class="k">Scope</span><span>This restraint pass is <b>Profile-only</b> for now (your call) — Home/Portfolio/Discover stay as locked. We can revisit them on-device later if they read too colorful.</span></div>
+  </div>
+</body>
+</html>

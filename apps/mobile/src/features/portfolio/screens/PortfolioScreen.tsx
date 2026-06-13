@@ -1,436 +1,952 @@
 import React, { useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
   Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { formatUnits } from "viem";
 import { useAppTheme } from "@theme";
-import { TabScreenContainer, MeshBackground, Sparkline } from "@shared/components";
-import { BalanceCard, AssetList } from "../../home/components/dashboard";
+import type { ThemeColors } from "@theme";
+import { TabScreenContainer, InteractiveChart } from "@shared/components";
+import { FontFamilies } from "@shared/components/TokenRegistry";
+import { TokenIcon } from "@shared/components/visuals/TokenIcon";
+import Toast from "@shared/components/feedback/Toast";
 import { useWalletData } from "@hooks/useWalletData";
 import { useMarketData } from "@hooks/useMarketData";
+import { usePortfolioHistory } from "@hooks/usePortfolioHistory";
 import { useTabContentBottomInset } from "@hooks";
-import { withAlpha } from "@utils/color";
+import { useUserStore } from "../../../store/useUserStore";
+import { useNavigation } from "@react-navigation/native";
+import { ActivationSheet } from "@features/wallet/components/ActivationSheet";
+import { ChainSwitcherChip } from "@features/wallet/components/ChainSwitcherChip";
+import { SetUpWalletSheet } from "@features/wallet/components/SetUpWalletSheet";
+import { useAccountState } from "@features/wallet/hooks/useAccountState";
+import { useActivationSheet } from "@features/wallet/hooks/useActivationSheet";
+import { useSetUpWalletSheet } from "@features/wallet/hooks/useSetUpWalletSheet";
+import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { TokenDetailModal } from "../components/TokenDetailModal";
+import type { TokenDetailModalHandle } from "../components/TokenDetailModal";
 import type { TokenBalance } from "../services/PortfolioService";
-import { TokenIcon } from "@shared/components/visuals/TokenIcon";
-import { ActivityIndicator } from "react-native";
-import { formatUnits } from "viem";
+import { usePortfolioSnapshots } from "../hooks/usePortfolioSnapshots";
+import { enabledPeriods, disabledPeriodMessage, valueChange } from "../utils/portfolioChart";
+import type { Period } from "../utils/portfolioChart";
+import { computeAllocation } from "../utils/allocation";
+import { popularTestnetTokens } from "../utils/popularTestnet";
+import { resolveNetworkKey, type SupportedChainId } from "@/src/integration/networks";
 
 const { width } = Dimensions.get("window");
 
+// Allocation bar color palette is built from theme tokens inside the component
+// (allocColorAt is a closure over theme colors, not a module-level const).
+// Violet family only — no rainbow.
+
+const PERIODS: Period[] = ["1D", "1W", "1M", "1Y", "ALL"];
 
 const PortfolioScreen: React.FC = () => {
-  const { theme, resolvedMode } = useAppTheme();
+  const { theme } = useAppTheme();
   const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  // Allocation bar palette resolved from theme tokens — violet family, no rainbow.
+  const ALLOC_COLORS = useMemo(() => [
+    colors.accent,                          // primary violet
+    colors.accentAlt,                       // secondary cyan
+    `${colors.accent}72`,                   // violet muted
+    `${colors.accentAlt}66`,                // cyan muted
+    `${colors.accent}40`,                   // violet faint
+    "rgba(142, 139, 133, 0.45)",            // neutral tint (no token equivalent)
+  ], [colors]);
+
+  const allocColorAt = (index: number): string =>
+    ALLOC_COLORS[index % ALLOC_COLORS.length];
   const contentBottomInset = useTabContentBottomInset();
-  const isDark = resolvedMode === 'dark';
-  
-  const smartAccountAddress = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
-  const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress);
-  const { assets: marketAssets, loading: marketLoading, refresh: refreshMarket } = useMarketData(5);
+  const navigation = useNavigation<any>();
 
-  const [selectedPeriod, setSelectedPeriod] = useState('1W');
-  const [selectedToken, setSelectedToken] = useState<TokenBalance | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const { isActiveOnChain, isProvisioned } = useAccountState();
+  const activeChainId = useWalletStore((s) => s.activeChainId);
+  const { ref: activationSheetRef, requireActiveOnChain } = useActivationSheet();
+  const { ref: setUpRef, requireProvisioned } = useSetUpWalletSheet();
 
-  // High-fidelity performance graph data mapping
-  const graphDataMap: Record<string, number[]> = {
-    '1D': [7800, 7850, 7900, 7820, 7880, 7950, 8020, 8100, 8050, 8150, 8200, 8100],
-    '1W': [6200, 6400, 6300, 6800, 7200, 7100, 7500, 7400, 7800, 8200, 8100, 8500],
-    '1M': [5000, 5200, 5800, 5500, 6000, 6500, 6200, 6800, 7200, 7500, 8000, 8500],
-    '1Y': [1200, 2500, 3800, 4200, 4500, 5000, 5800, 6200, 7000, 7500, 8200, 8500],
-    'ALL': [500, 800, 1500, 2200, 3000, 4500, 5500, 6200, 7000, 7800, 8200, 8500],
-  };
+  // Mirror HomeScreen: per-chain aa_wallets address is source of truth.
+  const aaAccountAddress = useWalletStore((s) => s.aaAccount?.predictedAddress);
+  const globalSmartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const smartAccountAddress = (aaAccountAddress ?? globalSmartAccountAddress) as string | null;
+
+  const { totalBalanceUSD, tokens, isLoading: walletLoading } = useWalletData(smartAccountAddress ?? undefined);
+  // Market feed — used for 24h change per token and 1D chart data
+  const { assets: marketAssets } = useMarketData(20);
+
+  const [selectedPeriod, setSelectedPeriod] = useState<Period>("1W");
+  const tokenDetailRef = React.useRef<TokenDetailModalHandle>(null);
+  const [touchedValue, setTouchedValue] = useState<number | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const handleAssetPress = (token: TokenBalance) => {
-    setSelectedToken(token);
-    setModalVisible(true);
+    tokenDetailRef.current?.open(token);
   };
 
-  // Format tokens for AssetList
+  // Build displayTokens — change24h is NOT hardcoded; joined from market feed below
   const displayTokens = useMemo(() => {
     return tokens.map((t: any) => {
-      // Ensure we have a valid balance and symbol
-      const balance = t.balance_formatted || (t.balance ? formatUnits(t.balance, t.decimals || 18) : "0");
+      const balance =
+        t.balance_formatted ||
+        (t.balance ? formatUnits(t.balance, t.decimals || 18) : "0");
       return {
         symbol: t.symbol || "UNKNOWN",
         name: t.name || "Unknown Token",
         amount: parseFloat(balance),
         price: t.usd_price || 0,
         value: t.usd_value || 0,
-        change24h: 0,
-        address: t.token_address || "0x"
+        change24h: 0, // placeholder; real value resolved from market feed per row
+        decimals: (t.decimals as number) || 18,
+        address: (t.token_address || "0x") as `0x${string}`,
       };
     });
   }, [tokens]);
 
-  return (
-    <TabScreenContainer includeBottomInset>
-      <MeshBackground intensity={isDark ? 0.3 : 0.8} />
-      
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomInset + 40 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={[styles.headerKicker, { color: colors.accent }]}>MY VAULT</Text>
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>PERFORMANCE</Text>
-          </View>
-          
-        </View>
+  // 24h change map: symbol → changePercent24Hr (from market feed)
+  const change24hBySymbol = useMemo(() => {
+    const map: Record<string, number> = {};
+    marketAssets.forEach((a) => {
+      const pct = parseFloat(a.changePercent24Hr);
+      if (isFinite(pct)) map[a.symbol.toUpperCase()] = pct;
+    });
+    return map;
+  }, [marketAssets]);
 
-        {/* Unified Institutional Performance Card */}
-        <View style={styles.sectionWrapper}>
-          <View style={[styles.omniCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : colors.surface, borderColor: colors.border }]}>
-            {/* Top Row: Balance & Growth */}
-            <View style={styles.omniHeader}>
-              <View>
-                <Text style={[styles.omniLabel, { color: colors.textSecondary }]}>Total Portfolio</Text>
-                <View style={styles.omniBalanceRow}>
-                  <Text style={[styles.omniCurrency, { color: colors.textSecondary }]}>$</Text>
-                  <Text style={[styles.omniBalance, { color: colors.textPrimary }]} numberOfLines={1} adjustsFontSizeToFit>
-                    {walletLoading ? "---" : (totalBalanceUSD >= 1000000000 
-                      ? `${(totalBalanceUSD / 1000000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}B`
-                      : totalBalanceUSD >= 1000000 
-                        ? `${(totalBalanceUSD / 1000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`
-                        : totalBalanceUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
+  // Snapshot hook: provides walletAge + seriesForPeriod(1W/1M/1Y/ALL)
+  const { walletAge, seriesForPeriod } = usePortfolioSnapshots(
+    totalBalanceUSD,
+    smartAccountAddress,
+    typeof activeChainId === "number" ? activeChainId : undefined
+  );
+
+  // 1D series: use existing usePortfolioHistory (current holdings × intraday price feed)
+  const { history: history1D, loading: loading1D } = usePortfolioHistory(displayTokens, "1D");
+
+  // Resolve which periods are gated
+  const enabled = useMemo(() => enabledPeriods(walletAge), [walletAge]);
+
+  // Chart data: 1D from price-feed, 1W+ from snapshots
+  const chartSeries = useMemo((): number[] => {
+    if (selectedPeriod === "1D") return history1D;
+    return seriesForPeriod(selectedPeriod);
+  }, [selectedPeriod, history1D, seriesForPeriod]);
+
+  const chartLoading = selectedPeriod === "1D" ? loading1D : false;
+
+  // Headline change — deposit-adjusted via valueChange helper.
+  // TODO: netFlows = deposits-withdrawals for the window (deposit-adjustment hook, deferred to future pass).
+  const headlineChange = useMemo(() => {
+    if (chartSeries.length < 2) return null;
+    return valueChange(chartSeries[0], chartSeries[chartSeries.length - 1], 0);
+  }, [chartSeries]);
+
+  const isPositive = (headlineChange?.pct ?? 0) >= 0;
+  const chartColor = isPositive ? colors.dataPositive : colors.dataNegative;
+
+  const displayedBalance = touchedValue ?? totalBalanceUSD;
+
+  const formatBalance = (val: number) =>
+    val >= 1e9
+      ? `${(val / 1e9).toLocaleString(undefined, { maximumFractionDigits: 2 })}B`
+      : val >= 1e6
+        ? `${(val / 1e6).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`
+        : val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Period picker handler — disabled periods show a warm message, do NOT switch
+  const handlePeriodPress = (period: Period) => {
+    if (!enabled[period]) {
+      const msg = disabledPeriodMessage(period, walletAge);
+      setToastMsg(msg);
+      return;
+    }
+    setSelectedPeriod(period);
+    setTouchedValue(null);
+  };
+
+  // Allocation bar — from holdings
+  const allocation = useMemo(() => {
+    const holdings = displayTokens.map((t) => ({ symbol: t.symbol, valueUsd: t.value }));
+    return computeAllocation(holdings);
+  }, [displayTokens]);
+
+  // Holdings sorted by value DESC
+  const sortedHoldings = useMemo(
+    () => [...displayTokens].sort((a, b) => b.value - a.value),
+    [displayTokens]
+  );
+
+  const totalValue = useMemo(
+    () => displayTokens.reduce((s, t) => s + t.value, 0),
+    [displayTokens]
+  );
+
+  // Popular shelf — chain-aware
+  let networkKey = "ethereum-sepolia"; // safe fallback
+  try {
+    if (typeof activeChainId === "number") {
+      networkKey = resolveNetworkKey(activeChainId as SupportedChainId);
+    }
+  } catch {
+    // keep fallback
+  }
+  const popularTokens = useMemo(() => popularTestnetTokens(networkKey), [networkKey]);
+
+  const isEmpty = !walletLoading && totalBalanceUSD === 0;
+
+  // ── Render helpers ──────────────────────────────────────────────────────────
+
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Portfolio</Text>
+      <View style={styles.headerChainRow}>
+        <ChainSwitcherChip
+          onError={(message) => Alert.alert("Could not switch chain", message)}
+        />
+      </View>
+    </View>
+  );
+
+  const renderPerformanceCard = () => {
+    if (isEmpty) return null;
+
+    return (
+      <View style={styles.sectionWrapper}>
+        <View style={[styles.perfCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+          {/* Balance row */}
+          <View style={styles.perfHeader}>
+            <View style={styles.perfBalanceBlock}>
+              <Text style={[styles.perfLabel, { color: colors.textMuted }]}>
+                {touchedValue ? "Portfolio at point" : "Total Portfolio"}
+              </Text>
+              <View style={styles.perfBalanceRow}>
+                <Text style={[styles.perfCurrency, { color: colors.textSecondary }]}>$</Text>
+                <Text
+                  style={[styles.perfBalance, { color: colors.textPrimary }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {walletLoading ? "---" : formatBalance(displayedBalance)}
+                </Text>
+              </View>
+            </View>
+
+            {headlineChange !== null ? (
+              <View
+                style={[
+                  styles.changeBadge,
+                  {
+                    backgroundColor: isPositive ? colors.successSoft : colors.dangerSoft,
+                  },
+                ]}
+              >
+                <Feather
+                  name={isPositive ? "trending-up" : "trending-down"}
+                  size={11}
+                  color={isPositive ? colors.dataPositive : colors.dataNegative}
+                />
+                <Text
+                  style={[
+                    styles.changeBadgeText,
+                    { color: isPositive ? colors.dataPositive : colors.dataNegative },
+                  ]}
+                >
+                  {isPositive ? "+" : ""}
+                  {headlineChange.pct.toFixed(2)}%
+                </Text>
+              </View>
+            ) : chartLoading ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : null}
+          </View>
+
+          {/* USD delta */}
+          {headlineChange !== null ? (
+            <Text
+              style={[
+                styles.perfDelta,
+                { color: isPositive ? colors.dataPositive : colors.dataNegative },
+              ]}
+            >
+              {headlineChange.delta >= 0 ? "+" : ""}$
+              {Math.abs(headlineChange.delta).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </Text>
+          ) : !chartLoading ? (
+            <Text style={[styles.perfDelta, { color: colors.textMuted }]}>
+              Drag chart to explore history
+            </Text>
+          ) : null}
+
+          {/* Chart */}
+          <View style={styles.chartWrapper}>
+            {chartLoading ? (
+              <ActivityIndicator color={colors.accent} />
+            ) : chartSeries.length >= 2 ? (
+              <InteractiveChart
+                data={chartSeries}
+                chartWidth={width - 80}
+                chartHeight={120}
+                color={chartColor}
+                onTouchValue={setTouchedValue}
+                formatTooltip={(v) =>
+                  `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                }
+              />
+            ) : (
+              <Text style={[styles.chartEmpty, { color: colors.textMuted }]}>
+                {walletLoading ? "Loading wallet…" : "No historical data yet"}
+              </Text>
+            )}
+          </View>
+
+          {/* Period picker — disabled = dimmed, NO lock icon */}
+          <View style={[styles.periodPicker, { backgroundColor: colors.glass }]}>
+            {PERIODS.map((period) => {
+              const isEnabled = enabled[period];
+              const isSelected = selectedPeriod === period;
+              return (
+                <TouchableOpacity
+                  key={period}
+                  style={[
+                    styles.periodPill,
+                    isSelected && { backgroundColor: colors.accent },
+                  ]}
+                  onPress={() => handlePeriodPress(period)}
+                  activeOpacity={isEnabled ? 0.7 : 0.5}
+                >
+                  <Text
+                    style={[
+                      styles.periodLabel,
+                      {
+                        color: isSelected
+                          ? colors.textOnAccent
+                          : isEnabled
+                            ? colors.textSecondary
+                            : colors.textMuted,
+                        opacity: isEnabled ? 1 : 0.45,
+                      },
+                    ]}
+                  >
+                    {period}
                   </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderAllocation = () => {
+    if (isEmpty || allocation.length === 0) return null;
+
+    return (
+      <View style={styles.sectionWrapper}>
+        <View style={[styles.allocationCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ALLOCATION</Text>
+
+          {/* Stacked horizontal bar */}
+          <View style={styles.allocBar}>
+            {allocation.map((seg, i) => (
+              <View
+                key={seg.symbol}
+                style={[
+                  styles.allocSegment,
+                  {
+                    width: `${seg.pct}%`,
+                    backgroundColor: allocColorAt(i),
+                    borderTopLeftRadius: i === 0 ? 8 : 0,
+                    borderBottomLeftRadius: i === 0 ? 8 : 0,
+                    borderTopRightRadius: i === allocation.length - 1 ? 8 : 0,
+                    borderBottomRightRadius: i === allocation.length - 1 ? 8 : 0,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+
+          {/* Key */}
+          <View style={styles.allocKey}>
+            {allocation.map((seg, i) => (
+              <View key={seg.symbol} style={styles.allocKeyRow}>
+                <View style={[styles.allocDot, { backgroundColor: allocColorAt(i) }]} />
+                <Text style={[styles.allocKeySymbol, { color: colors.textSecondary }]}>
+                  {seg.symbol}
+                </Text>
+                <Text style={[styles.allocKeyPct, { color: colors.textMuted }]}>
+                  {seg.pct.toFixed(1)}%
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderHoldings = () => {
+    if (isEmpty) {
+      // Empty state: single ETH row at 0.00 — NOT the fake multi-token AssetList placeholder
+      return (
+        <View style={styles.sectionWrapper}>
+          <View style={[styles.holdingsCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+            <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ASSETS</Text>
+
+            {/* Fund your wallet prompt */}
+            <View style={[styles.emptyPrompt, { borderColor: colors.border }]}>
+              <Text style={[styles.emptyPromptTitle, { color: colors.textPrimary }]}>
+                Fund your wallet
+              </Text>
+              <Text style={[styles.emptyPromptSub, { color: colors.textSecondary }]}>
+                Buy ETH or receive crypto to get started.
+              </Text>
+              <View style={styles.emptyActions}>
+                <TouchableOpacity
+                  style={[styles.emptyActionPrimary, { backgroundColor: colors.accent }]}
+                  onPress={() =>
+                    requireProvisioned(isProvisioned, () => navigation.navigate("Buy"))
+                  }
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.emptyActionPrimaryText, { color: colors.textOnAccent }]}>
+                    Buy ETH
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.emptyActionSecondary, { borderColor: colors.border }]}
+                  onPress={() =>
+                    requireProvisioned(isProvisioned, () => navigation.navigate("Receive"))
+                  }
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.emptyActionSecondaryText, { color: colors.textPrimary }]}>
+                    Receive
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Single native ETH row at 0.00 — honest, not a fake list */}
+            <View style={[styles.holdingRow, { borderBottomWidth: 0 }]}>
+              <View style={styles.holdingLeft}>
+                <TokenIcon symbol="ETH" size={44} style={{ borderRadius: 999 }} />
+                <View style={styles.holdingNameBlock}>
+                  <Text style={[styles.holdingSymbol, { color: colors.textPrimary }]}>ETH</Text>
+                  <Text style={[styles.holdingName, { color: colors.textSecondary }]}>Ethereum</Text>
                 </View>
               </View>
-              <View style={[styles.omniGrowthBadge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
-                <Feather name="trending-up" size={12} color={colors.accent} style={{ marginRight: 4 }} />
-                <Text style={[styles.omniGrowthText, { color: colors.accent }]}>+4.2%</Text>
+              <View style={styles.holdingRight}>
+                <Text style={[styles.holdingValue, { color: colors.textMuted }]}>$0.00</Text>
+                <Text style={[styles.holdingAmount, { color: colors.textMuted }]}>0.00 ETH</Text>
               </View>
-            </View>
-
-            {/* Performance Value */}
-            <Text style={[styles.omniPerformance, { color: colors.textSecondary }]}>
-              +${(totalBalanceUSD * 0.042).toLocaleString(undefined, { maximumFractionDigits: 2 })} this week
-            </Text>
-            
-            {/* Graph */}
-            <View style={styles.omniGraphWrapper}>
-              <Sparkline 
-                data={graphDataMap[selectedPeriod] || graphDataMap['1W']} 
-                width={width - 80} 
-                height={120} 
-                color={colors.accent}
-                strokeWidth={3}
-                fillOpacity={0.15}
-              />
-            </View>
-            
-            {/* Period Picker */}
-            <View style={styles.omniPeriodPicker}>
-              {['1D', '1W', '1M', '1Y', 'ALL'].map((period) => (
-                <TouchableOpacity 
-                  key={period} 
-                  style={[styles.omniPeriodPill, selectedPeriod === period && { backgroundColor: colors.accent }]}
-                  onPress={() => setSelectedPeriod(period)}
-                >
-                  <Text style={[styles.omniPeriodText, { color: selectedPeriod === period ? colors.textOnAccent : colors.textSecondary }]}>{period}</Text>
-                </TouchableOpacity>
-              ))}
             </View>
           </View>
         </View>
+      );
+    }
 
-        {/* Market Section - The New "Market Part" */}
-        <View style={styles.sectionWrapper}>
-          <View style={styles.sectionHeadingRow}>
-            <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>MARKET TRENDS</Text>
-            <TouchableOpacity onPress={() => refreshMarket()}>
-              <Text style={[styles.seeAll, { color: colors.accent }]}>Refresh</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.marketScroll}>
-            {marketLoading && marketAssets.length === 0 ? (
-              <View style={{ width: width - 40, height: 140, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator color={colors.accent} />
-              </View>
-            ) : (
-              marketAssets.map((asset) => {
-                const price = parseFloat(asset.priceUsd);
-                const change = parseFloat(asset.changePercent24Hr);
-                
-                return (
-                  <TouchableOpacity 
-                    key={asset.id} 
-                    style={[styles.marketCard, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleAssetPress({
-                      symbol: asset.symbol,
-                      name: asset.name,
-                      amount: 0,
-                      price: price,
-                      value: 0,
-                      change24h: change,
-                      address: asset.id
-                    })}
-                  >
-                    <View style={styles.marketHeader}>
-                      <TokenIcon symbol={asset.symbol} size={32} />
-                      <View style={[styles.miniChange, { backgroundColor: withAlpha(change >= 0 ? colors.accent : colors.danger, 0.1) }]}>
-                        <Text style={[styles.miniChangeText, { color: change >= 0 ? colors.accent : colors.danger }]}>
-                          {change >= 0 ? '+' : ''}{change.toFixed(1)}%
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={[styles.marketName, { color: colors.textPrimary }]} numberOfLines={1}>{asset.name}</Text>
-                    <Text style={[styles.marketPrice, { color: colors.textSecondary }]}>
-                      ${price > 1 ? price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : price.toFixed(3)}
+    return (
+      <View style={styles.sectionWrapper}>
+        <View style={[styles.holdingsCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>ASSET HOLDINGS</Text>
+          {sortedHoldings.map((token, index) => {
+            const change24h = change24hBySymbol[token.symbol.toUpperCase()];
+            const has24h = change24h !== undefined;
+            const changePositive = has24h && change24h >= 0;
+            const sharePct = totalValue > 0 ? (token.value / totalValue) * 100 : 0;
+            return (
+              <TouchableOpacity
+                key={`${token.address}-${index}`}
+                style={[
+                  styles.holdingRow,
+                  index !== sortedHoldings.length - 1 && {
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.border,
+                  },
+                ]}
+                onPress={() => handleAssetPress(token)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.holdingLeft}>
+                  <TokenIcon
+                    symbol={token.symbol}
+                    address={token.address}
+                    size={44}
+                    style={{ borderRadius: 999 }}
+                  />
+                  <View style={styles.holdingNameBlock}>
+                    <Text
+                      style={[styles.holdingSymbol, { color: colors.textPrimary }]}
+                      numberOfLines={1}
+                    >
+                      {token.symbol}
                     </Text>
-                    <View style={styles.miniGraph}>
-                       <Sparkline 
-                         data={change >= 0 ? [10, 12, 11, 13, 14, 15] : [15, 14, 16, 14, 12, 10]} 
-                         width={100} 
-                         height={30} 
-                         color={change >= 0 ? colors.accent : colors.danger} 
-                         strokeWidth={2} 
-                       />
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
+                    <Text
+                      style={[styles.holdingName, { color: colors.textSecondary }]}
+                      numberOfLines={1}
+                    >
+                      {token.name}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.holdingRight}>
+                  <Text
+                    style={[styles.holdingValue, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                  >
+                    ${token.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Text>
+                  <View style={styles.holdingMeta}>
+                    <Text style={[styles.holdingShare, { color: colors.textMuted }]}>
+                      {sharePct.toFixed(1)}%
+                    </Text>
+                    {has24h ? (
+                      <Text
+                        style={[
+                          styles.holding24h,
+                          {
+                            color: changePositive ? colors.dataPositive : colors.dataNegative,
+                          },
+                        ]}
+                      >
+                        {changePositive ? "+" : ""}
+                        {change24h.toFixed(2)}%
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderPopularShelf = () => (
+    <View style={styles.sectionWrapper}>
+      <View style={[styles.popularCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>POPULAR ON TESTNET</Text>
+        {popularTokens.map((pt) => (
+          <View
+            key={pt.symbol}
+            style={[
+              styles.popularRow,
+              {
+                borderBottomWidth:
+                  popularTokens.indexOf(pt) !== popularTokens.length - 1 ? 1 : 0,
+                borderBottomColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.popularLeft}>
+              <TokenIcon symbol={pt.symbol} size={40} style={{ borderRadius: 999 }} />
+              <Text style={[styles.popularSymbol, { color: colors.textPrimary }]}>
+                {pt.symbol}
+              </Text>
+            </View>
+            {pt.action === "buy" ? (
+              <TouchableOpacity
+                style={[styles.popularActionBtn, { backgroundColor: colors.accent }]}
+                onPress={() =>
+                  requireProvisioned(isProvisioned, () => navigation.navigate("Buy"))
+                }
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.popularActionText, { color: colors.textOnAccent }]}>
+                  Buy
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.popularActionBtn, { backgroundColor: colors.accentSoft }]}
+                onPress={() =>
+                  requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+                    navigation.navigate("Dex", {
+                      initialTab: "swap",
+                      preselect: { symbol: pt.symbol, side: "out" },
+                    })
+                  )
+                }
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.popularActionText, { color: colors.accent }]}>
+                  Swap
+                </Text>
+              </TouchableOpacity>
             )}
-          </ScrollView>
-        </View>
-
-        {/* Holdings Section */}
-        <View style={styles.sectionWrapper}>
-          <View style={[styles.glassSection, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Asset Holdings</Text>
-            <AssetList 
-              assets={displayTokens} 
-              formatPrice={(p) => `$${p.toLocaleString()}`} 
-              predictedAddress={smartAccountAddress}
-              onAssetPress={handleAssetPress}
-            />
           </View>
-        </View>
+        ))}
+      </View>
+    </View>
+  );
 
-       </ScrollView>
+  return (
+    <TabScreenContainer includeBottomInset>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: contentBottomInset + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {renderHeader()}
+        {renderPerformanceCard()}
+        {renderAllocation()}
+        {renderHoldings()}
+        {renderPopularShelf()}
+      </ScrollView>
 
-      {selectedToken && (
-        <TokenDetailModal 
-          visible={modalVisible} 
-          onClose={() => setModalVisible(false)} 
-          token={selectedToken} 
-        />
-      )}
+      <TokenDetailModal
+        ref={tokenDetailRef}
+        onRequestSend={(t) =>
+          requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+            navigation.navigate("Send", { tokenSymbol: t.symbol })
+          )
+        }
+        onRequestReceive={() =>
+          requireProvisioned(isProvisioned, () => navigation.navigate("Receive"))
+        }
+        onRequestSwap={(preselect) =>
+          requireActiveOnChain(activeChainId, isActiveOnChain(activeChainId), () =>
+            navigation.navigate("Dex", { initialTab: "swap", preselect })
+          )
+        }
+        onRequestBuy={() => requireProvisioned(isProvisioned, () => navigation.navigate("Buy"))}
+      />
+
+      <ActivationSheet ref={activationSheetRef} />
+      <SetUpWalletSheet ref={setUpRef} />
+
+      <Toast
+        visible={toastMsg !== null}
+        message={toastMsg ?? ""}
+        severity="info"
+        onHide={() => setToastMsg(null)}
+      />
     </TabScreenContainer>
   );
 };
 
-const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 16,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    marginBottom: 24,
-  },
-  headerKicker: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 2,
-    marginBottom: 4,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  headerRight: {
-    flexDirection: 'row',
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  balanceContainer: {
-    marginHorizontal: 20,
-    marginBottom: 24,
-  },
-  sectionWrapper: {
-    marginBottom: 32,
-    paddingHorizontal: 20,
-  },
-  omniCard: {
-    borderRadius: 32,
-    padding: 24,
-    borderWidth: 1,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  omniHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  omniLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  omniBalanceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  omniCurrency: {
-    fontSize: 20,
-    fontWeight: '800',
-    marginRight: 2,
-  },
-  omniBalance: {
-    fontSize: 34,
-    fontWeight: '900',
-    letterSpacing: -1,
-  },
-  omniGrowthBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginTop: 4,
-  },
-  omniGrowthText: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  omniPerformance: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  omniGraphWrapper: {
-    height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  omniPeriodPicker: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 18,
-    padding: 4,
-    marginTop: 12,
-  },
-  omniPeriodPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-    minWidth: 48,
-    alignItems: 'center',
-  },
-  omniPeriodText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  sectionHeadingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 4,
-  },
-  sectionHeading: {
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-  },
-  seeAll: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  assetCount: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  marketScroll: {
-    marginHorizontal: -20,
-    paddingHorizontal: 20,
-  },
-  marketCard: {
-    width: 150,
-    padding: 16,
-    borderRadius: 24,
-    borderWidth: 1,
-    marginRight: 12,
-  },
-  marketHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  marketName: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  marketPrice: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  miniChange: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  miniChangeText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  miniGraph: {
-    height: 30,
-    marginTop: 4,
-  },
-  assetsContainer: {
-    borderRadius: 30,
-    padding: 12,
-    borderWidth: 1,
-  },
-  glassSection: {
-    borderRadius: 20,
-    paddingVertical: 22,
-    paddingHorizontal: 25,
-    borderWidth: 1,
-    shadowOpacity: 0,
-    elevation: 0, 
-    overflow: 'visible',
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    marginBottom: 16,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingTop: 8,
+    },
+    // ── Header ────────────────────────────────────────────────────────────────
+    header: {
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      marginBottom: 8,
+      gap: 8,
+    },
+    headerTitle: {
+      fontSize: 26,
+      fontWeight: "700",
+      letterSpacing: -0.3,
+    },
+    headerChainRow: {
+      flexDirection: "row",
+    },
+    // ── Section wrapper ───────────────────────────────────────────────────────
+    sectionWrapper: {
+      marginHorizontal: 20,
+      marginBottom: 20,
+    },
+    sectionLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 1.4,
+      marginBottom: 14,
+    },
+    // ── Performance card ──────────────────────────────────────────────────────
+    perfCard: {
+      borderRadius: 28,
+      padding: 20,
+      borderWidth: 1,
+    },
+    perfHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 6,
+    },
+    perfBalanceBlock: {
+      flex: 1,
+    },
+    perfLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 1.2,
+      textTransform: "uppercase",
+      marginBottom: 4,
+    },
+    perfBalanceRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+    },
+    perfCurrency: {
+      fontSize: 22,
+      fontWeight: "700",
+      marginRight: 3,
+      fontFamily: FontFamilies.mono,
+    },
+    perfBalance: {
+      fontSize: 40,
+      fontWeight: "300",
+      letterSpacing: -1,
+      fontFamily: FontFamilies.mono,
+    },
+    changeBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      borderRadius: 12, // normalized from 10 → 12 (locked scale)
+      marginLeft: 8,
+      marginTop: 4,
+    },
+    changeBadgeText: {
+      fontSize: 12,
+      fontWeight: "700",
+      fontFamily: FontFamilies.mono,
+    },
+    perfDelta: {
+      fontSize: 13,
+      fontWeight: "500",
+      marginBottom: 14,
+      fontFamily: FontFamilies.mono,
+    },
+    chartWrapper: {
+      height: 120,
+      justifyContent: "center",
+      alignItems: "center",
+      marginVertical: 8,
+    },
+    chartEmpty: {
+      fontSize: 13,
+    },
+    periodPicker: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      borderRadius: 16,
+      padding: 4,
+      marginTop: 14,
+    },
+    periodPill: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+      minWidth: 44,
+      alignItems: "center",
+    },
+    periodLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.5,
+    },
+    // ── Allocation card ───────────────────────────────────────────────────────
+    allocationCard: {
+      borderRadius: 20, // locked scale: glass-details/modals = 20
+      padding: 20,
+      borderWidth: 1,
+    },
+    allocBar: {
+      flexDirection: "row",
+      height: 12,
+      borderRadius: 8,
+      overflow: "hidden",
+      marginBottom: 16,
+    },
+    allocSegment: {
+      height: "100%",
+    },
+    allocKey: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    allocKeyRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    allocDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 999,
+    },
+    allocKeySymbol: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    allocKeyPct: {
+      fontSize: 12,
+      fontWeight: "500",
+      fontFamily: FontFamilies.mono,
+    },
+    // ── Holdings card ─────────────────────────────────────────────────────────
+    holdingsCard: {
+      borderRadius: 20, // normalized from 22 → 20 (locked scale)
+      paddingVertical: 18,
+      paddingHorizontal: 20,
+      borderWidth: 1,
+    },
+    holdingRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 14,
+      minHeight: 72,
+    },
+    holdingLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      flex: 0.6,
+      gap: 14,
+    },
+    holdingNameBlock: {
+      flex: 1,
+      justifyContent: "center",
+    },
+    holdingSymbol: {
+      fontSize: 15,
+      fontWeight: "700",
+      letterSpacing: 0.3,
+      color: colors.textPrimary,
+    },
+    holdingName: {
+      fontSize: 12,
+      fontWeight: "500",
+      marginTop: 2,
+    },
+    holdingRight: {
+      flex: 0.4,
+      alignItems: "flex-end",
+      justifyContent: "center",
+      marginLeft: 8,
+    },
+    holdingValue: {
+      fontSize: 15,
+      fontWeight: "700",
+      textAlign: "right",
+      fontFamily: FontFamilies.mono,
+    },
+    holdingMeta: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 3,
+    },
+    holdingShare: {
+      fontSize: 11,
+      fontWeight: "500",
+      fontFamily: FontFamilies.mono,
+    },
+    holding24h: {
+      fontSize: 11,
+      fontWeight: "700",
+      fontFamily: FontFamilies.mono,
+    },
+    holdingAmount: {
+      fontSize: 12,
+      fontWeight: "500",
+      fontFamily: FontFamilies.mono,
+      textAlign: "right",
+    },
+    // ── Empty state ───────────────────────────────────────────────────────────
+    emptyPrompt: {
+      borderRadius: 16,
+      borderWidth: 1,
+      padding: 20,
+      marginBottom: 16,
+      alignItems: "center",
+    },
+    emptyPromptTitle: {
+      fontSize: 17,
+      fontWeight: "700",
+      marginBottom: 6,
+      textAlign: "center",
+    },
+    emptyPromptSub: {
+      fontSize: 13,
+      fontWeight: "400",
+      textAlign: "center",
+      marginBottom: 20,
+      lineHeight: 18,
+    },
+    emptyActions: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    emptyActionPrimary: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 999,
+      alignItems: "center",
+    },
+    emptyActionPrimaryText: {
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    emptyActionSecondary: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 999,
+      borderWidth: 1,
+      alignItems: "center",
+    },
+    emptyActionSecondaryText: {
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    // ── Popular shelf ─────────────────────────────────────────────────────────
+    popularCard: {
+      borderRadius: 20, // locked scale
+      paddingVertical: 18,
+      paddingHorizontal: 20,
+      borderWidth: 1,
+    },
+    popularRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+    },
+    popularLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+    },
+    popularSymbol: {
+      fontSize: 15,
+      fontWeight: "700",
+      letterSpacing: 0.3,
+    },
+    popularActionBtn: {
+      paddingHorizontal: 20,
+      paddingVertical: 8,
+      borderRadius: 999,
+    },
+    popularActionText: {
+      fontSize: 13,
+      fontWeight: "700",
+    },
+  });
 
 export default PortfolioScreen;

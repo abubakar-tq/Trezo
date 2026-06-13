@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {SocialRecovery, ISocialRecoveryAccount} from "src/modules/SocialRecovery/SocialRecovery.sol";
 import {ISocialRecovery} from "src/modules/SocialRecovery/interfaces/ISocialRecovery.sol";
 import {PasskeyTypes} from "src/common/Types.sol";
+import {RecoveryTypes} from "src/recovery/RecoveryTypes.sol";
 
 contract MockERC1271Guardian {
     bytes4 internal constant MAGIC = 0x1626ba7e;
@@ -65,6 +66,12 @@ contract SocialRecoveryTest is Test {
         keccak256("PasskeyInit(bytes32 idRaw,uint256 px,uint256 py)");
     uint256 private constant TIME_LOCK = 1 days;
 
+    // Last-built intent/scopes from `_recoveryDigest`. Each test that schedules a
+    // recovery calls `_recoveryDigest` first; the helper populates these so the
+    // 5-arg `scheduleRecovery` can be called without re-deriving the inputs.
+    RecoveryTypes.RecoveryIntent internal _lastIntent;
+    RecoveryTypes.ChainRecoveryScope[] internal _lastScopes;
+
     function setUp() public {
         recovery = new SocialRecovery();
         account = new MockSocialRecoveryAccount();
@@ -86,10 +93,11 @@ contract SocialRecoveryTest is Test {
         account.setRecoveryModule(address(recovery), false);
 
         PasskeyTypes.PasskeyInit memory newPassKey = _makePasskey("seed-authorize");
+        _recoveryDigest(address(account), 0, newPassKey);
         ISocialRecovery.GuardianSig[] memory sigs = new ISocialRecovery.GuardianSig[](2);
 
         vm.expectRevert(SocialRecovery.SocialRecovery_ModuleNotAuthorized.selector);
-        recovery.scheduleRecovery(address(account), newPassKey, sigs);
+        recovery.scheduleRecovery(address(account), newPassKey, _lastIntent, _lastScopes, sigs);
     }
 
     function testScheduleWithERC1271Guardian() public {
@@ -106,7 +114,7 @@ contract SocialRecoveryTest is Test {
         newAccount.setRecoveryModule(address(newRecovery), true);
 
         PasskeyTypes.PasskeyInit memory passkey = _makePasskey("seed-erc1271");
-        bytes32 digest = newRecovery.getRecoveryDigest(address(newAccount), 0, passkey);
+        bytes32 digest = _recoveryDigestFor(newRecovery, address(newAccount), 0, passkey);
 
         bytes memory contractSig = bytes("contract-approval");
         contractGuardian.setSignature(digest, contractSig, true);
@@ -126,10 +134,10 @@ contract SocialRecoveryTest is Test {
         });
 
         vm.prank(guardian1);
-        newRecovery.scheduleRecovery(address(newAccount), passkey, sigs);
+        newRecovery.scheduleRecovery(address(newAccount), passkey, _lastIntent, _lastScopes, sigs);
 
         vm.warp(block.timestamp + TIME_LOCK + 1);
-        newRecovery.executeRecovery(address(newAccount), passkey);
+        newRecovery.executeRecovery(address(newAccount));
 
         assertEq(newAccount.passkeyAddCount(), 1, "contract guardian recovery failed");
     }
@@ -156,13 +164,14 @@ contract SocialRecoveryTest is Test {
         });
 
         vm.prank(guardian1);
-        recovery.scheduleRecovery(address(account), newPassKey, sigs);
+        recovery.scheduleRecovery(address(account), newPassKey, _lastIntent, _lastScopes, sigs);
 
         assertEq(recovery.getRecoveryNonce(address(account)), 1, "nonce should increment after scheduling");
     }
 
     function testScheduleRevertsWhenThresholdNotMet() public {
         PasskeyTypes.PasskeyInit memory newPassKey = _makePasskey("seed-threshold");
+        _recoveryDigest(address(account), 0, newPassKey);
         ISocialRecovery.GuardianSig[] memory sigs = new ISocialRecovery.GuardianSig[](1);
         sigs[0] = ISocialRecovery.GuardianSig({
             index: 0,
@@ -171,7 +180,7 @@ contract SocialRecoveryTest is Test {
         });
 
         vm.expectRevert(SocialRecovery.SocialRecovery_ThresholdMustBeLessThanGuardians.selector);
-        recovery.scheduleRecovery(address(account), newPassKey, sigs);
+        recovery.scheduleRecovery(address(account), newPassKey, _lastIntent, _lastScopes, sigs);
     }
 
     function testScheduleRevertsOnDuplicateApproveHashGuardianIndex() public {
@@ -194,7 +203,7 @@ contract SocialRecoveryTest is Test {
         });
 
         vm.expectRevert(abi.encodeWithSelector(SocialRecovery.SocialRecovery_DuplicateGuardianSignature.selector, 0));
-        recovery.scheduleRecovery(address(account), newPassKey, sigs);
+        recovery.scheduleRecovery(address(account), newPassKey, _lastIntent, _lastScopes, sigs);
     }
 
     function testScheduleRevertsOnDuplicateEOAGuardianIndex() public {
@@ -215,7 +224,7 @@ contract SocialRecoveryTest is Test {
         });
 
         vm.expectRevert(abi.encodeWithSelector(SocialRecovery.SocialRecovery_DuplicateGuardianSignature.selector, 0));
-        recovery.scheduleRecovery(address(account), newPassKey, sigs);
+        recovery.scheduleRecovery(address(account), newPassKey, _lastIntent, _lastScopes, sigs);
     }
 
     function testScheduleRevertsOnDuplicateMixedGuardianIndex() public {
@@ -239,7 +248,7 @@ contract SocialRecoveryTest is Test {
         });
 
         vm.expectRevert(abi.encodeWithSelector(SocialRecovery.SocialRecovery_DuplicateGuardianSignature.selector, 0));
-        recovery.scheduleRecovery(address(account), newPassKey, sigs);
+        recovery.scheduleRecovery(address(account), newPassKey, _lastIntent, _lastScopes, sigs);
     }
 
     function testScheduleAndExecuteWithEOASignatures() public {
@@ -261,14 +270,14 @@ contract SocialRecoveryTest is Test {
             sig: _packSignature(v2, r2, s2)
         });
 
-        bytes32 recoveryId = recovery.scheduleRecovery(address(account), newPassKey, sigs);
+        bytes32 recoveryId = recovery.scheduleRecovery(address(account), newPassKey, _lastIntent, _lastScopes, sigs);
         assertTrue(recoveryId != bytes32(0), "recovery id mismatch");
 
         vm.warp(block.timestamp + TIME_LOCK + 1);
 
         vm.expectEmit(true, true, false, true);
         emit SocialRecovery.RecoveryExecuted(address(account), recoveryId);
-        recovery.executeRecovery(address(account), newPassKey);
+        recovery.executeRecovery(address(account));
 
         assertEq(account.passkeyAddCount(), 1, "passkey not added");
     }
@@ -296,7 +305,7 @@ contract SocialRecoveryTest is Test {
 
         uint256 expectedExecuteAfter = block.timestamp + TIME_LOCK;
 
-        bytes32 recoveryId = recovery.scheduleRecovery(address(account), newPassKey, sigs);
+        bytes32 recoveryId = recovery.scheduleRecovery(address(account), newPassKey, _lastIntent, _lastScopes, sigs);
         assertTrue(recoveryId != bytes32(0), "recovery id mismatch");
         (bytes32 activeRecoveryId, uint256 executeAfter) = recovery.getActiveRecovery(address(account));
         assertEq(activeRecoveryId, recoveryId, "active recovery id mismatch");
@@ -309,13 +318,13 @@ contract SocialRecoveryTest is Test {
                 ISocialRecovery.OperationState.Waiting
             )
         );
-        recovery.executeRecovery(address(account), newPassKey);
+        recovery.executeRecovery(address(account));
 
         vm.warp(block.timestamp + TIME_LOCK + 1);
 
         vm.expectEmit(true, true, false, true);
         emit SocialRecovery.RecoveryExecuted(address(account), recoveryId);
-        recovery.executeRecovery(address(account), newPassKey);
+        recovery.executeRecovery(address(account));
 
         PasskeyTypes.PasskeyInit memory stored = account.lastPasskey();
         assertEq(account.passkeyAddCount(), 1, "passkey add count");
@@ -324,7 +333,7 @@ contract SocialRecoveryTest is Test {
         assertEq(stored.py, newPassKey.py, "py mismatch");
 
         vm.expectRevert(SocialRecovery.SocialRecovery_NoActiveRecovery.selector);
-        recovery.executeRecovery(address(account), newPassKey);
+        recovery.executeRecovery(address(account));
     }
 
     function testCancelRecoveryAllowsReschedule() public {
@@ -337,7 +346,8 @@ contract SocialRecoveryTest is Test {
         recovery.approveHash(digestOne);
 
         ISocialRecovery.GuardianSig[] memory sigs = _approvedSignatures();
-        bytes32 firstId = recovery.scheduleRecovery(address(account), passkeyOne, sigs);
+        bytes32 firstId =
+            recovery.scheduleRecovery(address(account), passkeyOne, _lastIntent, _lastScopes, sigs);
 
         vm.expectEmit(true, true, false, true);
         emit SocialRecovery.RecoveryCancelled(address(account), firstId);
@@ -345,7 +355,7 @@ contract SocialRecoveryTest is Test {
         recovery.cancelRecovery(address(account), firstId);
 
         vm.expectRevert(SocialRecovery.SocialRecovery_NoActiveRecovery.selector);
-        recovery.executeRecovery(address(account), passkeyOne);
+        recovery.executeRecovery(address(account));
 
         PasskeyTypes.PasskeyInit memory passkeyTwo = _makePasskey("seed-cancel-two");
         bytes32 digestTwo = _recoveryDigest(address(account), 1, passkeyTwo);
@@ -355,13 +365,14 @@ contract SocialRecoveryTest is Test {
         vm.prank(guardian2);
         recovery.approveHash(digestTwo);
 
-        bytes32 secondId = recovery.scheduleRecovery(address(account), passkeyTwo, sigs);
+        bytes32 secondId =
+            recovery.scheduleRecovery(address(account), passkeyTwo, _lastIntent, _lastScopes, sigs);
         assertTrue(secondId != bytes32(0), "second id mismatch");
         assertTrue(secondId != firstId, "second id should differ from first id");
     }
 
     function testCancelRecoveryRejectsArbitraryCaller() public {
-        (PasskeyTypes.PasskeyInit memory passkey, bytes32 recoveryId) = _scheduleApprovedRecovery("seed-cancel-auth");
+        (, bytes32 recoveryId) = _scheduleApprovedRecovery("seed-cancel-auth");
 
         address attacker = makeAddr("attacker");
         vm.expectRevert(
@@ -371,13 +382,12 @@ contract SocialRecoveryTest is Test {
         recovery.cancelRecovery(address(account), recoveryId);
 
         vm.warp(block.timestamp + TIME_LOCK + 1);
-        recovery.executeRecovery(address(account), passkey);
+        recovery.executeRecovery(address(account));
         assertEq(account.passkeyAddCount(), 1, "attacker should not cancel recovery");
     }
 
     function testCancelRecoveryAllowsWalletSelfCall() public {
-        (PasskeyTypes.PasskeyInit memory passkey, bytes32 recoveryId) =
-            _scheduleApprovedRecovery("seed-cancel-wallet");
+        (, bytes32 recoveryId) = _scheduleApprovedRecovery("seed-cancel-wallet");
 
         vm.expectEmit(true, true, false, true);
         emit SocialRecovery.RecoveryCancelled(address(account), recoveryId);
@@ -386,7 +396,7 @@ contract SocialRecoveryTest is Test {
 
         vm.warp(block.timestamp + TIME_LOCK + 1);
         vm.expectRevert(SocialRecovery.SocialRecovery_NoActiveRecovery.selector);
-        recovery.executeRecovery(address(account), passkey);
+        recovery.executeRecovery(address(account));
     }
 
     function testAddGuardiansRejectsArbitraryCaller() public {
@@ -470,15 +480,47 @@ contract SocialRecoveryTest is Test {
         vm.prank(guardian2);
         recovery.approveHash(digest);
 
-        recoveryId = recovery.scheduleRecovery(address(account), passkey, _approvedSignatures());
+        recoveryId = recovery.scheduleRecovery(
+            address(account), passkey, _lastIntent, _lastScopes, _approvedSignatures()
+        );
     }
 
     function _recoveryDigest(address wallet, uint256 nonce, PasskeyTypes.PasskeyInit memory passkey)
         internal
-        view
         returns (bytes32)
     {
-        return recovery.getRecoveryDigest(wallet, nonce, passkey);
+        return _recoveryDigestFor(recovery, wallet, nonce, passkey);
+    }
+
+    /// Build the single-chain intent + scopes for `mod`/`wallet`/`nonce`/`passkey`,
+    /// store them on `_lastIntent` / `_lastScopes`, and return the EIP-712 digest.
+    function _recoveryDigestFor(
+        SocialRecovery mod,
+        address wallet,
+        uint256 nonce,
+        PasskeyTypes.PasskeyInit memory passkey
+    ) internal returns (bytes32) {
+        delete _lastScopes;
+        _lastScopes.push(
+            RecoveryTypes.ChainRecoveryScope({
+                chainId: block.chainid,
+                wallet: wallet,
+                socialRecovery: address(mod),
+                nonce: nonce,
+                guardianSetHash: mod.getGuardianSetHash(wallet),
+                policyHash: mod.getPolicyHash(wallet)
+            })
+        );
+        bytes32 chainScopeHash = mod.getChainScopeHash(_lastScopes);
+        _lastIntent = RecoveryTypes.RecoveryIntent({
+            requestId: keccak256(abi.encode(wallet, nonce, passkey.idRaw)),
+            newPasskeyHash: keccak256(abi.encode(PASSKEY_TYPE_HASH, passkey.idRaw, passkey.px, passkey.py)),
+            chainScopeHash: chainScopeHash,
+            validAfter: 0,
+            deadline: type(uint48).max,
+            metadataHash: bytes32(0)
+        });
+        return mod.getRecoveryDigest(_lastIntent);
     }
 
     function _hashPasskey(PasskeyTypes.PasskeyInit memory passkey) internal pure returns (bytes32) {

@@ -1,16 +1,16 @@
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Address } from "viem";
 
 import { TransactionListItem } from "@/src/features/transactions/components/TransactionListItem";
@@ -23,11 +23,15 @@ import type { RootStackParamList } from "@/src/types/navigation";
 
 type TransactionHistoryRoute = RouteProp<RootStackParamList, "TransactionHistory">;
 
+/** Number of rows to show by default before the user scrolls. */
+const DEFAULT_LIMIT = 20;
+
 export const TransactionHistoryScreen: React.FC = () => {
   const { theme } = useAppTheme();
   const { colors } = theme;
   const navigation = useNavigation<any>();
   const route = useRoute<TransactionHistoryRoute>();
+  const insets = useSafeAreaInsets();
 
   const user = useUserStore((state) => state.user);
   const aaAccount = useWalletStore((state) => state.aaAccount);
@@ -70,7 +74,7 @@ export const TransactionHistoryScreen: React.FC = () => {
         userId: user.id,
         walletAddress,
         chainId,
-        limit: 100,
+        limit: DEFAULT_LIMIT,
       });
       setRows(nextRows);
     } catch (err) {
@@ -88,52 +92,33 @@ export const TransactionHistoryScreen: React.FC = () => {
     }, [loadRows]),
   );
 
-  const summary = useMemo(() => {
-    const confirmed = rows.filter((row) => row.status === "confirmed").length;
-    const pending = rows.filter((row) => row.status === "pending" || row.status === "submitted").length;
-    const failed = rows.filter((row) => row.status === "failed" || row.status === "cancelled" || row.status === "dropped").length;
-    return { confirmed, pending, failed };
-  }, [rows]);
+  const containerPaddingTop = insets.top + 14;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: containerPaddingTop }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Transaction History</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Lifecycle rows from `wallet_transactions`.</Text>
-      </View>
-
-      <View style={styles.summaryRow}>
-        <View style={[styles.summaryCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.75), borderColor: withAlpha(colors.border, 0.24) }]}> 
-          <Text style={[styles.summaryValue, { color: colors.success }]}>{summary.confirmed}</Text>
-          <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Confirmed</Text>
-        </View>
-        <View style={[styles.summaryCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.75), borderColor: withAlpha(colors.border, 0.24) }]}> 
-          <Text style={[styles.summaryValue, { color: colors.warning }]}>{summary.pending}</Text>
-          <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Pending</Text>
-        </View>
-        <View style={[styles.summaryCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.75), borderColor: withAlpha(colors.border, 0.24) }]}> 
-          <Text style={[styles.summaryValue, { color: colors.danger }]}>{summary.failed}</Text>
-          <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>Failed</Text>
-        </View>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Transactions</Text>
       </View>
 
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={[styles.infoText, { color: colors.textSecondary }]}>Loading transactions...</Text>
+          <Text style={[styles.infoText, { color: colors.textSecondary }]}>Loading...</Text>
         </View>
       ) : null}
 
       {error ? (
-        <View style={[styles.errorCard, { backgroundColor: withAlpha(colors.danger, 0.12), borderColor: withAlpha(colors.danger, 0.3) }]}>
+        <View style={[styles.errorCard, { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}4D` }]}>
           <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
         </View>
       ) : null}
 
       {!loading && rows.length === 0 ? (
-        <View style={[styles.emptyCard, { backgroundColor: withAlpha(colors.surfaceCard, 0.75), borderColor: withAlpha(colors.border, 0.22) }]}>
+        <View style={[styles.emptyCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
           <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No transactions yet</Text>
-          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Your send, module, and recovery activity will appear here.</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            Your send, swap, and recovery activity will appear here.
+          </Text>
         </View>
       ) : null}
 
@@ -141,6 +126,7 @@ export const TransactionHistoryScreen: React.FC = () => {
         <FlatList
           data={rows}
           keyExtractor={(item) => item.id}
+          style={styles.list}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <TransactionListItem
@@ -160,7 +146,7 @@ export const TransactionHistoryScreen: React.FC = () => {
           }
         />
       ) : null}
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -168,41 +154,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 14,
   },
   header: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   title: {
     fontSize: 25,
     fontWeight: "800",
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  summaryRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 12,
-  },
-  summaryCard: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: "800",
-  },
-  summaryLabel: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "600",
-    textTransform: "uppercase",
   },
   centered: {
     alignItems: "center",
@@ -240,6 +198,9 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     textAlign: "center",
+  },
+  list: {
+    flex: 1,
   },
   listContent: {
     paddingBottom: 20,

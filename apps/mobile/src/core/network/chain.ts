@@ -4,7 +4,7 @@ import { DEFAULT_CHAIN_ID, getChainConfig, type SupportedChainId } from "@/src/i
 
 export const CHAIN_CONFIG = {
   chainId: DEFAULT_CHAIN_ID,
-  name: "Anvil",
+  name: getChainConfig(DEFAULT_CHAIN_ID).name,
   LAPTOP_IP: process.env.EXPO_PUBLIC_LAPTOP_IP || "10.70.81.26",
 };
 

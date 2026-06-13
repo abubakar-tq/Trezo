@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, ViewStyle, ImageStyle, StyleProp } from 'react-native';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
 
 interface TokenIconProps {
   symbol: string;
@@ -45,7 +44,7 @@ export const TokenIcon: React.FC<TokenIconProps> = ({
       setImgUri('https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/binance/info/logo.png');
     } else if (cleanSymbol === 'MATIC' || cleanSymbol === 'POL') {
       setImgUri('https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png');
-    } else if (address && address !== '0x0000000000000000000000000000000000000000') {
+    } else if (address && /^0x[0-9a-fA-F]{40}$/.test(address) && address !== '0x0000000000000000000000000000000000000000') {
       const isSolana = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
       const blockchain = isSolana ? 'solana' : 'ethereum';
       const trustUri = `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${blockchain}/assets/${address}/logo.png`;
@@ -64,8 +63,8 @@ export const TokenIcon: React.FC<TokenIconProps> = ({
         width: size, 
         height: size, 
         borderRadius: size / 2,
-        backgroundColor: withAlpha(colors.accent, 0.1),
-        borderColor: withAlpha(colors.accent, 0.2)
+        backgroundColor: `${colors.accent}1A`,
+        borderColor: `${colors.accent}33`
       },
       style
     ]}>

@@ -3,10 +3,12 @@
  * Final step of onboarding: Add first trusted contact
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { Feather } from "@expo/vector-icons";
+import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import AuthScaffold from '@features/auth/components/AuthScaffold';
 import { Onboarding3 } from '@/assets/components';
 
@@ -23,6 +25,7 @@ export const InitialGuardianSetupScreen: React.FC<InitialGuardianSetupScreenProp
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [email, setEmail] = useState('');
   const [addedContacts, setAddedContacts] = useState<string[]>([]);
@@ -79,7 +82,7 @@ export const InitialGuardianSetupScreen: React.FC<InitialGuardianSetupScreenProp
           <Text style={styles.label}>Email Address or Phone</Text>
           <TextInput
             placeholder="contact@example.com"
-            placeholderTextColor="rgba(255,255,255,0.3)"
+            placeholderTextColor={colors.textMuted}
             value={email}
             onChangeText={setEmail}
             editable={!isAdding}
@@ -91,10 +94,10 @@ export const InitialGuardianSetupScreen: React.FC<InitialGuardianSetupScreenProp
             activeOpacity={0.85}
             style={[
               styles.addButton, 
-              { backgroundColor: (isAdding || !email.trim()) ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.1)" }
+              { backgroundColor: (isAdding || !email.trim()) ? colors.glass : colors.glassBorder }
             ]}
           >
-            <Text style={[styles.addButtonText, { color: (isAdding || !email.trim()) ? "rgba(255,255,255,0.3)" : "#FFF" }]}>
+            <Text style={[styles.addButtonText, { color: (isAdding || !email.trim()) ? colors.textMuted : colors.textPrimary }]}>
               {isAdding ? 'ADDING...' : 'ADD CONTACT'}
             </Text>
           </TouchableOpacity>
@@ -110,7 +113,7 @@ export const InitialGuardianSetupScreen: React.FC<InitialGuardianSetupScreenProp
                    <Text style={styles.contactEmail}>{contact}</Text>
                 </View>
                 <TouchableOpacity onPress={() => handleRemoveContact(contact)}>
-                  <Text style={styles.removeIcon}>✕</Text>
+                  <Feather name="x" size={16} color={colors.textMuted} />
                 </TouchableOpacity>
               </View>
             ))}
@@ -121,7 +124,7 @@ export const InitialGuardianSetupScreen: React.FC<InitialGuardianSetupScreenProp
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     gap: 24,
   },
@@ -131,17 +134,17 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.5)',
+    color: colors.textSecondary,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   input: {
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: colors.glass,
     borderRadius: 16,
     padding: 16,
-    color: "#FFF",
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: colors.glassBorder,
     fontSize: 16,
   },
   addButton: {
@@ -149,11 +152,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: colors.glassBorder,
   },
   addButtonText: {
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "700",
     letterSpacing: 1,
   },
   listContainer: {
@@ -161,8 +164,8 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     fontSize: 10,
-    fontWeight: "800",
-    color: "#00FFFF",
+    fontWeight: "600",
+    color: colors.textSecondary,
     letterSpacing: 2,
   },
   contactRow: {
@@ -170,10 +173,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: colors.glass,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: colors.glassBorder,
   },
   contactInfo: {
     flexDirection: 'row',
@@ -181,24 +184,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   invitedTag: {
-    backgroundColor: "rgba(0,255,255,0.1)",
+    backgroundColor: colors.surfaceMuted,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   invitedText: {
     fontSize: 8,
-    fontWeight: '900',
-    color: '#00FFFF',
+    fontWeight: '700',
+    color: colors.textSecondary,
   },
   contactEmail: {
-    color: "#FFF",
+    color: colors.textPrimary,
     fontWeight: "600",
     fontSize: 14,
-  },
-  removeIcon: {
-    color: "rgba(255,255,255,0.3)",
-    fontWeight: "900",
   },
   actionGroup: {
     gap: 16,
@@ -207,14 +206,14 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 18,
     alignItems: "center",
-    shadowColor: "#00FFFF",
+    shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 8,
   },
   primaryButtonText: {
-    color: "#000",
+    color: colors.textOnAccent,
     fontSize: 15,
     fontWeight: "900",
     letterSpacing: 2,
@@ -223,7 +222,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   skipText: {
-    color: "rgba(255,255,255,0.4)",
+    color: colors.textSecondary,
     fontSize: 14,
     fontWeight: "700",
   },

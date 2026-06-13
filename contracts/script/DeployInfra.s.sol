@@ -3,25 +3,28 @@ pragma solidity ^0.8.30;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
+import {AcrossConfig} from "./common/AcrossConfig.sol";
 import {DeployConstants} from "./common/DeployConstants.sol";
 import {DeployUtils} from "./common/DeployUtils.sol";
 import {PredictInfra} from "./PredictInfra.s.sol";
 import {SmartAccount} from "src/account/SmartAccount.sol";
 import {PasskeyValidator} from "src/modules/passkey/PasskeyValidator.sol";
 import {SocialRecovery} from "src/modules/SocialRecovery/SocialRecovery.sol";
+import {CrossChainExecutor} from "src/modules/CrossChainExecutor.sol";
 import {MinimalProxyFactory} from "src/proxy/MinimalProxyFactory.sol";
 import {AccountFactory} from "src/factory/AccountFactory.sol";
 
 contract DeployInfra is Script {
     function run() external returns (PredictInfra.InfraAddresses memory deployed) {
         address entryPoint = vm.envOr("ENTRYPOINT", DeployConstants.ENTRYPOINT_V07);
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address rootFactory = DeployConstants.SAFE_SINGLETON_FACTORY;
 
         PredictInfra predictor = new PredictInfra();
         PredictInfra.InfraAddresses memory predicted = predictor.predict();
 
-        vm.startBroadcast(deployerKey);
+        // Broadcaster comes from Foundry CLI: --account <keystore> OR --private-key <pk>.
+        // Don't read PRIVATE_KEY from env — that conflicts with the --account flow.
+        vm.startBroadcast();
 
         deployed.smartAccountImpl = DeployUtils.deployThroughRootFactory(
             rootFactory,
@@ -64,6 +67,15 @@ contract DeployInfra is Script {
             )
         );
 
+        deployed.crossChainExecutor = DeployUtils.deployThroughRootFactory(
+            rootFactory,
+            DeployConstants.CROSS_CHAIN_EXECUTOR_SALT,
+            abi.encodePacked(
+                type(CrossChainExecutor).creationCode,
+                abi.encode(AcrossConfig.spokePool(block.chainid), AcrossConfig.swapRouter(block.chainid))
+            )
+        );
+
         vm.stopBroadcast();
 
         require(deployed.smartAccountImpl == predicted.smartAccountImpl, "smart account prediction mismatch");
@@ -71,6 +83,7 @@ contract DeployInfra is Script {
         require(deployed.proxyFactory == predicted.proxyFactory, "proxy factory prediction mismatch");
         require(deployed.passkeyValidator == predicted.passkeyValidator, "validator prediction mismatch");
         require(deployed.socialRecovery == predicted.socialRecovery, "social recovery prediction mismatch");
+        require(deployed.crossChainExecutor == predicted.crossChainExecutor, "cross-chain executor prediction mismatch");
 
         _writeArtifacts(deployed, entryPoint);
         _log(deployed);
@@ -103,7 +116,8 @@ contract DeployInfra is Script {
         vm.serializeAddress(chainRoot, "proxyFactory", deployed.proxyFactory);
         vm.serializeAddress(chainRoot, "accountFactory", deployed.accountFactory);
         vm.serializeAddress(chainRoot, "passkeyValidator", deployed.passkeyValidator);
-        string memory chainJson = vm.serializeAddress(chainRoot, "socialRecovery", deployed.socialRecovery);
+        vm.serializeAddress(chainRoot, "socialRecovery", deployed.socialRecovery);
+        string memory chainJson = vm.serializeAddress(chainRoot, "crossChainExecutor", deployed.crossChainExecutor);
         vm.writeJson(chainJson, _chainManifestPath());
 
         vm.writeJson(chainJson, _flatManifestPath());
@@ -117,6 +131,7 @@ contract DeployInfra is Script {
         console2.log("MinimalProxyFactory:", deployed.proxyFactory);
         console2.log("PasskeyValidator:", deployed.passkeyValidator);
         console2.log("SocialRecovery:", deployed.socialRecovery);
+        console2.log("CrossChainExecutor:", deployed.crossChainExecutor);
     }
 
     function _artifactRootPath() internal view virtual returns (string memory) {

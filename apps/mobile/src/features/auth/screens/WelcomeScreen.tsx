@@ -1,13 +1,18 @@
 import { NavigationProp, useNavigation } from "@react-navigation/native";
-import React from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { SigninIcon } from "@/assets/components";
 import { AuthStackParamList } from "@/src/types/navigation";
 import { AuthGradientButton, AuthScaffold } from "@features/auth/components";
+import type { ThemeColors } from "@theme";
+import { useAppTheme } from "@theme";
 
 const WelcomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp<AuthStackParamList>>();
+  const { theme } = useAppTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const navigateToLogin = () => {
     navigation.navigate("Login");
@@ -33,20 +38,20 @@ const WelcomeScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   actions: {
     rowGap: 16,
   },
   secondaryButton: {
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: `${colors.border}33`,
     borderWidth: 1,
     borderRadius: 999,
     paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: "rgba(23,20,25,0.85)",
+    backgroundColor: colors.surfaceCard,
   },
   secondaryText: {
-    color: "#ffffff",
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: "600",
   },

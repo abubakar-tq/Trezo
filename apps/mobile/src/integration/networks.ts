@@ -20,10 +20,17 @@ import { getDeployment } from "./viem/deployments";
 export type NetworkKey =
   | "anvil-local"
   | "ethereum-sepolia"
+  | "base-sepolia"
+  | "arbitrum-sepolia"
   | "base-mainnet"
   | "base-mainnet-fork";
 
-export type DeploymentProfile = "31337" | "base-mainnet-fork";
+export type DeploymentProfile =
+  | "31337"
+  | "base-mainnet-fork"
+  | "sepolia"
+  | "base-sepolia"
+  | "arb-sepolia";
 
 export type ChainEnvironmentExtended =
   | "local"
@@ -40,10 +47,14 @@ export type NativeCurrency = {
 export type SupportedChainId =
   | 31337
   | 11155111
+  | 84532
+  | 421614
   | 1
   | 324
   | 300
-  | 8453;
+  | 8453
+  | 84532
+  | 421614;
 
 export type NetworkConfig = {
   networkKey: NetworkKey;
@@ -63,6 +74,12 @@ export type NetworkConfig = {
   isDevelopmentOnly?: boolean;
   /** Whether the network should use a paymaster by default. */
   defaultUsePaymaster: boolean;
+  /** Gated by `make swap-healthcheck`; flips off when Uniswap V3 pool liquidity is empty. */
+  swapSupported: boolean;
+  /** True only on chains where the ZK Email hosted relayer accepts proofs. */
+  emailRecoverySupported: boolean;
+  /** True when CrossChainExecutor is deployed on this chain. */
+  crossChainSwapSupported: boolean;
 };
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -113,29 +130,89 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
     isEnabled: true,
     isDevelopmentOnly: true,
     defaultUsePaymaster: true,
+    swapSupported: false,
+    emailRecoverySupported: false,
+    crossChainSwapSupported: false,
   },
 
-  "ethereum-sepolia": {
-    networkKey: "ethereum-sepolia",
-    chainId: 11155111,
-    sourceChainId: 11155111,
-    deploymentProfile: "31337", // Sepolia uses same profile until it has its own manifest
-    name: "Ethereum Sepolia",
-    displayName: "Sepolia",
-    nativeCurrency: DEFAULT_NATIVE_ETH,
-    rpcUrl: process.env.EXPO_PUBLIC_SEPOLIA_RPC_URL ?? "",
-    bundlerUrl: process.env.EXPO_PUBLIC_SEPOLIA_BUNDLER_URL ?? "",
-    paymasterUrl: process.env.EXPO_PUBLIC_SEPOLIA_PAYMASTER_URL,
-    environment: "testnet",
-    blockExplorerUrl: "https://sepolia.etherscan.io",
-    isEnabled: Boolean(
-      process.env.EXPO_PUBLIC_SEPOLIA_RPC_URL &&
+  "ethereum-sepolia": (() => {
+    const d = getDeployment("sepolia");
+    return {
+      networkKey: "ethereum-sepolia" as NetworkKey,
+      chainId: 11155111 as SupportedChainId,
+      sourceChainId: 11155111,
+      deploymentProfile: "sepolia" as DeploymentProfile,
+      name: "Ethereum Sepolia",
+      displayName: "Sepolia",
+      nativeCurrency: DEFAULT_NATIVE_ETH,
+      rpcUrl: process.env.EXPO_PUBLIC_SEPOLIA_RPC_URL ?? "",
+      bundlerUrl: process.env.EXPO_PUBLIC_SEPOLIA_BUNDLER_URL ?? "",
+      paymasterUrl: process.env.EXPO_PUBLIC_SEPOLIA_PAYMASTER_URL,
+      environment: "testnet" as ChainEnvironmentExtended,
+      blockExplorerUrl: "https://sepolia.etherscan.io",
+      isEnabled: Boolean(
+        d?.entryPoint && d?.accountFactory &&
+        process.env.EXPO_PUBLIC_SEPOLIA_RPC_URL &&
         process.env.EXPO_PUBLIC_SEPOLIA_BUNDLER_URL
-    ),
-    defaultUsePaymaster: Boolean(
-      process.env.EXPO_PUBLIC_SEPOLIA_PAYMASTER_URL
-    ),
-  },
+      ),
+      defaultUsePaymaster: Boolean(process.env.EXPO_PUBLIC_SEPOLIA_PAYMASTER_URL),
+      swapSupported: Boolean(d?.swapSupported),
+      emailRecoverySupported: false, // ZK Email hosted relayer is Base Sepolia only
+      crossChainSwapSupported: Boolean(d?.crossChainExecutor),
+    };
+  })(),
+
+  "base-sepolia": (() => {
+    const d = getDeployment("base-sepolia");
+    return {
+      networkKey: "base-sepolia" as NetworkKey,
+      chainId: 84532 as SupportedChainId,
+      sourceChainId: 84532,
+      deploymentProfile: "base-sepolia" as DeploymentProfile,
+      name: "Base Sepolia",
+      displayName: "Base Sepolia",
+      nativeCurrency: DEFAULT_NATIVE_ETH,
+      rpcUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org",
+      bundlerUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_BUNDLER_URL ?? "",
+      paymasterUrl: process.env.EXPO_PUBLIC_BASE_SEPOLIA_PAYMASTER_URL,
+      environment: "testnet" as ChainEnvironmentExtended,
+      blockExplorerUrl: "https://sepolia.basescan.org",
+      isEnabled: Boolean(
+        d?.entryPoint && d?.accountFactory &&
+        process.env.EXPO_PUBLIC_BASE_SEPOLIA_BUNDLER_URL
+      ),
+      defaultUsePaymaster: Boolean(process.env.EXPO_PUBLIC_BASE_SEPOLIA_PAYMASTER_URL),
+      swapSupported: Boolean(d?.swapSupported),
+      emailRecoverySupported: true, // ZK Email hosted relayer is on Base Sepolia
+      crossChainSwapSupported: Boolean(d?.crossChainExecutor),
+    };
+  })(),
+
+  "arbitrum-sepolia": (() => {
+    const d = getDeployment("arb-sepolia");
+    return {
+      networkKey: "arbitrum-sepolia" as NetworkKey,
+      chainId: 421614 as SupportedChainId,
+      sourceChainId: 421614,
+      deploymentProfile: "arb-sepolia" as DeploymentProfile,
+      name: "Arbitrum Sepolia",
+      displayName: "Arbitrum Sepolia",
+      nativeCurrency: DEFAULT_NATIVE_ETH,
+      rpcUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_RPC_URL ?? "https://sepolia-rollup.arbitrum.io/rpc",
+      bundlerUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL ?? "",
+      paymasterUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_PAYMASTER_URL,
+      environment: "testnet" as ChainEnvironmentExtended,
+      blockExplorerUrl: "https://sepolia.arbiscan.io",
+      isEnabled: Boolean(
+        d?.entryPoint && d?.accountFactory &&
+        process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL
+      ),
+      defaultUsePaymaster: Boolean(process.env.EXPO_PUBLIC_ARB_SEPOLIA_PAYMASTER_URL),
+      swapSupported: Boolean(d?.swapSupported),
+      emailRecoverySupported: false, // ZK Email hosted relayer is Base Sepolia only
+      crossChainSwapSupported: Boolean(d?.crossChainExecutor),
+    };
+  })(),
 
   "base-mainnet": {
     networkKey: "base-mainnet",
@@ -152,6 +229,9 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
     blockExplorerUrl: "https://basescan.org",
     isEnabled: false, // Not yet enabled for production
     defaultUsePaymaster: false,
+    swapSupported: false,
+    emailRecoverySupported: false,
+    crossChainSwapSupported: false,
   },
 
   "base-mainnet-fork": (() => {
@@ -170,16 +250,19 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
       bundlerUrl:
         process.env.EXPO_PUBLIC_BASE_FORK_BUNDLER_URL ??
         `http://${INFRA_IP}:4337`,
-      paymasterUrl: process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL,
+      paymasterUrl:
+        process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL ??
+        `http://${INFRA_IP}:3000`,
       environment: "local_fork" as ChainEnvironmentExtended,
       blockExplorerUrl: "https://basescan.org",
       isEnabled: Boolean(
         deployment?.entryPoint && deployment?.accountFactory
       ),
       isDevelopmentOnly: true,
-      defaultUsePaymaster: Boolean(
-        process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL
-      ),
+      defaultUsePaymaster: true,
+      swapSupported: Boolean(deployment?.swapSupported ?? true), // fork has working Uniswap
+      emailRecoverySupported: false,
+      crossChainSwapSupported: Boolean(deployment?.crossChainExecutor),
     };
   })(),
 };

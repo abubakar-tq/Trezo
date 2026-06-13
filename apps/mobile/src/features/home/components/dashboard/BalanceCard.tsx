@@ -1,8 +1,13 @@
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Clipboard from 'expo-clipboard';
+import { Badge } from '@shared/components/Tier1/Badge';
+import { Sparkline } from '@shared/components';
+import { FontFamilies } from '@shared/components/TokenRegistry';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '@utils/color';
-import { Sparkline } from '@shared/components/Sparkline';
+import type { ThemeColors } from '@theme';
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface BalanceCardProps {
   balance: number;
@@ -11,6 +16,21 @@ interface BalanceCardProps {
   isDeployed?: boolean;
   isHydrating?: boolean;
   hasLocalPasskey?: boolean | null;
+  missingPrices?: string[];
+  /**
+   * Real portfolio 24h change in percent. Pass null when data is unknown —
+   * the badge is simply omitted. Never pass a fabricated number.
+   */
+  change24hPct?: number | null;
+  /**
+   * When true, renders as a flat (non-glow) card — used for the $0 empty state.
+   */
+  isEmpty?: boolean;
+  /**
+   * 1D portfolio-value series for the sparkline. Only rendered in the funded state
+   * when ≥2 finite points are present. NEVER pass data in the empty/$0 state.
+   */
+  sparklineData?: number[];
   onDeploy?: () => void;
   onEnablePasskey?: () => void;
 }
@@ -22,173 +42,322 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   isDeployed = true,
   isHydrating = false,
   hasLocalPasskey = null,
+  missingPrices,
+  change24hPct = null,
+  isEmpty = false,
+  sparklineData,
   onDeploy,
   onEnablePasskey,
 }) => {
   const { theme } = useAppTheme();
-  const { colors } = theme;
-  const { width } = Dimensions.get('window');
+  const { colors, gradients } = theme;
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const [copied, setCopied] = useState(false);
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.mode === 'dark' ? 'rgba(25, 25, 25, 0.65)' : '#FFFFFF', borderColor: colors.border }]}>
+  const handleCopy = async () => {
+    if (!address) return;
+    await Clipboard.setStringAsync(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const formattedBalance = loading
+    ? "---"
+    : balance >= 1e9
+      ? `${(balance / 1e9).toFixed(2)}B`
+      : balance >= 1e6
+        ? `${(balance / 1e6).toFixed(2)}M`
+        : balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  /**
+   * Badge order of priority:
+   * 1. Syncing spinner
+   * 2. Enable Passkey CTA (deployed but no passkey)
+   * 3. Real 24h change badge (only when change24hPct is not null)
+   * 4. Activate Wallet CTA (not yet deployed)
+   * — Nothing is shown when data is unknown (null) to avoid fake numbers.
+   */
+  const renderBadge = () => {
+    if (isHydrating) {
+      return <Badge status="neutral" label="Syncing..." icon={<Feather name="refresh-cw" size={10} color={colors.textSecondary} />} />;
+    }
+    if (isDeployed) {
+      if (hasLocalPasskey === false) {
+        return (
+          <TouchableOpacity onPress={onEnablePasskey} activeOpacity={0.85} style={styles.ctaPill}>
+            <Feather name="key" size={11} color={colors.accentAlt} />
+            <Text style={[styles.ctaPillText, { color: colors.accentAlt }]}>Enable Passkey</Text>
+          </TouchableOpacity>
+        );
+      }
+      // Real 24h change — only render when we have actual data
+      if (change24hPct !== null && isFinite(change24hPct) && !isEmpty) {
+        const isPositive = change24hPct >= 0;
+        const changeColor = isPositive ? colors.dataPositive : colors.dataNegative;
+        const sign = isPositive ? "+" : "";
+        return (
+          <View style={styles.ctaPill}>
+            <Feather
+              name={isPositive ? "trending-up" : "trending-down"}
+              size={11}
+              color={changeColor}
+            />
+            <Text style={[styles.ctaPillText, { color: changeColor }]}>
+              {sign}{change24hPct.toFixed(2)}%
+            </Text>
+            <Text style={[styles.ctaPillText, { color: "rgba(255,255,255,0.4)" }]}>
+              · 24H
+            </Text>
+          </View>
+        );
+      }
+      // No real 24h data available — render nothing (spec: "render nothing until data exists")
+      return null;
+    }
+    return (
+      <TouchableOpacity onPress={onDeploy} activeOpacity={0.85} style={styles.ctaPill}>
+        <Feather name="zap" size={11} color={colors.warning} />
+        <Text style={[styles.ctaPillText, { color: colors.warning }]}>Activate Wallet</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const shortAddress = address
+    ? `${address.slice(0, 6)}···${address.slice(-4)}`
+    : "No wallet";
+
+  const badge = renderBadge();
+
+  // Empty state: flat card (no glow orb, no gradient glow)
+  if (isEmpty) {
+    return (
+      <LinearGradient
+        colors={["rgba(18,15,24,0.95)", "rgba(12,10,18,0.98)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.container}
+      >
         <View style={styles.header}>
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Balance</Text>
-          {isHydrating ? (
-            <View style={[styles.badge, { backgroundColor: withAlpha(colors.textSecondary, 0.08) }]}>
-              <Feather name="refresh-cw" size={10} color={colors.textSecondary} />
-              <Text style={[styles.badgeText, { color: colors.textSecondary }]}>Syncing...</Text>
-            </View>
-          ) : isDeployed ? (
-            hasLocalPasskey === false ? (
-              <TouchableOpacity
-                onPress={onEnablePasskey}
-                style={[styles.deployBadge, { backgroundColor: withAlpha('#8B5CF6', 0.15), borderColor: withAlpha('#8B5CF6', 0.35) }]}
-                activeOpacity={0.8}
-              >
-                <Feather name="key" size={10} color="#8B5CF6" />
-                <Text style={[styles.badgeText, { color: '#8B5CF6', marginLeft: 4 }]}>Enable Passkey</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={[styles.badge, { backgroundColor: withAlpha(colors.accent, 0.1) }]}>
-                <Feather name="trending-up" size={10} color={colors.accent} />
-                <Text style={[styles.badgeText, { color: colors.accent }]}>+4.2%</Text>
-              </View>
-            )
-          ) : (
-            <TouchableOpacity
-              onPress={onDeploy}
-              style={[styles.deployBadge, { backgroundColor: withAlpha('#F59E0B', 0.15), borderColor: withAlpha('#F59E0B', 0.35) }]}
-              activeOpacity={0.8}
-            >
-              <Feather name="zap" size={10} color="#F59E0B" />
-              <Text style={[styles.badgeText, { color: '#F59E0B', marginLeft: 4 }]}>Activate Wallet</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={styles.label}>Total Balance</Text>
+          {badge}
         </View>
 
         <View style={styles.balanceRow}>
-          <Text style={[styles.currency, { color: colors.textSecondary }]}>$</Text>
-          <Text 
-            style={[styles.balance, { color: colors.textPrimary }]} 
-            numberOfLines={1} 
-            adjustsFontSizeToFit
-            minimumFontScale={0.8}
-          >
-            {loading ? "---" : (balance >= 1000000000 
-              ? `${(balance / 1000000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}B`
-              : balance >= 1000000 
-                ? `${(balance / 1000000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`
-                : balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
+          <Text style={styles.currency}>$</Text>
+          <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            0.00
           </Text>
         </View>
 
-
-        <View style={[styles.footer, { borderTopColor: colors.glassBorder }]}>
-          <View style={[styles.addressBox, { backgroundColor: colors.surfaceMuted }]}>
-            <Feather name={isDeployed ? "shield" : "alert-circle"} size={12} color={isDeployed ? colors.textSecondary : '#F59E0B'} />
-            <Text style={[styles.addressText, { color: isDeployed ? colors.textSecondary : '#F59E0B' }]}>
-              {address 
-                ? (isDeployed ? `${address.slice(0, 6)}...${address.slice(-4)}` : `${address.slice(0, 6)}...${address.slice(-4)} · Not Deployed`)
-                : "No wallet"}
+        <View style={styles.footer}>
+          <View style={styles.addressPill}>
+            <Feather
+              name={isDeployed ? "shield" : "alert-circle"}
+              size={12}
+              color={isDeployed ? "rgba(255,255,255,0.5)" : colors.warning}
+            />
+            <Text style={styles.addressText}>
+              {isDeployed ? shortAddress : `${shortAddress} · Not deployed`}
             </Text>
           </View>
-          <TouchableOpacity style={styles.copyButton}>
-            <Feather name="copy" size={14} color={colors.accent} />
+          <TouchableOpacity style={styles.copyBtn} activeOpacity={0.7} onPress={handleCopy} disabled={!address}>
+            <Feather name={copied ? "check" : "copy"} size={14} color={copied ? colors.success : "rgba(255,255,255,0.5)"} />
           </TouchableOpacity>
         </View>
-    </View>
+      </LinearGradient>
+    );
+  }
+
+  return (
+    <LinearGradient
+      colors={gradients.brand as [string, string, string]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.container}
+    >
+      {/* Subtle glow orb — funded state only */}
+      <View style={styles.glowOrb} />
+
+      <View style={styles.header}>
+        <Text style={styles.label}>Total Balance</Text>
+        {badge}
+      </View>
+
+      <View style={styles.balanceRow}>
+        <Text style={styles.currency}>$</Text>
+        <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+          {formattedBalance}
+        </Text>
+      </View>
+
+      {missingPrices && missingPrices.length > 0 && (
+        <Text style={styles.missingNote}>
+          USD unavailable for {missingPrices.length} token{missingPrices.length === 1 ? "" : "s"}
+        </Text>
+      )}
+
+      {/* Sparkline — real 1D data only; hidden when empty or <2 points (spec §5.1) */}
+      {sparklineData && sparklineData.length >= 2 && !isEmpty && (
+        <View style={styles.sparklineWrapper}>
+          <View style={styles.sparklineHeader}>
+            <Text style={styles.sparklineTimeLabel}>Past 24 hours</Text>
+          </View>
+          <Sparkline
+            data={sparklineData}
+            width={280}
+            height={36}
+            strokeWidth={1.5}
+            fillOpacity={0.15}
+            color={
+              sparklineData[sparklineData.length - 1] >= sparklineData[0]
+                ? colors.dataPositive
+                : colors.dataNegative
+            }
+          />
+        </View>
+      )}
+
+      <View style={styles.footer}>
+        <View style={styles.addressPill}>
+          <Feather
+            name={isDeployed ? "shield" : "alert-circle"}
+            size={12}
+            color={isDeployed ? "rgba(255,255,255,0.8)" : colors.warning}
+          />
+          <Text style={styles.addressText}>
+            {isDeployed ? shortAddress : `${shortAddress} · Not deployed`}
+          </Text>
+        </View>
+        <TouchableOpacity style={styles.copyBtn} activeOpacity={0.7} onPress={handleCopy} disabled={!address}>
+          <Feather name={copied ? "check" : "copy"} size={14} color={copied ? colors.success : "rgba(255,255,255,0.7)"} />
+        </TouchableOpacity>
+      </View>
+    </LinearGradient>
   );
 };
 
-
-const styles = StyleSheet.create({
-  container: {
-    borderRadius: 24,
-    padding: 24,
-    borderWidth: 1,
-    // Ultimate Borderless Fix: Zero depth
-    shadowOpacity: 0,
-    elevation: 0,
-    overflow: 'visible',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  deployBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    marginLeft: 4,
-  },
-  balanceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  currency: {
-    fontSize: 20,
-    fontWeight: '800',
-    marginRight: 2,
-  },
-  balance: {
-    fontSize: 34,
-    fontWeight: '900',
-    letterSpacing: -1,
-  },
-  pulseContainer: {
-    marginTop: 16,
-    marginBottom: 8,
-    height: 48,
-  },
-  footer: {
-    marginTop: 12,
-    paddingTop: 16,
-    borderTopWidth: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  addressBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
-  },
-  addressText: {
-    fontSize: 10,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  copyButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      borderRadius: 28,
+      padding: 24,
+      overflow: "hidden",
+      position: "relative",
+    },
+    glowOrb: {
+      position: "absolute",
+      top: -50,
+      right: -50,
+      width: 180,
+      height: 180,
+      borderRadius: 90,
+      backgroundColor: "rgba(255,255,255,0.06)",
+    },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 14,
+    },
+    label: {
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      textTransform: "uppercase",
+      color: "rgba(255,255,255,0.6)",
+    },
+    balanceRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      marginBottom: 4,
+    },
+    currency: {
+      fontSize: 26,
+      fontWeight: "300",
+      fontFamily: FontFamilies.mono,
+      color: "rgba(255,255,255,0.65)",
+      marginRight: 4,
+    },
+    balance: {
+      fontSize: 46,
+      // Spec §5.1: "light weight (300)" + mono font for balance number
+      fontWeight: "300",
+      fontFamily: FontFamilies.mono,
+      letterSpacing: -1,
+      // Must be light in BOTH themes — sits on the violet brand gradient.
+      color: colors.textOnAccent,
+    },
+    missingNote: {
+      fontSize: 11,
+      color: "rgba(255,255,255,0.45)",
+      marginTop: 2,
+    },
+    sparklineWrapper: {
+      marginTop: 12,
+      alignSelf: "stretch",
+      opacity: 0.8,
+    },
+    sparklineHeader: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      marginBottom: 4,
+    },
+    sparklineTimeLabel: {
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 0.6,
+      textTransform: "uppercase",
+      color: "rgba(255,255,255,0.4)",
+    },
+    footer: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 20,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: "rgba(255,255,255,0.12)",
+    },
+    addressPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      backgroundColor: "rgba(255,255,255,0.12)",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      // Spec §3: radius scale — 12 for pills/token-chips
+      borderRadius: 12,
+    },
+    addressText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: "rgba(255,255,255,0.85)",
+      letterSpacing: 0.3,
+    },
+    copyBtn: {
+      width: 32,
+      height: 32,
+      // Spec §3: 999 for circular/icon buttons
+      borderRadius: 999,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(255,255,255,0.12)",
+    },
+    ctaPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.15)",
+      backgroundColor: "rgba(255,255,255,0.10)",
+    },
+    ctaPillText: {
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.6,
+      textTransform: "uppercase",
+    },
+  });

@@ -1,7 +1,7 @@
-import type { WalletAccount } from '@/src/features/wallet/store/useWalletStore';
+import { useWalletStore, type WalletAccount } from '@/src/features/wallet/store/useWalletStore';
+import { useUserStore } from '@/src/store/useUserStore';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
-import { withAlpha } from '../../../utils/color';
 import * as Haptics from 'expo-haptics';
 import React from 'react';
 import {
@@ -39,16 +39,21 @@ export const AccountPickerModal: React.FC<AccountPickerModalProps> = ({
   const { colors } = theme;
   const isDark = resolvedMode === 'dark';
 
-  // Fallback seed data if no accounts exist
-  const displayAccounts = accounts.length > 0 ? accounts : [
-    {
-      id: 'default',
-      address: selectedAddress || '0x742d...40Af',
-      name: 'Primary Wallet',
-      isActive: true,
-      createdAt: new Date().toISOString()
-    }
-  ];
+  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
+  const aaAccount = useWalletStore((state) => state.aaAccount);
+
+  const smartAccount: WalletAccount | null = (smartAccountAddress || aaAccount?.predictedAddress) ? {
+    id: 'smart-account',
+    address: (smartAccountAddress || aaAccount?.predictedAddress) as string,
+    name: 'Smart Account',
+    isActive: true,
+    createdAt: new Date().toISOString()
+  } : null;
+
+  const displayAccounts = [...accounts];
+  if (smartAccount) {
+    displayAccounts.unshift(smartAccount);
+  }
 
   const handleSelect = (account: WalletAccount) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -63,7 +68,7 @@ export const AccountPickerModal: React.FC<AccountPickerModalProps> = ({
       <TouchableOpacity
         style={[
           styles.accountItem,
-          { backgroundColor: isSelected ? withAlpha(colors.accent, 0.1) : 'transparent' },
+          { backgroundColor: isSelected ? `${colors.accent}1A` : 'transparent' },
         ]}
         onPress={() => handleSelect(item)}
       >
@@ -92,9 +97,9 @@ export const AccountPickerModal: React.FC<AccountPickerModalProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={[styles.overlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.3)' }]} onPress={onClose} />
-      
-      <View style={[styles.content, { backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF' }]}>
+      <Pressable style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]} onPress={onClose} />
+
+      <View style={[styles.content, { backgroundColor: colors.surfaceCard }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
         
         <View style={styles.header}>
@@ -112,8 +117,8 @@ export const AccountPickerModal: React.FC<AccountPickerModalProps> = ({
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <View style={[styles.emptyIconContainer, { backgroundColor: withAlpha(colors.accent, 0.05) }]}>
-                <Ionicons name="wallet-outline" size={32} color={withAlpha(colors.accent, 0.3)} />
+              <View style={[styles.emptyIconContainer, { backgroundColor: colors.glass }]}>
+                <Ionicons name="wallet-outline" size={32} color={`${colors.accent}4D`} />
               </View>
               <Text style={[styles.emptyText, { color: colors.textPrimary }]}>No accounts found</Text>
               <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Create or import an account to get started.</Text>

@@ -24,8 +24,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import {
   GuardianListItem,
   GuardianListShowcase,
@@ -89,24 +90,24 @@ export const GuardianManagementScreen: React.FC<
       >
         {/* HEADER SECTION */}
         <View style={{ gap: 8 }}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={onBack}
-            style={{ 
+            style={{
               marginBottom: 8,
               width: 40,
               height: 40,
-              borderRadius: 20,
-              backgroundColor: withAlpha(colors.textPrimary, 0.05),
+              borderRadius: 9999,
+              backgroundColor: colors.glass,
               alignItems: 'center',
               justifyContent: 'center'
             }}
           >
-            <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700' }}>←</Text>
+            <Feather name="arrow-left" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text
             style={{
               fontSize: 28,
-              fontWeight: "800",
+              fontWeight: "600",
               color: colors.textPrimary,
             }}
           >
@@ -118,7 +119,7 @@ export const GuardianManagementScreen: React.FC<
               color: colors.textSecondary,
             }}
           >
-            Manage the people you trust to help protect and recover your account.
+            People who can help you recover your account.
           </Text>
         </View>
 
@@ -130,7 +131,7 @@ export const GuardianManagementScreen: React.FC<
                 fontSize: 11,
                 fontWeight: "700",
                 letterSpacing: 1,
-                color: colors.accent,
+                color: colors.textSecondary,
               }}
             >
               ACTIVE CONTACTS ({activeGuardians.length})
@@ -154,7 +155,7 @@ export const GuardianManagementScreen: React.FC<
           ) : (
             <View
               style={{
-                backgroundColor: withAlpha(colors.textPrimary, 0.03),
+                backgroundColor: colors.glass,
                 borderRadius: 20,
                 padding: 32,
                 alignItems: "center",
@@ -163,7 +164,7 @@ export const GuardianManagementScreen: React.FC<
                 borderStyle: 'dashed'
               }}
             >
-              <Text style={{ fontSize: 32, marginBottom: 12 }}>👥</Text>
+              <Feather name="users" size={32} color={colors.textMuted} style={{ marginBottom: 12 }} />
               <Text
                 style={{
                   fontSize: 14,
@@ -208,7 +209,7 @@ export const GuardianManagementScreen: React.FC<
         {/* INFO CARD */}
         <View
           style={{
-            backgroundColor: withAlpha(colors.textPrimary, 0.03),
+            backgroundColor: colors.glass,
             borderRadius: 24,
             padding: 20,
             borderWidth: 1,
@@ -221,7 +222,7 @@ export const GuardianManagementScreen: React.FC<
                 fontSize: 11,
                 fontWeight: "700",
                 letterSpacing: 1,
-                color: colors.accent,
+                color: colors.textSecondary,
               }}
             >
               KEY INFORMATION
@@ -234,7 +235,7 @@ export const GuardianManagementScreen: React.FC<
                 "Removing a contact doesn't affect pending recovery requests"
               ].map((info, idx) => (
                 <View key={idx} style={{ flexDirection: 'row', gap: 8 }}>
-                  <Text style={{ color: colors.accent, fontWeight: '700' }}>•</Text>
+                  <Text style={{ color: colors.textMuted, fontWeight: '700' }}>•</Text>
                   <Text style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 18, flex: 1 }}>
                     {info}
                   </Text>
@@ -306,7 +307,7 @@ export const GuardianManagementScreen: React.FC<
                   paddingHorizontal: 12
                 }}
               >
-                Historical record of contacts helping you maintain security oversight.
+                Record of previously removed contacts.
               </Text>
             </View>
           )}

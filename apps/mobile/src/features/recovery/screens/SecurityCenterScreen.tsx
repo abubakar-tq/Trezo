@@ -15,7 +15,8 @@ import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { useRecoveryStatusStore } from "@store/useRecoveryStatusStore";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
+import { Feather } from "@expo/vector-icons";
 import { Address } from "viem";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -155,7 +156,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
           <Text
             style={{
               fontSize: 28,
-              fontWeight: "800",
+              fontWeight: "600",
               color: colors.textPrimary,
             }}
           >
@@ -189,7 +190,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
                 gap: 8,
               }}
             >
-              <Text style={{ fontSize: 20 }}>🛡</Text>
+              <Feather name="shield" size={20} color={colors.accent} />
               <Text
                 style={{
                   fontSize: 11,
@@ -213,7 +214,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
                 <Text
                   style={{
                     fontSize: 32,
-                    fontWeight: "800",
+                    fontWeight: "600",
                     color: colors.textPrimary,
                   }}
                 >
@@ -277,7 +278,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
                   fontSize: 11,
                   fontWeight: "700",
                   letterSpacing: 1,
-                  color: colors.accent,
+                  color: colors.textSecondary,
                 }}
               >
                 ACTIVE TRUSTED CONTACTS
@@ -285,7 +286,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
               <Text
                 style={{
                   fontSize: 13,
-                  color: colors.accent,
+                  color: colors.textPrimary,
                   fontWeight: "700",
                 }}
               >
@@ -344,7 +345,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
                 fontSize: 11,
                 fontWeight: "700",
                 letterSpacing: 1,
-                color: colors.accent,
+                color: colors.textSecondary,
               }}
             >
               APPROVAL REQUIREMENT
@@ -374,7 +375,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
               onPress={onConfigureThreshold}
               activeOpacity={0.85}
               style={{
-                backgroundColor: withAlpha(colors.accent, 0.1),
+                backgroundColor: colors.accentSoft,
                 borderRadius: 16,
                 paddingVertical: 14,
                 alignItems: "center",
@@ -410,7 +411,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
                 fontSize: 11,
                 fontWeight: "700",
                 letterSpacing: 1,
-                color: colors.accent,
+                color: colors.textSecondary,
               }}
             >
               TRUSTED EMAIL
@@ -427,7 +428,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
                 : !emailRecoveryActive
                   ? "Add a trusted email to unlock an extra recovery path."
                   : !emailGuardiansAllAccepted && emailGuardiansInfo
-                    ? `Awaiting guardian approval (${emailGuardiansInfo.accepted}/${emailGuardiansInfo.total} accepted, ${emailGuardiansInfo.threshold} needed). Guardians must accept through the ZK Email flow before recovery is possible.`
+                    ? `Awaiting guardian approval (${emailGuardiansInfo.accepted}/${emailGuardiansInfo.total} accepted, ${emailGuardiansInfo.threshold} needed).`
                     : "Email recovery is active. All required guardians have accepted."}
             </Text>
 
@@ -435,7 +436,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
               onPress={onEmailRecovery}
               activeOpacity={0.85}
               style={{
-                backgroundColor: withAlpha(colors.accent, 0.1),
+                backgroundColor: colors.accentSoft,
                 borderRadius: 16,
                 paddingVertical: 14,
                 alignItems: "center",
@@ -471,7 +472,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
                 fontSize: 11,
                 fontWeight: "700",
                 letterSpacing: 1,
-                color: colors.accent,
+                color: colors.textSecondary,
               }}
             >
               ADD ANOTHER CONTACT
@@ -531,6 +532,12 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
                 paddingVertical: 8,
               }}
             >
+              <Feather
+                name={showRemovedContacts ? "chevron-down" : "chevron-right"}
+                size={14}
+                color={colors.textSecondary}
+                style={{ marginRight: 6 }}
+              />
               <Text
                 style={{
                   color: colors.textSecondary,
@@ -538,9 +545,7 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
                   fontWeight: "600",
                 }}
               >
-                {showRemovedContacts
-                  ? "▼ Removed Contacts (0)"
-                  : "▶ Removed Contacts (0)"}
+                Removed Contacts (0)
               </Text>
             </TouchableOpacity>
 
@@ -595,9 +600,8 @@ export const SecurityCenterScreen: React.FC<SecurityCenterScreenProps> = ({
                 lineHeight: 20,
               }}
             >
-              If you ever lose access to your device, your trusted contacts can
-              help you regain control of your account. They verify your identity
-              and collectively approve recovery requests.
+              If you lose your device, your trusted contacts verify your
+              identity and collectively approve recovery.
             </Text>
           </View>
         </View>

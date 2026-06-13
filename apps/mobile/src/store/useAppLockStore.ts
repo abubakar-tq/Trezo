@@ -6,9 +6,14 @@ const LOCK_ENABLED_KEY = "trezo-lock-enabled";
 
 const DEFAULT_PROMPT = "Unlock Trezo Wallet";
 
+// Same defaults the passkey/deploy flow uses (PasskeyService): trust the OS
+// BiometricPrompt to handle device-credential fallback when biometric is not
+// enrolled. On the rare OEMs where that prompt misbehaves, the LockScreen
+// surfaces a manual "Use app PIN instead" escape — but we don't force an
+// app PIN just because biometric isn't enrolled.
 const FALLBACK_OPTIONS: LocalAuthentication.LocalAuthenticationOptions = {
   promptMessage: DEFAULT_PROMPT,
-  fallbackLabel: "Use PIN or Password",
+  fallbackLabel: "Use device PIN",
   cancelLabel: "Cancel",
   disableDeviceFallback: false,
 };
@@ -18,11 +23,13 @@ export type AppLockState = {
   isLocked: boolean;
   isAuthenticating: boolean;
   isBiometricAvailable: boolean;
+  securityLevel: LocalAuthentication.SecurityLevel;
   lockEnabled: boolean;
   lastError: string | null;
   lastUnlockedAt: number | null;
   authContextActive: boolean;
   initialize: () => Promise<void>;
+  refreshSecurityLevel: () => Promise<LocalAuthentication.SecurityLevel>;
   authenticate: (options?: LocalAuthentication.LocalAuthenticationOptions) => Promise<boolean>;
   lock: () => void;
   unlock: () => void;
@@ -35,6 +42,7 @@ export const useAppLockStore = create<AppLockState>((set, get) => ({
   isLocked: false, // Start unlocked until initialized
   isAuthenticating: false,
   isBiometricAvailable: false,
+  securityLevel: LocalAuthentication.SecurityLevel.NONE,
   lockEnabled: true,
   lastError: null,
   lastUnlockedAt: Date.now(), // Set initial unlock time
@@ -46,9 +54,10 @@ export const useAppLockStore = create<AppLockState>((set, get) => ({
     const storedPreference = await SecureStore.getItemAsync(LOCK_ENABLED_KEY);
     const lockEnabled = storedPreference !== "false";
 
-    const [hasHardware, isEnrolled] = await Promise.all([
+    const [hasHardware, isEnrolled, securityLevel] = await Promise.all([
       LocalAuthentication.hasHardwareAsync(),
       LocalAuthentication.isEnrolledAsync(),
+      LocalAuthentication.getEnrolledLevelAsync(),
     ]);
 
     // Don't lock immediately on initialization - let the app load first
@@ -58,16 +67,50 @@ export const useAppLockStore = create<AppLockState>((set, get) => ({
       lockEnabled,
       isLocked: false, // Start unlocked, let useAppLock determine if lock is needed
       isBiometricAvailable: hasHardware && isEnrolled,
+      securityLevel,
       lastError: null,
       lastUnlockedAt: Date.now(), // Set initial time to prevent immediate lock
     });
   },
 
+  refreshSecurityLevel: async () => {
+    const [hasHardware, isEnrolled, securityLevel] = await Promise.all([
+      LocalAuthentication.hasHardwareAsync(),
+      LocalAuthentication.isEnrolledAsync(),
+      LocalAuthentication.getEnrolledLevelAsync(),
+    ]);
+    set({
+      isBiometricAvailable: hasHardware && isEnrolled,
+      securityLevel,
+    });
+    return securityLevel;
+  },
+
   authenticate: async (options) => {
-    const { lockEnabled, authContextActive } = get();
+    const { lockEnabled, authContextActive, securityLevel, isAuthenticating } = get();
     if (!lockEnabled || !authContextActive) {
       set({ isLocked: false, lastError: null, isAuthenticating: false });
       return true;
+    }
+
+    // Drop concurrent calls. Expo's Android module cancels the in-flight
+    // promise and replaces it without opening a new prompt — that race is what
+    // makes the lock screen "blink" when the auto-attempt and a button press
+    // overlap. Let the in-flight call finish; the caller can retry after.
+    if (isAuthenticating) {
+      return false;
+    }
+
+    // Nothing to authenticate against — caller is expected to drive the user
+    // through the app PIN setup flow instead. Without this guard, the native
+    // prompt opens and immediately rejects, flickering the screen.
+    if (securityLevel === LocalAuthentication.SecurityLevel.NONE) {
+      set({
+        isLocked: true,
+        isAuthenticating: false,
+        lastError: null,
+      });
+      return false;
     }
 
     set({ isAuthenticating: true, lastError: null });

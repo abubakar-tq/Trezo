@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -66,9 +66,17 @@ export const TransactionStatusScreen: React.FC = () => {
   }, [loadStatus]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}> 
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <TouchableOpacity
+        accessibilityLabel="Close"
+        style={styles.closeButton}
+        onPress={() => navigation.popToTop()}
+        hitSlop={8}
+      >
+        <Feather name="x" size={22} color={colors.textPrimary} />
+      </TouchableOpacity>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Transaction Status</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }, { paddingLeft: 48 }]}>Transaction Status</Text>
 
         {loading ? (
           <View style={styles.centered}>
@@ -78,13 +86,13 @@ export const TransactionStatusScreen: React.FC = () => {
         ) : null}
 
         {error ? (
-          <View style={[styles.errorCard, { backgroundColor: withAlpha(colors.danger, 0.12), borderColor: withAlpha(colors.danger, 0.3) }]}>
+          <View style={[styles.errorCard, { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}4D` }]}>
             <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
           </View>
         ) : null}
 
         {row ? (
-          <View style={[styles.card, { backgroundColor: withAlpha(colors.surfaceCard, 0.78), borderColor: withAlpha(colors.border, 0.24) }]}>
+          <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
             <View style={styles.cardTop}>
               <View>
                 <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>{getTypeLabel(row.type)}</Text>
@@ -110,7 +118,7 @@ export const TransactionStatusScreen: React.FC = () => {
               <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{row.blockNumber ? row.blockNumber.toString() : "-"}</Text>
             </View>
             {row.errorMessage ? (
-              <View style={[styles.errorInline, { backgroundColor: withAlpha(colors.danger, 0.12) }]}> 
+              <View style={[styles.errorInline, { backgroundColor: colors.dangerSoft }]}> 
                 <Feather name="alert-circle" size={14} color={colors.danger} />
                 <Text style={[styles.errorInlineText, { color: colors.danger }]}>{row.errorMessage}</Text>
               </View>
@@ -129,11 +137,22 @@ export const TransactionStatusScreen: React.FC = () => {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.secondaryButton, { borderColor: withAlpha(colors.border, 0.35), backgroundColor: withAlpha(colors.surfaceCard, 0.75) }]}
+          style={[styles.secondaryButton, { borderColor: colors.border, backgroundColor: colors.surfaceCard }]}
           onPress={() => navigation.navigate("TransactionDetail", { transactionId: route.params.transactionId })}
         >
           <Text style={[styles.secondaryButtonText, { color: colors.textPrimary }]}>Open Details</Text>
         </TouchableOpacity>
+
+        {row && (
+          <TouchableOpacity
+            style={[styles.doneButton, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}
+            onPress={() => navigation.popToTop()}
+          >
+            <Text style={[styles.doneButtonText, { color: colors.textPrimary }]}>
+              {["confirmed", "failed", "cancelled", "dropped"].includes(String(row.status)) ? "Done" : "Close"}
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -237,6 +256,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 14,
+    left: 12,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 22,
+  },
+  doneButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  doneButtonText: {
     fontSize: 14,
     fontWeight: "700",
   },

@@ -7,7 +7,7 @@ import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chain
 import { useUserStore } from "@store/useUserStore";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
-import { withAlpha } from "@utils/color";
+
 import type { Address } from "viem";
 
 export const DevFundingCard: React.FC = () => {
