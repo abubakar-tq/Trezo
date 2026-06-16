@@ -521,6 +521,42 @@ deploy-base-mainnet:
 	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=base-mainnet
 	$(MAKE) sync-abi
 
+# ── Verifying Paymaster (Base Mainnet) ───────────────────────────────────────
+# Deploys a VerifyingPaymaster and optionally seeds it with ETH.
+# The pm-rpc Supabase edge function is the off-chain signer that calls pm_sponsorUserOperation.
+#
+# Prerequisites:
+#   1. create a dedicated signer EOA:  cast wallet new
+#   2. note the address as PAYMASTER_SIGNER and private key as PAYMASTER_SIGNER_PRIVATE_KEY
+#      (private key goes into Supabase secrets, not here)
+#   3. fund the deployer EOA with enough ETH for deployment + deposit
+#
+# Usage:
+#   make deploy-verifying-paymaster \
+#     BASE_MAINNET_RPC_URL=https://base-mainnet.g.alchemy.com/v2/KEY \
+#     PAYMASTER_SIGNER=0xYourSignerAddress \
+#     PAYMASTER_DEPOSIT_WEI=5000000000000000   # 0.005 ETH ≈ 500 sponsored deployments
+#
+PAYMASTER_SIGNER       ?=
+PAYMASTER_DEPOSIT_WEI  ?= 5000000000000000
+
+.PHONY: deploy-verifying-paymaster
+deploy-verifying-paymaster: build
+	@[ -n "$(BASE_MAINNET_RPC_URL)" ] || (echo "❌ Set BASE_MAINNET_RPC_URL" && exit 1)
+	@[ -n "$(PAYMASTER_SIGNER)" ]     || (echo "❌ Set PAYMASTER_SIGNER=0x<signerAddress>" && exit 1)
+	PAYMASTER_SIGNER=$(PAYMASTER_SIGNER) \
+	PAYMASTER_DEPOSIT_WEI=$(PAYMASTER_DEPOSIT_WEI) \
+	forge script script/DeployVerifyingPaymaster.s.sol:DeployVerifyingPaymaster \
+		--rpc-url $(BASE_MAINNET_RPC_URL) \
+		$(KEYSTORE_FLAGS) \
+		--broadcast \
+		--value $(PAYMASTER_DEPOSIT_WEI) \
+		$(VERIFY_FLAGS) \
+		$(SCRIPT_VERBOSITY)
+	@echo "✅ Paymaster deployed. Address is in deployments/verifying-paymaster-8453.json"
+	@echo "   → Add to Supabase secrets: PAYMASTER_ADDRESS, PAYMASTER_SIGNER_PRIVATE_KEY, CHAIN_ID=8453"
+	@echo "   → Set EXPO_PUBLIC_BASE_MAINNET_PAYMASTER_URL=https://<project>.supabase.co/functions/v1/pm-rpc"
+
 .PHONY: deploy-email-arb-sepolia
 deploy-email-arb-sepolia: build
 	@[ -n "$(KILL_SWITCH_AUTHORIZER)" ] || (echo "❌ Set KILL_SWITCH_AUTHORIZER=0x... (typically the deployer EOA for testnet)" && exit 1)
