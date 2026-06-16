@@ -8,18 +8,21 @@ import { useAccountState } from "@features/wallet/hooks/useAccountState";
 import { getEnabledChains } from "@/src/integration/chains";
 import type { RootStackParamList } from "@/src/types/navigation";
 import { useAppTheme } from "@theme";
-import React, { useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   FlatList,
   Pressable,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/** Map chain ID to a TrustWallet icon URL (mirrors NetworkPickerModal). */
+const H_PAD = 20;
+const COL_GAP = 14;
+
 function chainIconUrl(chainId: number): string | undefined {
   switch (chainId) {
     case 1:        return "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png";
@@ -36,7 +39,6 @@ function chainIconUrl(chainId: number): string | undefined {
   }
 }
 
-/** Map chain ID to a brand colour for the fallback icon. */
 function chainColor(chainId: number): string {
   switch (chainId) {
     case 1:        return "#627EEA";
@@ -47,7 +49,7 @@ function chainColor(chainId: number): string {
     case 10:       return "#FF0420";
     case 8453:     return "#0052FF";
     case 84532:    return "#0052FF";
-    case 534352:   return "#FFDBB0";
+    case 534352:   return "#E8A87C";
     case 324:      return "#8C8DFC";
     case 300:      return "#8C8DFC";
     case 31337:    return "#4f46e5";
@@ -57,26 +59,97 @@ function chainColor(chainId: number): string {
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
+type ChainCardProps = {
+  item: ReturnType<typeof getEnabledChains>[number];
+  colors: ReturnType<typeof import("@theme").useAppTheme>["theme"]["colors"];
+  onPress: () => void;
+};
+
+function ChainCard({ item, colors, onPress }: ChainCardProps) {
+  const iconUrl = chainIconUrl(item.id);
+  const color = chainColor(item.id);
+  const isTestnet = item.environment === "testnet";
+  return (
+    // Plain View holds flex:1 — Pressable fills it. Avoids Pressable flex quirks on Android.
+    <View style={styles.cardOuter}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.card,
+        {
+          backgroundColor: colors.surfaceCard,
+          borderColor: colors.border,
+          transform: [{ scale: pressed ? 0.97 : 1 }],
+        },
+      ]}
+    >
+      <View style={[styles.iconZone, { backgroundColor: `${color}15` }]}>
+        {iconUrl ? (
+          <TokenIcon uri={iconUrl} symbol={item.name[0]} size={64} />
+        ) : (
+          <View style={[styles.chainIconFallback, { backgroundColor: `${color}25` }]}>
+            <Text style={[styles.chainIconLetter, { color }]}>{item.name[0]}</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.cardContent}>
+        <Text style={[styles.cardName, { color: colors.textPrimary }]} numberOfLines={2}>
+          {item.name}
+        </Text>
+        <View style={styles.cardFooter}>
+          <View style={[styles.badge, { backgroundColor: isTestnet ? `${colors.accent}20` : `${color}20` }]}>
+            <Text style={[styles.badgeText, { color: isTestnet ? colors.accent : color }]}>
+              {isTestnet ? "Testnet" : "Mainnet"}
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={14} color={colors.textSecondary} />
+        </View>
+      </View>
+    </Pressable>
+    </View>
+  );
+}
+
 export const ReceiveScreen: React.FC = () => {
   const { theme } = useAppTheme();
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavProp>();
+  const [query, setQuery] = useState("");
 
   const { isProvisioned } = useAccountState();
   const { ref: setUpRef, requireProvisioned } = useSetUpWalletSheet();
-  const chains = getEnabledChains().filter((c) => c.id !== 31337);
 
-  useEffect(() => {
-    if (!isProvisioned) {
-      requireProvisioned(false, () => {});
+  const allChains = useMemo(
+    () => getEnabledChains().filter((c) => c.id !== 31337),
+    []
+  );
+
+  const chains = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allChains;
+    return allChains.filter((c) => c.name.toLowerCase().includes(q));
+  }, [allChains, query]);
+
+  // Pair chains into rows of 2 so we control widths with flex: 1 per card
+  type ChainConfig = ReturnType<typeof getEnabledChains>[number];
+  const rows = useMemo(() => {
+    const result: [ChainConfig, ChainConfig | null][] = [];
+    for (let i = 0; i < chains.length; i += 2) {
+      result.push([chains[i], chains[i + 1] ?? null]);
     }
+    return result;
+  }, [chains]);
+
+  React.useEffect(() => {
+    if (!isProvisioned) requireProvisioned(false, () => {});
   }, [isProvisioned, requireProvisioned]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle="light-content" />
 
+      {/* Header */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
         <Pressable
           onPress={() => navigation.goBack()}
@@ -84,73 +157,62 @@ export const ReceiveScreen: React.FC = () => {
         >
           <Feather name="x" size={24} color={colors.textPrimary} />
         </Pressable>
-        <View style={styles.headerTitleContainer}>
-          <Text style={[styles.labelKicker, { color: colors.accent }]}>SECURE PASSAGE</Text>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Receive Funds</Text>
-        </View>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Receive Funds</Text>
         <View style={{ width: 44 }} />
       </View>
 
+      {/* Search */}
+      <View style={[styles.searchWrap, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+        <Feather name="search" size={16} color={colors.textSecondary} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.textPrimary }]}
+          placeholder="Search networks…"
+          placeholderTextColor={colors.textSecondary}
+          value={query}
+          onChangeText={setQuery}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+        />
+        {query.length > 0 && (
+          <Pressable onPress={() => setQuery("")} hitSlop={8}>
+            <Feather name="x-circle" size={16} color={colors.textSecondary} />
+          </Pressable>
+        )}
+      </View>
+
+      {/* Chain cards — manual 2-column rows so flex:1 guarantees equal widths */}
       <FlatList
-        data={chains}
-        keyExtractor={(c) => String(c.id)}
+        data={rows}
+        keyExtractor={(_, i) => String(i)}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: insets.bottom + 20 },
+          { paddingBottom: insets.bottom + 24 },
         ]}
         ListEmptyComponent={
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No networks available.
-          </Text>
+          <View style={styles.emptyWrap}>
+            <Feather name="wifi-off" size={28} color={colors.textSecondary} />
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              {query ? `No networks match "${query}"` : "No networks available."}
+            </Text>
+          </View>
         }
-        renderItem={({ item }) => {
-          const iconUrl = chainIconUrl(item.id);
-          const color = chainColor(item.id);
-          return (
-            <Pressable
-              onPress={() =>
-                navigation.navigate("ReceiveChain", { chainId: item.id })
-              }
-              style={({ pressed }) => [
-                styles.row,
-                {
-                  backgroundColor: colors.surfaceCard,
-                  borderColor: colors.border,
-                  opacity: pressed ? 0.75 : 1,
-                },
-              ]}
-            >
-              <View style={styles.rowInner}>
-                {iconUrl ? (
-                  <TokenIcon uri={iconUrl} symbol={item.name[0]} size={36} />
-                ) : (
-                  <View
-                    style={[
-                      styles.chainIconFallback,
-                      { backgroundColor: `${color}22` },
-                    ]}
-                  >
-                    <Text style={[styles.chainIconLetter, { color }]}>
-                      {item.name[0]}
-                    </Text>
-                  </View>
-                )}
-                <Text
-                  style={[styles.chainName, { color: colors.textPrimary }]}
-                  numberOfLines={1}
-                >
-                  {item.name}
-                </Text>
-                <Feather
-                  name="chevron-right"
-                  size={18}
-                  color={colors.textSecondary}
-                  style={styles.chevron}
+        renderItem={({ item: [left, right] }) => (
+          <View style={styles.row}>
+            {[left, right].map((item, idx) =>
+              item == null ? (
+                <View key="spacer" style={styles.cardSpacer} />
+              ) : (
+                <ChainCard
+                  key={item.id}
+                  item={item}
+                  colors={colors}
+                  onPress={() => navigation.navigate("ReceiveChain", { chainId: item.id })}
                 />
-              </View>
-            </Pressable>
-          );
-        }}
+              )
+            )}
+          </View>
+        )}
       />
 
       <SetUpWalletSheet ref={setUpRef} />
@@ -167,8 +229,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    zIndex: 10,
+    paddingBottom: 16,
   },
   backButton: {
     width: 44,
@@ -177,57 +238,109 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  headerTitleContainer: {
-    alignItems: "center",
-  },
-  labelKicker: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 2,
-    marginBottom: 4,
-  },
   title: {
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: -0.5,
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.4,
   },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    gap: 12,
-  },
-  row: {
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  rowInner: {
+
+  // Search
+  searchWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    marginHorizontal: H_PAD,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
+    padding: 0,
+  },
+
+  // Grid
+  listContent: {
+    paddingHorizontal: H_PAD,
+    paddingTop: 4,
+    gap: COL_GAP,
+  },
+  row: {
+    flexDirection: "row",
+    gap: COL_GAP,
+  },
+
+  // cardOuter is the flex container; card is purely visual
+  cardOuter: {
+    flex: 1,
+  },
+  card: {
+    flex: 1,
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.09,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  cardSpacer: {
+    flex: 1,
+  },
+  iconZone: {
+    height: 130,
+    alignItems: "center",
+    justifyContent: "center",
   },
   chainIconFallback: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: "center",
     alignItems: "center",
   },
   chainIconLetter: {
-    fontSize: 16,
+    fontSize: 26,
     fontWeight: "900",
   },
-  chainName: {
-    flex: 1,
+  cardContent: {
+    padding: 14,
+    gap: 10,
+  },
+  cardName: {
     fontSize: 16,
     fontWeight: "700",
+    letterSpacing: -0.2,
+    lineHeight: 21,
   },
-  chevron: {
-    flexShrink: 0,
+  cardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  // Empty
+  emptyWrap: {
+    alignItems: "center",
+    gap: 10,
+    marginTop: 48,
   },
   emptyText: {
     textAlign: "center",
-    marginTop: 40,
     fontSize: 14,
   },
 });
