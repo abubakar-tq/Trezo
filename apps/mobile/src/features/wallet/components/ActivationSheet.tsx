@@ -5,14 +5,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 
 import { TrezoBottomSheet } from "@shared/components/sheets/TrezoBottomSheet";
 import { DeployAccountSheetBody } from "./DeployAccountSheetBody";
 import type { DeployStep } from "@features/wallet/types/deploy";
 import { DEFAULT_CHAIN_ID, getChainConfig, getEnabledChains, isPortableChain, type SupportedChainId } from "@/src/integration/chains";
-import { useAppTheme } from "@theme";
 import { useAccountState } from "@features/wallet/hooks/useAccountState";
 import {
   AccountDeploymentService,
@@ -33,8 +32,6 @@ export const ActivationSheet = forwardRef<ActivationSheetHandle>((_, ref) => {
   const sheetRef = useRef<BottomSheetModal>(null);
   const [step, setStep] = useState<DeployStep>("intro");
   const [chainId, setChainId] = useState<number | null>(null);
-  const { theme } = useAppTheme();
-  const { colors } = theme;
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deployedAddress, setDeployedAddress] = useState<string | null>(null);
   const onSuccessRef = useRef<(() => void) | null>(null);
@@ -53,7 +50,7 @@ export const ActivationSheet = forwardRef<ActivationSheetHandle>((_, ref) => {
   const setDeploymentStatus = useWalletStore((s) => s.setDeploymentStatus);
   const markAsDeployed = useWalletStore((s) => s.markAsDeployed);
 
-  useImperativeHandle(ref, () => ({
+useImperativeHandle(ref, () => ({
     present: (cId, onSuccess, onCancel) => {
       // Snap to the first enabled chain if the requested chain isn't enabled.
       // Prevents the sheet from opening on a disabled chain (e.g., Base Mainnet Fork).
@@ -265,32 +262,6 @@ export const ActivationSheet = forwardRef<ActivationSheetHandle>((_, ref) => {
     >
       {chainId !== null && (
         <>
-          {step === "intro" && (
-            <View style={pickerStyles.row}>
-              {getEnabledChains().map((chain) => (
-                <Pressable
-                  key={chain.id}
-                  onPress={() => setChainId(chain.id)}
-                  style={[
-                    pickerStyles.chip,
-                    {
-                      backgroundColor: chain.id === chainId ? colors.accent : colors.glass,
-                      borderColor: chain.id === chainId ? colors.accent : colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      pickerStyles.chipLabel,
-                      { color: chain.id === chainId ? colors.background : colors.textSecondary },
-                    ]}
-                  >
-                    {chain.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
           <DeployAccountSheetBody
             step={step}
             chainName={chainName}
@@ -312,23 +283,3 @@ export const ActivationSheet = forwardRef<ActivationSheetHandle>((_, ref) => {
 
 ActivationSheet.displayName = "ActivationSheet";
 
-const pickerStyles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    justifyContent: "center",
-  },
-  chip: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  chipLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-});
