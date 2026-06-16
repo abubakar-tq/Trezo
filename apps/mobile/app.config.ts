@@ -31,7 +31,7 @@ const config: ExpoConfig = {
   android: {
     adaptiveIcon: {
       backgroundColor: "#050505",
-      foregroundImage: "./assets/images/icon.png",
+      foregroundImage: "./assets/images/adaptive-icon.png",
     },
     icon: "./assets/images/icon.png",
     edgeToEdgeEnabled: true,
@@ -66,6 +66,7 @@ const config: ExpoConfig = {
     [
       "expo-notifications",
       {
+        icon: "./assets/images/notification-icon.png",
         color: "#050505",
         defaultChannel: "default",
       },
