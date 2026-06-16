@@ -234,8 +234,13 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
 
   const securityStatus = getSecurityStatus();
 
-  // Keyed on holdings: $0 with no tokens = empty state
-  const isEmpty = !walletLoading && totalBalanceUSD === 0;
+  // Stable isEmpty: holds the last settled value during loading so the card
+  // doesn't flip between empty/funded gradients on each 10-second poll.
+  const isEmptyRef = React.useRef<boolean>(false);
+  if (!walletLoading) {
+    isEmptyRef.current = totalBalanceUSD === 0;
+  }
+  const isEmpty = isEmptyRef.current;
 
   // 1D portfolio sparkline — real data only (current holdings × intraday prices)
   // Uses the same hook as PortfolioScreen for consistency.
@@ -265,7 +270,7 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
         ── */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={[styles.headerWordmark, { color: colors.textPrimary }]}>trezo</Text>
+            <Text style={[styles.headerWordmark, { color: colors.textPrimary }]}>Trezo</Text>
             <ChainSwitcherChip
               onError={(message) => Alert.alert("Could not switch chain", message)}
             />
@@ -595,13 +600,11 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       gap: 10,
     },
-    // Small wordmark — replaces the big WALLET / TREZO ALL-CAPS block
     headerWordmark: {
-      fontSize: 16,
+      fontSize: 22,
       fontWeight: "900",
-      letterSpacing: 2,
+      letterSpacing: 1,
       fontFamily: FontFamilies.sansBlack,
-      textTransform: "lowercase",
     },
     headerRight: {
       flexDirection: "row",
