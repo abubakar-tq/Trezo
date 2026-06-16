@@ -113,13 +113,12 @@ export default function BrowserSettingsScreen() {
   const searchEngineLabel = useMemo(() => {
     switch (settings.searchEngine) {
       case "web3compass-duckduckgo":
-        return "Web3Compass + DuckDuckGo";
       case "duckduckgo":
         return "DuckDuckGo";
       case "google":
         return "Google";
       default:
-        return "Unknown";
+        return "DuckDuckGo";
     }
   }, [settings.searchEngine]);
 
@@ -194,10 +193,10 @@ export default function BrowserSettingsScreen() {
           </View>
 
           <View style={[styles.helpBox, { backgroundColor: colors.glass }]}>
-            <Feather name="shield" size={14} color={colors.accent} />
+            <Feather name="zap" size={14} color={colors.accent} />
             <Text style={[styles.helpText, { color: colors.textSecondary }]}>
-              <Text style={{ fontWeight: "800", color: colors.accent }}>Hybrid Mode:</Text> Uses Web3Compass for dApp
-              discovery and DuckDuckGo for general privacy searches.
+              <Text style={{ fontWeight: "800", color: colors.accent }}>dApp shortcuts:</Text> Type a dApp name like
+              "uniswap" or "aave" to go directly to the app — no search needed.
             </Text>
           </View>
         </View>
@@ -325,23 +324,15 @@ export default function BrowserSettingsScreen() {
             </View>
 
             <View style={styles.optionsContainer}>
-              <SearchOption 
-                title="Web3Compass + DuckDuckGo"
-                description="Optimized for dApp discovery and high privacy."
-                selected={settings.searchEngine === "web3compass-duckduckgo"}
-                onPress={() => handleSelectSearchEngine("web3compass-duckduckgo")}
-                colors={colors}
-                styles={styles}
-              />
-              <SearchOption 
-                title="DuckDuckGo Only"
-                description="Standard privacy-focused web search."
-                selected={settings.searchEngine === "duckduckgo"}
+              <SearchOption
+                title="DuckDuckGo"
+                description="Privacy-focused search. Type a dApp name to navigate directly."
+                selected={settings.searchEngine === "duckduckgo" || settings.searchEngine === "web3compass-duckduckgo"}
                 onPress={() => handleSelectSearchEngine("duckduckgo")}
                 colors={colors}
                 styles={styles}
               />
-              <SearchOption 
+              <SearchOption
                 title="Google"
                 description="Comprehensive results with standard tracking."
                 selected={settings.searchEngine === "google"}

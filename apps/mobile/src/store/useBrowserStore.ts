@@ -216,9 +216,9 @@ export const useBrowserStore = create<BrowserStoreState>()(
 
       // Settings
       settings: {
-        persistTabs: false, // Default OFF
-        historyLimit: 30,   // Default 30
-        searchEngine: "web3compass-duckduckgo", // Hybrid approach
+        persistTabs: false,
+        historyLimit: 30,
+        searchEngine: "duckduckgo",
       },
 
       updateSettings: (updates) =>
@@ -279,57 +279,57 @@ export const isUrl = (value: string): boolean => {
 };
 
 /**
- * Web3Compass dApp discovery patterns
+ * Well-known dApp shortcuts — exact-match on the trimmed lowercase query
+ * navigates directly to the dApp rather than going through a search engine.
  */
-const WEB3_KEYWORDS = [
-  "swap", "bridge", "lend", "borrow", "stake", "pool", "yield", "farm",
-  "nft", "defi", "dex", "dao", "token", "coin", "crypto", "wallet",
-  "uniswap", "aave", "compound", "opensea", "etherscan", "metamask",
-  "ethereum", "polygon", "arbitrum", "optimism", "base", "avalanche"
-];
-
-/**
- * Check if query is Web3-related
- */
-const isWeb3Query = (query: string): boolean => {
-  const lower = query.toLowerCase();
-  return WEB3_KEYWORDS.some(keyword => lower.includes(keyword));
+const DAPP_SHORTCUTS: Record<string, string> = {
+  "uniswap":      "https://app.uniswap.org",
+  "pancakeswap":  "https://pancakeswap.finance",
+  "sushiswap":    "https://www.sushi.com",
+  "aave":         "https://app.aave.com",
+  "compound":     "https://app.compound.finance",
+  "curve":        "https://curve.fi",
+  "balancer":     "https://app.balancer.fi",
+  "1inch":        "https://app.1inch.io",
+  "lido":         "https://lido.fi",
+  "maker":        "https://makerdao.com",
+  "dydx":         "https://dydx.exchange",
+  "gmx":          "https://gmx.io",
+  "opensea":      "https://opensea.io",
+  "rarible":      "https://rarible.com",
+  "etherscan":    "https://etherscan.io",
+  "basescan":     "https://basescan.org",
+  "arbiscan":     "https://arbiscan.io",
+  "metamask":     "https://metamask.io",
+  "rainbow":      "https://rainbow.me",
+  "zapper":       "https://zapper.xyz",
+  "debank":       "https://debank.com",
 };
 
-/**
- * Hybrid search: Web3Compass for dApps, DuckDuckGo for general queries
- */
-export const buildSearchUrl = (query: string, engine: "web3compass-duckduckgo" | "duckduckgo" | "google" = "web3compass-duckduckgo"): string => {
+export const buildSearchUrl = (query: string, engine: "web3compass-duckduckgo" | "duckduckgo" | "google" = "duckduckgo"): string => {
   const trimmed = query.trim();
   if (!trimmed) return "https://app.uniswap.org";
 
   const encoded = encodeURIComponent(trimmed);
 
-  // Hybrid mode (recommended)
-  if (engine === "web3compass-duckduckgo") {
-    if (isWeb3Query(trimmed)) {
-      // Use Web3Compass for dApp discovery
-      return `https://web3compass.xyz/search?q=${encoded}`;
-    }
-    // Fallback to DuckDuckGo for general search
-    return `https://duckduckgo.com/?q=${encoded}`;
+  if (engine === "google") {
+    return `https://www.google.com/search?q=${encoded}`;
   }
 
-  // DuckDuckGo only
-  if (engine === "duckduckgo") {
-    return `https://duckduckgo.com/?q=${encoded}`;
-  }
-
-  // Google
-  return `https://www.google.com/search?q=${encoded}`;
+  // Both "duckduckgo" and legacy "web3compass-duckduckgo" use DuckDuckGo —
+  // web3compass.xyz is an onboarding guide, not a search engine.
+  return `https://duckduckgo.com/?q=${encoded}`;
 };
 
 /**
- * Convert user input to destination URL
+ * Convert user input to a destination URL.
+ * Exact-match dApp shortcuts navigate directly; everything else searches.
  */
-export const toDestination = (value: string, searchEngine: "web3compass-duckduckgo" | "duckduckgo" | "google" = "web3compass-duckduckgo"): string => {
+export const toDestination = (value: string, searchEngine: "web3compass-duckduckgo" | "duckduckgo" | "google" = "duckduckgo"): string => {
   if (isUrl(value)) {
     return sanitizeBrowserUrl(value);
   }
+  const shortcut = DAPP_SHORTCUTS[value.trim().toLowerCase()];
+  if (shortcut) return shortcut;
   return buildSearchUrl(value, searchEngine);
 };
