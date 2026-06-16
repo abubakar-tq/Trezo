@@ -3,8 +3,8 @@ pragma solidity ^0.8.30;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
-import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import {VerifyingPaymaster} from "src/paymaster/VerifyingPaymaster.sol";
+import {VerifyingPaymaster} from "lib/modulekit/node_modules/account-abstraction/contracts/samples/VerifyingPaymaster.sol";
+import {IEntryPoint} from "lib/modulekit/node_modules/account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import {DeployConstants} from "./common/DeployConstants.sol";
 
 /**
