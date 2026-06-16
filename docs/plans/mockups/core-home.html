@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trezo Home — Empty vs Funded</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#060608; --surface:rgba(18,15,24,0.70); --elevated:rgba(24,20,32,0.95);
+    --glass:rgba(244,241,234,0.02); --border:rgba(124,58,237,0.10); --border2:rgba(124,58,237,0.18);
+    --text:#F4F1EA; --text2:#8E8B85; --text3:#5C5A55;
+    --accent:#7C3AED; --accentAlt:#06B6D4; --success:#10B981; --danger:#E8654F; --warning:#F59E0B;
+    --gain:#34D399; --loss:#E8654F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:radial-gradient(120% 70% at 50% -10%, #120c1e 0%, #060608 55%);
+    color:var(--text); font-family:'Inter',system-ui,sans-serif;
+    min-height:100vh; padding:32px 20px 80px; -webkit-font-smoothing:antialiased;
+  }
+  .head{max-width:1120px;margin:0 auto 28px;text-align:center}
+  .head h1{font-size:22px;font-weight:700;letter-spacing:-.3px}
+  .head p{color:var(--text2);font-size:14px;margin-top:6px;font-weight:400}
+  .stage{display:flex;gap:48px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1120px;margin:0 auto}
+  .col{display:flex;flex-direction:column;align-items:center;gap:14px;width:330px}
+  .tag{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase}
+  .tag.empty{color:var(--warning)}
+  .tag.funded{color:var(--accent)}
+  .tagsub{font-size:12px;color:var(--text2);text-align:center;line-height:1.55;min-height:54px}
+
+  .phone{
+    width:328px;border-radius:42px;background:var(--bg);
+    border:1px solid rgba(124,58,237,.16); padding:14px 0 18px;
+    box-shadow:0 30px 80px rgba(0,0,0,.6), 0 0 0 10px #0b0910, 0 0 0 11px rgba(124,58,237,.12);
+    position:relative;overflow:hidden;display:flex;flex-direction:column
+  }
+  .notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:118px;height:26px;background:#000;border-radius:0 0 16px 16px;z-index:5}
+  .scroll{flex:1;padding:0 16px}
+  .statusbar{display:flex;justify-content:space-between;align-items:center;padding:2px 6px 12px;font-size:11px;color:var(--text2);font-weight:600}
+
+  .mono{font-family:'JetBrains Mono',monospace}
+  .row{display:flex;align-items:center}
+  .between{justify-content:space-between}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600}
+  .chip-chain{background:rgba(124,58,237,.12);color:#c4b5fd;border:1px solid var(--border2)}
+  .dot{width:7px;height:7px;border-radius:50%}
+  .icon{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:var(--glass);border:1px solid var(--border);font-size:15px}
+  .sec-label{font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text2)}
+  .see{font-size:11px;color:var(--accent);font-weight:600}
+
+  .a-bar{display:flex;align-items:center;justify-content:space-between;padding:2px 0 16px}
+  .a-brand{font-size:15px;font-weight:900;letter-spacing:2px}
+  .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(140deg,#8B5CF6,#6D28D9);display:flex;align-items:center;justify-content:center;font-size:13px}
+  .balcard{border-radius:28px;padding:22px;background:linear-gradient(140deg,#8B5CF6,#7C3AED 55%,#6D28D9);position:relative;overflow:hidden}
+  .balcard.flat{background:linear-gradient(140deg,#241a36,#160f24 60%,#0d0916)}
+  .balcard .orb{position:absolute;right:-40px;top:-50px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.06)}
+  .bal-lbl{font-size:11px;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,.6);text-transform:uppercase}
+  .bal-num{font-size:40px;font-weight:300;letter-spacing:-1.5px;color:#fff;line-height:1.05}
+  .bal-num.zero{color:rgba(255,255,255,.55)}
+  .a-change{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#bff7e0}
+  .spark{margin:14px 0 12px;height:38px;width:100%;display:block}
+  .addr{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:rgba(255,255,255,.72);font-weight:500}
+
+  .a-actions{display:flex;gap:10px}
+  .a-primary{flex:1.5;height:54px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;font-weight:700;color:#fff;border:1px solid var(--border2)}
+  .a-primary.alt{background:rgba(124,58,237,.22)}
+  .a-primary.solid{background:var(--accent)}
+  .a-sec{flex:1;height:54px;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:var(--glass);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2)}
+  .a-sec.disabled{opacity:.4}
+  .a-sec b{font-size:18px;font-weight:400;color:var(--text)}
+
+  .asset{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border)}
+  .asset:last-child{border-bottom:0}
+  .tok{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0}
+  .asset .nm{font-size:15px;font-weight:600}
+  .asset .sub{font-size:12px;color:var(--text2);font-weight:500}
+  .asset .val{font-size:15px;font-weight:500}
+  .asset .chg{font-size:12px;font-weight:600}
+  .act{display:flex;align-items:center;gap:12px;padding:12px 0}
+  .act .ic{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+  .trend-card{min-width:104px;border:1px solid var(--border);border-radius:12px;padding:11px;background:var(--glass)}
+  .scrollx{display:flex;gap:10px;overflow:hidden}
+  .gain{color:var(--gain)} .loss{color:var(--loss)}
+  .gtxt{color:var(--text2);font-size:11px}
+
+  /* empty-state moment (C) */
+  .fund{border:1px solid var(--border2);border-radius:20px;padding:22px 18px;background:
+    radial-gradient(120% 90% at 50% 0%, rgba(124,58,237,.10), rgba(124,58,237,.02));
+    text-align:center}
+  .fund .ic{width:54px;height:54px;border-radius:16px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:24px;background:rgba(124,58,237,.14);border:1px solid var(--border2)}
+  .fund h4{font-size:17px;font-weight:600;letter-spacing:-.2px}
+  .fund p{font-size:13px;color:var(--text2);margin-top:6px;line-height:1.5}
+  .emptyline{text-align:center;color:var(--text3);font-size:12.5px;font-weight:500;padding:18px 0}
+
+  .note{max-width:1120px;margin:32px auto 0;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface);font-size:13px;color:var(--text2);line-height:1.65}
+  .note b{color:var(--text)} .note code{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c4b5fd}
+  .legend{display:flex;gap:9px;align-items:flex-start;margin-top:9px}
+  .legend .k{color:var(--accent);font-weight:800;flex-shrink:0}
+  .scroll::-webkit-scrollbar{display:none}
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>Home has two states — this is the real first-run question</h1>
+    <p>Left = brand-new wallet ($0, no assets). Right = funded wallet. Same screen, contextual hierarchy. Full layout now renders (clipping bug fixed).</p>
+  </div>
+
+  <div class="stage">
+    <!-- ================= EMPTY ================= -->
+    <div class="col">
+      <div class="tag empty">New wallet — empty</div>
+      <div class="tagsub">Balance is an honest $0.00 (no fake change, no sparkline). Actions <b>flip</b>: Receive + Buy primary. Body = a focused "Fund your wallet" moment, not a fake zero-token list.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+
+          <div class="a-bar">
+            <div class="row" style="gap:9px"><div class="logo">◐</div><span class="a-brand">TREZO</span></div>
+            <div class="row" style="gap:10px"><div class="pill chip-chain"><span class="dot" style="background:#c4b5fd"></span>Base Sepolia</div><div class="icon">🔔</div></div>
+          </div>
+
+          <div class="balcard flat">
+            <div class="orb"></div>
+            <div class="bal-lbl" style="margin-bottom:10px">Total Balance</div>
+            <div class="bal-num zero mono">$0.00</div>
+            <div style="margin-top:12px"><span class="addr mono">0x12···ab&nbsp; ⧉</span></div>
+          </div>
+
+          <!-- flipped action hierarchy -->
+          <div class="a-actions" style="margin-top:16px">
+            <div class="a-primary alt">⬇ Receive</div>
+            <div class="a-primary solid">＋ Buy</div>
+          </div>
+          <div class="a-actions" style="margin-top:10px">
+            <div class="a-sec disabled"><b>⬆</b>Send</div>
+            <div class="a-sec disabled"><b>⇄</b>Swap</div>
+          </div>
+
+          <!-- fund moment instead of asset list -->
+          <div class="row between" style="margin:22px 0 8px"><span class="sec-label">Your Assets</span></div>
+          <div class="fund">
+            <div class="ic">✦</div>
+            <h4>Fund your wallet</h4>
+            <p>Receive crypto or buy with card to get started. Your assets will appear here.</p>
+          </div>
+          <!-- recommended: optionally the single native asset at 0 -->
+          <div class="asset" style="margin-top:6px">
+            <div class="tok" style="background:rgba(98,126,234,.18);color:#9aacf0">Ξ</div>
+            <div style="flex:1"><div class="nm">Ethereum</div><div class="sub mono">0.0000 ETH · gas</div></div>
+            <div style="text-align:right"><div class="val mono" style="color:var(--text2)">$0.00</div></div>
+          </div>
+
+          <div class="row between" style="margin:20px 0 2px"><span class="sec-label">Recent Activity</span></div>
+          <div class="emptyline">Your transactions will appear here</div>
+
+          <!-- discovery is MORE justified when wallet is empty -->
+          <div class="row between" style="margin:14px 0 10px"><span class="sec-label">Trending</span></div>
+          <div class="scrollx" style="padding-bottom:6px">
+            <div class="trend-card"><div class="row between"><span style="font-weight:700;font-size:13px">BTC</span><span class="gain" style="font-size:10px;font-weight:700">▲2.1</span></div><div class="mono" style="margin-top:7px;font-size:12px">$67.2k</div></div>
+            <div class="trend-card"><div class="row between"><span style="font-weight:700;font-size:13px">ETH</span><span class="gain" style="font-size:10px;font-weight:700">▲1.1</span></div><div class="mono" style="margin-top:7px;font-size:12px">$2,402</div></div>
+            <div class="trend-card"><div class="row between"><span style="font-weight:700;font-size:13px">SOL</span><span class="loss" style="font-size:10px;font-weight:700">▾0.8</span></div><div class="mono" style="margin-top:7px;font-size:12px">$142</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= FUNDED ================= -->
+    <div class="col">
+      <div class="tag funded">Funded wallet</div>
+      <div class="tagsub">Holdings lead. Balance shows real 24h change + sparkline. Send + Receive primary. Trending demoted to one compact shelf at the bottom. No news (that lives in Discover).</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+
+          <div class="a-bar">
+            <div class="row" style="gap:9px"><div class="logo">◐</div><span class="a-brand">TREZO</span></div>
+            <div class="row" style="gap:10px"><div class="pill chip-chain"><span class="dot" style="background:#c4b5fd"></span>Base Sepolia</div><div class="icon">🔔</div></div>
+          </div>
+
+          <div class="balcard">
+            <div class="orb"></div>
+            <div class="bal-lbl" style="margin-bottom:8px">Total Balance</div>
+            <div class="bal-num mono">$12,480.55</div>
+            <div class="a-change" style="margin-top:10px"><span>▲ $312.40</span><span style="opacity:.6">·</span><span>2.6% today</span></div>
+            <svg class="spark" viewBox="0 0 280 38" preserveAspectRatio="none">
+              <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+              <path d="M0,28 L20,24 L40,26 L60,18 L80,22 L100,14 L120,17 L140,9 L160,15 L180,11 L200,16 L220,7 L240,12 L260,6 L280,9" fill="none" stroke="#fff" stroke-width="2" stroke-opacity=".9" stroke-linejoin="round"/>
+              <path d="M0,28 L20,24 L40,26 L60,18 L80,22 L100,14 L120,17 L140,9 L160,15 L180,11 L200,16 L220,7 L240,12 L260,6 L280,9 L280,38 L0,38 Z" fill="url(#sg)"/>
+            </svg>
+            <div><span class="addr mono">0x12···ab&nbsp; ⧉</span></div>
+          </div>
+
+          <div class="a-actions" style="margin-top:16px">
+            <div class="a-primary alt">⬇ Receive</div>
+            <div class="a-primary solid">⬆ Send</div>
+          </div>
+          <div class="a-actions" style="margin-top:10px">
+            <div class="a-sec"><b>⇄</b>Swap</div>
+            <div class="a-sec"><b>＋</b>Buy</div>
+          </div>
+
+          <div class="row between" style="margin:22px 0 4px"><span class="sec-label">Your Assets</span><span class="see">See all →</span></div>
+          <div class="asset">
+            <div class="tok" style="background:rgba(98,126,234,.18);color:#9aacf0">Ξ</div>
+            <div style="flex:1"><div class="nm">Ethereum</div><div class="sub mono">1.2400 ETH</div></div>
+            <div style="text-align:right"><div class="val mono">$2,980</div><div class="chg gain">▲ 1.1%</div></div>
+          </div>
+          <div class="asset">
+            <div class="tok" style="background:rgba(39,117,202,.18);color:#5bb0f0">$</div>
+            <div style="flex:1"><div class="nm">USD Coin</div><div class="sub mono">500.00 USDC</div></div>
+            <div style="text-align:right"><div class="val mono">$500.00</div><div class="chg gtxt">—</div></div>
+          </div>
+          <div class="asset">
+            <div class="tok" style="background:rgba(124,58,237,.18);color:#c4b5fd">◎</div>
+            <div style="flex:1"><div class="nm">Wrapped ETH</div><div class="sub mono">3.50 WETH</div></div>
+            <div style="text-align:right"><div class="val mono">$8,407</div><div class="chg loss">▾ 0.4%</div></div>
+          </div>
+
+          <div class="row between" style="margin:22px 0 2px"><span class="sec-label">Recent Activity</span><span class="see">See all →</span></div>
+          <div class="act">
+            <div class="ic" style="background:rgba(16,185,129,.12);color:var(--success)">↘</div>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600">Received ETH</div><div class="sub mono" style="color:var(--text2);font-size:12px">2h ago</div></div>
+            <div class="mono gain" style="font-size:14px;font-weight:500">+0.50</div>
+          </div>
+          <div class="act">
+            <div class="ic" style="background:rgba(124,58,237,.12);color:var(--accent)">⇄</div>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600">Swapped USDC → ETH</div><div class="sub mono" style="color:var(--text2);font-size:12px">1d ago</div></div>
+            <div class="mono" style="font-size:14px;font-weight:500;color:var(--text2)">200.0</div>
+          </div>
+
+          <div class="row between" style="margin:22px 0 10px"><span class="sec-label">Trending</span></div>
+          <div class="scrollx" style="padding-bottom:6px">
+            <div class="trend-card"><div class="row between"><span style="font-weight:700;font-size:13px">BTC</span><span class="gain" style="font-size:10px;font-weight:700">▲2.1</span></div><div class="mono" style="margin-top:7px;font-size:12px">$67.2k</div></div>
+            <div class="trend-card"><div class="row between"><span style="font-weight:700;font-size:13px">ETH</span><span class="gain" style="font-size:10px;font-weight:700">▲1.1</span></div><div class="mono" style="margin-top:7px;font-size:12px">$2,402</div></div>
+            <div class="trend-card"><div class="row between"><span style="font-weight:700;font-size:13px">SOL</span><span class="loss" style="font-size:10px;font-weight:700">▾0.8</span></div><div class="mono" style="margin-top:7px;font-size:12px">$142</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>The three decisions you raised:</b>
+    <div class="legend"><span class="k">A</span><span><b>Empty assets →</b> a focused "Fund your wallet" card + the single native ETH row at 0 (it's the gas asset, legitimately yours). <b>Not</b> a fake list of zero-balance tokens — that reads as a bug and implies holdings you don't have.</span></div>
+    <div class="legend"><span class="k">B</span><span><b>News →</b> recommend keeping it OUT of Home. It already lives in Discover. Home = your money; Discover = the world. Adding news re-creates the "borrowed content crowds out your content" problem we just fixed.</span></div>
+    <div class="legend"><span class="k">C</span><span><b>Trending →</b> stays as one compact bottom shelf. It earns its place most on the <b>empty</b> screen (no personal content yet); on the funded screen it's the quiet tail, never above your assets.</span></div>
+  </div>
+</body>
+</html>

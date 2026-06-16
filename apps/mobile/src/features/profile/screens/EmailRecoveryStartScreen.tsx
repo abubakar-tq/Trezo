@@ -58,6 +58,11 @@ const EmailRecoveryStartScreen: React.FC = () => {
   const [creatingStep, setCreatingStep] = useState<string>("");
   // Resume sheet: shown if an active Recovery Attempt already exists (ADR-0011).
   const [resumeSheetDismissed, setResumeSheetDismissed] = useState(false);
+  // DEV-only (ADR-0011): force minting a brand-new passkey on a device that
+  // already has one, to exercise the same-device owner-rotation path. Production
+  // always uses getOrCreatePasskey (create-only-if-none) and can never orphan a
+  // live wallet by overwriting its passkey.
+  const [forceNewPasskey, setForceNewPasskey] = useState(false);
 
   useEffect(() => {
     if (!smartAccountAddress) {
@@ -120,11 +125,12 @@ const EmailRecoveryStartScreen: React.FC = () => {
     }
 
     setIsCreating(true);
-    setCreatingStep("Creating new passkey on this device...");
+    setCreatingStep("Preparing recovery passkey on this device...");
 
     try {
       // Phase 4.5: before creating any row, check for an expired on-chain slot.
       // ADR-0010: server EOA clears it; user doesn't need a passkey to do this.
+      let expiredSlotClearFailed = false;
       const deployment = getDeployment(resolvedChainId);
       if (deployment?.emailRecovery) {
         const emailRecoveryAbi = parseAbi([
@@ -142,16 +148,39 @@ const EmailRecoveryStartScreen: React.FC = () => {
           if (executeBefore > 0n && executeBefore < nowSec) {
             setCreatingStep("Clearing previous expired Recovery Attempt…");
             const supabase = getSupabaseClient();
-            await supabase.functions.invoke("submit-recovery-operation", {
-              body: { action: "cancel-expired-email-recovery", smartAccountAddress, chainId: resolvedChainId },
-            });
+            const { data: clearData, error: clearError } = await supabase.functions.invoke(
+              "submit-recovery-operation",
+              { body: { action: "cancel-expired-email-recovery", smartAccountAddress, chainId: resolvedChainId } },
+            );
+            // The edge fn returns { status: "failed" } with HTTP 200 on an
+            // on-chain revert, so `error` stays null — data.status is the
+            // load-bearing signal. A genuinely failed clear must NOT fall through
+            // to createGroup (it would fail on-chain with a murkier error).
+            const clearStatus = (clearData as { status?: string } | null)?.status;
+            if (clearError || clearStatus === "failed") {
+              expiredSlotClearFailed = true;
+            }
           }
         } catch {
-          // Non-fatal: expired-slot check is best-effort; proceed with createGroup.
+          // Non-fatal: the expired-slot READ is best-effort. A read failure just
+          // means we proceed to createGroup, which surfaces any real conflict.
         }
       }
+      if (expiredSlotClearFailed) {
+        throw new Error(
+          "Couldn't clear the previous expired recovery attempt. Please try again in a moment.",
+        );
+      }
 
-      const passkey = await PasskeyService.createPasskey(user.id);
+      // Production recovery runs on a NEW device (no local passkey), so this
+      // creates one that becomes the wallet's new owner after guardians approve.
+      // If this device already has a passkey we REUSE it (never overwrite) — that
+      // keeps a live wallet safe. The DEV toggle below intentionally forces a
+      // fresh passkey to exercise the same-device rotation path while testing.
+      const passkey =
+        __DEV__ && forceNewPasskey
+          ? await PasskeyService.createPasskey(user.id, { allowReplace: true })
+          : await PasskeyService.getOrCreatePasskey(user.id);
 
       setCreatingStep("Building multichain recovery payload...");
       const result = await EmailRecoveryGroupService.createGroup({
@@ -178,7 +207,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
       setIsCreating(false);
       setCreatingStep("");
     }
-  }, [user?.id, smartAccountAddress, selectedChainIds, deadlineDays, navigation]);
+  }, [user?.id, smartAccountAddress, selectedChainIds, deadlineDays, navigation, resolvedChainId, forceNewPasskey]);
 
   if (loadingMetadata) {
     return (
@@ -191,7 +220,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={theme.colors.accentAlt} />
+          <ActivityIndicator size="large" color={theme.colors.accent} />
           <Text style={styles.loadingText}>Loading recovery config...</Text>
         </View>
       </View>
@@ -251,10 +280,9 @@ const EmailRecoveryStartScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>New Passkey</Text>
+          <Text style={styles.cardTitle}>Recovery Passkey</Text>
           <Text style={styles.cardDesc}>
-            A new passkey will be created on this device. Once your trusted contacts approve recovery,
-            this passkey will be activated on all selected chains.
+            A recovery passkey is created on new devices and reused on this one—recovery never overwrites an existing key.
           </Text>
         </View>
 
@@ -280,7 +308,7 @@ const EmailRecoveryStartScreen: React.FC = () => {
                 >
                   <View style={styles.chainCheck}>
                     {isSelected ? (
-                      <Feather name="check-circle" size={20} color={theme.colors.accentAlt} />
+                      <Feather name="check-circle" size={20} color={theme.colors.accent} />
                     ) : (
                       <Feather name="circle" size={20} color={theme.colors.textMuted} />
                     )}
@@ -340,9 +368,32 @@ const EmailRecoveryStartScreen: React.FC = () => {
           ))}
         </View>
 
+        {__DEV__ && (
+          <View style={[styles.card, styles.devCard]}>
+            <Text style={styles.devBadge}>DEV ONLY</Text>
+            <TouchableOpacity
+              style={styles.devToggleRow}
+              onPress={() => setForceNewPasskey((v) => !v)}
+              activeOpacity={0.85}
+            >
+              <Feather
+                name={forceNewPasskey ? "check-square" : "square"}
+                size={22}
+                color={forceNewPasskey ? theme.colors.accent : theme.colors.textMuted}
+              />
+              <View style={styles.devToggleTextWrap}>
+                <Text style={styles.devToggleLabel}>Force fresh passkey (simulate new device)</Text>
+                <Text style={styles.devToggleHint}>
+                  Forces a fresh passkey to test same-device owner rotation. Dev-only.
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {isCreating && creatingStep ? (
           <View style={styles.card}>
-            <ActivityIndicator size="small" color={theme.colors.accentAlt} />
+            <ActivityIndicator size="small" color={theme.colors.accent} />
             <Text style={styles.creatingStepText}>{creatingStep}</Text>
           </View>
         ) : null}
@@ -385,7 +436,7 @@ const createStyles = (colors: ThemeColors) =>
     headerTitle: {
       color: colors.textPrimary,
       fontSize: 20,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     scrollView: {
       flex: 1,
@@ -407,7 +458,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     card: {
       backgroundColor: colors.surfaceCard,
-      borderRadius: 22,
+      borderRadius: 24,
       borderWidth: 1,
       borderColor: colors.border,
       padding: 20,
@@ -416,7 +467,7 @@ const createStyles = (colors: ThemeColors) =>
     cardTitle: {
       color: colors.textPrimary,
       fontSize: 18,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     cardDesc: {
       color: colors.textSecondary,
@@ -433,15 +484,15 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       paddingVertical: 12,
       paddingHorizontal: 14,
-      borderRadius: 14,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
       gap: 12,
       backgroundColor: colors.glass,
     },
     chainRowSelected: {
-      borderColor: colors.accentAlt,
-      backgroundColor: `${colors.accentAlt}14`,
+      borderColor: colors.accent,
+      backgroundColor: colors.accentSoft,
     },
     chainCheck: {
       width: 24,
@@ -471,12 +522,12 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: `${colors.textPrimary}0A`,
+      backgroundColor: colors.surfaceMuted,
     },
     deadlineValue: {
       color: colors.textPrimary,
       fontSize: 18,
-      fontWeight: "700",
+      fontWeight: "600",
       minWidth: 80,
       textAlign: "center",
     },
@@ -490,12 +541,12 @@ const createStyles = (colors: ThemeColors) =>
       width: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: `${colors.accentAlt}1F`,
+      backgroundColor: colors.surfaceMuted,
       alignItems: "center",
       justifyContent: "center",
     },
     guardianIndexText: {
-      color: colors.accentAlt,
+      color: colors.textSecondary,
       fontSize: 12,
       fontWeight: "700",
     },
@@ -517,8 +568,37 @@ const createStyles = (colors: ThemeColors) =>
       textAlign: "center",
       marginTop: 4,
     },
+    devCard: {
+      borderColor: colors.warning,
+      borderStyle: "dashed",
+    },
+    devBadge: {
+      color: colors.warning,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 1.5,
+    },
+    devToggleRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12,
+    },
+    devToggleTextWrap: {
+      flex: 1,
+      gap: 4,
+    },
+    devToggleLabel: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    devToggleHint: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 16,
+    },
     primaryButton: {
-      backgroundColor: colors.accentAlt,
+      backgroundColor: colors.accent,
       borderRadius: 16,
       paddingVertical: 16,
       alignItems: "center",

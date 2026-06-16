@@ -22,7 +22,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
-  Share,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -140,16 +140,6 @@ export const ReceiveChainScreen: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleShare = async () => {
-    if (!address) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try {
-      await Share.share({ message: address });
-    } catch (err) {
-      console.log(err);
-    }
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle="light-content" />
@@ -170,11 +160,14 @@ export const ReceiveChainScreen: React.FC = () => {
         <View style={{ width: 44 }} />
       </View>
 
-      <View
-        style={[
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
           styles.body,
           { paddingBottom: insets.bottom + 24 },
         ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {resolving ? (
           <View style={styles.loadingWrap}>
@@ -237,23 +230,6 @@ export const ReceiveChainScreen: React.FC = () => {
             <Text style={[styles.hint, { color: colors.textSecondary }]}>
               Send any token on {chain?.name ?? "this chain"} to this address.
             </Text>
-
-            {/* Share */}
-            <Pressable
-              onPress={handleShare}
-              style={({ pressed }) => [
-                styles.shareBtn,
-                {
-                  backgroundColor: colors.accent,
-                  opacity: pressed ? 0.85 : 1,
-                },
-              ]}
-            >
-              <Feather name="share-2" size={18} color={colors.textOnAccent} />
-              <Text style={[styles.shareBtnText, { color: colors.textOnAccent }]}>
-                Share Address
-              </Text>
-            </Pressable>
           </>
         ) : (
           <View style={styles.loadingWrap}>
@@ -262,7 +238,7 @@ export const ReceiveChainScreen: React.FC = () => {
             </Text>
           </View>
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 };
@@ -301,8 +277,10 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -0.5,
   },
-  body: {
+  scrollView: {
     flex: 1,
+  },
+  body: {
     paddingHorizontal: 24,
     paddingTop: 8,
     alignItems: "center",
@@ -313,6 +291,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 16,
+    paddingVertical: 60,
   },
   loadingText: {
     fontSize: 14,
@@ -387,20 +366,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     textAlign: "center",
     paddingHorizontal: 8,
-  },
-  shareBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    width: "100%",
-    height: 56,
-    borderRadius: 18,
-    marginTop: 4,
-  },
-  shareBtnText: {
-    fontSize: 16,
-    fontWeight: "700",
   },
 });
 

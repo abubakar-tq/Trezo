@@ -69,7 +69,7 @@ export const ChainSwitcherChip: React.FC<ChainSwitcherChipProps> = ({ onSwitched
         <Text style={[styles.label, { color: envColor }]} numberOfLines={1}>
           {label}
         </Text>
-        <Feather name="chevron-down" size={11} color={envColor} />
+        <Feather name="chevron-down" size={10} color={envColor} />
       </TouchableOpacity>
 
       <NetworkPickerModal
@@ -90,10 +90,10 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 9,
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
     borderWidth: 1,
     maxWidth: 160,
   },
@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   label: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.2,
   },

@@ -1,7 +1,7 @@
 /**
  * RecoveryScoreWidget Component
  * Displays the security gamification metric (0-100%)
- * Color-coded: gray (0-40%), amber (41-74%), teal (75-99%), emerald (100%)
+ * Color-coded: gray (0-40%), amber (41-74%), violet (75-99%), emerald (100%)
  */
 
 import React from "react";
@@ -96,7 +96,7 @@ export const RecoveryScoreWidget: React.FC<RecoveryScoreWidgetProps> = ({
         style={{
           height: 12,
           backgroundColor: colors.surface,
-          borderRadius: 6,
+          borderRadius: 8,
           overflow: "hidden",
         }}
       >

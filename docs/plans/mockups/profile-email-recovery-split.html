@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email Recovery — setup vs manage split</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#060608;--surface:rgba(18,15,24,0.66);--glass:rgba(244,241,234,0.02);--border:rgba(124,58,237,0.10);--border2:rgba(124,58,237,0.16);
+    --text:#F4F1EA;--text2:#8E8B85;--text3:#5C5A55;--accent:#7C3AED;--accentAlt:#06B6D4;--gain:#34D399;--success:#10B981;--loss:#E8654F;--warning:#F59E0B;--danger:#E8654F}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(120% 60% at 50% -8%, #0e0a16 0%, #060608 52%);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;padding:32px 20px 80px;-webkit-font-smoothing:antialiased}
+  .head{max-width:1120px;margin:0 auto 24px;text-align:center}.head h1{font-size:22px;font-weight:700;letter-spacing:-.3px}.head p{color:var(--text2);font-size:14px;margin-top:6px;max-width:780px;margin-inline:auto;line-height:1.5}
+  .stage{display:flex;gap:38px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1120px;margin:0 auto}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px;width:330px}
+  .tag{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2)}
+  .tagsub{font-size:12px;color:var(--text2);text-align:center;line-height:1.5;min-height:46px}
+  .phone{width:330px;border-radius:42px;background:var(--bg);border:1px solid rgba(124,58,237,.14);padding:14px 0 16px;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 10px #0b0910,0 0 0 11px rgba(124,58,237,.10);position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:118px;height:26px;background:#000;border-radius:0 0 16px 16px;z-index:5}
+  .scroll{flex:1;padding:0 18px;overflow-y:auto;max-height:712px}.scroll::-webkit-scrollbar{width:0}
+  .statusbar{display:flex;justify-content:space-between;padding:2px 4px 10px;font-size:11px;color:var(--text2);font-weight:600}
+  .mono{font-family:'JetBrains Mono',monospace}.row{display:flex;align-items:center}.between{justify-content:space-between}
+  .nav{display:flex;align-items:center;gap:12px;padding:6px 0 14px}.nav .back{font-size:20px;color:var(--text2)}.nav .ttl{font-size:20px;font-weight:600;letter-spacing:-.3px}
+  .glabel{font-size:11px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;color:var(--text3);margin:20px 2px 9px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+  .pad{padding:16px 15px}
+  .ic-chip{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;color:#b9a8e8;background:rgba(124,58,237,.07)}
+  .ok{font-size:11px;color:var(--text2);font-weight:500;display:inline-flex;align-items:center;gap:6px}.ok .d{width:6px;height:6px;border-radius:50%;background:var(--success);box-shadow:0 0 6px rgba(16,185,129,.5)}
+  .pend{font-size:11px;color:var(--warning);font-weight:600;display:inline-flex;align-items:center;gap:6px}.pend .d{width:6px;height:6px;border-radius:50%;background:var(--warning)}
+  /* wizard step header */
+  .steps{display:flex;gap:6px;margin-bottom:4px}
+  .steps i{flex:1;height:4px;border-radius:999px;background:rgba(244,241,234,.08)}.steps i.on{background:var(--accent)}
+  .stepcap{font-size:11px;color:var(--text2);margin:8px 2px 2px}
+  .h2{font-size:20px;font-weight:600;letter-spacing:-.3px;margin:14px 2px 6px;line-height:1.25}
+  .lede{font-size:13px;color:var(--text2);line-height:1.5;margin:0 2px 8px}
+  /* input */
+  .inp{display:flex;align-items:center;gap:10px;background:var(--glass);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+  .inp .ph{color:var(--text3);font-size:13px;flex:1}
+  .inp .val{color:var(--text);font-size:13px;flex:1}
+  /* contact row */
+  .crow{display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid var(--border)}.crow:last-child{border-bottom:0}
+  .cav{width:34px;height:34px;border-radius:999px;background:rgba(124,58,237,.10);color:#b9a8e8;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+  .cmail{font-size:13.5px;font-weight:500}.csub{font-size:11px;color:var(--text2);margin-top:1px}
+  /* stepper control */
+  .stepper{display:flex;align-items:center;gap:14px}
+  .stepbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--glass);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:18px}
+  .stepval{font-size:22px;font-weight:600;font-family:'JetBrains Mono',monospace;min-width:30px;text-align:center}
+  /* primary cta */
+  .cta{height:52px;border-radius:999px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;margin-top:18px}
+  .cta.ghost{background:var(--glass);border:1px solid var(--border);color:var(--text2);height:46px;margin-top:10px;font-weight:600}
+  .addlink{font-size:12px;color:var(--accent);font-weight:600;padding:13px 15px}
+  .note{max-width:1120px;margin:28px auto 0;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface);font-size:13px;color:var(--text2);line-height:1.65}
+  .note b{color:var(--text)}.note code{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c4b5fd}
+  .legend{display:flex;gap:9px;align-items:flex-start;margin-top:9px}.legend .k{color:var(--accent);font-weight:800;flex-shrink:0;width:74px}
+  .small{font-size:11px;color:var(--text3);margin-top:12px;padding:0 2px;line-height:1.5}
+</style>
+</head>
+<body>
+  <div class="head"><h1>Email Recovery — the 2,263-line monolith, split in two</h1>
+    <p>Today one screen is BOTH a first-time wizard AND a management dashboard, with hidden dead UI paths. Split by state: <b>not installed → Setup wizard</b> (focused steps); <b>installed → Manage</b> (calm status). Same on-chain logic, two clear surfaces.</p></div>
+
+  <div class="stage">
+    <!-- ===== SETUP WIZARD ===== -->
+    <div class="col">
+      <div class="tag">Setup — first time (not installed)</div>
+      <div class="tagsub">A focused wizard. One decision per step, plain language. No raw "threshold / weight / minutes" dumped at once.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="nav"><span class="back">‹</span><span class="ttl">Email Recovery</span></div>
+
+          <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+          <div class="stepcap">Step 2 of 3 · Trusted contacts</div>
+
+          <div class="h2">Who can help you recover?</div>
+          <div class="lede">Add people you trust. They'll confirm it's really you by email if you ever lose access. We recommend at least 3.</div>
+
+          <div class="card" style="margin-bottom:4px">
+            <div class="crow"><div class="cav">M</div><div style="flex:1"><div class="cmail">mom@example.com</div><div class="csub">Trusted contact</div></div><span style="color:var(--text3)">✕</span></div>
+            <div class="crow"><div class="cav">J</div><div style="flex:1"><div class="cmail">jordan@example.com</div><div class="csub">Trusted contact</div></div><span style="color:var(--text3)">✕</span></div>
+            <div class="addlink">+ Add another contact</div>
+          </div>
+
+          <div class="small">You'll choose how many must approve in the next step.</div>
+
+          <div class="cta">Continue</div>
+          <div class="cta ghost">Back</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SETUP — threshold/timing step ===== -->
+    <div class="col">
+      <div class="tag">Setup — step 3 (approvals + timing)</div>
+      <div class="tagsub">Threshold &amp; timing as plain choices, not bare number fields.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="nav"><span class="back">‹</span><span class="ttl">Email Recovery</span></div>
+          <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+          <div class="stepcap">Step 3 of 3 · Approvals &amp; timing</div>
+
+          <div class="h2">How many must approve?</div>
+          <div class="lede">More approvals = safer, but harder to recover. We suggest a majority.</div>
+          <div class="card pad" style="margin-bottom:14px">
+            <div class="between"><div><div style="font-size:14px;font-weight:600">Approvals needed</div><div style="font-size:11px;color:var(--text2);margin-top:2px">of 3 trusted contacts</div></div>
+              <div class="stepper"><div class="stepbtn">−</div><div class="stepval">2</div><div class="stepbtn">+</div></div></div>
+          </div>
+
+          <div class="h2" style="font-size:17px">Safety delay</div>
+          <div class="lede">A waiting period before recovery completes, so you can cancel if it wasn't you.</div>
+          <div class="card">
+            <div class="crow"><div class="ic-chip">◷</div><div style="flex:1"><div class="cmail">48 hours</div><div class="csub">Recommended</div></div><span class="ok"><span class="d"></span></span></div>
+            <div class="crow"><div class="ic-chip">◷</div><div style="flex:1"><div class="cmail">24 hours</div></div><span style="color:var(--text3)">○</span></div>
+            <div class="crow"><div class="ic-chip">◷</div><div style="flex:1"><div class="cmail">7 days</div><div class="csub">Most cautious</div></div><span style="color:var(--text3)">○</span></div>
+          </div>
+
+          <div class="cta">Turn on Email Recovery</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== MANAGE ===== -->
+    <div class="col">
+      <div class="tag">Manage — installed</div>
+      <div class="tagsub">Calm status view. No setup controls, no raw payloads, no hidden dead UI.</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="scroll">
+          <div class="statusbar"><span>9:41</span><span>▮▮▮ 100%</span></div>
+          <div class="nav"><span class="back">‹</span><span class="ttl">Email Recovery</span></div>
+
+          <div class="card pad" style="margin-bottom:2px">
+            <div class="row" style="gap:12px"><div class="ic-chip" style="width:38px;height:38px">✉</div>
+              <div style="flex:1"><div style="font-size:15px;font-weight:600">Email Recovery is on</div><div style="font-size:12px;color:var(--text2);margin-top:2px">2 of 3 approvals · 48h delay</div></div>
+              <span class="ok"><span class="d"></span></span></div>
+          </div>
+
+          <div class="glabel">Trusted contacts</div>
+          <div class="card">
+            <div class="crow"><div class="cav">M</div><div style="flex:1"><div class="cmail">mom@example.com</div><div class="csub">Accepted</div></div><span class="ok"><span class="d"></span></span></div>
+            <div class="crow"><div class="cav">J</div><div style="flex:1"><div class="cmail">jordan@example.com</div><div class="csub">Accepted</div></div><span class="ok"><span class="d"></span></span></div>
+            <div class="crow"><div class="cav">S</div><div style="flex:1"><div class="cmail">sam@example.com</div><div class="csub">Invite sent</div></div><span class="pend"><span class="d"></span>Resend</span></div>
+            <div class="addlink">+ Add a contact</div>
+          </div>
+
+          <div class="glabel">Settings</div>
+          <div class="card">
+            <div class="crow"><div class="ic-chip">⚙</div><div style="flex:1"><div class="cmail">Approvals &amp; timing</div><div class="csub">2 of 3 · 48h delay</div></div><span style="color:var(--text3)">›</span></div>
+          </div>
+
+          <div class="cta ghost" style="color:var(--danger);border-color:rgba(232,101,79,.2)">Turn off Email Recovery</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note"><b>How the split untangles the monolith:</b>
+    <div class="legend"><span class="k">Setup</span><span>Shown only when the module isn't installed. A <b>3-step wizard</b> (passkey/intro → trusted contacts → approvals &amp; timing) in plain language. "Threshold" → "how many must approve"; "delay in minutes" → named safety-delay choices. One decision per screen.</span></div>
+    <div class="legend"><span class="k">Manage</span><span>Shown once installed. A <b>calm status view</b>: on-state summary, contact list with accepted/pending + resend, one "Approvals &amp; timing" settings row, and turn-off. <b>No</b> setup steppers, raw weights, or the hidden <code>SHOW_ADVANCED_RECOVERY_UI</code> dead cards.</span></div>
+    <div class="legend"><span class="k">Safety</span><span>Pure UI/structure split — <b>the on-chain install/guardian/timing logic is unchanged</b>, just reorganized by state. Plain-language labels wrap the same params (threshold, delay, weights).</span></div>
+    <div class="legend"><span class="k">?</span><span>Open: is the 3-step wizard grouping right (intro → contacts → approvals+timing), or fold timing into its own 4th step? And keep weights hidden behind an "advanced" affordance in Manage, or drop per-contact weights from the UI entirely for v1?</span></div>
+  </div>
+</body>
+</html>

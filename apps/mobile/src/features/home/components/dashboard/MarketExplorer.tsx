@@ -6,7 +6,7 @@ import { Sparkline, TokenIcon } from '@shared/components';
 import { useMarketData } from '@hooks/useMarketData';
 import type { TokenBalance } from '../../../portfolio/services/PortfolioService';
 
-const TokenItem = React.memo<{ token: any, colors: any, onPress?: () => void }>(({ token, colors, onPress }) => {
+const TokenItem = React.memo<{ token: any, colors: any, onPress?: () => void }>(function TokenItem({ token, colors, onPress }) {
   const price = parseFloat(token.priceUsd);
   const change = parseFloat(token.changePercent24Hr);
 
@@ -51,7 +51,7 @@ interface MarketExplorerProps {
   onTokenPress?: (token: TokenBalance) => void;
 }
 
-export const MarketExplorer = forwardRef<any, MarketExplorerProps>(({ onTokenPress }, ref) => {
+export const MarketExplorer = forwardRef<any, MarketExplorerProps>(function MarketExplorer({ onTokenPress }, ref) {
   const inputRef = useRef<TextInput>(null);
 
   useImperativeHandle(ref, () => ({

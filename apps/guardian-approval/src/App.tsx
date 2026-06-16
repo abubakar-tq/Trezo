@@ -106,45 +106,93 @@ const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_URL
 const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_ANON_KEY
   || (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-// MetaMask injects a SES (Secure EcmaScript) lockdown shim into every page
-// before our code runs. That shim sometimes routes outgoing fetch headers
-// through a tracing wrapper that adds non-Latin-1 code points (Symbol tags),
-// and the native `Headers.set` rejects those with
-// "TypeError: Failed to execute 'set' on 'Headers': String contains non
-// ISO-8859-1 code point.".
+// Why this exists: in some browsers the portal threw
+// "Failed to execute 'set' on 'Headers': String contains non ISO-8859-1 code
+// point". The deployed Supabase URL + anon key are clean ASCII, and supabase-js
+// builds its own Headers (apikey/Authorization) with clean values — so the bad
+// code point is injected *after* we hand off to the global fetch, by a browser
+// extension that wraps window.fetch. A fetch-level value sanitizer can't help
+// because supabase-js calls Headers.set internally before our wrapper runs.
 //
-// Strip anything outside Latin-1 from header VALUES before fetch runs. Our
-// real headers (apikey, Authorization, Content-Type) are pure ASCII, so this
-// is a no-op for legitimate traffic — only the SES-injected junk gets removed.
-const sanitizeHeaders = (
-  source: HeadersInit | undefined,
-): Record<string, string> | undefined => {
-  if (!source) return undefined;
-  const entries: Array<[string, string]> =
-    source instanceof Headers
-      ? Array.from(source.entries())
-      : Array.isArray(source)
-        ? (source as Array<[string, string]>)
-        : Object.entries(source as Record<string, string>);
-  const cleaned: Record<string, string> = {};
-  for (const [name, value] of entries) {
-    cleaned[name] = String(value).replace(/[^\x00-\xFF]/g, "");
-  }
-  return cleaned;
+// Fix: don't use window.fetch for Supabase at all. Issue the request over
+// XMLHttpRequest, which extensions typically do not patch. We control every
+// header value (all pure ASCII) and strip stray non-Latin-1 code points anyway.
+const stripNonLatin1 = (value: string) => value.replace(/[^\x00-\xFF]/g, "");
+
+const headerEntries = (source: HeadersInit | undefined): Array<[string, string]> => {
+  if (!source) return [];
+  if (source instanceof Headers) return Array.from(source.entries());
+  if (Array.isArray(source)) return source as Array<[string, string]>;
+  return Object.entries(source as Record<string, string>);
 };
 
-const sesSafeFetch: typeof fetch = async (input, init) => {
-  if (init?.headers) {
-    init = { ...init, headers: sanitizeHeaders(init.headers) };
-  }
-  return fetch(input, init);
-};
+const xhrFetch: typeof fetch = (input, init = {}) =>
+  new Promise<Response>((resolve, reject) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : (input as Request).url;
+    const method = (
+      init.method ||
+      (input instanceof Request ? input.method : undefined) ||
+      "GET"
+    ).toUpperCase();
+
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    xhr.responseType = "text";
+
+    const source = init.headers ?? (input instanceof Request ? input.headers : undefined);
+    for (const [name, value] of headerEntries(source)) {
+      try {
+        xhr.setRequestHeader(name, stripNonLatin1(String(value)));
+      } catch {
+        // ignore forbidden or malformed header names
+      }
+    }
+
+    xhr.onload = () => {
+      if (xhr.status === 0) {
+        reject(new TypeError("Network request failed (xhrFetch, status 0)"));
+        return;
+      }
+      const headers = new Headers();
+      const raw = xhr.getAllResponseHeaders().trim();
+      if (raw) {
+        for (const line of raw.split(/[\r\n]+/)) {
+          const idx = line.indexOf(":");
+          if (idx > 0) {
+            try {
+              headers.set(line.slice(0, idx).trim(), line.slice(idx + 1).trim());
+            } catch {
+              // skip headers the runtime rejects
+            }
+          }
+        }
+      }
+      const nullBody =
+        xhr.status === 101 || xhr.status === 204 || xhr.status === 205 || xhr.status === 304;
+      resolve(
+        new Response(nullBody ? null : (xhr.response ?? ""), {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          headers,
+        }),
+      );
+    };
+    xhr.onerror = () => reject(new TypeError("Network request failed (xhrFetch)"));
+    xhr.ontimeout = () => reject(new TypeError("Network request timed out (xhrFetch)"));
+
+    xhr.send((init.body ?? null) as XMLHttpRequestBodyInit | null);
+  });
 
 const supabase: SupabaseClient | null =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey, {
         auth: { persistSession: false },
-        global: { fetch: sesSafeFetch },
+        global: { fetch: xhrFetch },
       })
     : null;
 
@@ -527,6 +575,21 @@ const GuardianApproval: React.FC = () => {
     void load();
   }, [address, requestId]);
 
+  // Resolve the recovery's target chain BEFORE any effect/derived value reads
+  // it. These must be declared above the approval-mode effect that lists them
+  // in its dependency array — otherwise referencing them there throws a TDZ
+  // "Cannot access 'targetChain' before initialization" and the render crashes.
+  const primaryScope = request?.chain_scopes_json?.[0] ?? null;
+  const targetChainId = primaryScope?.chainId ?? null;
+  const targetChain: Chain | null = useMemo(
+    () => (targetChainId != null ? getChainForId(targetChainId) : null),
+    [targetChainId],
+  );
+  const targetRpcUrl: string | null = useMemo(
+    () => (targetChainId != null ? getRpcUrlForId(targetChainId) : null),
+    [targetChainId],
+  );
+
   // ── Determine approval mode (EOA vs contract wallet) ────────────────────
   useEffect(() => {
     if (!address || !request) { setApprovalMode(null); return; }
@@ -576,17 +639,6 @@ const GuardianApproval: React.FC = () => {
     );
   }, [address, request]);
 
-  const primaryScope = request?.chain_scopes_json?.[0] ?? null;
-  const targetChainId = primaryScope?.chainId ?? null;
-  const targetChain: Chain | null = useMemo(
-    () => (targetChainId != null ? getChainForId(targetChainId) : null),
-    [targetChainId],
-  );
-  const targetRpcUrl: string | null = useMemo(
-    () => (targetChainId != null ? getRpcUrlForId(targetChainId) : null),
-    [targetChainId],
-  );
-
   const typedIntent = useMemo<RecoveryIntent | null>(() => {
     if (!request) return null;
     const raw = request.recovery_intent_json;
@@ -622,18 +674,42 @@ const GuardianApproval: React.FC = () => {
 
   // ── Wallet connection ────────────────────────────────────────────────────
   const connectWallet = async () => {
-    if (typeof (window as any).ethereum === 'undefined') {
+    const eth = (window as any).ethereum;
+    if (typeof eth === 'undefined') {
       toast.error('Please install a wallet like MetaMask');
       return;
     }
     try {
+      // eth_requestAccounts reuses whatever account was already permitted for
+      // this site and won't re-prompt — so switching the active account in
+      // MetaMask does nothing. Force the account picker so the user can grant
+      // the correct guardian account.
+      try {
+        await eth.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] });
+      } catch {
+        // User dismissed the permission dialog — fall through and use whatever
+        // is currently authorized.
+      }
+
       // Use the recovery request's target chain as the connection context.
       // If no request loaded yet, fall back to Base Sepolia.
       const chain = targetChain ?? baseSepolia;
-      const wc = createWalletClient({ chain, transport: custom((window as any).ethereum) });
-      const [account] = await wc.requestAddresses();
+      const wc = createWalletClient({ chain, transport: custom(eth) });
+      const accounts = await wc.requestAddresses();
+
+      // If several accounts are shared, prefer the one that is actually a
+      // guardian for this request so the user isn't left on a non-guardian.
+      const guardianMatch = request
+        ? accounts.find((a) =>
+            request.guardian_addresses.some((g) => g.toLowerCase() === a.toLowerCase()),
+          )
+        : undefined;
+      const account = guardianMatch ?? accounts[0];
+
       setAddress(account);
-      toast.success('Wallet connected!');
+      toast.success(
+        guardianMatch ? 'Guardian wallet connected!' : 'Wallet connected!',
+      );
     } catch {
       toast.error('Failed to connect wallet');
     }

@@ -1,12 +1,13 @@
 import type WebView from "react-native-webview";
 import { respondToRPC } from "./injectedProvider";
-import { useDAppSessionsStore } from "@features/browser/store/useDAppSessionsStore";
 import type { DAppSession } from "@features/browser/store/useDAppSessionsStore";
-import { DEFAULT_CHAIN_ID } from "@/src/integration/chains";
 
 export type RPCContext = {
   webview: WebView | null;
   origin: string;
+  defaultChainId: number;
+  findSession: (origin: string) => DAppSession | null;
+  touchSession: (origin: string) => void;
   requestApproval: (origin: string, chainId: number) => Promise<DAppSession | null>;
   requestSignMessage: (origin: string, hexMessage: string) => Promise<`0x${string}` | null>;
   requestSignTypedData: (origin: string, typedData: unknown) => Promise<`0x${string}` | null>;
@@ -26,8 +27,7 @@ export type RPCMessage = {
 
 export async function handleRPC(ctx: RPCContext, msg: RPCMessage): Promise<void> {
   const { webview, origin } = ctx;
-  const store = useDAppSessionsStore.getState();
-  const session = store.findSession(origin);
+  const session = ctx.findSession(origin);
 
   try {
     switch (msg.method) {
@@ -36,7 +36,7 @@ export async function handleRPC(ctx: RPCContext, msg: RPCMessage): Promise<void>
           respondToRPC(webview, msg.id, [session.accountAddress]);
           return;
         }
-        const approved = await ctx.requestApproval(origin, DEFAULT_CHAIN_ID);
+        const approved = await ctx.requestApproval(origin, ctx.defaultChainId);
         if (!approved) {
           respondToRPC(webview, msg.id, undefined, { code: 4001, message: "User rejected" });
           return;
@@ -54,7 +54,7 @@ export async function handleRPC(ctx: RPCContext, msg: RPCMessage): Promise<void>
         respondToRPC(
           webview,
           msg.id,
-          `0x${(session?.chainId ?? DEFAULT_CHAIN_ID).toString(16)}`,
+          `0x${(session?.chainId ?? ctx.defaultChainId).toString(16)}`,
         );
         return;
       }
@@ -70,7 +70,7 @@ export async function handleRPC(ctx: RPCContext, msg: RPCMessage): Promise<void>
           respondToRPC(webview, msg.id, undefined, { code: 4001, message: "User rejected" });
           return;
         }
-        store.touchSession(origin);
+        ctx.touchSession(origin);
         respondToRPC(webview, msg.id, sig);
         return;
       }
@@ -88,7 +88,7 @@ export async function handleRPC(ctx: RPCContext, msg: RPCMessage): Promise<void>
           respondToRPC(webview, msg.id, undefined, { code: 4001, message: "User rejected" });
           return;
         }
-        store.touchSession(origin);
+        ctx.touchSession(origin);
         respondToRPC(webview, msg.id, sig);
         return;
       }
@@ -106,7 +106,7 @@ export async function handleRPC(ctx: RPCContext, msg: RPCMessage): Promise<void>
           respondToRPC(webview, msg.id, undefined, { code: 4001, message: "User rejected" });
           return;
         }
-        store.touchSession(origin);
+        ctx.touchSession(origin);
         respondToRPC(webview, msg.id, hash);
         return;
       }

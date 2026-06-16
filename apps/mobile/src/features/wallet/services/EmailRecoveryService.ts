@@ -1206,6 +1206,64 @@ export class EmailRecoveryService {
   }
 
   /**
+   * Builds a UserOp that calls `uninstallModule(2, emailRecovery, "0x")` on
+   * the SmartAccount itself (ERC-7579 executor module type = 2). This is the
+   * mirror of `buildInstallModuleUserOp` — it removes the email-recovery
+   * executor from the account's module registry.
+   *
+   * Target is the smart account (not the module), because ERC-7579
+   * `uninstallModule` is a method on the account contract.
+   */
+  static async buildUninstallModuleUserOp(params: {
+    smartAccountAddress: Address;
+    passkeyId: Hex;
+    chainId?: SupportedChainId;
+    bundlerUrl?: string;
+    paymasterUrl?: string;
+    usePaymaster?: boolean;
+  }): Promise<EmailRecoveryInstallResponse> {
+    const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
+    const deployment = getDeployment(chainId);
+    if (!deployment?.emailRecovery) {
+      throw new Error(`No Email Recovery module configured for chain ${chainId}`);
+    }
+
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
+    const usePaymaster = params.usePaymaster ?? true;
+    const paymasterUrl = usePaymaster
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
+      : undefined;
+
+    const { encodeFunctionData } = await import("viem");
+    // ERC-7579 executor module type = 2; deInitData = "0x" (no teardown data).
+    const callData = encodeFunctionData({
+      abi: ABIS.smartAccount,
+      functionName: "uninstallModule",
+      args: [2n, deployment.emailRecovery as Address, "0x"],
+    });
+
+    const { buildSmartAccountExecutionUserOp } = await import(
+      "@/src/integration/viem/userOps"
+    );
+    // The `uninstallModule` function lives on the smart account itself, so
+    // target === smartAccountAddress (the account calls itself via execute).
+    const { userOp, userOpHash } = await buildSmartAccountExecutionUserOp({
+      smartAccountAddress: params.smartAccountAddress,
+      target: params.smartAccountAddress,
+      value: 0n,
+      data: callData,
+      chainId,
+      bundlerUrl,
+      paymasterUrl,
+      usePaymaster,
+      passkeyId: params.passkeyId,
+      operationLabel: "SmartAccount.uninstallModule(emailRecovery)",
+    });
+
+    return { userOp, userOpHash };
+  }
+
+  /**
    * Persists a single newly-added guardian into Supabase. Mirrors the
    * guardianRow shape used by persistMetadata so loadMetadata picks it up.
    * Caller is responsible for triggering sendGuardianAcceptanceEmails after.

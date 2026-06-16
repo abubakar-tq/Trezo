@@ -108,10 +108,10 @@ export function RecoveryAttemptResumeSheet({
         </Text>
 
         <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: colors.accentAlt }]}
+          style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
           onPress={handleContinue}
         >
-          <Text style={[styles.primaryBtnLabel, { color: "#fff" }]}>Continue</Text>
+          <Text style={[styles.primaryBtnLabel, { color: colors.textOnAccent }]}>Continue</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -131,17 +131,17 @@ export function RecoveryAttemptResumeSheet({
 
 const styles = StyleSheet.create({
   content: { padding: 24, gap: 16 },
-  title: { fontSize: 17, fontWeight: "700" },
+  title: { fontSize: 17, fontWeight: "600" },
   body: { fontSize: 14, lineHeight: 20 },
   primaryBtn: {
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 16,
     alignItems: "center",
   },
   primaryBtnLabel: { fontSize: 15, fontWeight: "600" },
   secondaryBtn: {
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 16,
     alignItems: "center",
     borderWidth: 1,
   },

@@ -120,9 +120,13 @@ export class PasskeyAccountService {
 
   static async buildAddPasskeyUserOp(params: AddPasskeyBuildRequest): Promise<PasskeyUserOpResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    // Resolve bundler/paymaster URLs FOR THIS chainId. Calling these with no
+    // argument defaulted to DEFAULT_CHAIN_ID (Base Sepolia), so a passkey op on
+    // another chain (e.g. Eth Sepolia) was sent to the Base-Sepolia paymaster and
+    // reverted with "AA20 account not deployed".
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const paymasterUrl = params.usePaymaster
-      ? params.paymasterUrl ?? getPaymasterUrl()
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
       : params.paymasterUrl;
 
     const passkey = toPasskeyInit(params.pendingPasskey);
@@ -152,9 +156,13 @@ export class PasskeyAccountService {
     params: RemovePasskeyBuildRequest,
   ): Promise<PasskeyUserOpResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    // Resolve bundler/paymaster URLs FOR THIS chainId. Calling these with no
+    // argument defaulted to DEFAULT_CHAIN_ID (Base Sepolia), so a passkey op on
+    // another chain (e.g. Eth Sepolia) was sent to the Base-Sepolia paymaster and
+    // reverted with "AA20 account not deployed".
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const paymasterUrl = params.usePaymaster
-      ? params.paymasterUrl ?? getPaymasterUrl()
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
       : params.paymasterUrl;
 
     const { userOp, userOpHash } = await buildScheduleRemovePasskeyUserOp({
@@ -182,9 +190,13 @@ export class PasskeyAccountService {
     params: RemovePasskeyBuildRequest,
   ): Promise<PasskeyUserOpResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    // Resolve bundler/paymaster URLs FOR THIS chainId. Calling these with no
+    // argument defaulted to DEFAULT_CHAIN_ID (Base Sepolia), so a passkey op on
+    // another chain (e.g. Eth Sepolia) was sent to the Base-Sepolia paymaster and
+    // reverted with "AA20 account not deployed".
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const paymasterUrl = params.usePaymaster
-      ? params.paymasterUrl ?? getPaymasterUrl()
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
       : params.paymasterUrl;
 
     const { userOp, userOpHash } = await buildExecuteRemovePasskeyUserOp({
@@ -212,9 +224,13 @@ export class PasskeyAccountService {
     params: RemovePasskeyBuildRequest,
   ): Promise<PasskeyUserOpResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    // Resolve bundler/paymaster URLs FOR THIS chainId. Calling these with no
+    // argument defaulted to DEFAULT_CHAIN_ID (Base Sepolia), so a passkey op on
+    // another chain (e.g. Eth Sepolia) was sent to the Base-Sepolia paymaster and
+    // reverted with "AA20 account not deployed".
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const paymasterUrl = params.usePaymaster
-      ? params.paymasterUrl ?? getPaymasterUrl()
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
       : params.paymasterUrl;
 
     const { userOp, userOpHash } = await buildCancelRemovePasskeyUserOp({
@@ -241,7 +257,7 @@ export class PasskeyAccountService {
   static async submitAddPasskeyUserOp(
     signedUserOp: UserOperation<"0.7">,
     chainId: SupportedChainId = DEFAULT_CHAIN_ID,
-    bundlerUrl: string = getBundlerUrl(),
+    bundlerUrl: string = getBundlerUrl(chainId),
     entryPoint?: Hex,
   ): Promise<Hex> {
     if (!signedUserOp.signature || signedUserOp.signature === "0x") {
@@ -260,7 +276,7 @@ export class PasskeyAccountService {
   static async waitForReceipt(
     userOpHash: Hex,
     chainId: SupportedChainId = DEFAULT_CHAIN_ID,
-    bundlerUrl: string = getBundlerUrl(),
+    bundlerUrl: string = getBundlerUrl(chainId),
     timeoutMs = 120_000,
   ): Promise<UserOperationReceipt<"0.7">> {
     return waitForUserOperationReceipt(userOpHash, chainId, bundlerUrl, timeoutMs);

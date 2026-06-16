@@ -73,3 +73,5 @@ export const Sparkline = React.memo<SparklineProps>(({
     </View>
   );
 });
+
+Sparkline.displayName = 'Sparkline';

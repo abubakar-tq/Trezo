@@ -2,6 +2,17 @@ import { createWalletClient, http, parseEther, createPublicClient } from "https:
 import { privateKeyToAccount } from "https://esm.sh/viem@2.17.4/accounts";
 import { anvil } from "https://esm.sh/viem@2.17.4/chains";
 
+// viem's privateKeyToAccount requires the 0x prefix; project secrets are often
+// stored without it (deployer/relayer convention). Normalize to match.
+function normalizePrivateKey(raw: string): `0x${string}` {
+  const t = raw.trim();
+  const prefixed = (t.startsWith("0x") ? t : `0x${t}`).toLowerCase();
+  if (!/^0x[0-9a-f]{64}$/.test(prefixed)) {
+    throw new Error("LOCAL_FUNDER_PRIVATE_KEY must be a 32-byte hex private key (with or without 0x)");
+  }
+  return prefixed as `0x${string}`;
+}
+
 export class LocalFulfillmentService {
   private rpcUrl: string;
   private funderPrivateKey: string;
@@ -55,7 +66,7 @@ export class LocalFulfillmentService {
     );
 
     try {
-      const account = privateKeyToAccount(this.funderPrivateKey as `0x${string}`);
+      const account = privateKeyToAccount(normalizePrivateKey(this.funderPrivateKey));
       const walletClient = createWalletClient({
         account,
         chain: anvil,

@@ -158,7 +158,9 @@ const PairDeviceScreen: React.FC = () => {
     setBusy(true);
     setError(null);
     try {
-      const metadata = await PasskeyService.createPasskey(user.id);
+      // New device pairing: create this device's passkey if it has none, otherwise
+      // reuse the existing one. Never overwrite — that would change the AA address.
+      const metadata = await PasskeyService.getOrCreatePasskey(user.id);
       const updated = await DevicePairingService.submitNewDevicePasskey({
         requestId: linkParams.requestId,
         secret: linkParams.secret,
@@ -196,11 +198,18 @@ const PairDeviceScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={24} color={theme.colors.textPrimary} />
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.headerBackBtn, { backgroundColor: theme.colors.glass, borderColor: theme.colors.border }]}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-left" size={18} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Pair New Device</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.headerTitleBlock}>
+          <Text style={styles.headerKicker}>SECURITY</Text>
+          <Text style={styles.headerTitle}>Pair New Device</Text>
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.body}>
@@ -221,13 +230,13 @@ const PairDeviceScreen: React.FC = () => {
         ) : !linkParams ? (
           <>
             <Text style={styles.title}>No pairing link found</Text>
-            <Text style={styles.subtitle}>Open a pairing deep link from your trusted device QR code, or go back and start over.</Text>
+            <Text style={styles.subtitle}>Scan the pairing QR code shown on a device you already use.</Text>
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={() => navigation.goBack()}
+              onPress={() => navigation.navigate("LinkDevice")}
               activeOpacity={0.9}
             >
-              <Text style={styles.primaryButtonLabel}>Go back</Text>
+              <Text style={styles.primaryButtonLabel}>Scan pairing QR</Text>
             </TouchableOpacity>
           </>
         ) : request?.status === "approved" ? (
@@ -282,7 +291,7 @@ const PairDeviceScreen: React.FC = () => {
             <View style={styles.introCard}>
               <Text style={styles.introTitle}>How pairing works</Text>
               <Text style={styles.introBody}>
-                This device becomes active only after the trusted device approves the request and the on-chain `addPasskey` transaction confirms.
+                This device becomes active only after the trusted device approves the request and the on-chain add-passkey transaction confirms.
               </Text>
             </View>
 
@@ -300,7 +309,7 @@ const PairDeviceScreen: React.FC = () => {
             <View style={styles.noteCard}>
               <Text style={styles.noteTitle}>Before you continue</Text>
               <Text style={styles.noteBody}>
-                Real passkeys should be created on a physical device in a native build. Emulator biometric fallback is only suitable for local UI testing.
+                Create passkeys on a physical device — emulator biometrics are for UI testing only.
               </Text>
             </View>
 
@@ -343,10 +352,29 @@ const createStyles = (colors: ThemeColors) =>
       borderBottomWidth: 1,
       borderBottomColor: colors.borderMuted,
     },
-    headerTitle: {
-      color: colors.textPrimary,
-      fontSize: 20,
+    headerBackBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+    },
+    headerTitleBlock: {
+      alignItems: "center",
+    },
+    headerKicker: {
+      fontSize: 10,
       fontWeight: "700",
+      letterSpacing: 1.8,
+      color: colors.textMuted,
+      marginBottom: 2,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.textPrimary,
+      letterSpacing: -0.3,
     },
     body: {
       flex: 1,
@@ -365,10 +393,10 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     introCard: {
-      backgroundColor: `${colors.accentAlt}1F`,
-      borderRadius: 14,
+      backgroundColor: colors.surfaceCard,
+      borderRadius: 16,
       borderWidth: 1,
-      borderColor: `${colors.accentAlt}3D`,
+      borderColor: colors.borderMuted,
       padding: 14,
       gap: 6,
     },
@@ -391,10 +419,10 @@ const createStyles = (colors: ThemeColors) =>
       gap: 6,
     },
     noteCard: {
-      backgroundColor: `${colors.warning}1F`,
-      borderRadius: 14,
+      backgroundColor: colors.warningSoft,
+      borderRadius: 16,
       borderWidth: 1,
-      borderColor: `${colors.warning}47`,
+      borderColor: colors.warning,
       padding: 14,
       gap: 6,
     },
@@ -425,10 +453,10 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 12,
     },
     primaryButton: {
-      marginTop: 10,
-      backgroundColor: colors.accentAlt,
-      borderRadius: 12,
-      paddingVertical: 14,
+      marginTop: 8,
+      backgroundColor: colors.accent,
+      borderRadius: 16,
+      paddingVertical: 16,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -445,7 +473,7 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 13,
     },
     note: {
-      color: `${colors.textMuted}D9`,
+      color: colors.textMuted,
       fontSize: 12,
       lineHeight: 18,
     },
@@ -454,9 +482,9 @@ const createStyles = (colors: ThemeColors) =>
       width: 64,
       height: 64,
       borderRadius: 32,
-      backgroundColor: `${colors.success}1F`,
+      backgroundColor: colors.successSoft,
       borderWidth: 1,
-      borderColor: `${colors.success}66`,
+      borderColor: colors.success,
       alignItems: "center",
       justifyContent: "center",
       marginBottom: 4,

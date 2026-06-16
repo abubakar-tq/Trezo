@@ -15,21 +15,26 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { formatUnits, parseUnits, type Address } from "viem";
+import { formatUnits, parseUnits, type Address, type Hex } from "viem";
 
 import { BalanceService } from "@/src/features/assets/services/BalanceService";
 import { TokenRegistryService } from "@/src/features/assets/services/TokenRegistryService";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 import { AllowanceService } from "@/src/features/swaps/services/AllowanceService";
 import { classify, type ClassifiedError } from "@/src/features/swaps/services/SwapErrorClassifier";
-import { SwapExecutionService } from "@/src/features/swaps/services/SwapExecutionService";
 import { SwapPreparationService } from "@/src/features/swaps/services/SwapPreparationService";
 import { SwapQuoteService } from "@/src/features/swaps/services/SwapQuoteService";
 import { BridgeQuoteService } from "@/src/features/swaps/services/BridgeQuoteService";
-import { BridgeExecutionService } from "@/src/features/swaps/services/BridgeExecutionService";
 import { BridgePreparationService } from "@/src/features/swaps/services/BridgePreparationService";
+import { buildSwapPreview } from "@/src/features/swaps/services/buildSwapPreview";
+import { buildBridgePreview } from "@/src/features/swaps/services/buildBridgePreview";
 import type { SwapIntent, SwapPlan, SwapQuote } from "@/src/features/swaps/types/swap";
 import type { BridgeIntent, BridgePlan, BridgeQuote } from "@/src/features/swaps/types/bridge";
+import { TransactionConfirmSheet } from "@/src/features/transactions/components/TransactionConfirmSheet";
+import { useTransactionConfirmation } from "@/src/features/transactions/hooks/useTransactionConfirmation";
+import { TransactionHistoryService } from "@/src/features/transactions/services/TransactionHistoryService";
+import { SmartAccountExecutionService } from "@/src/features/wallet/services/SmartAccountExecutionService";
+import type { PreparedSmartAccountExecution } from "@/src/features/wallet/types/execution";
 import WalletPersistenceService from "@/src/features/wallet/services/SupabaseWalletService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
@@ -65,6 +70,23 @@ type UiState =
   | "cancelled";
 
 const DEFAULT_QUOTE_DEBOUNCE_MS = 500;
+
+// Extracts a typed errorCode from the thrown value (e.g. viem error codes).
+const getErrorDetails = (errorValue: unknown): { errorCode?: string | null; errorMessage: string } => {
+  const errorCode =
+    typeof errorValue === "object" &&
+    errorValue !== null &&
+    "code" in errorValue
+      ? String((errorValue as { code?: unknown }).code)
+      : null;
+  const errorMessage =
+    errorValue instanceof Error
+      ? errorValue.message
+      : typeof errorValue === "string"
+        ? errorValue
+        : "Unknown execution failure";
+  return { errorCode, errorMessage };
+};
 
 const shorten = (value?: string | null): string => {
   if (!value) return "-";
@@ -170,6 +192,9 @@ export const DexScreen: React.FC = () => {
   const networkConfig = useMemo(() => {
     try { return getNetworkConfig(networkKey); } catch { return null; }
   }, [networkKey]);
+
+  // ── Confirm sheet (unified pre-broadcast review) ──────────────────────────
+  const tc = useTransactionConfirmation();
 
   const swapSupported = networkConfig?.swapSupported ?? false;
 
@@ -433,6 +458,14 @@ export const DexScreen: React.FC = () => {
           throw new Error("Sell amount must be greater than zero.");
         }
 
+        if (sellAmountRaw > sellTokenBalanceRaw) {
+          setQuote(null);
+          setApprovalRequired(false);
+          setUiState("idle");
+          setErrorState(classify(new Error("Insufficient balance.")));
+          return;
+        }
+
         const nextQuote = await SwapQuoteService.getQuote({
           networkKey,
           chainId: selectedChainId,
@@ -475,7 +508,7 @@ export const DexScreen: React.FC = () => {
       cancelled = true;
       clearTimeout(debounce);
     };
-  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, effectiveSlippageBps, walletAddress, retryNonce, swapSupported]);
+  }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, effectiveSlippageBps, walletAddress, retryNonce, swapSupported, sellTokenBalanceRaw]);
 
   // ── Bridge: auto-pick first available destination when source changes ──────
   useEffect(() => {
@@ -526,6 +559,12 @@ export const DexScreen: React.FC = () => {
           throw new Error("Bridge amount must be greater than zero.");
         }
 
+        if (inputAmountRaw > sellTokenBalanceRaw) {
+          setBridgeQuote(null);
+          setErrorState(classify(new Error("Insufficient balance.")));
+          return;
+        }
+
         const q = await BridgeQuoteService.getQuote({
           sourceNetworkKey: networkKey,
           sourceChainId: selectedChainId,
@@ -565,7 +604,7 @@ export const DexScreen: React.FC = () => {
   }, [
     activeTab, bridgeReady, walletAddress, sellToken, sellAmountDecimal,
     bridgeDestNetworkKey, networkKey, selectedChainId, retryNonce,
-    effectiveBridgeOutputToken, effectiveSlippageBps, destWalletAddress,
+    effectiveBridgeOutputToken, effectiveSlippageBps, destWalletAddress, sellTokenBalanceRaw,
   ]);
 
   // Eagerly resolve the destination-chain wallet address so the bridge UI
@@ -659,6 +698,88 @@ export const DexScreen: React.FC = () => {
     };
   };
 
+  // Run an approval or other "silent" execution step (no confirm sheet).
+  // Returns { ok, transactionId } — on failure, also sets errorState.
+  const runSilentStep = async (
+    userId: string,
+    execution: PreparedSmartAccountExecution,
+    transactionInput: Parameters<typeof TransactionHistoryService.createDraft>[0],
+    intentId: string,
+    sequenceIndex: number,
+    parentTransactionId?: string,
+  ): Promise<{ ok: boolean; transactionId: string }> => {
+    const draft = await TransactionHistoryService.createDraft({
+      ...transactionInput,
+      intentId,
+      sequenceIndex,
+      parentTransactionId: parentTransactionId ?? null,
+    });
+    let didSubmit = false;
+    try {
+      await TransactionHistoryService.markPrepared(draft.id, {
+        targetAddress: execution.target,
+        valueRaw: execution.value.toString(),
+        calldata: execution.data,
+        metadata: execution.metadata,
+      });
+      const preparedOp = await SmartAccountExecutionService.prepareUserOperation(execution, {
+        userId,
+        usePaymaster: true,
+      });
+      await TransactionHistoryService.markSigning(draft.id);
+      const signedOp = await SmartAccountExecutionService.signUserOperation(userId, preparedOp);
+      await TransactionHistoryService.markSigned(draft.id, {
+        signatureBytes: signedOp.signature.length > 2 ? (signedOp.signature.length - 2) / 2 : 0,
+        userOpHash: signedOp.userOpHash,
+      });
+      const submission = await SmartAccountExecutionService.submitUserOperation(signedOp);
+      didSubmit = true;
+      await TransactionHistoryService.markSubmitted({ id: draft.id, userOpHash: submission.submittedUserOpHash as Hex });
+      await TransactionHistoryService.markPending(draft.id);
+      const receipt = await SmartAccountExecutionService.waitForReceipt(submission, {
+        timeoutMs: 60_000,
+        pollIntervalMs: 2_000,
+      });
+      if (!receipt.success) {
+        await TransactionHistoryService.markFailed({
+          id: draft.id,
+          errorMessage: "UserOperation receipt indicates failure",
+          debugContext: {
+            submittedUserOpHash: receipt.submittedUserOpHash,
+            receiptSuccess: false,
+          },
+        });
+        return { ok: false, transactionId: draft.id };
+      }
+      await TransactionHistoryService.markConfirmed({
+        id: draft.id,
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber,
+        debugContext: {
+          submittedUserOpHash: receipt.submittedUserOpHash,
+          receiptSuccess: true,
+        },
+      });
+      return { ok: true, transactionId: draft.id };
+    } catch (error) {
+      const isCancel = error instanceof Error && (
+        error.message.toLowerCase().includes("cancel") ||
+        error.message.toLowerCase().includes("aborted") ||
+        error.message.toLowerCase().includes("notallowed") ||
+        error.message.toLowerCase().includes("user denied")
+      );
+      if (isCancel && !didSubmit) {
+        await TransactionHistoryService.markCancelled(draft.id, "passkey_prompt_cancelled");
+        setErrorState(classify(new Error("User cancelled passkey prompt")));
+      } else {
+        const { errorCode, errorMessage } = getErrorDetails(error);
+        await TransactionHistoryService.markFailed({ id: draft.id, errorCode, errorMessage });
+        setErrorState(classify(error));
+      }
+      return { ok: false, transactionId: draft.id };
+    }
+  };
+
   const handleReviewBridge = async () => {
     const intent = await buildBridgeIntent();
     if (!intent) {
@@ -667,8 +788,9 @@ export const DexScreen: React.FC = () => {
     }
     setErrorState(null);
     setBridgeBusy(true);
+    let plan: BridgePlan | null = null;
     try {
-      const plan = await BridgePreparationService.prepareBridge(intent);
+      plan = await BridgePreparationService.prepareBridge(intent);
       setBridgePlan(plan);
     } catch (error) {
       setBridgePlan(null);
@@ -678,43 +800,155 @@ export const DexScreen: React.FC = () => {
       } else {
         setErrorState(c);
       }
-    } finally {
       setBridgeBusy(false);
+      return;
     }
+    // Pass plan directly to avoid stale state — state setter is async
+    await handleConfirmBridge(plan);
   };
 
-  const handleExecuteBridge = async () => {
-    const intent = await buildBridgeIntent();
-    if (!intent) {
+  const handleConfirmBridge = async (planArg?: BridgePlan) => {
+    const plan = planArg ?? bridgePlan;
+    if (!plan || !user?.id) {
       setErrorState(classify(new Error("Missing user, wallet, or token context for bridge.")));
       return;
     }
+
     setErrorState(null);
     setBridgeBusy(true);
-    try {
-      const result = await BridgeExecutionService.executeBridge(intent, {
-        waitForReceipt: true,
-        receiptTimeoutMs: 60_000,
-        receiptPollIntervalMs: 2_000,
+    const intentId = (() => {
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
       });
+    })();
 
-      if (result.status === "cancelled") {
-        setErrorState(classify(new Error("User cancelled passkey prompt")));
-      } else if (result.status === "failed" && result.error) {
-        setErrorState(classify(new Error(result.error)));
-      } else {
-        setErrorState(null);
-        const transactionId = result.bridgeTransactionId ?? result.approvalTransactionId ?? "";
-        if (transactionId) {
-          navigation.navigate("TransactionStatus", { transactionId });
+    let approvalTransactionId: string | undefined;
+
+    try {
+      // 1) SHEET FIRST — build preview and show confirm sheet before any signing
+      // Build chainNames from source and dest network configs
+      const chainNames: Record<number, string> = {};
+      try { chainNames[plan.intent.sourceChainId] = getNetworkConfig(plan.intent.sourceNetworkKey).displayName; } catch { chainNames[plan.intent.sourceChainId] = String(plan.intent.sourceChainId); }
+      try { chainNames[plan.intent.destChainId] = getNetworkConfig(plan.intent.destNetworkKey).displayName; } catch { chainNames[plan.intent.destChainId] = String(plan.intent.destChainId); }
+
+      const preview = buildBridgePreview(plan, chainNames);
+
+      let approved: boolean;
+      let preparedUserOp: Awaited<ReturnType<typeof SmartAccountExecutionService.prepareUserOperation>> | undefined;
+      try {
+        const confirmResult = await tc.confirm({
+          preview,
+          execution: plan.bridgeExecution,
+          userId: user.id,
+          usePaymaster: true,
+        });
+        approved = confirmResult.approved;
+        preparedUserOp = confirmResult.prepared;
+      } catch (err) {
+        setErrorState(classify(err));
+        return; // finally resets bridgeBusy
+      }
+
+      if (!approved) {
+        // User dismissed/rejected the confirm sheet — nothing drafted yet; retryable.
+        return; // finally resets bridgeBusy
+      }
+
+      // 2) User approved — sign approval FIRST if required
+      if (plan.approvalRequired && plan.approvalExecution && plan.approvalTransactionInput) {
+        const approvalResult = await runSilentStep(
+          user.id, plan.approvalExecution, plan.approvalTransactionInput,
+          intentId, 0,
+        );
+        approvalTransactionId = approvalResult.transactionId;
+        if (!approvalResult.ok) {
+          return; // Retryable — finally resets bridgeBusy
         }
       }
-    } catch (error) {
-      const c = classify(error);
-      if (c.kind === "network") {
-        setToast({ message: c.userMessage, severity: c.severity });
-      } else {
-        setErrorState(c);
+
+      // 3) Create main bridge draft (after approval so parentTransactionId is known)
+      const bridgeSequence = plan.approvalRequired ? 1 : 0;
+      const bridgeDraft = await TransactionHistoryService.createDraft({
+        ...plan.bridgeTransactionInput,
+        intentId,
+        sequenceIndex: bridgeSequence,
+        parentTransactionId: approvalTransactionId ?? null,
+      });
+
+      // 4) Sign + submit bridge deposit (prepare now if deferred, else use op from confirm)
+      let didSubmit = false;
+      try {
+        const opToSign = preparedUserOp ?? await SmartAccountExecutionService.prepareUserOperation(
+          plan.bridgeExecution, { userId: user.id, usePaymaster: true },
+        );
+        await TransactionHistoryService.markPrepared(bridgeDraft.id, {
+          targetAddress: plan.bridgeExecution.target,
+          valueRaw: plan.bridgeExecution.value.toString(),
+          calldata: plan.bridgeExecution.data,
+          metadata: plan.bridgeExecution.metadata,
+        });
+        await TransactionHistoryService.markSigning(bridgeDraft.id);
+        const signed = await SmartAccountExecutionService.signUserOperation(user.id, opToSign);
+        await TransactionHistoryService.markSigned(bridgeDraft.id, {
+          signatureBytes: signed.signature.length > 2 ? (signed.signature.length - 2) / 2 : 0,
+          userOpHash: signed.userOpHash,
+        });
+        const submission = await SmartAccountExecutionService.submitUserOperation(signed);
+        didSubmit = true;
+        await TransactionHistoryService.markSubmitted({ id: bridgeDraft.id, userOpHash: submission.submittedUserOpHash as Hex });
+        await TransactionHistoryService.markPending(bridgeDraft.id);
+
+        const receipt = await SmartAccountExecutionService.waitForReceipt(submission, {
+          timeoutMs: 60_000,
+          pollIntervalMs: 2_000,
+        });
+        if (!receipt.success) {
+          await TransactionHistoryService.markFailed({
+            id: bridgeDraft.id,
+            errorMessage: "UserOperation receipt indicates failure",
+            debugContext: {
+              submittedUserOpHash: receipt.submittedUserOpHash,
+              receiptSuccess: false,
+            },
+          });
+          setErrorState(classify(new Error("Bridge transaction failed on-chain.")));
+          navigation.navigate("TransactionStatus", { transactionId: bridgeDraft.id });
+          return;
+        }
+        await TransactionHistoryService.markConfirmed({
+          id: bridgeDraft.id,
+          transactionHash: receipt.transactionHash,
+          blockNumber: receipt.blockNumber,
+          debugContext: {
+            submittedUserOpHash: receipt.submittedUserOpHash,
+            receiptSuccess: true,
+          },
+        });
+        setErrorState(null);
+        await BalanceService.refreshBalancesAfterTransaction({
+          chainId: plan.intent.sourceChainId,
+          walletAddress: plan.intent.walletAddress,
+          tokens: [plan.intent.inputToken],
+        });
+        navigation.navigate("TransactionStatus", { transactionId: bridgeDraft.id });
+      } catch (error) {
+        const isCancel = error instanceof Error && (
+          error.message.toLowerCase().includes("cancel") ||
+          error.message.toLowerCase().includes("aborted") ||
+          error.message.toLowerCase().includes("notallowed") ||
+          error.message.toLowerCase().includes("user denied")
+        );
+        if (isCancel && !didSubmit) {
+          await TransactionHistoryService.markCancelled(bridgeDraft.id, "passkey_prompt_cancelled");
+          setErrorState(classify(new Error("User cancelled passkey prompt")));
+        } else {
+          const { errorCode, errorMessage } = getErrorDetails(error);
+          await TransactionHistoryService.markFailed({ id: bridgeDraft.id, errorCode, errorMessage });
+          setErrorState(classify(error));
+        }
       }
     } finally {
       setBridgeBusy(false);
@@ -785,8 +1019,9 @@ export const DexScreen: React.FC = () => {
     setErrorState(null);
     setUiState("validating");
 
+    let plan: SwapPlan | null = null;
     try {
-      const plan = await SwapPreparationService.prepareSwap(intent);
+      plan = await SwapPreparationService.prepareSwap(intent);
       setPreparedPlan(plan);
       setUiState(plan.approvalRequired ? "approval_required" : "quote_ready");
     } catch (error) {
@@ -798,50 +1033,169 @@ export const DexScreen: React.FC = () => {
       } else {
         setErrorState(c);
       }
+      return;
     }
+    // Pass plan directly to avoid stale state — state setter is async
+    await handleConfirmSwap(plan);
   };
 
-  const handleExecuteSwap = async () => {
-    const intent = buildIntent();
-    if (!intent) {
+  const handleConfirmSwap = async (planArg?: SwapPlan) => {
+    const plan = planArg ?? preparedPlan;
+    if (!plan || !user?.id) {
       setErrorState(classify(new Error("Missing user or wallet context for swap.")));
       return;
     }
 
     setErrorState(null);
-    setUiState(preparedPlan?.approvalRequired ? "signing_approval" : "signing_swap");
+    const intentId = (() => {
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    })();
+
+    let approvalTransactionId: string | undefined;
 
     try {
-      const result = await SwapExecutionService.executeSwap(intent, {
-        waitForReceipt: true,
-        receiptTimeoutMs: 60_000,
-        receiptPollIntervalMs: 2_000,
+      // 1) SHEET FIRST — build preview and show confirm sheet before any signing
+      const swapNetworkName = (() => {
+        try { return getNetworkConfig(plan.intent.networkKey).displayName; } catch { return String(plan.intent.chainId); }
+      })();
+      const preview = buildSwapPreview(plan, swapNetworkName);
+
+      let approved: boolean;
+      let preparedUserOp: Awaited<ReturnType<typeof SmartAccountExecutionService.prepareUserOperation>> | undefined;
+      try {
+        const confirmResult = await tc.confirm({
+          preview,
+          execution: plan.swapExecution,
+          userId: user.id,
+          usePaymaster: true,
+        });
+        approved = confirmResult.approved;
+        preparedUserOp = confirmResult.prepared;
+      } catch (err) {
+        setErrorState(classify(err));
+        setUiState("failed");
+        return;
+      }
+
+      if (!approved) {
+        // User dismissed/rejected the confirm sheet — nothing has been drafted or
+        // submitted yet, so return to a retryable state (not a stuck dead-end).
+        setUiState(plan.approvalRequired ? "approval_required" : "quote_ready");
+        return;
+      }
+
+      // 2) User approved — sign approval FIRST if required
+      if (plan.approvalRequired && plan.approvalExecution && plan.approvalTransactionInput) {
+        setUiState("signing_approval");
+        const approvalResult = await runSilentStep(
+          user.id, plan.approvalExecution, plan.approvalTransactionInput,
+          intentId, 0,
+        );
+        approvalTransactionId = approvalResult.transactionId;
+        if (!approvalResult.ok) {
+          // Retryable — approval failed/cancelled; user can try again
+          setUiState("approval_required");
+          return;
+        }
+        setUiState("approval_pending");
+      }
+
+      // 3) Create main swap draft (after approval so parentTransactionId is known)
+      const swapSequence = plan.approvalRequired ? 1 : 0;
+      const swapDraft = await TransactionHistoryService.createDraft({
+        ...plan.swapTransactionInput,
+        intentId,
+        sequenceIndex: swapSequence,
+        parentTransactionId: approvalTransactionId ?? null,
       });
 
-      if (result.status === "cancelled") {
-        setErrorState(classify(new Error("User cancelled passkey prompt")));
-      } else if (result.status === "failed" && result.error) {
-        setErrorState(classify(new Error(result.error)));
-      } else {
+      // 4) Sign + submit swap (prepare now if deferred, else use op from confirm)
+      setUiState("signing_swap");
+      let didSubmit = false;
+      try {
+        const opToSign = preparedUserOp ?? await SmartAccountExecutionService.prepareUserOperation(
+          plan.swapExecution, { userId: user.id, usePaymaster: true },
+        );
+        await TransactionHistoryService.markPrepared(swapDraft.id, {
+          targetAddress: plan.swapExecution.target,
+          valueRaw: plan.swapExecution.value.toString(),
+          calldata: plan.swapExecution.data,
+          metadata: plan.swapExecution.metadata,
+        });
+        await TransactionHistoryService.markSigning(swapDraft.id);
+        const signed = await SmartAccountExecutionService.signUserOperation(user.id, opToSign);
+        await TransactionHistoryService.markSigned(swapDraft.id, {
+          signatureBytes: signed.signature.length > 2 ? (signed.signature.length - 2) / 2 : 0,
+          userOpHash: signed.userOpHash,
+        });
+        const submission = await SmartAccountExecutionService.submitUserOperation(signed);
+        didSubmit = true;
+        await TransactionHistoryService.markSubmitted({ id: swapDraft.id, userOpHash: submission.submittedUserOpHash as Hex });
+        await TransactionHistoryService.markPending(swapDraft.id);
+        setUiState("swap_pending");
+
+        const receipt = await SmartAccountExecutionService.waitForReceipt(submission, {
+          timeoutMs: 60_000,
+          pollIntervalMs: 2_000,
+        });
+        if (!receipt.success) {
+          await TransactionHistoryService.markFailed({
+            id: swapDraft.id,
+            errorMessage: "UserOperation receipt indicates failure",
+            debugContext: {
+              submittedUserOpHash: receipt.submittedUserOpHash,
+              receiptSuccess: false,
+            },
+          });
+          setUiState("failed");
+          setErrorState(classify(new Error("Transaction failed on-chain.")));
+          navigation.navigate("TransactionStatus", { transactionId: swapDraft.id });
+          return;
+        }
+        await TransactionHistoryService.markConfirmed({
+          id: swapDraft.id,
+          transactionHash: receipt.transactionHash,
+          blockNumber: receipt.blockNumber,
+          debugContext: {
+            submittedUserOpHash: receipt.submittedUserOpHash,
+            receiptSuccess: true,
+          },
+        });
+        setUiState("confirmed");
         setErrorState(null);
-        const transactionId = result.swapTransactionId ?? result.approvalTransactionId ?? "";
-        if (transactionId) {
-          navigation.navigate("TransactionStatus", { transactionId });
+        await BalanceService.refreshBalancesAfterTransaction({
+          chainId: plan.intent.chainId,
+          walletAddress: plan.intent.walletAddress,
+          tokens: [plan.intent.sellToken, plan.intent.buyToken],
+        });
+        navigation.navigate("TransactionStatus", { transactionId: swapDraft.id });
+      } catch (error) {
+        const isCancel = error instanceof Error && (
+          error.message.toLowerCase().includes("cancel") ||
+          error.message.toLowerCase().includes("aborted") ||
+          error.message.toLowerCase().includes("notallowed") ||
+          error.message.toLowerCase().includes("user denied")
+        );
+        if (isCancel && !didSubmit) {
+          await TransactionHistoryService.markCancelled(swapDraft.id, "passkey_prompt_cancelled");
+          setErrorState(classify(new Error("User cancelled passkey prompt")));
+        } else {
+          const { errorCode, errorMessage } = getErrorDetails(error);
+          await TransactionHistoryService.markFailed({ id: swapDraft.id, errorCode, errorMessage });
+          setErrorState(classify(error));
         }
-        if (result.status === "confirmed") {
-          setUiState("confirmed");
-        } else if (result.status === "pending") {
-          setUiState(result.swapTransactionId ? "swap_pending" : "approval_pending");
-        }
+        setUiState("failed");
       }
-    } catch (error) {
+    } catch (outerError) {
+      // Catches errors before the confirm sheet or during draft creation.
+      // Leave uiState as failed so the UI is not stuck in a transient state.
+      setErrorState(classify(outerError));
       setUiState("failed");
-      const c = classify(error);
-      if (c.kind === "network") {
-        setToast({ message: c.userMessage, severity: c.severity });
-      } else {
-        setErrorState(c);
-      }
     }
   };
 
@@ -858,7 +1212,6 @@ export const DexScreen: React.FC = () => {
       && sellAmountDecimal.trim().length > 0
       && quoteReady,
   );
-  const canExecute = Boolean(preparedPlan);
 
   // ── Quote freshness countdown ─────────────────────────────────────────────
   const [nowMs, setNowMs] = useState<number>(Date.now());
@@ -964,12 +1317,23 @@ export const DexScreen: React.FC = () => {
                   <View style={styles.swapSide}>
                     <View style={styles.swapSideTopRow}>
                       <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You send</Text>
-                      <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
-                        {"Bal: "}
-                        <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
-                          {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
+                      <View style={styles.balanceRow}>
+                        <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
+                          {"Bal: "}
+                          <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+                            {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
+                          </Text>
                         </Text>
-                      </Text>
+                        {sellTokenBalanceRaw > 0n && (
+                          <TouchableOpacity
+                            onPress={() => setSellAmountDecimal(sellTokenBalanceDisplay)}
+                            style={[styles.maxBtn, { backgroundColor: `${colors.accent}1F`, borderColor: `${colors.accent}59` }]}
+                            hitSlop={8}
+                          >
+                            <Text style={[styles.maxBtnText, { color: colors.accent }]}>MAX</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
                     <View style={styles.swapSideRow}>
                       <TouchableOpacity
@@ -1205,49 +1569,28 @@ export const DexScreen: React.FC = () => {
                   ) : null}
                 </View>
 
-                {/* Bridge CTA buttons */}
-                {!bridgePlan && (
-                  <TouchableOpacity
-                    style={[
-                      styles.primaryBtn,
-                      {
-                        backgroundColor: colors.accent,
-                        opacity:
-                          bridgeQuote && !bridgeBusy && destWalletAddress && !destWalletLookupError
-                            ? 1
-                            : 0.38,
-                      },
-                    ]}
-                    onPress={handleReviewBridge}
-                    disabled={!bridgeQuote || bridgeBusy || !destWalletAddress || !!destWalletLookupError}
-                  >
-                    {bridgeBusy ? (
-                      <ActivityIndicator size="small" color={colors.textOnAccent} />
-                    ) : (
-                      <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>Review Bridge</Text>
-                    )}
-                  </TouchableOpacity>
-                )}
+                {/* Bridge CTA button */}
+                <TouchableOpacity
+                  style={[
+                    styles.primaryBtn,
+                    {
+                      backgroundColor: colors.accent,
+                      opacity:
+                        bridgeQuote && !bridgeBusy && destWalletAddress && !destWalletLookupError
+                          ? 1
+                          : 0.38,
+                    },
+                  ]}
+                  onPress={handleReviewBridge}
+                  disabled={!bridgeQuote || bridgeBusy || !destWalletAddress || !!destWalletLookupError}
+                >
+                  {bridgeBusy ? (
+                    <ActivityIndicator size="small" color={colors.textOnAccent} />
+                  ) : (
+                    <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>Review Bridge</Text>
+                  )}
+                </TouchableOpacity>
 
-                {bridgePlan && (
-                  <TouchableOpacity
-                    style={[
-                      styles.secondaryBtn,
-                      { backgroundColor: colors.glass, borderColor: colors.border, opacity: bridgeBusy ? 0.38 : 1 },
-                    ]}
-                    onPress={handleExecuteBridge}
-                    disabled={bridgeBusy}
-                  >
-                    {bridgeBusy ? (
-                      <ActivityIndicator size="small" color={colors.textPrimary} />
-                    ) : (
-                      <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>
-                        Confirm & Bridge
-                        {bridgePlan.approvalRequired ? " (approve + deposit)" : ""}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                )}
               </>
             )}
           </>
@@ -1261,12 +1604,23 @@ export const DexScreen: React.FC = () => {
           <View style={styles.swapSide}>
             <View style={styles.swapSideTopRow}>
               <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You pay</Text>
-              <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
-                {"Bal: "}
-                <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
-                  {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
+              <View style={styles.balanceRow}>
+                <Text style={[styles.balanceHint, { color: colors.textMuted }]}>
+                  {"Bal: "}
+                  <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+                    {sellTokenBalanceDisplay} {sellToken?.symbol ?? ""}
+                  </Text>
                 </Text>
-              </Text>
+                {sellTokenBalanceRaw > 0n && (
+                  <TouchableOpacity
+                    onPress={() => setSellAmountDecimal(sellTokenBalanceDisplay)}
+                    style={[styles.maxBtn, { backgroundColor: `${colors.accent}1F`, borderColor: `${colors.accent}59` }]}
+                    hitSlop={8}
+                  >
+                    <Text style={[styles.maxBtnText, { color: colors.accent }]}>MAX</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
             <View style={styles.swapSideRow}>
               <TouchableOpacity
@@ -1515,14 +1869,6 @@ export const DexScreen: React.FC = () => {
           )}
         </TouchableOpacity>
 
-        {canExecute && (
-          <TouchableOpacity
-            style={[styles.secondaryBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
-            onPress={handleExecuteSwap}
-          >
-            <Text style={[styles.secondaryBtnText, { color: colors.textPrimary }]}>Confirm & Execute</Text>
-          </TouchableOpacity>
-        )}
         </>
         )}
       </ScrollView>
@@ -1542,6 +1888,17 @@ export const DexScreen: React.FC = () => {
               ? "Select Buy Token"
               : "Select Destination Token"
         }
+      />
+
+      {/* ── Unified pre-broadcast confirm sheet (swap + bridge) ─────────────── */}
+      <TransactionConfirmSheet
+        ref={tc.sheetRef}
+        preview={tc.preview}
+        simulation={tc.simulation}
+        gasFee={tc.gasFee}
+        loading={tc.loading}
+        onApprove={tc.onApprove}
+        onReject={tc.onReject}
       />
     </TabScreenContainer>
   );
@@ -1648,6 +2005,22 @@ const createStyles = (colors: ThemeColors) =>
     balanceHint: {
       fontSize: 12,
       fontWeight: "500",
+    },
+    balanceRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    maxBtn: {
+      borderRadius: 6,
+      borderWidth: 1,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    maxBtnText: {
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.5,
     },
     swapSideRow: {
       flexDirection: "row",

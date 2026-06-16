@@ -22,6 +22,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -51,6 +52,14 @@ import { getChainConfig, getEnabledChains } from "@/src/integration/chains";
 import { BuyAmountForm } from "../components/ramp/BuyAmountForm";
 import { OrderStatusCard } from "../components/ramp/OrderStatusCard";
 import { TransakWebViewModal } from "../components/ramp/TransakWebViewModal";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Testnet demo hard cap per purchase — must match the backend default in
+ * TestnetFulfillmentService (TESTNET_DEMO_MAX_ETH). Keep both in sync.
+ */
+const MAX_BUY_ETH = 0.025;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -177,7 +186,9 @@ export const BuyScreen: React.FC = () => {
     };
   }, [transakNetwork, selectedChain?.environment, selectedChainId, selectedAsset.symbol]);
 
-  const QUICK_AMOUNTS = useMemo(() => ["30", "50", "100", "200"], []);
+  // Quick-amount chips are capped so none exceeds MAX_BUY_ETH at the $2 500/ETH
+  // rate used by estimateCrypto. Max spend = 0.025 × $2 500 = $62.50 USD.
+  const QUICK_AMOUNTS = useMemo(() => ["10", "25", "40", "60"], []);
 
   // Derived
   const fiatAmount = parseFloat(amount || "0");
@@ -188,7 +199,8 @@ export const BuyScreen: React.FC = () => {
   const displayAddress = targetAddress
     ? `${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)}`
     : "No wallet";
-  const isValidAmount = fiatAmount > 0;
+  const isOverCap = parseFloat(estimatedCrypto) > MAX_BUY_ETH;
+  const isValidAmount = fiatAmount > 0 && !isOverCap;
 
   // ── Polling ───────────────────────────────────────────────────────────────
   const stopPolling = useCallback(() => {
@@ -204,7 +216,12 @@ export const BuyScreen: React.FC = () => {
 
     pollTimerRef.current = setInterval(async () => {
       try {
-        const updated = await RampService.getOrder(activeOrder.id);
+        // For Transak, each tick pulls the real status from Transak and fulfills
+        // on completion (status can lag the widget's success event). Mock just
+        // reads the DB row.
+        const updated = activeOrder.provider === "transak"
+          ? await RampService.verifyOrder(activeOrder.id)
+          : await RampService.getOrder(activeOrder.id);
         setActiveOrder(updated);
         if (TERMINAL_STATUSES.includes(updated.internalStatus as any)) {
           stopPolling();
@@ -243,6 +260,16 @@ export const BuyScreen: React.FC = () => {
       return;
     }
 
+    // Enforce testnet demo cap before hitting the backend — prevents silent
+    // infinite load when the user picks an amount above the treasury limit.
+    if (parseFloat(estimatedCrypto) > MAX_BUY_ETH) {
+      Alert.alert(
+        "Amount too high",
+        `The testnet demo caps purchases at ${MAX_BUY_ETH} ETH. Lower the amount and try again.`
+      );
+      return;
+    }
+
     setIsProcessing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -265,9 +292,28 @@ export const BuyScreen: React.FC = () => {
       setActiveOrder(order);
       setIsPolling(true);
 
-      // Open widget for Transak; mock shows the status card directly
+      // Open the Transak widget in an in-app Chrome Custom Tab (expo-web-browser),
+      // NOT a raw WebView: Transak's account auth (Google OAuth + captcha) cannot
+      // complete inside react-native-webview (white screen after login). Custom
+      // Tabs use Chrome's engine and handle the auth popups/redirects correctly —
+      // the same mechanism this app already uses for its own Google sign-in.
+      // Completion is detected by the pull-verify poll loop (no postMessage needed).
       if (session.provider === "transak" && session.widgetUrl) {
-        setTransakUrl(session.widgetUrl);
+        WebBrowser.openBrowserAsync(session.widgetUrl, {
+          showTitle: true,
+          enableBarCollapsing: true,
+          dismissButtonStyle: "close",
+        })
+          .then(async () => {
+            // Tab dismissed → kick an immediate verify; the poll loop also runs.
+            try {
+              const updated = await RampService.verifyOrder(session.orderId);
+              setActiveOrder(updated);
+            } catch (e) {
+              console.log("[BuyScreen] post-tab verify non-fatal:", e);
+            }
+          })
+          .catch((e) => console.log("[BuyScreen] openBrowserAsync error:", e));
       }
     } catch (err: any) {
       console.error("[BuyScreen] handleBuy error:", err);
@@ -280,10 +326,18 @@ export const BuyScreen: React.FC = () => {
   const handleTransakEvent = useCallback(async (eventId: string, data: any) => {
     if (eventId === "TRANSAK_ORDER_SUCCESSFUL") {
       setTransakUrl(null);
+      // Kick an immediate server-side verification (authoritative, pulls real
+      // status from Transak + delivers funds). The poll loop keeps verifying
+      // until Transak reports COMPLETED. notifyWebhook stays only as a harmless
+      // optimistic hint (ignored server-side unless signed by Transak).
       try {
-        if (activeOrder?.id) await RampService.notifyWebhook(activeOrder.id, data);
+        if (activeOrder?.id) {
+          void RampService.notifyWebhook(activeOrder.id, data);
+          const updated = await RampService.verifyOrder(activeOrder.id);
+          setActiveOrder(updated);
+        }
       } catch (err) {
-        console.error("[BuyScreen] notifyWebhook error:", err);
+        console.log("[BuyScreen] verifyOrder kick non-fatal:", err);
       }
     } else if (
       eventId === "TRANSAK_ORDER_FAILED" ||
@@ -393,6 +447,8 @@ export const BuyScreen: React.FC = () => {
               quickAmounts={QUICK_AMOUNTS}
               onQuickAmount={(v) => setAmount(v)}
               assetLoading={transakAssetsLoading}
+              maxHint={`Max ${MAX_BUY_ETH} ETH (~$${Math.floor(MAX_BUY_ETH * 2500)})`}
+              capError={isOverCap ? `Exceeds testnet cap of ${MAX_BUY_ETH} ETH. Lower your amount.` : undefined}
             />
           ) : (
             <OrderStatusCard

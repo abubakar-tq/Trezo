@@ -240,20 +240,20 @@ const TabBar: React.FC<BottomTabBarProps> = ({
                     styles.iconGlow,
                     {
                       opacity: tabGlows[index],
-                      backgroundColor: `${colors.accent}14`,
+                      backgroundColor: colors.glass,
                     },
                   ]}
                 />
                 <Feather
                   name={iconName}
                   size={22}
-                  color={isFocused ? colors.accent : colors.textSecondary}
+                  color={isFocused ? colors.textPrimary : colors.textSecondary}
                 />
               </Animated.View>
               <Text
                 style={[
                   styles.label,
-                  { color: isFocused ? colors.accent : colors.textMuted },
+                  { color: isFocused ? colors.textPrimary : colors.textMuted },
                 ]}
                 numberOfLines={1}
               >

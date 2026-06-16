@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 
-import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, getChainConfig, type SupportedChainId } from "@/src/integration/chains";
+import { getPublicClient } from "@/src/integration/viem/clients";
 import DevicePairingService, {
   type DevicePairingRequest,
   type WalletDevice,
@@ -134,6 +135,11 @@ const DevicesPasskeysScreen: React.FC = () => {
           userId: user.id,
           smartAccountAddress: (walletAddress ?? walletFromStore ?? null) as `0x${string}` | null,
           chainId: resolvedChainId,
+          // Without this, canSignForWallet trusts ANY local passkey — so a new
+          // device holding a stray/local-only key is treated as authorized and
+          // never sees the inbound "Pair this device" scanner. Matching the
+          // wallet owner makes the gate reflect real signing authority.
+          expectedPasskeyId: aaAccount?.ownerAddress ?? null,
         });
         if (active) { setCanSignForWallet(signerStatus.canSignForWallet); setCheckingLocalSigner(false); }
       };
@@ -219,7 +225,8 @@ const DevicesPasskeysScreen: React.FC = () => {
     if (!user?.id) { Alert.alert("Error", "User not found. Please sign in again."); return; }
     try {
       setIsSubmitting(true);
-      const metadata = await PasskeyService.createPasskey(user.id);
+      // Intentionally mints a NEW passkey to add as an additional on-chain signer.
+      const metadata = await PasskeyService.createPasskey(user.id, { allowReplace: true });
       await PasskeyAccountService.enqueuePendingPasskey(user.id, metadata);
       addPasskey({
         id: metadata.credentialId,
@@ -385,14 +392,24 @@ const DevicesPasskeysScreen: React.FC = () => {
   };
 
   const handleCreatePairing = useCallback(async () => {
-    if (!user?.id || !walletAddress) {
+    if (!user?.id) {
       setError("Wallet address is required before creating a pairing request");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const created = await DevicePairingService.createPairingRequest({ userId: user.id, walletAddress, chainId: resolvedChainId });
+      const pairingChainId = (activeChainId || DEFAULT_CHAIN_ID) as SupportedChainId;
+      const walletService = new SupabaseWalletService();
+      const chainWallet = await walletService.getAAWalletForChain(user.id, pairingChainId);
+      if (!chainWallet?.predicted_address) {
+        const name = getChainConfig(pairingChainId)?.name ?? `chain ${pairingChainId}`;
+        setError(`Your wallet isn't active on ${name}. Switch to a chain where your wallet is deployed, then pair.`);
+        return;
+      }
+      const created = await DevicePairingService.createPairingRequest({
+        userId: user.id, walletAddress: chainWallet.predicted_address, chainId: pairingChainId,
+      });
       setActiveLink(created.deepLink);
       await loadData();
     } catch (err) {
@@ -400,21 +417,24 @@ const DevicesPasskeysScreen: React.FC = () => {
     } finally {
       setBusy(false);
     }
-  }, [loadData, user?.id, walletAddress, resolvedChainId]);
+  }, [activeChainId, loadData, user?.id]);
 
   const signAndSubmit = useCallback(
-    async (userOpHash: `0x${string}`, userOp: any) => {
+    async (userOpHash: `0x${string}`, userOp: any, chainId: SupportedChainId) => {
       if (!user?.id) throw new Error("Missing user session");
       const signature = await PasskeyService.signWithPasskey(user.id, userOpHash);
       const encoded = PasskeyService.encodeSignatureForContract(signature) as `0x${string}`;
-      return PasskeyAccountService.submitAddPasskeyUserOp({ ...userOp, signature: encoded });
+      // Submit on the SAME chain the UserOp was built+sponsored for. Without the
+      // explicit chainId, submitAddPasskeyUserOp defaulted to DEFAULT_CHAIN_ID
+      // (Base Sepolia) and an Eth-Sepolia op was sent to the Base-Sepolia bundler.
+      return PasskeyAccountService.submitAddPasskeyUserOp({ ...userOp, signature: encoded }, chainId);
     },
     [user?.id],
   );
 
   const handleApproveRequest = useCallback(
     async (request: DevicePairingRequest) => {
-      if (!user?.id || !walletAddress) return;
+      if (!user?.id) return;
       if (!request.new_passkey_id || !request.new_public_key_x || !request.new_public_key_y) {
         Alert.alert("Missing passkey payload", "The new device has not submitted passkey metadata yet.");
         return;
@@ -422,10 +442,32 @@ const DevicesPasskeysScreen: React.FC = () => {
       setBusy(true);
       setError(null);
       try {
+        // Use the chain + address baked into the request itself — this is the chain
+        // the new device created the request for, which is where the wallet is deployed.
+        const requestChainId = request.chain_id as SupportedChainId;
+        const requestWalletAddress = request.wallet_address as `0x${string}`;
+
+        // Guard: verify the account is actually deployed on-chain before building a UserOp.
+        // If the wallet has no bytecode the bundler will reject with AA20 / account not deployed.
+        try {
+          const publicClient = getPublicClient(requestChainId);
+          const code = await publicClient.getBytecode({ address: requestWalletAddress });
+          if (!code || code === "0x") {
+            const chainName = getChainConfig(requestChainId)?.name ?? `chain ${requestChainId}`;
+            setError(
+              `This pairing request targets ${chainName} where your wallet isn't deployed. It's stale — reject it and create a new one.`,
+            );
+            return;
+          }
+        } catch (guardErr) {
+          console.warn("[DevicesPasskeys] bytecode guard failed (non-fatal):", guardErr);
+          // If we can't reach the RPC, proceed and let the bundler surface the error.
+        }
+
         const currentPasskey = await PasskeyService.getPasskey(user.id);
         if (!currentPasskey?.credentialIdRaw) throw new Error("Current trusted passkey is required to approve pairing");
         const built = await PasskeyAccountService.buildAddPasskeyUserOp({
-          smartAccountAddress: walletAddress as `0x${string}`,
+          smartAccountAddress: requestWalletAddress,
           pendingPasskey: {
             idRaw: request.new_passkey_id as `0x${string}`,
             credentialId: request.new_credential_id ?? request.new_passkey_id,
@@ -436,11 +478,11 @@ const DevicesPasskeysScreen: React.FC = () => {
             createdAt: request.created_at,
           },
           signingPasskeyId: currentPasskey.credentialIdRaw as `0x${string}`,
-          chainId: resolvedChainId,
+          chainId: requestChainId,
           usePaymaster: true,
         });
-        const submittedHash = await signAndSubmit(built.userOpHash, built.userOp);
-        const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, resolvedChainId);
+        const submittedHash = await signAndSubmit(built.userOpHash, built.userOp, requestChainId);
+        const receipt = await PasskeyAccountService.waitForReceipt(submittedHash, requestChainId);
         const success = Boolean((receipt as { success?: boolean }).success);
         if (!success) {
           await DevicePairingService.markFailed(request.id, user.id, "UserOperation reverted", submittedHash);
@@ -450,8 +492,8 @@ const DevicesPasskeysScreen: React.FC = () => {
           requestId: request.id,
           userId: user.id,
           operationHash: submittedHash,
-          walletAddress,
-          chainId: resolvedChainId,
+          walletAddress: requestWalletAddress,
+          chainId: requestChainId,
           passkeyId: request.new_passkey_id,
           credentialId: request.new_credential_id,
           deviceName: request.new_device_name,
@@ -464,7 +506,7 @@ const DevicesPasskeysScreen: React.FC = () => {
         setBusy(false);
       }
     },
-    [loadData, signAndSubmit, user?.id, walletAddress, resolvedChainId],
+    [loadData, signAndSubmit, user?.id],
   );
 
   const handleRejectRequest = useCallback(
@@ -650,16 +692,16 @@ const DevicesPasskeysScreen: React.FC = () => {
                 <View style={[styles.authRequiredIcon, { backgroundColor: `${colors.warning}1A`, borderColor: `${colors.warning}40` }]}>
                   <Feather name="shield-off" size={20} color={colors.warning} />
                 </View>
-                <Text style={[styles.authRequiredTitle, { color: colors.textPrimary }]}>This device isn't authorized yet</Text>
+                <Text style={[styles.authRequiredTitle, { color: colors.textPrimary }]}>This device isn&apos;t authorized yet</Text>
                 <Text style={[styles.authRequiredBody, { color: colors.textSecondary }]}>
-                  Pair this device with a trusted device that already has your wallet, or use recovery if you no longer have access to your trusted device.
+                  Pair with a trusted device that has your wallet, or recover if you no longer can.
                 </Text>
                 <TouchableOpacity
-                  style={[styles.addDeviceBtn, { backgroundColor: colors.accentAlt, marginTop: 4 }]}
+                  style={[styles.addDeviceBtn, { backgroundColor: colors.accent, marginTop: 4 }]}
                   onPress={() => navigation.navigate("LinkDevice")}
                   activeOpacity={0.88}
                 >
-                  <View style={[styles.addDeviceIconWrap, { backgroundColor: "rgba(255,255,255,0.18)" }]}>
+                  <View style={[styles.addDeviceIconWrap, { backgroundColor: `${colors.textOnAccent}2E` }]}>
                     <Feather name="link-2" size={16} color={colors.textOnAccent} />
                   </View>
                   <Text style={[styles.addDeviceLabel, { color: colors.textOnAccent }]}>Pair this device</Text>
@@ -678,19 +720,25 @@ const DevicesPasskeysScreen: React.FC = () => {
           <>
             {/* Add device CTA */}
             <TouchableOpacity
-              style={[styles.addDeviceBtn, { backgroundColor: colors.accentAlt, opacity: busy && !walletAddress ? 0.5 : 1 }]}
+              style={[
+                styles.addDeviceBtn,
+                {
+                  backgroundColor: colors.accent,
+                  opacity: busy ? 0.5 : 1,
+                },
+              ]}
               onPress={handleCreatePairing}
-              disabled={busy || !walletAddress}
+              disabled={busy}
               activeOpacity={0.88}
             >
               {busy ? (
                 <ActivityIndicator color={colors.textOnAccent} />
               ) : (
                 <>
-                  <View style={[styles.addDeviceIconWrap, { backgroundColor: "rgba(255,255,255,0.18)" }]}>
+                  <View style={[styles.addDeviceIconWrap, { backgroundColor: `${colors.textOnAccent}2E` }]}>
                     <Feather name="plus" size={16} color={colors.textOnAccent} />
                   </View>
-                  <Text style={[styles.addDeviceLabel, { color: colors.textOnAccent }]}>Add New Device</Text>
+                  <Text style={[styles.addDeviceLabel, { color: colors.textOnAccent }]}>Add a Device</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -699,34 +747,34 @@ const DevicesPasskeysScreen: React.FC = () => {
             {activeLink && (
               <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
                 <View style={styles.cardHeader}>
-                  <View style={[styles.cardIconWrap, { backgroundColor: `${colors.accentAlt}1A` }]}>
-                    <Feather name="smartphone" size={15} color={colors.accentAlt} />
+                  <View style={[styles.cardIconWrap, { backgroundColor: `${colors.accent}1A` }]}>
+                    <Feather name="smartphone" size={15} color={colors.accent} />
                   </View>
-                  <Text style={styles.cardTitle}>Scan on New Device</Text>
+                  <Text style={styles.cardTitle}>
+                    Scan on New Device
+                  </Text>
                 </View>
                 <View style={styles.qrWrapper}>
                   <QRCode value={activeLink} size={180} />
                 </View>
                 <Text style={[styles.cardHint, { color: colors.textSecondary }]}>
-                  Open this QR code on the new device. If the device is signed out, Trezo will resume pairing automatically after sign-in.
+                  Scan on the new device — pairing resumes automatically after sign-in.
                 </Text>
                 <Text style={[styles.cardMono, { color: colors.textMuted }]} selectable>{activeLink}</Text>
               </View>
             )}
 
             {/* Pending pairing requests */}
-            <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
-              <View style={styles.cardHeader}>
-                <View style={[styles.cardIconWrap, { backgroundColor: `${colors.warning}1A` }]}>
-                  <Feather name="clock" size={15} color={colors.warning} />
+            {requests.length > 0 && (
+              <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: `${colors.warning}1A` }]}>
+                    <Feather name="clock" size={15} color={colors.warning} />
+                  </View>
+                  <Text style={styles.cardTitle}>Pending Requests</Text>
                 </View>
-                <Text style={styles.cardTitle}>Pending Requests</Text>
-              </View>
 
-              {requests.length === 0 ? (
-                <Text style={[styles.emptyHint, { color: colors.textMuted }]}>No pending pairing requests.</Text>
-              ) : (
-                requests.map((request, i) => (
+                {requests.map((request, i) => (
                   <View
                     key={request.id}
                     style={[
@@ -734,8 +782,8 @@ const DevicesPasskeysScreen: React.FC = () => {
                       i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderMuted },
                     ]}
                   >
-                    <View style={[styles.deviceAvatarWrap, { backgroundColor: `${colors.accentAlt}1A` }]}>
-                      <Feather name="smartphone" size={14} color={colors.accentAlt} />
+                    <View style={[styles.deviceAvatarWrap, { backgroundColor: colors.surfaceMuted }]}>
+                      <Feather name="smartphone" size={14} color={colors.textSecondary} />
                     </View>
                     <View style={styles.listRowContent}>
                       <Text style={[styles.listRowTitle, { color: colors.textPrimary }]}>
@@ -762,9 +810,9 @@ const DevicesPasskeysScreen: React.FC = () => {
                       </View>
                     )}
                   </View>
-                ))
-              )}
-            </View>
+                ))}
+              </View>
+            )}
 
             {/* My passkeys */}
             <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
@@ -776,12 +824,12 @@ const DevicesPasskeysScreen: React.FC = () => {
                 <TouchableOpacity
                   onPress={handleAddPasskey}
                   disabled={isSubmitting}
-                  style={[styles.addPasskeyBtn, { backgroundColor: `${colors.accentAlt}18`, borderColor: `${colors.accentAlt}40` }]}
+                  style={[styles.addPasskeyBtn, { backgroundColor: `${colors.accent}18`, borderColor: `${colors.accent}40` }]}
                 >
                   {isSubmitting ? (
-                    <ActivityIndicator size="small" color={colors.accentAlt} />
+                    <ActivityIndicator size="small" color={colors.accent} />
                   ) : (
-                    <Feather name="plus" size={15} color={colors.accentAlt} />
+                    <Feather name="plus" size={15} color={colors.accent} />
                   )}
                 </TouchableOpacity>
               </View>
@@ -821,12 +869,12 @@ const DevicesPasskeysScreen: React.FC = () => {
                         <TouchableOpacity
                           onPress={() => handleRegisterOnChain(pk)}
                           disabled={processingId === pk.id}
-                          style={[styles.iconBtn, { backgroundColor: `${colors.accentAlt}18`, borderColor: `${colors.accentAlt}40`, opacity: processingId === pk.id ? 0.5 : 1 }]}
+                          style={[styles.iconBtn, { backgroundColor: `${colors.accent}18`, borderColor: `${colors.accent}40`, opacity: processingId === pk.id ? 0.5 : 1 }]}
                         >
                           {processingId === pk.id ? (
-                            <ActivityIndicator size="small" color={colors.accentAlt} />
+                            <ActivityIndicator size="small" color={colors.accent} />
                           ) : (
-                            <Feather name="upload-cloud" size={14} color={colors.accentAlt} />
+                            <Feather name="upload-cloud" size={14} color={colors.accent} />
                           )}
                         </TouchableOpacity>
                       )}
@@ -884,8 +932,8 @@ const DevicesPasskeysScreen: React.FC = () => {
                             {device.device_name ?? "Unnamed device"}
                           </Text>
                           {isThis && (
-                            <View style={[styles.thisDevicePill, { backgroundColor: `${colors.accentAlt}18`, borderColor: `${colors.accentAlt}40` }]}>
-                              <Text style={[styles.thisDevicePillText, { color: colors.accentAlt }]}>This device</Text>
+                            <View style={[styles.thisDevicePill, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderMuted }]}>
+                              <Text style={[styles.thisDevicePillText, { color: colors.textSecondary }]}>This device</Text>
                             </View>
                           )}
                         </View>
@@ -1016,7 +1064,7 @@ const createStyles = (colors: ThemeColors) =>
     headerBackBtn: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,
@@ -1033,7 +1081,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     headerTitle: {
       fontSize: 18,
-      fontWeight: "800",
+      fontWeight: "600",
       color: colors.textPrimary,
       letterSpacing: -0.3,
     },
@@ -1065,7 +1113,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     card: {
-      borderRadius: 20,
+      borderRadius: 16,
       borderWidth: 1,
       padding: 16,
       gap: 14,
@@ -1250,7 +1298,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     authRequiredTitle: {
       fontSize: 16,
-      fontWeight: "800",
+      fontWeight: "600",
       letterSpacing: -0.2,
     },
     authRequiredBody: {

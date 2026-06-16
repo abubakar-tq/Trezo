@@ -24,11 +24,15 @@ import { BalanceService } from "@/src/features/assets/services/BalanceService";
 import { TokenRegistryService } from "@/src/features/assets/services/TokenRegistryService";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 import { ContactService, type Contact } from "@/src/features/contacts";
-import { SendExecutionService } from "@/src/features/send/services/SendExecutionService";
+import { SendPreparationService } from "@/src/features/send/services/SendPreparationService";
 import { SendValidationService } from "@/src/features/send/services/SendValidationService";
+import { buildSendPreview } from "@/src/features/send/services/buildSendPreview";
 import type { SendIntent } from "@/src/features/send/types/send";
 import { TransactionHistoryService } from "@/src/features/transactions/services/TransactionHistoryService";
 import { TransactionReceiptTracker } from "@/src/features/transactions/services/TransactionReceiptTracker";
+import { TransactionConfirmSheet } from "@/src/features/transactions/components/TransactionConfirmSheet";
+import { useTransactionConfirmation } from "@/src/features/transactions/hooks/useTransactionConfirmation";
+import { SmartAccountExecutionService } from "@/src/features/wallet/services/SmartAccountExecutionService";
 import WalletPersistenceService from "@/src/features/wallet/services/SupabaseWalletService";
 import { devFundSmartAccount } from "@/src/features/wallet/services/devFunding";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
@@ -38,6 +42,7 @@ import {
   getChainConfig,
   type SupportedChainId,
 } from "@/src/integration/chains";
+import { resolveNetworkKey } from "@/src/integration/networks";
 import { useUserStore } from "@/src/store/useUserStore";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -50,7 +55,6 @@ type FlowStep =
   | "token"
   | "amount"
   | "recipient"
-  | "review"
   | "submitting"
   | "result";
 
@@ -162,16 +166,29 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
   const walletService = useMemo(() => new WalletPersistenceService(), []);
   const autoFundedRef = useRef<Set<string>>(new Set());
 
+  // ── Confirm sheet (unified pre-broadcast review) ──────────────────────────
+  const tc = useTransactionConfirmation();
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const chainOptions = useMemo(
     () => SUPPORTED_CHAIN_IDS.map((id) => getChainConfig(id)),
     [],
   );
   const selectedChain = getChainConfig(selectedChainId);
-  const tokenOptions = useMemo(
-    () => TokenRegistryService.listTokens(selectedChainId),
-    [selectedChainId],
-  );
+  // Use the network-key-aware token list so builtin ERC20s registered via
+  // BUILTIN_TOKENS_BY_NETWORK (e.g. Base Sepolia USDC/WETH/LINK) are included.
+  // The legacy chain-id list only returns native + deployment-manifest tokens,
+  // so on testnets whose manifest has no `usdc` (Base Sepolia) it collapsed to
+  // ETH only. Mirrors TokenDiscoveryProvider's defaultTokenLister.
+  const tokenOptions = useMemo(() => {
+    try {
+      return TokenRegistryService.listTokensForNetwork(
+        resolveNetworkKey(selectedChainId),
+      );
+    } catch {
+      return TokenRegistryService.listTokens(selectedChainId);
+    }
+  }, [selectedChainId]);
 
   const contactCandidates = useMemo(() => {
     const base = contacts
@@ -394,13 +411,15 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
     };
   };
 
-  const executeSend = async () => {
+  const handleSendWithSheet = async () => {
     setErrorMessage(null);
     const intent = composeIntent();
-    if (!intent) {
+    if (!intent || !user?.id) {
       setErrorMessage("Missing wallet or user session.");
       return;
     }
+
+    // 1) Validate
     const validation = await SendValidationService.validate(intent, {
       feeMode: "sponsored",
     });
@@ -409,60 +428,156 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
-    setStep("submitting");
-    const result = await SendExecutionService.executeSend(intent, {
-      waitForReceipt: false,
-      validation: { feeMode: "sponsored" },
+
+    // 2) Prepare the send (builds calldata / execution params)
+    let preparedSend: ReturnType<typeof SendPreparationService.prepare>;
+    try {
+      preparedSend = SendPreparationService.prepare(intent, validation);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Preparation failed.");
+      return;
+    }
+
+    // 3) Create history draft so we have a transactionId from the start
+    const draft = await TransactionHistoryService.createDraft({
+      userId: intent.userId,
+      aaWalletId: intent.aaWalletId,
+      walletAddress: intent.walletAddress,
+      chainId: intent.chainId,
+      type: intent.token.type === "native" ? "send_native" : "send_erc20",
+      direction: "outgoing",
+      tokenType: intent.token.type,
+      tokenAddress: intent.token.type === "erc20" ? intent.token.address : null,
+      tokenSymbol: intent.token.symbol,
+      tokenDecimals: intent.token.decimals,
+      fromAddress: intent.walletAddress,
+      toAddress: intent.recipient as Address,
+      amountDisplay: intent.amountDecimal,
+      targetAddress: intent.recipient as Address,
+      valueRaw: "0",
+      calldata: "0x",
+      metadata: intent.memo ? { memo: intent.memo } : {},
     });
-    setUserOpHash(result.userOpHash ?? null);
-    setTxHash(result.transactionHash ?? null);
 
-    if (result.status === "cancelled") {
-      setFinalState("cancelled");
-      setErrorMessage("Signing was cancelled.");
-      setStep("result");
-      navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
+    await TransactionHistoryService.markPrepared(draft.id, {
+      type: intent.token.type === "native" ? "send_native" : "send_erc20",
+      tokenType: intent.token.type,
+      tokenAddress: intent.token.type === "erc20" ? intent.token.address : null,
+      tokenSymbol: intent.token.symbol,
+      tokenDecimals: intent.token.decimals,
+      toAddress: preparedSend.validation.recipient,
+      amountRaw: preparedSend.validation.amountRaw.toString(),
+      amountDisplay: formatUnits(preparedSend.validation.amountRaw, preparedSend.intent.token.decimals),
+      targetAddress: preparedSend.targetAddress,
+      valueRaw: preparedSend.valueRaw.toString(),
+      calldata: preparedSend.calldata,
+      paymasterUsed: preparedSend.validation.feeMode === "sponsored",
+      feeMode: preparedSend.validation.feeMode === "sponsored" ? "sponsored" : "wallet_native",
+      metadata: preparedSend.intent.memo ? { memo: preparedSend.intent.memo } : {},
+    });
+
+    // 4) Build the preview and present the confirm sheet.
+    //    The hook internally prepares the UserOp (unsigned) + simulates.
+    const preview = buildSendPreview(preparedSend, selectedChain.name);
+    let approved: boolean;
+    let preparedUserOp: Awaited<ReturnType<typeof SmartAccountExecutionService.prepareUserOperation>> | undefined;
+    try {
+      const result = await tc.confirm({
+        preview,
+        execution: preparedSend.execution,
+        userId: user.id,
+        usePaymaster: preparedSend.validation.feeMode === "sponsored",
+      });
+      approved = result.approved;
+      preparedUserOp = result.prepared;
+    } catch (err) {
+      await TransactionHistoryService.markFailed({
+        id: draft.id,
+        errorMessage: err instanceof Error ? err.message : "Confirmation failed.",
+      });
+      setErrorMessage(err instanceof Error ? err.message : "Transaction preparation failed.");
       return;
     }
-    if (result.status === "failed") {
-      setFinalState("failed");
-      setErrorMessage(result.error ?? "Transaction failed.");
-      setStep("result");
-      navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
+
+    // 5) User rejected → cancel the draft and return quietly
+    if (!approved || !preparedUserOp) {
+      await TransactionHistoryService.markCancelled(draft.id, "user_rejected");
       return;
     }
 
-    const row = await TransactionHistoryService.getById(result.transactionId);
-    if (!row) {
+    // 6) User approved → sign + submit + track receipt
+    setStep("submitting");
+    let didSubmit = false;
+    let submittedHash: Address | undefined;
+
+    try {
+      await TransactionHistoryService.markSigning(draft.id);
+      const signed = await SmartAccountExecutionService.signUserOperation(user.id, preparedUserOp);
+      await TransactionHistoryService.markSigned(draft.id, {
+        signatureBytes: signed.signature.length > 2 ? (signed.signature.length - 2) / 2 : 0,
+        userOpHash: signed.userOpHash,
+      });
+
+      const submission = await SmartAccountExecutionService.submitUserOperation(signed);
+      didSubmit = true;
+      submittedHash = submission.submittedUserOpHash as Address;
+      setUserOpHash(submittedHash);
+
+      await TransactionHistoryService.markSubmitted({ id: draft.id, userOpHash: submission.submittedUserOpHash });
+      await TransactionHistoryService.markPending(draft.id);
+
+      // Track receipt (non-blocking timeout)
+      const row = await TransactionHistoryService.getById(draft.id);
+      if (!row) {
+        setFinalState("pending");
+        setStep("result");
+        navigation.navigate("TransactionStatus", { transactionId: draft.id });
+        return;
+      }
+      const tracked = await TransactionReceiptTracker.trackUserOperation({
+        transactionId: row.id,
+        timeoutMs: 45_000,
+        pollIntervalMs: 2_000,
+      });
+      if (tracked.status === "confirmed") {
+        setTxHash(tracked.transactionHash ?? null);
+        setFinalState("confirmed");
+        setStep("result");
+        navigation.navigate("TransactionStatus", { transactionId: draft.id });
+        return;
+      }
+      if (tracked.status === "failed") {
+        setFinalState("failed");
+        setErrorMessage(tracked.errorMessage ?? "Transaction failed after submission.");
+        setStep("result");
+        navigation.navigate("TransactionStatus", { transactionId: draft.id });
+        return;
+      }
       setFinalState("pending");
       setStep("result");
-      navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
-      return;
-    }
-    const tracked = await TransactionReceiptTracker.trackUserOperation({
-      transactionId: row.id,
-      timeoutMs: 45_000,
-      pollIntervalMs: 2_000,
-    });
-    if (tracked.status === "confirmed") {
-      setTxHash(tracked.transactionHash ?? null);
-      setFinalState("confirmed");
+      navigation.navigate("TransactionStatus", { transactionId: draft.id });
+    } catch (err) {
+      const isCancel =
+        err instanceof Error &&
+        (err.message.toLowerCase().includes("cancel") ||
+          err.message.toLowerCase().includes("aborted") ||
+          err.message.toLowerCase().includes("notallowed") ||
+          err.message.toLowerCase().includes("user denied"));
+
+      if (isCancel && !didSubmit) {
+        await TransactionHistoryService.markCancelled(draft.id, "passkey_prompt_cancelled");
+        setFinalState("cancelled");
+        setErrorMessage("Signing was cancelled.");
+      } else {
+        const msg = err instanceof Error ? err.message : "Transaction failed.";
+        await TransactionHistoryService.markFailed({ id: draft.id, errorMessage: msg });
+        setFinalState("failed");
+        setErrorMessage(msg);
+      }
+      setUserOpHash(submittedHash ?? null);
       setStep("result");
-      navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
-      return;
+      navigation.navigate("TransactionStatus", { transactionId: draft.id });
     }
-    if (tracked.status === "failed") {
-      setFinalState("failed");
-      setErrorMessage(
-        tracked.errorMessage ?? "Transaction failed after submission.",
-      );
-      setStep("result");
-      navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
-      return;
-    }
-    setFinalState("pending");
-    setStep("result");
-    navigation.navigate("TransactionStatus", { transactionId: result.transactionId });
   };
 
   const resetFlow = () => {
@@ -482,7 +597,6 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
       else navigation.goBack();
     } else if (step === "amount") setStep("token");
     else if (step === "recipient") setStep("amount");
-    else if (step === "review") setStep("recipient");
     else resetFlow();
   };
 
@@ -490,7 +604,6 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
     if (step === "token") return "Send";
     if (step === "amount") return "Send";
     if (step === "recipient") return "Send";
-    if (step === "review") return "Review";
     if (step === "submitting") return "Sending…";
     return "Status";
   }, [step]);
@@ -966,8 +1079,8 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
               ]}
               disabled={!canContinueRecipient}
               onPress={() => {
-                setStep("review");
                 Haptics.selectionAsync();
+                handleSendWithSheet();
               }}
             >
               <Text style={[s.primaryBtnText, { color: colors.textOnAccent }]}>
@@ -978,110 +1091,16 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
         </KeyboardAvoidingView>
       )}
 
-      {/* ════════════════════════════════════════════════════════════════
-          STEP: REVIEW  (Phantom style)
-         ════════════════════════════════════════════════════════════════ */}
-      {step === "review" && (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={[s.body, { paddingBottom: insets.bottom + 20 }]}
-        >
-          {/* Sending header */}
-          <View style={s.reviewHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.reviewHeaderLabel, { color: colors.textMuted }]}>Sending</Text>
-              <Text style={[s.reviewHeaderAmount, { color: colors.textPrimary }]}>
-                {amountDecimal} {selectedToken?.symbol}
-              </Text>
-            </View>
-            {/* Token icon */}
-            <View
-              style={[
-                s.reviewTokenIcon,
-                { backgroundColor: `${accent}26` },
-              ]}
-            >
-              <Text style={[s.reviewTokenLetter, { color: accent }]}>
-                {selectedToken?.symbol?.[0] ?? "?"}
-              </Text>
-            </View>
-          </View>
-
-          {/* Details card */}
-          <View
-            style={[
-              s.reviewCard,
-              {
-                backgroundColor: colors.surfaceCard,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            {/* From */}
-            <View style={[s.reviewRow, { borderBottomColor: colors.border }]}>
-              <Text style={[s.reviewKey, { color: colors.textMuted }]}>From</Text>
-              <View style={s.reviewValRow}>
-                <View
-                  style={[
-                    s.reviewAvatar,
-                    { backgroundColor: `${accent}2E` },
-                  ]}
-                >
-                  <Feather name="user" size={12} color={accent} />
-                </View>
-                <Text style={[s.reviewVal, { color: colors.textPrimary }]}>
-                  {shorten(walletAddress, 8, 6)}
-                </Text>
-              </View>
-            </View>
-
-            {/* To */}
-            <View style={[s.reviewRow, { borderBottomColor: colors.border }]}>
-              <Text style={[s.reviewKey, { color: colors.textMuted }]}>To</Text>
-              <Text style={[s.reviewVal, { color: colors.textPrimary }]}>
-                {shorten(recipient.trim(), 8, 6)}
-              </Text>
-            </View>
-
-            {/* Network */}
-            <View style={[s.reviewRow, { borderBottomColor: colors.border }]}>
-              <Text style={[s.reviewKey, { color: colors.textMuted }]}>Network</Text>
-              <Text style={[s.reviewVal, { color: colors.textPrimary }]}>
-                {selectedChain.name}
-              </Text>
-            </View>
-
-            {/* Network fee */}
-            <View style={[s.reviewRow, { borderBottomWidth: 0 }]}>
-              <Text style={[s.reviewKey, { color: colors.textMuted }]}>Network fee</Text>
-              <Text style={[s.reviewVal, { color: colors.textPrimary }]}>Sponsored</Text>
-            </View>
-          </View>
-
-          {/* Cancel / Confirm */}
-          <View style={s.reviewActions}>
-            <TouchableOpacity
-              style={[
-                s.cancelBtn,
-                {
-                  backgroundColor: colors.surfaceCard,
-                  borderColor: colors.border,
-                },
-              ]}
-              onPress={() => setStep("recipient")}
-            >
-              <Text style={[s.cancelBtnText, { color: colors.textPrimary }]}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[s.confirmBtn, { backgroundColor: accent }]}
-              onPress={executeSend}
-            >
-              <Text style={[s.confirmBtnText, { color: colors.textOnAccent }]}>Confirm</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      )}
+      {/* ── Unified confirm sheet (pre-broadcast: prepare + simulate + approve) */}
+      <TransactionConfirmSheet
+        ref={tc.sheetRef}
+        preview={tc.preview}
+        simulation={tc.simulation}
+        gasFee={tc.gasFee}
+        loading={tc.loading}
+        onApprove={tc.onApprove}
+        onReject={tc.onReject}
+      />
 
       {/* ════════════════════════════════════════════════════════════════
           STEP: SUBMITTING
@@ -1432,23 +1451,7 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   primaryBtnText: { fontSize: 16, fontWeight: "700" },
-  // Review step
-  reviewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    marginTop: 8,
-  },
-  reviewHeaderLabel: { fontSize: 13, fontWeight: "600", marginBottom: 2 },
-  reviewHeaderAmount: { fontSize: 32, fontWeight: "600", letterSpacing: -1 },
-  reviewTokenIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reviewTokenLetter: { fontSize: 22, fontWeight: "800" },
+  // Review card (shared with result step)
   reviewCard: {
     borderRadius: 16,
     borderWidth: 1,
@@ -1463,35 +1466,8 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  reviewValRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  reviewAvatar: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   reviewKey: { fontSize: 13, fontWeight: "600" },
   reviewVal: { fontSize: 13, fontWeight: "700", maxWidth: "60%", textAlign: "right" },
-  reviewActions: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  cancelBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  cancelBtnText: { fontSize: 16, fontWeight: "700" },
-  confirmBtn: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  confirmBtnText: { fontSize: 16, fontWeight: "700" },
   // Submitting step
   centeredStep: {
     flex: 1,

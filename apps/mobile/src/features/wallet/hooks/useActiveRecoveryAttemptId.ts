@@ -4,6 +4,8 @@ import type { Address } from "viem";
 
 import { getSupabaseClient } from "@lib/supabase";
 
+import { isAttemptLive } from "../utils/recoveryLiveness";
+
 // ADR-0009: the "Recovery Attempt in progress" banner reads only Supabase —
 // a single existence SELECT — and never pays an RPC call. Detail screen is
 // where chain reads happen. See CONTEXT.md "RPC budget for chain reads".
@@ -24,14 +26,20 @@ export function useActiveRecoveryAttemptId(smartAccountAddress: Address | undefi
     const supabase = getSupabaseClient();
     const { data } = await supabase
       .from("email_recovery_groups")
-      .select("id")
+      .select("id, created_at")
       .eq("smart_account_address", smartAccountAddress.toLowerCase())
       .is("deleted_at", null)
       .is("executed_at", null)
+      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    setAttemptId(data?.id ?? null);
+    // The `deadline` column was dropped from email_recovery_groups; created_at is
+    // the only time anchor for the documented pre-vote TTL. Without this guard an
+    // expired pre-vote group (never cleaned up — the TTL cron was never built)
+    // keeps re-presenting the resume sheet and pinning the sticky banner.
+    const live = data ? isAttemptLive(data.created_at, Date.now()) : false;
+    setAttemptId(live ? (data?.id ?? null) : null);
     setLoading(false);
   };
 

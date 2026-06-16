@@ -1,0 +1,24 @@
+{
+  "//": "tsx test runner config. Same path aliases as tsconfig.json, plus stubs for native-only modules (react-native, expo-constants) so node-run tests can import production modules that touch the native chain. Never used by Metro/Expo builds.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "react-native": ["./test/stubs/react-native.ts"],
+      "expo-constants": ["./test/stubs/expo-constants.ts"],
+      "@/*": ["./*"],
+      "@app/*": ["src/app/*"],
+      "@features/*": ["src/features/*"],
+      "@shared/*": ["src/shared/*"],
+      "@theme": ["src/theme/index"],
+      "@theme/*": ["src/theme/*"],
+      "@types/*": ["src/types/*"],
+      "@lib/*": ["src/lib/*"],
+      "@store/*": ["src/store/*"],
+      "@utils/*": ["src/utils/*"],
+      "@hooks/*": ["src/shared/hooks/*"],
+      "@hooks": ["src/shared/hooks/index"],
+      "@services/*": ["src/services/*"]
+    }
+  }
+}

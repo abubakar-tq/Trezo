@@ -41,7 +41,7 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: "center",
     },
     card: {
-      borderRadius: 28,
+      borderRadius: 24,
       padding: 24,
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -56,9 +56,9 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "700",
     },
     title: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 26,
-      fontWeight: "800",
+      fontWeight: "600",
       lineHeight: 32,
     },
     body: {
@@ -68,7 +68,7 @@ const createStyles = (colors: ThemeColors) =>
     },
     primaryButton: {
       paddingVertical: 16,
-      borderRadius: 18,
+      borderRadius: 16,
       backgroundColor: colors.accent,
       alignItems: "center",
     },

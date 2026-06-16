@@ -25,7 +25,24 @@ function exclusionList(additionalExclusions) {
 }
 
 const projectRoot = __dirname;
-const workspaceRoot = path.resolve(projectRoot, "../..");
+
+// Walk up the tree to find the real monorepo root (handles git worktrees whose
+// path is deeper than the standard apps/mobile/../../ two-level assumption).
+function findWorkspaceRoot(start) {
+  const fs = require("fs");
+  let dir = start;
+  for (let i = 0; i < 10; i++) {
+    if (fs.existsSync(path.join(dir, "node_modules", "expo"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(projectRoot, "../..");
+}
+
+const workspaceRoot = process.env.TREZO_WORKSPACE_ROOT
+  ? path.resolve(process.env.TREZO_WORKSPACE_ROOT)
+  : findWorkspaceRoot(path.resolve(projectRoot, "../.."));
 
 const config = getDefaultConfig(projectRoot);
 

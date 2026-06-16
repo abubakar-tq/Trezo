@@ -98,6 +98,25 @@ class BinanceService {
   }
 
   /**
+   * Fetches 24h ticker stats for a specific set of symbols (against USDT).
+   * Used to populate category views with a curated token list, independent of
+   * the volume-ranked global pool. Returns [] on any failure (one invalid
+   * symbol makes Binance reject the whole batch).
+   */
+  async getTickersForSymbols(symbols: string[]): Promise<BinanceTicker[]> {
+    if (symbols.length === 0) return [];
+    try {
+      const pairs = symbols.map((s) => `${s.toUpperCase()}USDT`);
+      const symbolString = encodeURIComponent(JSON.stringify(pairs));
+      const response = await this.api.get(`/ticker/24hr?symbols=${symbolString}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching category tickers from Binance:', error);
+      return [];
+    }
+  }
+
+  /**
    * Fetches global 24h stats for the top trading pairs
    */
   async getGlobalMarketStats(): Promise<BinanceTicker[]> {

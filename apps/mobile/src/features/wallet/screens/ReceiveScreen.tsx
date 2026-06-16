@@ -65,7 +65,7 @@ export const ReceiveScreen: React.FC = () => {
 
   const { isProvisioned } = useAccountState();
   const { ref: setUpRef, requireProvisioned } = useSetUpWalletSheet();
-  const chains = getEnabledChains();
+  const chains = getEnabledChains().filter((c) => c.id !== 31337);
 
   useEffect(() => {
     if (!isProvisioned) {
@@ -120,31 +120,34 @@ export const ReceiveScreen: React.FC = () => {
                 },
               ]}
             >
-              {iconUrl ? (
-                <TokenIcon uri={iconUrl} symbol={item.name[0]} size={36} />
-              ) : (
-                <View
-                  style={[
-                    styles.chainIconFallback,
-                    { backgroundColor: `${color}22` },
-                  ]}
+              <View style={styles.rowInner}>
+                {iconUrl ? (
+                  <TokenIcon uri={iconUrl} symbol={item.name[0]} size={36} />
+                ) : (
+                  <View
+                    style={[
+                      styles.chainIconFallback,
+                      { backgroundColor: `${color}22` },
+                    ]}
+                  >
+                    <Text style={[styles.chainIconLetter, { color }]}>
+                      {item.name[0]}
+                    </Text>
+                  </View>
+                )}
+                <Text
+                  style={[styles.chainName, { color: colors.textPrimary }]}
+                  numberOfLines={1}
                 >
-                  <Text style={[styles.chainIconLetter, { color }]}>
-                    {item.name[0]}
-                  </Text>
-                </View>
-              )}
-              <Text
-                style={[styles.chainName, { color: colors.textPrimary }]}
-                numberOfLines={1}
-              >
-                {item.name}
-              </Text>
-              <Feather
-                name="chevron-right"
-                size={18}
-                color={colors.textSecondary}
-              />
+                  {item.name}
+                </Text>
+                <Feather
+                  name="chevron-right"
+                  size={18}
+                  color={colors.textSecondary}
+                  style={styles.chevron}
+                />
+              </View>
             </Pressable>
           );
         }}
@@ -194,11 +197,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   row: {
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  rowInner: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 18,
-    borderWidth: 1,
     gap: 14,
   },
   chainIconFallback: {
@@ -216,6 +221,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: "700",
+  },
+  chevron: {
+    flexShrink: 0,
   },
   emptyText: {
     textAlign: "center",

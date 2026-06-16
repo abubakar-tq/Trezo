@@ -69,7 +69,9 @@ export const SetUpWalletSheet = forwardRef<SetUpSheetHandle>((_, ref) => {
 
     try {
       setStep("passkey");
-      const passkey = await PasskeyService.createPasskey(user.id);
+      // Reuse an existing passkey if the device already has one — creating a new
+      // one would derive a different AA address and orphan the prior wallet.
+      const passkey = await PasskeyService.getOrCreatePasskey(user.id);
 
       setStep("predicting");
 
@@ -153,7 +155,7 @@ export const SetUpWalletSheet = forwardRef<SetUpSheetHandle>((_, ref) => {
         {step === "success" && (
           <>
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
-              You're ready to receive.
+              You&apos;re ready to receive.
             </Text>
             <Pressable
               onPress={() => {

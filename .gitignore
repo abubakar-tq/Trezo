@@ -122,9 +122,15 @@ apps/guardian-approval/.env
 apps/backend/zk-email-recovery-api/src/future-only/
 scripts/graphify-solidity-parser-scripts
 
-# Documentation (only docs/ARCHITECTURE.md is tracked; docs/plans/ stays local)
+# Documentation: docs/plans/ and docs/ARCHITECTURE.md are tracked; everything
+# else under docs/ stays local. (Plans are tracked so they survive across git
+# worktrees without re-adding — see the allow-list at the top of this file.)
 docs/*
+!docs/plans/
+!docs/plans/**
 !docs/ARCHITECTURE.md
+# ...but local-only screenshots referenced by plans stay off the server.
+docs/plans/CoreScreenshots/
 
 # Foundry libraries
 contracts/lib/email-recovery/
@@ -145,3 +151,4 @@ kilo.jsonc
 .roo/.env.*
 .roo/
 .rooignore
+.design-skills/

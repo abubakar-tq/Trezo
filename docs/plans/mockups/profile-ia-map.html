@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profile IA — before / after</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#060608;--surface:rgba(18,15,24,0.70);--glass:rgba(244,241,234,0.02);--border:rgba(124,58,237,0.10);--border2:rgba(124,58,237,0.18);
+    --text:#F4F1EA;--text2:#8E8B85;--text3:#5C5A55;--accent:#7C3AED;--accentAlt:#06B6D4;--gain:#34D399;--loss:#E8654F;--warning:#F59E0B;--danger:#E8654F}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(120% 60% at 50% -10%, #120c1e 0%, #060608 55%);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;padding:32px 24px 80px;-webkit-font-smoothing:antialiased}
+  .head{max-width:1200px;margin:0 auto 26px;text-align:center}.head h1{font-size:23px;font-weight:700;letter-spacing:-.3px}.head p{color:var(--text2);font-size:14px;margin-top:6px;max-width:820px;margin-inline:auto;line-height:1.5}
+  .counts{display:flex;gap:14px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+  .pillcount{border:1px solid var(--border2);border-radius:999px;padding:7px 16px;font-size:13px;font-weight:700}
+  .pillcount .n{font-family:'JetBrains Mono',monospace}
+  .c-before{color:var(--loss)}.c-after{color:var(--gain)}.c-del{color:var(--warning)}
+  .stage{display:flex;gap:34px;justify-content:center;align-items:flex-start;flex-wrap:wrap;max-width:1200px;margin:0 auto}
+  .panel{width:380px;background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:18px}
+  .panel h2{font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px}
+  .panel .sub{font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.4;min-height:32px}
+  .h-before h2{color:var(--loss)}.h-after h2{color:var(--accent)}
+  .grp{font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin:14px 0 6px}
+  .node{display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:13px;line-height:1.35}
+  .node .ico{flex-shrink:0;width:16px;text-align:center;color:var(--text2)}
+  .node .nm{flex:1}
+  .lvl1{padding-left:0}.lvl2{padding-left:18px}.lvl3{padding-left:36px}.lvl4{padding-left:54px}
+  .lvl2 .nm,.lvl3 .nm,.lvl4 .nm{color:var(--text2)}
+  .lvl3 .nm,.lvl4 .nm{font-size:12px}
+  .tagx{font-size:9px;font-weight:800;letter-spacing:.5px;padding:2px 6px;border-radius:5px;margin-left:6px;text-transform:uppercase;vertical-align:middle}
+  .x-del{background:rgba(232,101,79,.16);color:#f0a08c}
+  .x-dev{background:rgba(245,158,11,.16);color:#f5c45f}
+  .x-merge{background:rgba(6,182,212,.16);color:#5fd0e0}
+  .x-new{background:rgba(52,211,153,.16);color:#7fe3bd}
+  .x-keep{background:rgba(124,58,237,.16);color:#c4b5fd}
+  .strike .nm{text-decoration:line-through;color:var(--text3)}
+  .depth{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:6px}
+  .note{max-width:1200px;margin:28px auto 0;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:var(--surface);font-size:13px;color:var(--text2);line-height:1.65}
+  .note b{color:var(--text)}.note code{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c4b5fd}
+  .legend{display:flex;gap:9px;align-items:flex-start;margin-top:9px}.legend .k{flex-shrink:0;width:74px;font-weight:800}
+  .k-del{color:#f0a08c}.k-dev{color:#f5c45f}.k-merge{color:#5fd0e0}.k-new{color:#7fe3bd}
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>Profile cleanup — the navigation map</h1>
+    <p>The heart of this stream is <b>subtraction</b>. Left = today's sprawl (~31 reachable/registered screens). Right = the proposed structure. Same capabilities, far less surface.</p>
+    <div class="counts">
+      <span class="pillcount c-before">Before: <span class="n">~31</span> screens</span>
+      <span class="pillcount c-del">Delete/gate: <span class="n">8</span></span>
+      <span class="pillcount c-after">After: <span class="n">~15</span> live screens</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <!-- ============ BEFORE ============ -->
+    <div class="panel h-before">
+      <h2>Before — today</h2>
+      <div class="sub">Flat global stack. Dead/mock screens, dev/test UI in production, a 2,263-line monolith, recovery nested 4+ taps deep.</div>
+
+      <div class="grp">Profile root</div>
+      <div class="node lvl1"><span class="ico">◈</span><span class="nm">Profile</span></div>
+
+      <div class="grp">Account group</div>
+      <div class="node lvl2"><span class="ico">›</span><span class="nm">Edit Profile</span></div>
+      <div class="node lvl2"><span class="ico">›</span><span class="nm">Linked Devices (DevicesPasskeys) <span class="depth">1272 lines</span></span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ PairDevice</span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ LinkDevice</span></div>
+      <div class="node lvl2"><span class="ico">›</span><span class="nm">Backup &amp; Recovery (hub)</span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ Incoming Recovery Approvals</span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ Guardian Recovery <span class="tagx x-dev">test UI</span></span></div>
+      <div class="node lvl4"><span class="ico">·</span><span class="nm">→ Guardian Update Modal</span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ Email Recovery <span class="depth">2263 lines</span></span></div>
+      <div class="node lvl4"><span class="ico">·</span><span class="nm">→ Recovery Kit Export</span></div>
+      <div class="node lvl4"><span class="ico">·</span><span class="nm">→ Email Recovery Start <span class="tagx x-dev">dev</span></span></div>
+      <div class="node lvl4"><span class="ico">·</span><span class="nm">→ Recovery Attempt Status</span></div>
+      <div class="node lvl4"><span class="ico">·</span><span class="nm">→ Email Recovery Group Status</span></div>
+      <div class="node lvl2"><span class="ico">›</span><span class="nm">Connected dApps</span></div>
+      <div class="node lvl2"><span class="ico">›</span><span class="nm">Contacts</span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ Add Contact · Contact Detail</span></div>
+
+      <div class="grp">Preferences group</div>
+      <div class="node lvl2"><span class="ico">›</span><span class="nm">Notifications</span></div>
+      <div class="node lvl2"><span class="ico">›</span><span class="nm">Browser Settings <span class="tagx x-dev">odd tone</span></span></div>
+      <div class="node lvl2"><span class="ico">›</span><span class="nm">Dev Controls <span class="tagx x-dev">dev</span></span></div>
+
+      <div class="grp">Danger / footer</div>
+      <div class="node lvl2"><span class="ico">!</span><span class="nm">My wallet is compromised</span></div>
+      <div class="node lvl2"><span class="ico">⎋</span><span class="nm">Sign Out</span></div>
+
+      <div class="grp">Orphaned / dead (registered, no clean entry)</div>
+      <div class="node lvl2 strike"><span class="ico">✕</span><span class="nm">SecurityPrivacy <span class="tagx x-del">passthrough</span></span></div>
+      <div class="node lvl2 strike"><span class="ico">✕</span><span class="nm">ConnectedDevices <span class="tagx x-del">mock</span></span></div>
+      <div class="node lvl2 strike"><span class="ico">✕</span><span class="nm">Settings (legacy) <span class="tagx x-del">no-op</span></span></div>
+
+      <div class="grp">Recovery feature screens (deep, reachable)</div>
+      <div class="node lvl2"><span class="ico">·</span><span class="nm" style="color:var(--text3);font-size:12px">RecoveryEntry · Progress · Complete · CreateRequest · ShareRequest · AddGuardian · GuardianManagement · SecurityCenter · ThresholdConfig (9)</span></div>
+    </div>
+
+    <!-- ============ AFTER ============ -->
+    <div class="panel h-after">
+      <h2>After — proposed</h2>
+      <div class="sub">Three clear groups. Dead screens gone, dev/test gated, recovery flattened, status screens merged. Same power, ~half the surface.</div>
+
+      <div class="grp">Profile root</div>
+      <div class="node lvl1"><span class="ico">◈</span><span class="nm">Profile <span class="tagx x-keep">redesign</span></span></div>
+      <div class="node lvl2"><span class="ico">›</span><span class="nm">Edit Profile (tap avatar)</span></div>
+
+      <div class="grp">Security group</div>
+      <div class="node lvl2"><span class="ico">🛡</span><span class="nm">Recovery &amp; Backup <span class="tagx x-keep">hub</span></span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ Guardians (social recovery)</span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ Email Recovery <span class="tagx x-merge">split: setup vs manage</span></span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ Recovery Status <span class="tagx x-merge">+group status merged in</span></span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ Incoming Approvals (guardian inbox)</span></div>
+      <div class="node lvl2"><span class="ico">📱</span><span class="nm">Devices &amp; Passkeys <span class="tagx x-merge">2 sections, 1 screen, trimmed</span></span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ Pair / Link device</span></div>
+
+      <div class="grp">Wallet group</div>
+      <div class="node lvl2"><span class="ico">🔗</span><span class="nm">Connected Apps</span></div>
+      <div class="node lvl2"><span class="ico">👤</span><span class="nm">Contacts</span></div>
+      <div class="node lvl3"><span class="ico">·</span><span class="nm">→ Add / Detail</span></div>
+
+      <div class="grp">Preferences group</div>
+      <div class="node lvl2"><span class="ico">🔔</span><span class="nm">Notifications</span></div>
+      <div class="node lvl2"><span class="ico">🌐</span><span class="nm">Browser <span class="tagx x-keep">tone fixed, dead btn removed</span></span></div>
+
+      <div class="grp">Footer</div>
+      <div class="node lvl2"><span class="ico">!</span><span class="nm">My wallet is compromised <span class="tagx x-merge">slimmed</span></span></div>
+      <div class="node lvl2"><span class="ico">⎋</span><span class="nm">Sign Out · version</span></div>
+
+      <div class="grp">Gated behind __DEV__ (out of prod nav)</div>
+      <div class="node lvl2"><span class="ico">⚙</span><span class="nm" style="color:var(--text3);font-size:12px">Dev Controls · Email Recovery Start · Guardian timelock picker + payload dumps · Check Passkey Authority</span></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>The 8 cuts (how ~31 → ~15):</b>
+    <div class="legend"><span class="k k-del">DELETE ×3</span><span><b>ConnectedDevices</b> (hardcoded mock, all buttons no-op) · <b>Settings legacy</b> (disconnected duplicate of theme+signout+notifs) · <b>SecurityPrivacy</b> (pure passthrough to 2 screens already reachable in 1 tap). Zero capability lost.</span></div>
+    <div class="legend"><span class="k k-dev">GATE ×3</span><span>Move behind <code>__DEV__</code>, out of the production nav: <b>Email Recovery Start</b>, the <b>Guardian timelock picker + raw UserOp payload dumps</b>, <b>Check Passkey Authority</b> debug. (Dev Controls already dev-gated.)</span></div>
+    <div class="legend"><span class="k k-merge">MERGE ×2</span><span><b>Recovery Attempt Status + Group Status</b> → one status screen (group = a section/accordion, not a 4th hop). <b>Email Recovery monolith (2263 lines)</b> → split into a setup wizard vs a management view (kills shipped-but-hidden dead UI paths).</span></div>
+    <div class="legend"><span class="k k-new">REGROUP</span><span>Root reorganized into <b>Security / Wallet / Preferences</b> (was Account / Preferences). Recovery becomes one clear hub; the 9 recovery-feature screens stay reachable but flatten from 4+ taps to ≤2 under that hub.</span></div>
+    <div class="legend"><span class="k" style="color:#c4b5fd">QUESTION</span><span>Open calls for you: (1) the 3 deletes — confirm none are secretly used? (2) recovery hub: one "Recovery &amp; Backup" entry, or split "Guardians" and "Email Recovery" as two top-level Security rows? (3) keep the emoji-ish icons or Feather line icons (recommend Feather, per system).</span></div>
+  </div>
+</body>
+</html>

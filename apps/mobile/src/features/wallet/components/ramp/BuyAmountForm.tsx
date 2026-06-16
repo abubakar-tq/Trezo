@@ -31,6 +31,10 @@ interface Props {
   quickAmounts?: string[];
   onQuickAmount?: (v: string) => void;
   assetLoading?: boolean;
+  /** Small hint shown below the crypto estimate, e.g. "Max 0.025 ETH (~$62)" */
+  maxHint?: string;
+  /** Inline validation error shown in red below the amount (e.g. cap exceeded). */
+  capError?: string;
 }
 
 export const BuyAmountForm: React.FC<Props> = ({
@@ -45,6 +49,8 @@ export const BuyAmountForm: React.FC<Props> = ({
   quickAmounts,
   onQuickAmount,
   assetLoading,
+  maxHint,
+  capError,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
@@ -103,6 +109,11 @@ export const BuyAmountForm: React.FC<Props> = ({
         <Text style={[styles.estimatedCrypto, { color: colors.textMuted }]}>
           ≈ {estimatedCrypto} {selectedAsset.symbol}
         </Text>
+        {capError ? (
+          <Text style={[styles.capError, { color: colors.danger }]}>{capError}</Text>
+        ) : maxHint ? (
+          <Text style={[styles.maxHint, { color: colors.textMuted }]}>{maxHint}</Text>
+        ) : null}
       </View>
 
       {/* Asset Chip */}
@@ -187,6 +198,8 @@ const styles = StyleSheet.create({
   currencySymbol: { fontSize: 32, fontWeight: "500", marginTop: 10 },
   amountInput: { fontSize: 72, fontWeight: "800", textAlign: "center", minWidth: 80 },
   estimatedCrypto: { fontSize: 16, fontWeight: "500", marginTop: 6 },
+  maxHint: { fontSize: 12, fontWeight: "500", marginTop: 4 },
+  capError: { fontSize: 13, fontWeight: "700", marginTop: 4 },
   assetChip: {
     flexDirection: "row",
     alignItems: "center",

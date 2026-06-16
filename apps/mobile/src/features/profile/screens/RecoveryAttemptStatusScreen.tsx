@@ -18,6 +18,7 @@ import type { Address } from "viem";
 import { getSupabaseClient } from "@lib/supabase";
 import { RootStackParamList } from "@/src/types/navigation";
 import { useAppTheme } from "@theme";
+import { FontFamilies } from "@shared/components/TokenRegistry";
 import type { ThemeColors } from "@theme";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import {
@@ -41,7 +42,7 @@ function statusPillLabel(state: RecoveryAttemptState): string {
     }
     case "executable": return "Ready to install new passkey";
     case "executing": return "Installing new passkey…";
-    case "executed": return "Recovery complete ✓";
+    case "executed": return "Recovery complete";
     case "expired": return "Recovery Attempt expired";
     case "error": return `Error: ${state.reason}`;
     default: return "Checking status…";
@@ -54,7 +55,7 @@ function statusPillColor(state: RecoveryAttemptState, colors: ThemeColors): stri
     case "expired":
     case "error": return colors.danger;
     case "executable":
-    case "vote-landed-pre-execute": return colors.accentAlt;
+    case "vote-landed-pre-execute": return colors.accent;
     case "executing": return colors.accent;
     default: return colors.textSecondary;
   }
@@ -66,7 +67,7 @@ function guardianBadgeLabel(s: ProveEmailStatus["proofStatus"]): string {
   switch (s) {
     case "email_sent": return "Awaiting reply";
     case "email_received": return "Reply received, proof pending";
-    case "proof_generated": return "Voted ✓";
+    case "proof_generated": return "Voted";
     case "failed": return "Failed — Retry";
     default: return "Awaiting reply";
   }
@@ -76,7 +77,7 @@ function guardianBadgeColor(s: ProveEmailStatus["proofStatus"], colors: ThemeCol
   switch (s) {
     case "proof_generated": return colors.success;
     case "failed": return colors.danger;
-    case "email_received": return colors.accentAlt;
+    case "email_received": return colors.textSecondary;
     default: return colors.textMuted;
   }
 }
@@ -253,7 +254,7 @@ const RecoveryAttemptStatusScreen: React.FC = () => {
   if (metaLoading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={theme.colors.accentAlt} />
+        <ActivityIndicator size="large" color={theme.colors.accent} />
       </View>
     );
   }
@@ -277,7 +278,7 @@ const RecoveryAttemptStatusScreen: React.FC = () => {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* ── Block 1: Status pill ────────────────────────────────────────── */}
-        <View style={[styles.pillRow, { borderColor: `${pillColor}40`, backgroundColor: `${pillColor}12` }]}>
+        <View style={[styles.pillRow, { borderColor: pillColor, backgroundColor: theme.colors.surfaceMuted }]}>
           <View style={[styles.pillDot, { backgroundColor: pillColor }]} />
           <Text style={[styles.pillLabel, { color: pillColor }]}>
             {statusPillLabel(state)}
@@ -307,11 +308,11 @@ const RecoveryAttemptStatusScreen: React.FC = () => {
               </View>
               {(g.proofStatus === "failed" || (g.proofStatus === "pending" && !g.relayerRequestId)) && (
                 <TouchableOpacity
-                  style={[styles.resendBtn, { borderColor: theme.colors.accentAlt }]}
+                  style={[styles.resendBtn, { borderColor: theme.colors.accent }]}
                   onPress={() => void handleResend(g.id)}
                 >
-                  <Feather name="refresh-cw" size={13} color={theme.colors.accentAlt} />
-                  <Text style={[styles.resendLabel, { color: theme.colors.accentAlt }]}>Retry</Text>
+                  <Feather name="refresh-cw" size={13} color={theme.colors.accent} />
+                  <Text style={[styles.resendLabel, { color: theme.colors.accent }]}>Retry</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -326,7 +327,7 @@ const RecoveryAttemptStatusScreen: React.FC = () => {
               const s = steps[i];
               const dotColor =
                 s === "done" ? theme.colors.success
-                : s === "active" ? theme.colors.accentAlt
+                : s === "active" ? theme.colors.accent
                 : theme.colors.border;
               const labelColor =
                 s === "pending" ? theme.colors.textMuted : theme.colors.textPrimary;
@@ -334,8 +335,8 @@ const RecoveryAttemptStatusScreen: React.FC = () => {
                 <React.Fragment key={label}>
                   <View style={styles.stepChip}>
                     <View style={[styles.stepDot, { backgroundColor: dotColor }]}>
-                      {s === "done" && <Feather name="check" size={10} color="#fff" />}
-                      {s === "active" && <ActivityIndicator size="small" color="#fff" style={{ transform: [{ scale: 0.55 }] }} />}
+                      {s === "done" && <Feather name="check" size={10} color={theme.colors.textOnAccent} />}
+                      {s === "active" && <ActivityIndicator size="small" color={theme.colors.textOnAccent} style={{ transform: [{ scale: 0.55 }] }} />}
                     </View>
                     <Text style={[styles.stepLabel, { color: labelColor }]}>{label}</Text>
                   </View>
@@ -384,7 +385,7 @@ const createStyles = (colors: ThemeColors) =>
       gap: 10,
       paddingHorizontal: 14,
       paddingVertical: 11,
-      borderRadius: 12,
+      borderRadius: 16,
       borderWidth: 1,
     },
     pillDot: { width: 8, height: 8, borderRadius: 4 },
@@ -398,7 +399,7 @@ const createStyles = (colors: ThemeColors) =>
       justifyContent: "space-between",
       paddingVertical: 12,
       paddingHorizontal: 14,
-      borderRadius: 10,
+      borderRadius: 8,
       borderWidth: StyleSheet.hairlineWidth,
       backgroundColor: colors.surfaceCard,
       gap: 10,
@@ -425,7 +426,7 @@ const createStyles = (colors: ThemeColors) =>
     stepLabel: { fontSize: 11, fontWeight: "500" },
     stepLine: { height: 2, flex: 0.5, marginBottom: 14 },
     devSection: { opacity: 0.6 },
-    devText: { fontSize: 11, fontFamily: "monospace" },
+    devText: { fontSize: 11, fontFamily: FontFamilies.mono },
   });
 
 export default RecoveryAttemptStatusScreen;

@@ -22,6 +22,7 @@ import {
   View,
   ActivityIndicator,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
 
 
@@ -116,7 +117,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
           <Text
             style={{
               fontSize: 28,
-              fontWeight: "800",
+              fontWeight: "600",
               color: colors.textPrimary,
             }}
           >
@@ -139,7 +140,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
             borderRadius: 24,
             padding: 20,
             borderWidth: 1,
-            borderColor: `${colors.accent}1A`,
+            borderColor: colors.glassBorder,
           }}
         >
           <View style={{ gap: 16 }}>
@@ -148,7 +149,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                 fontSize: 11,
                 fontWeight: "700",
                 letterSpacing: 1,
-                color: colors.accent,
+                color: colors.textSecondary,
               }}
             >
               WHY ADD A TRUSTED CONTACT?
@@ -160,13 +161,13 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                   style={{ 
                     width: 36, 
                     height: 36, 
-                    borderRadius: 18, 
-                    backgroundColor: `${colors.accent}1A`,
-                    alignItems: 'center', 
-                    justifyContent: 'center' 
+                    borderRadius: 18,
+                    backgroundColor: colors.surfaceMuted,
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
-                  <Text style={{ fontSize: 16 }}>🛡</Text>
+                  <Feather name="shield" size={16} color={colors.textSecondary} />
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>
@@ -183,13 +184,13 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                   style={{ 
                     width: 36, 
                     height: 36, 
-                    borderRadius: 18, 
-                    backgroundColor: `${colors.accent}1A`,
-                    alignItems: 'center', 
-                    justifyContent: 'center' 
+                    borderRadius: 18,
+                    backgroundColor: colors.surfaceMuted,
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
-                  <Text style={{ fontSize: 16 }}>🔐</Text>
+                  <Feather name="lock" size={16} color={colors.textSecondary} />
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>
@@ -206,13 +207,13 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                   style={{ 
                     width: 36, 
                     height: 36, 
-                    borderRadius: 18, 
-                    backgroundColor: `${colors.accent}1A`,
-                    alignItems: 'center', 
-                    justifyContent: 'center' 
+                    borderRadius: 18,
+                    backgroundColor: colors.surfaceMuted,
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
-                  <Text style={{ fontSize: 16 }}>📱</Text>
+                  <Feather name="smartphone" size={16} color={colors.textSecondary} />
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={{ fontSize: 15, fontWeight: "700", color: colors.textPrimary }}>
@@ -243,7 +244,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                 fontSize: 11,
                 fontWeight: "700",
                 letterSpacing: 1,
-                color: colors.accent,
+                color: colors.textSecondary,
               }}
             >
               ENTER CONTACT INFORMATION
@@ -255,14 +256,14 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
               </Text>
               <TextInput
                 style={{
-                  backgroundColor: colors.glass,
-                  borderRadius: 12,
+                  backgroundColor: colors.inputBackground,
+                  borderRadius: 16,
                   paddingHorizontal: 16,
                   paddingVertical: 14,
                   color: colors.textPrimary,
                   fontSize: 16,
                   borderWidth: 1,
-                  borderColor: error ? colors.danger : colors.borderMuted,
+                  borderColor: error ? colors.danger : colors.inputBorder,
                 }}
                 placeholder={
                   contactType === "email"
@@ -294,15 +295,19 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                 style={{
                   flex: 1,
                   paddingVertical: 12,
-                  borderRadius: 12,
-                  backgroundColor: contactType === 'email' ? `${colors.accent}1A` : 'transparent',
+                  borderRadius: 16,
+                  backgroundColor: contactType === 'email' ? colors.accentSoft : 'transparent',
                   borderWidth: 1,
                   borderColor: contactType === 'email' ? colors.accent : colors.borderMuted,
+                  flexDirection: 'row',
                   alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
                 }}
               >
+                <Feather name="mail" size={16} color={contactType === 'email' ? colors.accent : colors.textSecondary} />
                 <Text style={{ color: contactType === 'email' ? colors.accent : colors.textSecondary, fontWeight: '700' }}>
-                  📧 Email
+                  Email
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -314,15 +319,19 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
                 style={{
                   flex: 1,
                   paddingVertical: 12,
-                  borderRadius: 12,
-                  backgroundColor: contactType === 'phone' ? `${colors.accent}1A` : 'transparent',
+                  borderRadius: 16,
+                  backgroundColor: contactType === 'phone' ? colors.accentSoft : 'transparent',
                   borderWidth: 1,
                   borderColor: contactType === 'phone' ? colors.accent : colors.borderMuted,
+                  flexDirection: 'row',
                   alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
                 }}
               >
+                <Feather name="phone" size={16} color={contactType === 'phone' ? colors.accent : colors.textSecondary} />
                 <Text style={{ color: contactType === 'phone' ? colors.accent : colors.textSecondary, fontWeight: '700' }}>
-                  📱 Phone
+                  Phone
                 </Text>
               </TouchableOpacity>
             </View>
@@ -345,10 +354,9 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
             </Text>
             <View style={{ gap: 8 }}>
               {[
-                `1. We send a secure invitation to ${contactType === "email" ? "their email" : "their phone"}`,
-                "2. They verify their identity and accept the invitation",
-                "3. Once verified, they become an active trusted contact",
-                "4. They'll be notified if recovery is needed"
+                `1. We send a secure invite to ${contactType === "email" ? "their email" : "their phone"}`,
+                "2. They verify and accept to become an active contact",
+                "3. They're notified only if you need recovery"
               ].map((step, idx) => (
                 <Text key={idx} style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 20 }}>
                   {step}
@@ -367,7 +375,7 @@ export const AddGuardianScreen: React.FC<AddGuardianScreenProps> = ({
             paddingHorizontal: 8,
           }}
         >
-          <Text style={{ fontSize: 20 }}>🛡</Text>
+          <Feather name="shield" size={20} color={colors.success} />
           <Text
             style={{ fontSize: 13, fontWeight: "600", color: colors.success }}
           >

@@ -140,10 +140,16 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 3 }) => {
   }
 
   if (rows.length === 0) {
+    // Spec §5.1: real EmptyState block, NOT 12px muted text
     return (
-      <View style={styles.emptyWrap}>
-        <PushPermissionBanner />
-        <Text style={[styles.emptyText, { color: colors.textMuted }]}>No recent activity yet.</Text>
+      <View style={[styles.emptyWrap, { borderColor: colors.glassBorder }]}>
+        <View style={[styles.emptyIconBox, { backgroundColor: `${colors.accent}14`, borderColor: `${colors.accent}22` }]}>
+          <Feather name="activity" size={22} color={colors.accent} />
+        </View>
+        <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>No activity yet</Text>
+        <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
+          Your transactions will appear here after your first send or swap.
+        </Text>
       </View>
     );
   }
@@ -227,23 +233,44 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   emptyWrap: {
-    paddingVertical: 16,
+    paddingVertical: 28,
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 4,
   },
-  emptyText: {
-    fontSize: 12,
-    fontWeight: "500",
+  emptyIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    fontWeight: "400",
+    lineHeight: 18,
+    textAlign: "center",
+    paddingHorizontal: 16,
   },
   item: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 16,
-    minHeight: 80,
+    paddingVertical: 12,
+    minHeight: 64,
   },
   itemLeft: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 0.65,
+    flex: 1,
     gap: 16,
   },
   textContainer: {
@@ -253,7 +280,8 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    // Spec §3: radius scale — 12 for token chips/icons (was offending 14)
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -269,11 +297,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   itemRight: {
-    flex: 0.35,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 12,
+    flexShrink: 0,
+    paddingLeft: 12,
   },
   amountText: {
     fontSize: 16,

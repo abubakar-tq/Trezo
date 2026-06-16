@@ -27,12 +27,12 @@ export function RecoveryAttemptBanner({ smartAccountAddress, sticky = false }: R
 
   return (
     <TouchableOpacity
-      style={[styles.banner, { backgroundColor: `${colors.accentAlt}18`, borderColor: `${colors.accentAlt}40` }]}
+      style={[styles.banner, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
       onPress={() => navigation.navigate("RecoveryAttemptStatus", { attemptId })}
       activeOpacity={0.8}
     >
-      <Feather name="refresh-cw" size={14} color={colors.accentAlt} style={styles.icon} />
-      <Text style={[styles.label, { color: colors.accentAlt }]}>
+      <Feather name="refresh-cw" size={14} color={colors.accent} style={styles.icon} />
+      <Text style={[styles.label, { color: colors.accent }]}>
         Recovery in progress — Tap to view
       </Text>
       {!sticky && (
@@ -54,8 +54,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
     borderWidth: 1,
     gap: 8,
   },

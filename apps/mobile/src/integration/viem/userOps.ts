@@ -5,7 +5,6 @@ import {
   keccak256,
   parseAbiParameters,
   http,
-  decodeAbiParameters,
   type Address,
   type Hex,
   createClient,
@@ -23,6 +22,7 @@ import { ABIS } from "./abis";
 import { getDeployment } from "./deployments";
 import { getPublicClient, getViemChain } from "./clients";
 import type { SupportedChainId } from "../chains";
+import { collectErrorData, decodeDelegateAndRevert, decodeFailedOp, decodeRevertString } from "./revertDecoding";
 
 export type PasskeyInit = {
   idRaw: Hex;
@@ -38,8 +38,6 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
 const BUNDLER_GAS_CAP = 20_000_000n; // many bundlers default to 20m max gas per UserOp
 const CREATE_ACCOUNT_MIN_VERIFICATION_GAS = 1_500_000n;
 const SMART_ACCOUNT_MIN_VERIFICATION_GAS = 500_000n;
-const DELEGATE_AND_REVERT_SELECTOR = "0x99410554";
-const FAILED_OP_SELECTOR = "0x220266b6";
 const VALIDATIONDATA_ALL_TIME_VALID_SENTINEL = "000000000000ffffffffffff0000000000000000000000000000000000000000";
 
 const debugLog = (...args: unknown[]) => {
@@ -65,61 +63,7 @@ const summarizeUserOp = (op: UserOperation<typeof ENTRY_POINT_VERSION>) => ({
   paymaster: op.paymaster,
 });
 
-// ------------ Error decoding helpers (for bundler delegateAndRevert) -------------
-const asHex = (v: any): Hex | undefined =>
-  typeof v === "string" && v.startsWith("0x") ? (v as Hex) : undefined;
-
-const collectErrorData = (err: any): Hex[] => {
-  const candidates = [
-    err?.data,
-    err?.error?.data,
-    err?.cause?.data,
-    err?.cause?.error?.data,
-    (() => {
-      try {
-        const parsed = JSON.parse(err?.body ?? "{}");
-        return parsed?.error?.data;
-      } catch {
-        return undefined;
-      }
-    })(),
-  ];
-  return candidates.map(asHex).filter(Boolean) as Hex[];
-};
-
-const decodeDelegateAndRevert = (raw: Hex) => {
-  if (!raw.startsWith(DELEGATE_AND_REVERT_SELECTOR) || raw.length < 10) return null;
-  try {
-    const data = ("0x" + raw.slice(10)) as Hex;
-    const [ok, inner] = decodeAbiParameters([{ type: "bool" }, { type: "bytes" }], data);
-    return { ok, inner: inner as Hex };
-  } catch {
-    return null;
-  }
-};
-
-const decodeFailedOp = (raw: Hex) => {
-  if (!raw.startsWith(FAILED_OP_SELECTOR) || raw.length < 10) return null;
-  try {
-    const data = ("0x" + raw.slice(10)) as Hex;
-    const [opIndex, reason] = decodeAbiParameters([{ type: "uint256" }, { type: "string" }], data);
-    return { opIndex: Number(opIndex), reason: reason as string };
-  } catch {
-    return null;
-  }
-};
-
-const decodeRevertString = (raw: Hex) => {
-  // Error(string) selector 0x08c379a0
-  if (!raw.startsWith("0x08c379a0") || raw.length < 10) return null;
-  try {
-    const data = ("0x" + raw.slice(10)) as Hex;
-    const [reason] = decodeAbiParameters([{ type: "string" }], data);
-    return reason as string;
-  } catch {
-    return null;
-  }
-};
+// ------------ Error decoding helpers (imported from revertDecoding) -------------
 
 const containsValidationDataSuccessSentinel = (raw: Hex) =>
   raw.toLowerCase().includes(VALIDATIONDATA_ALL_TIME_VALID_SENTINEL);

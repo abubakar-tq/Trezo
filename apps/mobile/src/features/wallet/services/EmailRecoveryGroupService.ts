@@ -509,8 +509,6 @@ export class EmailRecoveryGroupService {
 
   // DEPRECATED: Phase 2 replaced this with useRecoveryAttemptState.triggerExecute.
   // Auto-execute now fires from RecoveryAttemptStatusScreen when phase === 'executable'.
-  // Kept temporarily so the old EmailRecoveryGroupStatusScreen can still compile;
-  // will be deleted when that screen is replaced in Phase 4.
   static async executeReadyChains(
     groupId: string,
     relayer?: ZkEmailRelayerAdapter,
@@ -577,7 +575,6 @@ export class EmailRecoveryGroupService {
   // DEPRECATED: Phase 2 replaced this with useRecoveryAttemptState.
   // The hook reads prove.email and on-chain state directly; Supabase polling
   // is no longer the mechanism for tracking Recovery Attempt execution lifecycle.
-  // Will be deleted when EmailRecoveryGroupStatusScreen is replaced in Phase 4.
   static async refreshGroupStatus(groupId: string): Promise<{
     group: EmailRecoveryGroupView;
     chainRequests: ChainRequestView[];
@@ -776,8 +773,8 @@ export class EmailRecoveryGroupService {
   }): Promise<boolean> {
     // DEPRECATED: status / last_error / email_auth_msg_json / proof_hash columns
     // were dropped per ADR-0009. This method is kept only to satisfy refreshGroupStatus
-    // (also deprecated) until Phase 4 removes both. It now only writes email_nullifier,
-    // the one prove.email correlation field that is not on-chain by design.
+    // (also deprecated). It now only writes email_nullifier, the one prove.email
+    // correlation field that is not on-chain by design.
     const { approvals, submission, status } = params;
 
     const approval = approvals.find((item) => item.id === submission.approval_id);

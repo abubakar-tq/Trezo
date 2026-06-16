@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { NavigationProp, useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -19,6 +19,7 @@ import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
+import { FontFamilies } from "@shared/components/TokenRegistry";
 
 import { useRecoveryStatusStore } from "@store/useRecoveryStatusStore";
 import type { Guardian } from "@store/useRecoveryStatusStore";
@@ -27,12 +28,15 @@ import { useUserStore } from "@store/useUserStore";
 import { isAddress, type Address, type Hex } from "viem";
 import type { UserOperation } from "viem/account-abstraction";
 import { GuardianUpdateModal } from "./GuardianUpdateModal";
+import type { RootStackParamList } from "@/src/types/navigation";
 
 const shortenHex = (value: string | null | undefined, chars = 6) => {
   if (!value) return "—";
   if (value.length <= chars * 2 + 2) return value;
   return `${value.slice(0, chars + 2)}…${value.slice(-chars)}`;
 };
+
+const shortenAddr = (addr: string) => `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 
 // TODO(TESTING): Timelock selector - hardcode to 1 day before production.
 const TIMELOCK_OPTIONS = [
@@ -43,11 +47,11 @@ const TIMELOCK_OPTIONS = [
 ] as const;
 
 const GuardianRecoveryScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { theme } = useAppTheme();
   const { colors } = theme;
   const styles = useMemo(() => createStyles(colors), [colors]);
-  
+
   const user = useUserStore((state) => state.user);
   const storedSmartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const smartAccountDeployed = useUserStore((state) => state.smartAccountDeployed);
@@ -83,18 +87,10 @@ const GuardianRecoveryScreen: React.FC = () => {
     return Array(defaultN).fill("");
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [viewMode, setViewMode] = useState<"form" | "list">(
     storedGuardians.length > 0 ? "list" : "form"
   );
   const [selectedTimelockIdx, setSelectedTimelockIdx] = useState(3); // default 1 day
-  const [syncStatus, setSyncStatus] = useState<{
-    hasWalletMetadata: boolean;
-    walletMarkedDeployed: boolean;
-    isSynced: boolean;
-    localGuardians: number;
-    dbGuardians: number;
-  } | null>(null);
   const [moduleStatusNonce, setModuleStatusNonce] = useState(0);
   const [checkingModule, setCheckingModule] = useState(false);
   const [moduleInstalledState, setModuleInstalledState] = useState<boolean | null>(null);
@@ -106,9 +102,11 @@ const GuardianRecoveryScreen: React.FC = () => {
   const [lastUserOpHash, setLastUserOpHash] = useState<Hex | null>(null);
   const [lastOperationHash, setLastOperationHash] = useState<Hex | null>(null);
   const [lastInstallPayload, setLastInstallPayload] = useState<UserOperation<"0.7"> | null>(null);
-  const [moduleStatusWarning, setModuleStatusWarning] = useState<string | null>(null);
   const [checkingLocalSigner, setCheckingLocalSigner] = useState(true);
   const [canSignForWallet, setCanSignForWallet] = useState(false);
+
+  const guardianCount = moduleInstalledState ? onChainGuardians.length : storedGuardians.length;
+
   const savedGuardianAddresses = useMemo(
     () => storedGuardians.map((g) => g.address.trim()).filter(Boolean),
     [storedGuardians],
@@ -147,21 +145,10 @@ const GuardianRecoveryScreen: React.FC = () => {
     };
   }, [aaAccount?.ownerAddress, resolvedChainId, smartAccountAddress, user?.id]);
 
-  // Check sync status on mount
-  useEffect(() => {
-    const checkSync = async () => {
-      if (!user?.id) return;
-      const status = await GuardianSyncService.getDatabaseGuardianStatus(user.id);
-      setSyncStatus(status);
-    };
-    void checkSync();
-  }, [moduleStatusNonce, user?.id]);
-
   useEffect(() => {
     if (!smartAccountReady || !smartAccountAddress) {
       setModuleInstalledState(null);
       setModuleError(null);
-      setModuleStatusWarning(null);
       setCheckingModule(false);
       return;
     }
@@ -210,25 +197,6 @@ const GuardianRecoveryScreen: React.FC = () => {
       cancelled = true;
     };
   }, [moduleInstalledState, smartAccountAddress, resolvedChainId, moduleStatusNonce]);
-
-  useEffect(() => {
-    if (!syncStatus) {
-      setModuleStatusWarning(null);
-      return;
-    }
-
-    if (syncStatus.dbGuardians > 0 && moduleInstalledState === false) {
-      setModuleStatusWarning("Saved in database, but not installed on current chain.");
-      return;
-    }
-
-    if (syncStatus.dbGuardians === 0 && moduleInstalledState) {
-      setModuleStatusWarning("Module is active on-chain, but no guardian metadata is saved in the database.");
-      return;
-    }
-
-    setModuleStatusWarning(null);
-  }, [moduleInstalledState, syncStatus]);
 
   const handleMNChange = useCallback(
     (field: "m" | "n", value: string) => {
@@ -288,7 +256,7 @@ const GuardianRecoveryScreen: React.FC = () => {
     if (moduleInstalledState && storedGuardians.length > 0) {
       Alert.alert(
         "On-Chain Guardians Active",
-        "This screen manages pre-install guardian metadata. Once the module is installed, changing guardians here would drift from the on-chain guardian set. Use the active guardian configuration for recovery, or add an explicit wallet-authorized update flow before changing it.",
+        "Guardians are now enforced on-chain. Use Update Guardians On-Chain to change them.",
       );
       return;
     }
@@ -305,14 +273,11 @@ const GuardianRecoveryScreen: React.FC = () => {
 
     // Try to sync to database
     const syncResult = await GuardianSyncService.syncGuardiansToDatabase(user.id);
-    
+
     setIsSubmitting(false);
 
     if (syncResult.success || syncResult.error === 'AA_WALLET_NOT_DEPLOYED') {
       Alert.alert("Recovery Updated", "Guardian changes were authenticated and synced.");
-      // Refresh sync status
-      const status = await GuardianSyncService.getDatabaseGuardianStatus(user.id);
-      setSyncStatus(status);
     } else {
       Alert.alert(
         "Partially Saved",
@@ -323,23 +288,6 @@ const GuardianRecoveryScreen: React.FC = () => {
 
     setViewMode("list");
   }, [guardianAddresses, mValue, moduleInstalledState, nValue, setGuardians, storedGuardians.length, user?.id]);
-
-  const handleSyncNow = useCallback(async () => {
-    if (!user?.id) return;
-    
-    setIsSyncing(true);
-    const result = await GuardianSyncService.syncGuardiansToDatabase(user.id);
-    setIsSyncing(false);
-
-    if (result.success || result.error === 'AA_WALLET_NOT_DEPLOYED') {
-      Alert.alert("Success", "Guardians synced to database!");
-      // Refresh sync status
-      const status = await GuardianSyncService.getDatabaseGuardianStatus(user.id);
-      setSyncStatus(status);
-    } else {
-      Alert.alert("Sync Failed", result.error ?? "Failed to sync guardians to database. Please try again later.");
-    }
-  }, [user?.id]);
 
   const handleRefreshModuleStatus = useCallback(() => {
     if (!smartAccountReady) return;
@@ -377,8 +325,8 @@ const GuardianRecoveryScreen: React.FC = () => {
       }
 
       const guardians = savedGuardianAddresses.map((address) => address as Address);
-      // TODO(TESTING): timelockSeconds is selectable for testing; fix to 86400 in production
-      const timelockSeconds = TIMELOCK_OPTIONS[selectedTimelockIdx]?.seconds ?? 86400;
+      // Timelock is fixed to 1 day in production; the __DEV__ picker only changes it for testing.
+      const timelockSeconds = __DEV__ ? (TIMELOCK_OPTIONS[selectedTimelockIdx]?.seconds ?? 86400) : 86400;
       const { userOp, userOpHash } = await SocialRecoveryService.buildInstallModuleUserOp({
         smartAccountAddress,
         guardians,
@@ -430,7 +378,7 @@ const GuardianRecoveryScreen: React.FC = () => {
         setModuleError(null);
         Alert.alert(
           "Module Already Installed",
-          "The social recovery module is already active on this wallet. No need to install it again — open Backup & Recovery → Guardian Recovery to view or update guardians.",
+          "Social recovery is already active on this wallet.",
         );
       } else {
         setModuleError(raw);
@@ -505,7 +453,7 @@ const GuardianRecoveryScreen: React.FC = () => {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Guardian Recovery</Text>
+          <Text style={styles.headerTitle}>Guardians</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -517,7 +465,7 @@ const GuardianRecoveryScreen: React.FC = () => {
           <View style={styles.blockedCard}>
             {checkingLocalSigner ? (
               <>
-                <ActivityIndicator size="small" color={colors.accentAlt} />
+                <ActivityIndicator size="small" color={colors.accent} />
                 <Text style={styles.blockedTitle}>Checking local signer access...</Text>
                 <Text style={styles.blockedText}>
                   Trezo is verifying whether this device has a wallet passkey for guardian setup.
@@ -527,14 +475,16 @@ const GuardianRecoveryScreen: React.FC = () => {
               <>
                 <Text style={styles.blockedTitle}>This device cannot manage guardians yet</Text>
                 <Text style={styles.blockedText}>
-                  Guardian setup is a wallet-authorized action. This device can read saved guardian
-                  metadata from your account, but without an active wallet passkey it cannot
-                  install or edit the live guardian set.
+                  Managing guardians needs a wallet passkey on this device. You can view guardians but not change them here.
                 </Text>
 
                 <TouchableOpacity
                   style={styles.blockedPrimaryButton}
-                  onPress={() => navigation.navigate("RecoveryEntry" as never)}
+                  onPress={() =>
+                    navigation.canGoBack()
+                      ? navigation.goBack()
+                      : navigation.navigate("RecoveryEntry", { reason: "no_local_passkey" })
+                  }
                   activeOpacity={0.85}
                 >
                   <Text style={styles.blockedPrimaryButtonText}>Open recovery options</Text>
@@ -542,7 +492,7 @@ const GuardianRecoveryScreen: React.FC = () => {
 
                 <TouchableOpacity
                   style={styles.blockedSecondaryButton}
-                  onPress={() => navigation.navigate("BackupRecovery" as never)}
+                  onPress={() => navigation.navigate("BackupRecovery")}
                   activeOpacity={0.85}
                 >
                   <Text style={styles.blockedSecondaryButtonText}>Back to backup & recovery</Text>
@@ -561,7 +511,7 @@ const GuardianRecoveryScreen: React.FC = () => {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Guardian Recovery</Text>
+          <Text style={styles.headerTitle}>Guardians</Text>
           <View style={{ width: 24 }} />
         </View>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -569,17 +519,16 @@ const GuardianRecoveryScreen: React.FC = () => {
             <Feather name="alert-circle" size={40} color={colors.warning} style={{ marginBottom: 16 }} />
             <Text style={styles.blockedTitle}>Deploy Your Wallet First</Text>
             <Text style={styles.blockedText}>
-              Guardian recovery is an on-chain feature. Your wallet address exists but is not yet
-              deployed to the network. Deploy your smart account to enable recovery configuration.
+              Deploy your smart account on-chain to set up guardian recovery.
             </Text>
             {smartAccountAddress && (
-              <Text style={[styles.blockedText, { fontFamily: 'monospace', fontSize: 12, marginTop: 8 }]}>
+              <Text style={[styles.blockedText, { fontFamily: FontFamilies.mono, fontSize: 12, marginTop: 8 }]}>
                 {smartAccountAddress.slice(0, 10)}...{smartAccountAddress.slice(-8)}
               </Text>
             )}
             <TouchableOpacity
               style={styles.blockedPrimaryButton}
-              onPress={() => navigation.navigate('DeployAccount' as never)}
+              onPress={() => navigation.navigate("DeployAccount")}
               activeOpacity={0.85}
             >
               <Text style={styles.blockedPrimaryButtonText}>Deploy Wallet</Text>
@@ -592,12 +541,27 @@ const GuardianRecoveryScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Guardian Recovery</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.headerTitle}>Guardians</Text>
+        <TouchableOpacity
+          onPress={handleRefreshModuleStatus}
+          style={styles.refreshButton}
+          disabled={!smartAccountReady || checkingModule}
+        >
+          {checkingModule ? (
+            <ActivityIndicator size="small" color={colors.textMuted} />
+          ) : (
+            <Feather
+              name="refresh-ccw"
+              size={16}
+              color={smartAccountReady ? colors.textMuted : colors.textMuted}
+            />
+          )}
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -605,6 +569,34 @@ const GuardianRecoveryScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Summary card */}
+        <View style={styles.card}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 16 }}>
+            <View style={styles.icChip}>
+              <Feather name="shield" size={17} color={colors.textSecondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.summaryTitle}>
+                {moduleInstalledState ? "Social recovery is on" : "Social recovery is off"}
+              </Text>
+              <Text style={styles.summaryMeta}>
+                {moduleInstalledState && guardianCount > 0
+                  ? `${requiredSignatures} of ${guardianCount} guardians required`
+                  : "Set up guardians to enable recovery"}
+              </Text>
+            </View>
+            {moduleInstalledState !== null && (
+              <View style={{
+                width: 8, height: 8, borderRadius: 4,
+                backgroundColor: moduleInstalledState ? colors.success : colors.textMuted,
+                ...(moduleInstalledState ? { shadowColor: colors.success, shadowOpacity: 0.5, shadowRadius: 4, elevation: 2 } : {}),
+              }} />
+            )}
+            {checkingModule && <ActivityIndicator size="small" color={colors.textMuted} />}
+          </View>
+        </View>
+
+        {/* Form mode: configure guardians */}
         {viewMode === "form" && (
           <View style={styles.configCard}>
             <View style={styles.configHeader}>
@@ -677,299 +669,221 @@ const GuardianRecoveryScreen: React.FC = () => {
           </View>
         )}
 
-        {viewMode === "list" && (
-          <View style={styles.existingCard}>
-            <View style={styles.existingHeader}>
-              <Text style={styles.existingTitle}>Current Guardians</Text>
-              <TouchableOpacity onPress={handleEditGuardians}>
-                <Text style={styles.editButton}>Edit</Text>
+        {/* List mode: guardian rows */}
+        {viewMode === "list" && storedGuardians.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>YOUR GUARDIANS</Text>
+            <View style={styles.card}>
+              {storedGuardians.map((guardian, index) => {
+                const isOnChain = moduleInstalledState && onChainGuardians.some(
+                  (a) => a.toLowerCase() === guardian.address.toLowerCase()
+                );
+                const statusLabel = isOnChain ? "Active" : (moduleInstalledState ? "Active" : "Pending");
+                const isActive = !moduleInstalledState || isOnChain;
+
+                return (
+                  <View
+                    key={guardian.id}
+                    style={[
+                      styles.guardianRow,
+                      index < storedGuardians.length - 1 && styles.guardianRowBorder,
+                    ]}
+                  >
+                    <View style={styles.guardianInfo}>
+                      <View style={styles.guardianBadge}>
+                        <Text style={styles.guardianBadgeText}>0x</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.guardianAddress}>
+                          {shortenAddr(guardian.address)}
+                        </Text>
+                        <Text style={[
+                          styles.csub,
+                          !isActive && { color: colors.warning },
+                        ]}>
+                          {statusLabel}
+                          {!isActive && " ●"}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleRemoveGuardian(guardian.id)}
+                      style={styles.removeBtn}
+                    >
+                      <Text style={styles.removeBtnText}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+
+              {/* Add guardian row */}
+              {!moduleInstalledState && (
+                <TouchableOpacity
+                  style={styles.addGuardianRow}
+                  onPress={handleEditGuardians}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="plus" size={16} color={colors.accent} />
+                  <Text style={styles.addGuardianText}>Add a guardian</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* Update guardians on-chain CTA */}
+        {moduleInstalledState && onChainGuardians.length > 0 && (
+          <TouchableOpacity
+            onPress={() => setUpdateModalOpen(true)}
+            style={styles.updateGuardiansBtn}
+          >
+            <Feather name="zap" size={16} color={colors.textOnAccent} />
+            <Text style={styles.updateGuardiansBtnText}>Update Guardians On-Chain</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Settings section */}
+        <Text style={styles.sectionLabel}>SETTINGS</Text>
+        <View style={styles.card}>
+          <View style={styles.thresholdRow}>
+            <View style={styles.thresholdIconWrap}>
+              <Feather name="settings" size={15} color={colors.textSecondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.thresholdLabel}>Threshold</Text>
+              <Text style={styles.thresholdMeta}>
+                {mValue} of {storedGuardians.length > 0 ? storedGuardians.length : nValue} must approve
+              </Text>
+            </View>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity
+                style={styles.stepperBtn}
+                onPress={() => handleMNChange("m", Math.max(1, parseInt(mValue) - 1).toString())}
+                disabled={parseInt(mValue) <= 1}
+              >
+                <Feather name="minus" size={14} color={parseInt(mValue) <= 1 ? colors.textMuted : colors.textPrimary} />
+              </TouchableOpacity>
+              <Text style={styles.stepperValue}>{mValue}</Text>
+              <TouchableOpacity
+                style={styles.stepperBtn}
+                onPress={() => handleMNChange("m", Math.min(
+                  storedGuardians.length > 0 ? storedGuardians.length : parseInt(nValue),
+                  parseInt(mValue) + 1
+                ).toString())}
+                disabled={parseInt(mValue) >= (storedGuardians.length > 0 ? storedGuardians.length : parseInt(nValue))}
+              >
+                <Feather name="plus" size={14} color={
+                  parseInt(mValue) >= (storedGuardians.length > 0 ? storedGuardians.length : parseInt(nValue))
+                    ? colors.textMuted
+                    : colors.textPrimary
+                } />
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
 
-            {/* Sync Status Indicator */}
-            {syncStatus && (
-              <View style={[
-                styles.syncStatusContainer,
-                !syncStatus.hasWalletMetadata ? styles.syncStatusWarning :
-                !syncStatus.isSynced ? styles.syncStatusNeedSync :
-                styles.syncStatusSynced
-              ]}>
-                <Feather 
-                  name={
-                    !syncStatus.hasWalletMetadata ? "database" :
-                    !syncStatus.isSynced ? "upload-cloud" :
-                    "check-circle"
-                  } 
-                  size={16} 
-                  color={
-                    !syncStatus.hasWalletMetadata ? colors.warning :
-                    !syncStatus.isSynced ? colors.accentAlt :
-                    colors.success
-                  } 
-                />
-                <Text style={styles.syncStatusText}>
-                  {!syncStatus.hasWalletMetadata 
-                    ? "No wallet metadata saved in the database yet."
-                    : syncStatus.dbGuardians === 0
-                    ? "Wallet metadata exists, but guardian configuration is not saved in the database."
-                    : !syncStatus.isSynced
-                    ? `Database has ${syncStatus.dbGuardians} guardian(s); this device has ${syncStatus.localGuardians}.`
-                    : `Database synced with ${syncStatus.dbGuardians} guardian(s).`}
-                </Text>
-                {syncStatus.hasWalletMetadata && !syncStatus.isSynced && (
-                  <TouchableOpacity 
-                    onPress={handleSyncNow}
-                    disabled={isSyncing}
-                    style={styles.syncButton}
-                  >
-                    {isSyncing ? (
-                      <ActivityIndicator size="small" color={colors.accentAlt} />
-                    ) : (
-                      <Text style={styles.syncButtonText}>Sync Now</Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
+        {/* Safety delay note */}
+        <Text style={styles.safetyNote}>
+          A 24-hour safety delay applies before guardian changes take effect.
+        </Text>
 
-            {storedGuardians.map((guardian, index) => (
-              <View
-                key={guardian.id}
-                style={[
-                  styles.guardianRow,
-                  index < storedGuardians.length - 1 && styles.guardianRowBorder,
-                ]}
-              >
-                <View style={styles.guardianInfo}>
-                  <View style={styles.guardianBadge}>
-                    <Text style={styles.guardianBadgeText}>{index + 1}</Text>
-                  </View>
-                  <Text style={styles.guardianAddress} numberOfLines={1}>
-                    {guardian.address}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => handleRemoveGuardian(guardian.id)}>
-                  <Feather name="trash-2" size={18} color={colors.danger} />
-                </TouchableOpacity>
-              </View>
-            ))}
+        {/* Module errors */}
+        {moduleError && <Text style={styles.moduleError}>{moduleError}</Text>}
 
-            <View style={styles.guardianSummary}>
-              <Feather name="info" size={16} color={colors.accentAlt} />
-              <Text style={styles.guardianSummaryText}>
-                {requiredSignatures} of {storedGuardians.length} guardians required for recovery
+        {/* DEV: debug payload blocks */}
+        {__DEV__ && lastUserOpHash && (
+          <View style={styles.hashRow}>
+            <Text style={styles.hashLabel}>UserOp Hash</Text>
+            <Text style={styles.hashValue}>{lastUserOpHash}</Text>
+          </View>
+        )}
+        {__DEV__ && lastOperationHash && (
+          <View style={styles.hashRow}>
+            <Text style={styles.hashLabel}>Bundler Operation Hash</Text>
+            <Text style={styles.hashValue}>{lastOperationHash}</Text>
+          </View>
+        )}
+        {__DEV__ && lastInstallPayload && (
+          <View style={styles.payloadBox}>
+            <Text style={styles.payloadTitle}>Latest Module Payload</Text>
+            <View style={styles.payloadRow}>
+              <Text style={styles.payloadLabel}>Sender</Text>
+              <Text style={styles.payloadValue}>{shortenHex(lastInstallPayload.sender)}</Text>
+            </View>
+            <View style={styles.payloadRow}>
+              <Text style={styles.payloadLabel}>Nonce</Text>
+              <Text style={styles.payloadValue}>{String(lastInstallPayload.nonce)}</Text>
+            </View>
+            <View style={styles.payloadRow}>
+              <Text style={styles.payloadLabel}>Paymaster</Text>
+              <Text style={styles.payloadValue}>
+                {lastInstallPayload.paymaster ? shortenHex(lastInstallPayload.paymaster) : "Not Sponsored"}
               </Text>
+            </View>
+            <Text style={styles.payloadSubLabel}>Call Data</Text>
+            <Text style={styles.payloadCode}>{shortenHex(lastInstallPayload.callData, 16)}</Text>
+            <Text style={styles.payloadSubLabel}>Signature</Text>
+            <Text style={styles.payloadCode}>{shortenHex(lastInstallPayload.signature, 20)}</Text>
+          </View>
+        )}
+
+        {/* TODO(TESTING): Timelock picker — remove before production */}
+        {__DEV__ && !moduleInstalledState && (
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.payloadLabel, { marginBottom: 8 }]}>
+              Timelock (testing only)
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              {TIMELOCK_OPTIONS.map((opt, idx) => (
+                <TouchableOpacity
+                  key={opt.label}
+                  onPress={() => setSelectedTimelockIdx(idx)}
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    borderWidth: 1.5,
+                    borderColor: idx === selectedTimelockIdx ? colors.accent : colors.border,
+                    backgroundColor: idx === selectedTimelockIdx ? colors.accentSoft : colors.surface,
+                  }}
+                >
+                  <Text style={{
+                    color: idx === selectedTimelockIdx ? colors.accent : colors.textSecondary,
+                    fontWeight: '700',
+                    fontSize: 13,
+                  }}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         )}
-        <View style={styles.moduleCard}>
-          <View style={styles.moduleHeader}>
-            <Text style={styles.moduleTitle}>Social Recovery Module</Text>
-            <TouchableOpacity
-              onPress={handleRefreshModuleStatus}
-              style={styles.refreshButton}
-              disabled={!smartAccountReady || checkingModule}
-            >
-              {checkingModule ? (
-                <ActivityIndicator size="small" color={colors.accentAlt} />
-              ) : (
-                <Feather
-                  name="refresh-ccw"
-                  size={16}
-                  color={smartAccountReady ? colors.accentAlt : colors.textMuted}
-                />
-              )}
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.moduleDescription}>
-            Install the on-chain guardian recovery module so your saved M-of-N guardian list can recover
-            the wallet if you lose access.
-          </Text>
-          {moduleInstalledState && (
-            <Text style={styles.moduleHint}>
-              Guardian edits are locked here after installation so the app cannot drift away from the on-chain policy enforced by the module.
-            </Text>
-          )}
-          {moduleInstalledState && onChainGuardians.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setUpdateModalOpen(true)}
-              style={{
-                marginTop: 12,
-                marginBottom: 4,
-                backgroundColor: colors.accent,
-                borderRadius: 16,
-                paddingVertical: 14,
-                paddingHorizontal: 16,
-                flexDirection: "row",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <Feather name="zap" size={16} color={colors.textOnAccent} />
-              <Text style={{ color: colors.textOnAccent, fontWeight: "800", fontSize: 15 }}>
-                Update Guardians On-Chain
-              </Text>
-            </TouchableOpacity>
-          )}
-          {syncStatus && (
-            <View
-              style={[
-                styles.syncStatusContainer,
-                syncStatus.dbGuardians > 0 ? styles.syncStatusSynced : styles.syncStatusWarning,
-              ]}
-            >
-              <Feather
-                name="database"
-                size={16}
-                color={syncStatus.dbGuardians > 0 ? colors.success : colors.warning}
-              />
-              <Text style={styles.syncStatusText}>
-                {syncStatus.dbGuardians > 0
-                  ? `Database status: ${syncStatus.dbGuardians} guardian(s) saved${syncStatus.walletMarkedDeployed ? "" : ", but wallet metadata is not marked deployed on this chain."}`
-                  : syncStatus.hasWalletMetadata
-                    ? "Database status: wallet metadata exists, but no guardian configuration is saved."
-                    : "Database status: no wallet metadata saved yet."}
-              </Text>
-            </View>
-          )}
-          <View
-            style={[
-              styles.moduleStatusBadge,
-              moduleInstalledState ? styles.moduleStatusInstalled : styles.moduleStatusIdle,
-              !smartAccountReady && styles.moduleStatusWarning,
-            ]}
-          >
-            <Feather
-              name={
-                !smartAccountReady
-                  ? "alert-circle"
-                  : moduleInstalledState
-                  ? "check-circle"
-                  : "shield-off"
-              }
-              size={16}
-              color={
-                !smartAccountReady
-                  ? colors.warning
-                  : moduleInstalledState
-                  ? colors.success
-                  : colors.accentAlt
-              }
-            />
-            <Text style={styles.moduleStatusText}>
-              {!smartAccountReady
-                ? "Deploy smart account to enable recovery"
-                : checkingModule
-                ? "Checking module status..."
-                : moduleInstalledState
-                ? "On-chain status: module installed"
-                : "On-chain status: module not installed"}
-            </Text>
-          </View>
-          {moduleError && <Text style={styles.moduleError}>{moduleError}</Text>}
-          {moduleStatusWarning && <Text style={styles.moduleError}>{moduleStatusWarning}</Text>}
-          {!smartAccountReady && (
-            <Text style={styles.moduleHint}>
-              Deploy your smart account first. Module installation requires an on-chain contract.
-            </Text>
-          )}
-          {smartAccountReady && !guardiansReady && (
-            <Text style={styles.moduleHint}>
-              Add and save guardians (at least {requiredSignatures}) before installing.
-            </Text>
-          )}
-          {lastUserOpHash && (
-            <View style={styles.hashRow}>
-              <Text style={styles.hashLabel}>UserOp Hash</Text>
-              <Text style={styles.hashValue}>{lastUserOpHash}</Text>
-            </View>
-          )}
-          {lastOperationHash && (
-            <View style={styles.hashRow}>
-              <Text style={styles.hashLabel}>Bundler Operation Hash</Text>
-              <Text style={styles.hashValue}>{lastOperationHash}</Text>
-            </View>
-          )}
-          {lastInstallPayload && (
-            <View style={styles.payloadBox}>
-              <Text style={styles.payloadTitle}>Latest Module Payload</Text>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Sender</Text>
-                <Text style={styles.payloadValue}>{shortenHex(lastInstallPayload.sender)}</Text>
-              </View>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Nonce</Text>
-                <Text style={styles.payloadValue}>{String(lastInstallPayload.nonce)}</Text>
-              </View>
-              <View style={styles.payloadRow}>
-                <Text style={styles.payloadLabel}>Paymaster</Text>
-                <Text style={styles.payloadValue}>
-                  {lastInstallPayload.paymaster ? shortenHex(lastInstallPayload.paymaster) : "Not Sponsored"}
-                </Text>
-              </View>
-              <Text style={styles.payloadSubLabel}>Call Data</Text>
-              <Text style={styles.payloadCode}>{shortenHex(lastInstallPayload.callData, 16)}</Text>
-              <Text style={styles.payloadSubLabel}>Signature</Text>
-              <Text style={styles.payloadCode}>{shortenHex(lastInstallPayload.signature, 20)}</Text>
-            </View>
-          )}
-          {/* TODO(TESTING): Timelock picker — remove before production */}
-          {!moduleInstalledState && (
-            <View style={{ marginBottom: 12 }}>
-              <Text style={[styles.payloadLabel, { marginBottom: 8 }]}>
-                ⏱ Timelock (testing only)
-              </Text>
-              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                {TIMELOCK_OPTIONS.map((opt, idx) => (
-                  <TouchableOpacity
-                    key={opt.label}
-                    onPress={() => setSelectedTimelockIdx(idx)}
-                    style={{
-                      paddingHorizontal: 14,
-                      paddingVertical: 8,
-                      borderRadius: 12,
-                      borderWidth: 1.5,
-                      borderColor: idx === selectedTimelockIdx ? colors.accentAlt : colors.border,
-                      backgroundColor: idx === selectedTimelockIdx ? colors.accentAlt + '20' : colors.surface,
-                    }}
-                  >
-                    <Text style={{
-                      color: idx === selectedTimelockIdx ? colors.accentAlt : colors.textSecondary,
-                      fontWeight: '700',
-                      fontSize: 13,
-                    }}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
 
-          <TouchableOpacity
-            style={[
-              styles.installButton,
-              (!smartAccountReady || !guardiansReady || moduleInstalledState || installingModule) &&
-                styles.installButtonDisabled,
-            ]}
-            disabled={!smartAccountReady || !guardiansReady || moduleInstalledState || installingModule}
-            onPress={handleInstallModule}
-            activeOpacity={0.85}
-          >
-            {installingModule ? (
-              <ActivityIndicator size="small" color={colors.textOnAccent} />
-            ) : (
-              <Text style={styles.installButtonText}>
-                {moduleInstalledState ? "Module Installed" : "Install Social Recovery"}
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        {/* Install CTA */}
+        <TouchableOpacity
+          style={[
+            styles.installButton,
+            (!smartAccountReady || !guardiansReady || moduleInstalledState || installingModule) &&
+              styles.installButtonDisabled,
+          ]}
+          disabled={!smartAccountReady || !guardiansReady || moduleInstalledState || installingModule}
+          onPress={handleInstallModule}
+          activeOpacity={0.85}
+        >
+          {installingModule ? (
+            <ActivityIndicator size="small" color={colors.textOnAccent} />
+          ) : (
+            <Text style={styles.installButtonText}>
+              {moduleInstalledState ? "Module Installed" : "Install Social Recovery"}
+            </Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
+
       {isSubmitting && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={colors.accentAlt} />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Saving guardians…</Text>
         </View>
       )}
@@ -1010,13 +924,21 @@ const createStyles = (colors: ThemeColors) =>
     headerTitle: {
       color: colors.textPrimary,
       fontSize: 20,
-      fontWeight: "700",
+      fontWeight: "600",
+    },
+    refreshButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 9999,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surfaceMuted,
     },
     blockedCard: {
       borderRadius: 24,
       borderWidth: 1,
-      borderColor: `${colors.warning}47`,
-      backgroundColor: `${colors.warning}1A`,
+      borderColor: colors.warning,
+      backgroundColor: colors.warningSoft,
       padding: 20,
       gap: 12,
       marginTop: 16,
@@ -1024,7 +946,7 @@ const createStyles = (colors: ThemeColors) =>
     blockedTitle: {
       color: colors.textPrimary,
       fontSize: 20,
-      fontWeight: "700",
+      fontWeight: "600",
       lineHeight: 28,
     },
     blockedText: {
@@ -1033,7 +955,7 @@ const createStyles = (colors: ThemeColors) =>
       lineHeight: 22,
     },
     blockedPrimaryButton: {
-      backgroundColor: colors.accentAlt,
+      backgroundColor: colors.accent,
       borderRadius: 16,
       paddingVertical: 14,
       alignItems: "center",
@@ -1064,6 +986,180 @@ const createStyles = (colors: ThemeColors) =>
       padding: 20,
       paddingBottom: 40,
     },
+    // Summary card
+    card: {
+      backgroundColor: colors.surfaceCard,
+      borderRadius: 16,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      overflow: "hidden",
+    },
+    icChip: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.accentSoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    summaryTitle: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    summaryMeta: {
+      color: colors.textMuted,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    // Section labels
+    sectionLabel: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      marginTop: 24,
+      marginBottom: 8,
+      paddingHorizontal: 4,
+    },
+    // Guardian rows
+    guardianRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+    },
+    guardianRowBorder: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.borderMuted,
+    },
+    guardianInfo: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      flex: 1,
+    },
+    guardianBadge: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: colors.surfaceMuted,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    guardianBadgeText: {
+      color: colors.textSecondary,
+      fontSize: 11,
+      fontWeight: "700",
+      fontFamily: FontFamilies.mono,
+    },
+    guardianAddress: {
+      color: colors.textPrimary,
+      fontSize: 13,
+      fontFamily: FontFamilies.monoMedium,
+      fontWeight: "500",
+    },
+    csub: {
+      color: colors.success,
+      fontSize: 11,
+      fontWeight: "500",
+      marginTop: 2,
+    },
+    removeBtn: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
+    removeBtnText: {
+      color: colors.danger,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    addGuardianRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.borderMuted,
+    },
+    addGuardianText: {
+      color: colors.accent,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    // Update guardians CTA
+    updateGuardiansBtn: {
+      marginTop: 12,
+      backgroundColor: colors.accent,
+      borderRadius: 16,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      flexDirection: "row",
+      justifyContent: "center",
+      alignItems: "center",
+      gap: 8,
+    },
+    updateGuardiansBtnText: {
+      color: colors.textOnAccent,
+      fontWeight: "600",
+      fontSize: 15,
+    },
+    // Settings / threshold row
+    thresholdRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+    },
+    thresholdIconWrap: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: colors.surfaceMuted,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    thresholdLabel: {
+      color: colors.textPrimary,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    thresholdMeta: {
+      color: colors.textMuted,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    stepperRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    stepperBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: colors.surfaceMuted,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    stepperValue: {
+      color: colors.textPrimary,
+      fontSize: 15,
+      fontWeight: "700",
+      minWidth: 20,
+      textAlign: "center",
+    },
+    safetyNote: {
+      color: colors.textMuted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 12,
+      paddingHorizontal: 4,
+    },
+    // Form card
     configCard: {
       backgroundColor: colors.surfaceCard,
       borderRadius: 24,
@@ -1081,7 +1177,7 @@ const createStyles = (colors: ThemeColors) =>
     configTitle: {
       color: colors.textPrimary,
       fontSize: 18,
-      fontWeight: "700",
+      fontWeight: "600",
     },
     configDesc: {
       color: colors.textSecondary,
@@ -1106,7 +1202,7 @@ const createStyles = (colors: ThemeColors) =>
       fontWeight: "600",
     },
     mnInput: {
-      backgroundColor: `${colors.textPrimary}0F`,
+      backgroundColor: colors.inputBackground,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 16,
@@ -1145,18 +1241,18 @@ const createStyles = (colors: ThemeColors) =>
     },
     addressInput: {
       flex: 1,
-      backgroundColor: `${colors.textPrimary}0F`,
+      backgroundColor: colors.inputBackground,
       borderWidth: 1,
       borderColor: colors.borderMuted,
-      borderRadius: 14,
+      borderRadius: 16,
       paddingHorizontal: 16,
       paddingVertical: 14,
       color: colors.textPrimary,
       fontSize: 14,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
     submitButton: {
-      backgroundColor: colors.accentAlt,
+      backgroundColor: colors.accent,
       borderRadius: 16,
       paddingVertical: 16,
       alignItems: "center",
@@ -1170,130 +1266,21 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: 16,
       fontWeight: "700",
     },
-    existingCard: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 24,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: 20,
-      marginTop: 8,
-    },
-    existingHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 16,
-    },
-    existingTitle: {
-      color: colors.textPrimary,
-      fontSize: 18,
-      fontWeight: "700",
-    },
-    editButton: {
-      color: colors.accentAlt,
-      fontSize: 15,
-      fontWeight: "600",
-    },
-    guardianRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: 14,
-    },
-    guardianRowBorder: {
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderMuted,
-    },
-    guardianInfo: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      flex: 1,
-    },
-    guardianBadge: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: `${colors.accentAlt}26`,
-      borderWidth: 1,
-      borderColor: `${colors.accentAlt}4D`,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    guardianBadgeText: {
-      color: colors.accentAlt,
-      fontSize: 14,
-      fontWeight: "700",
-    },
-    guardianAddress: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      fontFamily: "monospace",
-      flex: 1,
-    },
-    guardianSummary: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      backgroundColor: `${colors.accentAlt}1A`,
-      borderRadius: 12,
-      padding: 14,
-      marginTop: 16,
-    },
-    guardianSummaryText: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      flex: 1,
-    },
-    syncStatusContainer: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      borderRadius: 12,
-      padding: 14,
-      marginBottom: 16,
-    },
-    syncStatusWarning: {
-      backgroundColor: `${colors.warning}1A`,
-      borderWidth: 1,
-      borderColor: `${colors.warning}33`,
-    },
-    syncStatusNeedSync: {
-      backgroundColor: `${colors.accentAlt}1A`,
-      borderWidth: 1,
-      borderColor: `${colors.accentAlt}33`,
-    },
-    syncStatusSynced: {
-      backgroundColor: `${colors.success}1A`,
-      borderWidth: 1,
-      borderColor: `${colors.success}33`,
-    },
-    syncStatusText: {
-      color: colors.textSecondary,
+    // Error / hint
+    moduleError: {
+      color: colors.danger,
       fontSize: 12,
-      flex: 1,
-      lineHeight: 16,
+      marginTop: 4,
+      paddingHorizontal: 4,
     },
-    syncButton: {
-      backgroundColor: colors.accentAlt,
-      borderRadius: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      minWidth: 70,
-      alignItems: "center",
-    },
-    syncButtonText: {
-      color: colors.textOnAccent,
-      fontSize: 12,
-      fontWeight: "600",
-    },
+    // Dev payload
     payloadBox: {
       marginTop: 16,
       borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.borderMuted,
       padding: 14,
-      backgroundColor: `${colors.surfaceCard}99`,
+      backgroundColor: colors.surfaceMuted,
       gap: 8,
     },
     payloadTitle: {
@@ -1314,7 +1301,7 @@ const createStyles = (colors: ThemeColors) =>
     payloadValue: {
       color: colors.textPrimary,
       fontSize: 13,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
     payloadSubLabel: {
       color: colors.textSecondary,
@@ -1324,75 +1311,13 @@ const createStyles = (colors: ThemeColors) =>
     payloadCode: {
       color: colors.textPrimary,
       fontSize: 12,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
       marginTop: 2,
     },
-    moduleCard: {
-      backgroundColor: colors.surfaceCard,
-      borderRadius: 24,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: 20,
-      marginTop: 20,
-      gap: 14,
-    },
-    moduleHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    moduleTitle: {
-      color: colors.textPrimary,
-      fontSize: 17,
-      fontWeight: "700",
-    },
-    refreshButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: `${colors.borderMuted}80`,
-    },
-    moduleDescription: {
-      color: colors.textSecondary,
-      fontSize: 13,
-      lineHeight: 18,
-    },
-    moduleStatusBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      borderRadius: 14,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
-      gap: 10,
-    },
-    moduleStatusInstalled: {
-      backgroundColor: colors.successSoft,
-    },
-    moduleStatusIdle: {
-      backgroundColor: `${colors.accentAlt}1F`,
-    },
-    moduleStatusWarning: {
-      backgroundColor: colors.warningSoft,
-    },
-    moduleStatusText: {
-      color: colors.textPrimary,
-      fontSize: 13,
-      fontWeight: "600",
-    },
-    moduleHint: {
-      color: colors.textMuted,
-      fontSize: 12,
-    },
-    moduleError: {
-      color: colors.danger,
-      fontSize: 12,
-    },
     hashRow: {
-      backgroundColor: `${colors.textPrimary}0A`,
-      borderRadius: 12,
-      padding: 10,
+      backgroundColor: colors.surfaceMuted,
+      borderRadius: 8,
+      padding: 8,
       marginTop: 4,
     },
     hashLabel: {
@@ -1403,11 +1328,12 @@ const createStyles = (colors: ThemeColors) =>
     hashValue: {
       color: colors.textPrimary,
       fontSize: 12,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono,
     },
+    // Install CTA
     installButton: {
-      marginTop: 8,
-      backgroundColor: colors.accentAlt,
+      marginTop: 16,
+      backgroundColor: colors.accent,
       borderRadius: 16,
       paddingVertical: 14,
       alignItems: "center",
@@ -1416,7 +1342,7 @@ const createStyles = (colors: ThemeColors) =>
       opacity: 0.6,
     },
     installButtonText: {
-      color: colors.background,
+      color: colors.textOnAccent,
       fontSize: 15,
       fontWeight: "700",
     },
@@ -1426,7 +1352,7 @@ const createStyles = (colors: ThemeColors) =>
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: `${colors.background}D9`,
+      backgroundColor: "rgba(0,0,0,0.85)",
       alignItems: "center",
       justifyContent: "center",
       gap: 12,

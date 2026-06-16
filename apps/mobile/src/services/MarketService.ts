@@ -212,6 +212,52 @@ class MarketService {
   }
 
   /**
+   * Fetches market data for a specific set of symbols (via Binance), mapped to
+   * MarketAsset and sorted by 24h volume. Powers the Discover category views.
+   */
+  async getAssetsBySymbols(symbols: string[]): Promise<MarketAsset[]> {
+    try {
+      const { binanceService } = require('./BinanceService');
+      const tickers = await binanceService.getTickersForSymbols(symbols);
+      return tickers
+        .map((t: any) => ({
+          id: t.symbol.replace('USDT', '').toLowerCase(),
+          rank: '0',
+          symbol: t.symbol.replace('USDT', ''),
+          name: t.symbol.replace('USDT', ''),
+          supply: '0',
+          maxSupply: null,
+          marketCapUsd: '0',
+          volumeUsd24Hr: t.quoteVolume,
+          priceUsd: t.lastPrice,
+          changePercent24Hr: t.priceChangePercent,
+          vwap24Hr: t.weightedAvgPrice,
+        }))
+        .sort((a: MarketAsset, b: MarketAsset) => parseFloat(b.volumeUsd24Hr) - parseFloat(a.volumeUsd24Hr));
+    } catch (error) {
+      console.error('[MarketService] getAssetsBySymbols failed:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Search assets by name/symbol using CoinCap v2 /assets?search=<query>.
+   * Returns up to `limit` results mapped to the standard MarketAsset shape.
+   */
+  async searchAssets(query: string, limit = 20): Promise<MarketAsset[]> {
+    if (!query.trim()) return [];
+    try {
+      const response = await this.api.get(`/assets`, {
+        params: { search: query.trim(), limit },
+      });
+      return response.data.data as MarketAsset[];
+    } catch (error) {
+      console.warn('[MarketService] searchAssets failed:', error);
+      return [];
+    }
+  }
+
+  /**
    * Helper to convert interval labels to CoinCap intervals
    */
   getIntervalForLabel(label: string): string {

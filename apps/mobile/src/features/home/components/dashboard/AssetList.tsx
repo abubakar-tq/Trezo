@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useAppTheme } from '@theme';
 import { FontFamilies } from '@shared/components/TokenRegistry';
 import { TokenIcon } from '@shared/components';
@@ -10,6 +11,8 @@ interface AssetListProps {
   predictedAddress: string | null;
   formatPrice: (value: number) => string;
   onAssetPress?: (asset: TokenBalance) => void;
+  /** Map of symbol → 24h change %. Omit or pass null/undefined for a token when unknown. */
+  change24hBySymbol?: Record<string, number | undefined>;
 }
 
 /**
@@ -44,123 +47,111 @@ export const AssetList = React.memo<AssetListProps>(({
   assets,
   formatPrice,
   onAssetPress,
+  change24hBySymbol,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
 
+  // Spec §5.1 EMPTY state: Home owns its empty state — do NOT render a fake
+  // multi-token placeholder list. Home renders a "Fund your wallet" card + a
+  // single native ETH row instead. AssetList simply renders nothing when empty.
   if (assets.length === 0) {
-    // Show professional placeholders if empty to avoid blank screen
-    const placeholders = [
-      { symbol: 'ETH', name: 'Ethereum', amount: 0, price: 0, value: 0 },
-      { symbol: 'USDC', name: 'USD Coin', amount: 0, price: 0, value: 0 },
-      { symbol: 'USDT', name: 'Tether', amount: 0, price: 0, value: 0 },
-      { symbol: 'WBTC', name: 'Wrapped Bitcoin', amount: 0, price: 0, value: 0 },
-    ];
-    
-    return (
-      <View style={styles.container}>
-        <View style={styles.list}>
-          {placeholders.map((token, index) => (
-            <View 
-              key={`placeholder-${index}`} 
-              style={[
-                styles.item, 
-                { opacity: 0.3 },
-                index !== placeholders.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
-              ]}
-            >
-              <View style={styles.itemLeft}>
-                <TokenIcon symbol={token.symbol} size={44} style={{ borderRadius: 14 }} />
-                <View style={styles.nameWrapper}>
-                  <Text style={[styles.symbol, { color: colors.textSecondary }]}>{token.symbol}</Text>
-                  <Text style={[styles.name, { color: colors.textMuted }]}>{token.name}</Text>
-                </View>
-              </View>
-              <View style={styles.itemRight}>
-                <Text style={[styles.value, { color: colors.textMuted }]}>$0.00</Text>
-                <Text style={[styles.amount, { color: colors.textMuted }]}>0.00 {token.symbol}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
-    );
+    return null;
   }
 
   return (
     <View style={styles.container}>
       <View style={styles.list}>
-        {assets.map((token, index) => (
-          <TouchableOpacity 
-            key={`${token.address}-${index}`} 
-            style={[
-              styles.item, 
-              index !== assets.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
-            ]}
-            onPress={() => onAssetPress?.(token)}
-            activeOpacity={0.7}
-          >
-            {/* Left Section: Icon and Token Name */}
-            <View style={styles.itemLeft}>
-              <TokenIcon 
-                symbol={token.symbol} 
-                address={token.address} 
-                size={44}
-                style={{ borderRadius: 14 }}
-              />
-              <View style={styles.nameWrapper}>
-                <Text 
-                  style={[styles.symbol, { color: colors.textPrimary }]}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {token.symbol}
-                </Text>
-                <Text 
-                  style={[styles.name, { color: colors.textSecondary }]}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {token.name}
-                </Text>
-              </View>
-            </View>
+        {assets.map((token, index) => {
+          const pct = change24hBySymbol?.[token.symbol.toUpperCase()];
+          const hasPct = typeof pct === "number" && isFinite(pct);
+          const isPositive = hasPct && (pct as number) >= 0;
 
-            {/* Right Section: USD Value and Token Amount */}
-            <View style={styles.itemRight}>
-              <Text 
-                style={[styles.value, { color: colors.textPrimary }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
-              >
-                {formatCompactPrice(token.value)}
-              </Text>
-              <Text 
-                style={[styles.amount, { color: colors.textSecondary }]}
-                numberOfLines={1}
-                ellipsizeMode="middle"
-              >
-                {formatCompactNumber(token.amount)} <Text style={styles.amountSymbol}>{token.symbol}</Text>
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+          return (
+            <TouchableOpacity
+              key={`${token.address}-${index}`}
+              style={[
+                styles.item,
+                index !== assets.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
+              ]}
+              onPress={() => onAssetPress?.(token)}
+              activeOpacity={0.7}
+            >
+              {/* Left Section: Icon and Token Name */}
+              <View style={styles.itemLeft}>
+                <TokenIcon
+                  symbol={token.symbol}
+                  address={token.address}
+                  size={44}
+                  // Spec §3: radius scale — 12 for token chips (was offending 14)
+                  style={{ borderRadius: 12 }}
+                />
+                <View style={styles.nameWrapper}>
+                  <Text
+                    style={[styles.symbol, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {token.symbol}
+                  </Text>
+                  <Text
+                    style={[styles.name, { color: colors.textSecondary }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {token.name}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Right Section: USD Value, Token Amount, and 24h change */}
+              <View style={styles.itemRight}>
+                <Text
+                  style={[styles.value, { color: colors.textPrimary }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  {formatCompactPrice(token.value ?? 0)}
+                </Text>
+                <Text
+                  style={[styles.amount, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                  ellipsizeMode="middle"
+                >
+                  {formatCompactNumber(token.amount)} <Text style={styles.amountSymbol}>{token.symbol}</Text>
+                </Text>
+                {/* 24h change — only when real data; never fake 0 */}
+                {hasPct ? (
+                  <View style={styles.changeRow}>
+                    <Feather
+                      name={isPositive ? "trending-up" : "trending-down"}
+                      size={10}
+                      color={isPositive ? colors.dataPositive : colors.dataNegative}
+                    />
+                    <Text
+                      style={[
+                        styles.changeText,
+                        { color: isPositive ? colors.dataPositive : colors.dataNegative },
+                      ]}
+                    >
+                      {isPositive ? "+" : ""}{(pct as number).toFixed(2)}%
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
 });
 
+AssetList.displayName = "AssetList";
+
 const styles = StyleSheet.create({
   container: {
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    marginBottom: 20,
-    paddingHorizontal: 4,
   },
   list: {
     gap: 0,
@@ -175,24 +166,12 @@ const styles = StyleSheet.create({
   itemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 0.6, // Give more space to the name section if needed, but allow right side to grow
+    flex: 0.6,
     gap: 16,
   },
   nameWrapper: {
     flex: 1,
     justifyContent: 'center',
-  },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  iconText: {
-    fontSize: 16,
-    fontWeight: '900',
   },
   symbol: {
     fontSize: 16,
@@ -209,6 +188,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
     marginLeft: 8,
+    gap: 2,
   },
   value: {
     fontSize: 16,
@@ -219,7 +199,6 @@ const styles = StyleSheet.create({
   amount: {
     fontSize: 13,
     fontWeight: '500',
-    marginTop: 4,
     fontFamily: FontFamilies.mono,
     textAlign: 'right',
   },
@@ -227,18 +206,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  placeholderIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-  },
-  emptyState: {
-    paddingVertical: 32,
+  changeRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 3,
   },
-  emptyText: {
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+  changeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });

@@ -118,3 +118,5 @@ export const InteractiveChart = React.memo<InteractiveChartProps>(({
     </View>
   );
 });
+
+InteractiveChart.displayName = 'InteractiveChart';
