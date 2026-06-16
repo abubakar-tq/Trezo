@@ -13,6 +13,10 @@ function hostnameOf(origin: string): string {
   }
 }
 
+function faviconLetter(origin: string): string {
+  return hostnameOf(origin).charAt(0).toUpperCase();
+}
+
 export function ConnectedDAppsScreen() {
   const { theme } = useAppTheme();
   const sessions = useDAppSessionsStore((s) => s.sessions);
@@ -20,23 +24,9 @@ export function ConnectedDAppsScreen() {
 
   if (sessions.length === 0) {
     return (
-      <View
-        style={[
-          styles.empty,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <Feather
-          name="link"
-          size={32}
-          color={theme.colors.textSecondary}
-        />
-        <Text
-          style={[
-            styles.emptyText,
-            { color: theme.colors.textSecondary },
-          ]}
-        >
+      <View style={[styles.empty, { backgroundColor: theme.colors.background }]}>
+        <Feather name="link" size={32} color={theme.colors.textSecondary} />
+        <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
           No connected dApps yet.
         </Text>
       </View>
@@ -49,6 +39,16 @@ export function ConnectedDAppsScreen() {
       keyExtractor={(s) => s.id}
       style={{ backgroundColor: theme.colors.background }}
       contentContainerStyle={styles.listContent}
+      ListHeaderComponent={
+        <View style={styles.listHeader}>
+          <Text style={[styles.listHeaderTitle, { color: theme.colors.textPrimary }]}>
+            Connected Sites
+          </Text>
+          <Text style={[styles.listHeaderCount, { color: theme.colors.textSecondary }]}>
+            {sessions.length} {sessions.length === 1 ? "site" : "sites"} have access to your wallet
+          </Text>
+        </View>
+      }
       renderItem={({ item }) => (
         <View
           style={[
@@ -59,40 +59,33 @@ export function ConnectedDAppsScreen() {
             },
           ]}
         >
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                color: theme.colors.textPrimary,
-                fontSize: 15,
-                fontWeight: "600",
-              }}
-            >
-              {hostnameOf(item.origin)}
-            </Text>
-            <Text
-              style={{
-                color: theme.colors.textSecondary,
-                fontSize: 12,
-                marginTop: 2,
-              }}
-            >
-              Connected{" "}
-              {new Date(item.approvedAt).toLocaleDateString()}
+          {/* Site avatar */}
+          <View style={[styles.avatar, { backgroundColor: `${theme.colors.accent}22` }]}>
+            <Text style={[styles.avatarLetter, { color: theme.colors.accent }]}>
+              {faviconLetter(item.origin)}
             </Text>
           </View>
+
+          {/* Site info */}
+          <View style={styles.siteInfo}>
+            <Text style={[styles.hostname, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              {hostnameOf(item.origin)}
+            </Text>
+            <View style={styles.metaRow}>
+              <View style={[styles.connectedDot, { backgroundColor: theme.colors.success }]} />
+              <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>
+                Connected · {new Date(item.approvedAt).toLocaleDateString()}
+              </Text>
+            </View>
+          </View>
+
+          {/* Disconnect */}
           <Pressable
             onPress={() => remove(item.origin)}
-            hitSlop={8}
+            hitSlop={12}
+            style={[styles.disconnectBtn, { borderColor: `${theme.colors.danger}40` }]}
           >
-            <Text
-              style={{
-                color: theme.colors.danger,
-                fontSize: 14,
-                fontWeight: "600",
-              }}
-            >
-              {LABELS.disconnectDApp}
-            </Text>
+            <Feather name="x" size={14} color={theme.colors.danger} />
           </Pressable>
         </View>
       )}
@@ -112,15 +105,73 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
+    paddingTop: 4,
+    paddingBottom: 32,
+    gap: 10,
+  },
+  listHeader: {
+    paddingTop: 40,
+    paddingBottom: 16,
+    gap: 4,
+  },
+  listHeaderTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+  },
+  listHeaderCount: {
+    fontSize: 13,
+    fontWeight: "400",
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 12,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    borderRadius: 20,
     borderWidth: 1,
-    gap: 12,
+    gap: 16,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarLetter: {
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  siteInfo: {
+    flex: 1,
+    gap: 6,
+  },
+  hostname: {
+    fontSize: 18,
+    fontWeight: "600",
+    letterSpacing: -0.3,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  connectedDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  metaText: {
+    fontSize: 13,
+    fontWeight: "400",
+  },
+  disconnectBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
