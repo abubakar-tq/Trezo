@@ -501,6 +501,26 @@ deploy-arb-sepolia:
 	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=arb-sepolia
 	$(MAKE) sync-abi
 
+# ── Base Mainnet ──────────────────────────────────────────────────────────────
+# Prereqs: deployer EOA funded with ~0.05 ETH on Base mainnet (chainId 8453)
+# Usage:   make deploy-base-mainnet BASE_MAINNET_RPC_URL=https://base-mainnet.g.alchemy.com/v2/KEY ETHERSCAN_API_KEY=...
+BASE_MAINNET_RPC_URL ?= https://mainnet.base.org
+
+.PHONY: deploy-base-mainnet
+deploy-base-mainnet:
+	@[ -n "$(BASE_MAINNET_RPC_URL)" ] || (echo "❌ Set BASE_MAINNET_RPC_URL" && exit 1)
+	$(MAKE) check-root-factory RPC_URL=$(BASE_MAINNET_RPC_URL)
+	$(MAKE) predict-infra RPC_URL=$(BASE_MAINNET_RPC_URL)
+	-$(MAKE) deploy-infra \
+		RPC_URL=$(BASE_MAINNET_RPC_URL) \
+		USE_KEYSTORE=1 \
+		DEPLOYMENT_PROFILE=base-mainnet \
+		DEPLOYMENT_NAMESPACE=base-mainnet
+	$(MAKE) verify-infra RPC_URL=$(BASE_MAINNET_RPC_URL)
+	@echo "Skipping email recovery: no hosted ZK Email relayer on Base mainnet (emailRecoverySupported=false)."
+	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=base-mainnet
+	$(MAKE) sync-abi
+
 .PHONY: deploy-email-arb-sepolia
 deploy-email-arb-sepolia: build
 	@[ -n "$(KILL_SWITCH_AUTHORIZER)" ] || (echo "❌ Set KILL_SWITCH_AUTHORIZER=0x... (typically the deployer EOA for testnet)" && exit 1)
