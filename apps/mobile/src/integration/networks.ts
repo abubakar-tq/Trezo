@@ -27,6 +27,7 @@ export type NetworkKey =
 
 export type DeploymentProfile =
   | "31337"
+  | "base-mainnet"
   | "base-mainnet-fork"
   | "sepolia"
   | "base-sepolia"
@@ -214,25 +215,32 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
     };
   })(),
 
-  "base-mainnet": {
-    networkKey: "base-mainnet",
-    chainId: 8453,
-    sourceChainId: 8453,
-    deploymentProfile: "base-mainnet-fork", // Placeholder – real mainnet not yet deployed
-    name: "Base Mainnet",
-    displayName: "Base",
-    nativeCurrency: DEFAULT_NATIVE_ETH,
-    rpcUrl: process.env.EXPO_PUBLIC_BASE_MAINNET_RPC_URL ?? "",
-    bundlerUrl: process.env.EXPO_PUBLIC_BASE_MAINNET_BUNDLER_URL ?? "",
-    paymasterUrl: process.env.EXPO_PUBLIC_BASE_MAINNET_PAYMASTER_URL,
-    environment: "mainnet",
-    blockExplorerUrl: "https://basescan.org",
-    isEnabled: false, // Not yet enabled for production
-    defaultUsePaymaster: false,
-    swapSupported: false,
-    emailRecoverySupported: false,
-    crossChainSwapSupported: false,
-  },
+  "base-mainnet": (() => {
+    const d = getDeployment("base-mainnet");
+    return {
+      networkKey: "base-mainnet" as NetworkKey,
+      chainId: 8453 as SupportedChainId,
+      sourceChainId: 8453,
+      deploymentProfile: "base-mainnet" as DeploymentProfile,
+      name: "Base Mainnet",
+      displayName: "Base",
+      nativeCurrency: DEFAULT_NATIVE_ETH,
+      rpcUrl: process.env.EXPO_PUBLIC_BASE_MAINNET_RPC_URL ?? "",
+      bundlerUrl: process.env.EXPO_PUBLIC_BASE_MAINNET_BUNDLER_URL ?? "",
+      paymasterUrl: process.env.EXPO_PUBLIC_BASE_MAINNET_PAYMASTER_URL,
+      environment: "mainnet" as ChainEnvironmentExtended,
+      blockExplorerUrl: "https://basescan.org",
+      isEnabled: Boolean(
+        d?.entryPoint && d?.accountFactory &&
+        process.env.EXPO_PUBLIC_BASE_MAINNET_RPC_URL &&
+        process.env.EXPO_PUBLIC_BASE_MAINNET_BUNDLER_URL
+      ),
+      defaultUsePaymaster: false,
+      swapSupported: Boolean(d?.swapSupported),
+      emailRecoverySupported: false,
+      crossChainSwapSupported: true,
+    };
+  })(),
 
   "base-mainnet-fork": (() => {
     const deployment = getDeployment("base-mainnet-fork");

@@ -15,6 +15,7 @@
 
 import type { NetworkKey } from "@/src/integration/networks";
 import type { Address } from "viem";
+import { isLifiNetwork } from "../lifi/constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -145,6 +146,7 @@ export const getBridgeConfig = (networkKey: NetworkKey): BridgeConfig | undefine
  * smart account on the destination chain (no executor hop).
  */
 export const isCrossChainBridgeReady = (networkKey: NetworkKey): boolean => {
+  if (isLifiNetwork(networkKey)) return true;
   const config = getBridgeConfig(networkKey);
   return Boolean(config?.spokePool);
 };
@@ -153,8 +155,10 @@ export const isCrossChainBridgeReady = (networkKey: NetworkKey): boolean => {
  * True when cross-chain SWAP is wired into the destination chain — requires
  * a deployed CrossChainExecutor on `destinationNetworkKey` so the bridged
  * token can be swapped to a different output token on arrival.
+ * LI.FI networks are always ready (route fetched live from the API).
  */
 export const isCrossChainSwapReady = (destinationNetworkKey: NetworkKey): boolean => {
+  if (isLifiNetwork(destinationNetworkKey)) return true;
   const config = getBridgeConfig(destinationNetworkKey);
   return Boolean(config?.spokePool && config?.crossChainExecutor);
 };

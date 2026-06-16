@@ -2,7 +2,7 @@
  * deployments.ts
  *
  * Resolves Trezo contract deployment manifests by:
- *   - DeploymentProfile  ("31337" | "base-mainnet-fork")
+ *   - DeploymentProfile  ("31337" | "base-mainnet" | "base-mainnet-fork")
  *   - NetworkKey         ("anvil-local" | "base-mainnet-fork" | …)
  *   - Legacy SupportedChainId  (backwards compat)
  */
@@ -41,11 +41,19 @@ try {
   deploymentArbSepolia = undefined;
 }
 
+let deploymentBaseMainnet: DeploymentAddresses | undefined;
+try {
+  deploymentBaseMainnet = require("../contracts/deployment.base-mainnet.json") as DeploymentAddresses;
+} catch {
+  deploymentBaseMainnet = undefined;
+}
+
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 /** App-level deployment profile identifier — decoupled from chainId. */
 export type DeploymentProfile =
   | "31337"
+  | "base-mainnet"
   | "base-mainnet-fork"
   | "sepolia"
   | "base-sepolia"
@@ -101,6 +109,7 @@ export type DeploymentAddresses = {
 
 export const DEPLOYMENTS_BY_PROFILE: Partial<Record<DeploymentProfile, DeploymentAddresses>> = {
   "31337": deployment31337 as DeploymentAddresses,
+  "base-mainnet": deploymentBaseMainnet,
   "base-mainnet-fork": deploymentBaseFork,
   "sepolia": deploymentSepolia,
   "base-sepolia": deploymentBaseSepolia,
@@ -117,7 +126,7 @@ export function getDeployment(profileOrChainId: DeploymentProfile | number): Dep
   if (typeof profileOrChainId === "number") {
     // Legacy chain-id lookup for callers that have not moved to networkKey yet.
     if (profileOrChainId === 31337) return DEPLOYMENTS_BY_PROFILE["31337"];
-    if (profileOrChainId === 8453) return DEPLOYMENTS_BY_PROFILE["base-mainnet-fork"];
+    if (profileOrChainId === 8453) return DEPLOYMENTS_BY_PROFILE["base-mainnet"] ?? DEPLOYMENTS_BY_PROFILE["base-mainnet-fork"];
     if (profileOrChainId === 11155111) return DEPLOYMENTS_BY_PROFILE["sepolia"];
     if (profileOrChainId === 84532) return DEPLOYMENTS_BY_PROFILE["base-sepolia"];
     if (profileOrChainId === 421614) return DEPLOYMENTS_BY_PROFILE["arb-sepolia"];
@@ -138,7 +147,7 @@ export function getDeploymentForNetwork(networkKey: string): DeploymentAddresses
     "ethereum-sepolia": "sepolia",
     "base-sepolia": "base-sepolia",
     "arbitrum-sepolia": "arb-sepolia",
-    "base-mainnet": "base-mainnet-fork",
+    "base-mainnet": "base-mainnet",
     "base-mainnet-fork": "base-mainnet-fork",
   };
 

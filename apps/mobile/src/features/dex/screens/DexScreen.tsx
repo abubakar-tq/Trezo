@@ -38,7 +38,7 @@ import type { PreparedSmartAccountExecution } from "@/src/features/wallet/types/
 import WalletPersistenceService from "@/src/features/wallet/services/SupabaseWalletService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
 import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
-import { resolveNetworkKey, getNetworkConfig } from "@/src/integration/networks";
+import { resolveNetworkKey, getNetworkConfig, type NetworkKey } from "@/src/integration/networks";
 import {
   getBridgeConfig,
   isCrossChainBridgeReady,
@@ -48,6 +48,7 @@ import {
 import { getDexConfig } from "@/src/features/swaps/config/dexRegistry";
 import { useUserStore } from "@/src/store/useUserStore";
 import { defaultSlippageBps } from "@/src/features/dex/utils/slippage";
+import { LiveRouteCard } from "@/src/features/dex/components/LiveRouteCard";
 import { TabScreenContainer, TokenIcon, AssetPickerModal, type Asset } from "@shared/components";
 import { ChainSwitcherChip } from "@features/wallet/components/ChainSwitcherChip";
 import Toast from "@/src/shared/components/feedback/Toast";
@@ -724,7 +725,7 @@ export const DexScreen: React.FC = () => {
       });
       const preparedOp = await SmartAccountExecutionService.prepareUserOperation(execution, {
         userId,
-        usePaymaster: true,
+        usePaymaster: networkConfig?.defaultUsePaymaster ?? true,
       });
       await TransactionHistoryService.markSigning(draft.id);
       const signedOp = await SmartAccountExecutionService.signUserOperation(userId, preparedOp);
@@ -843,7 +844,7 @@ export const DexScreen: React.FC = () => {
           preview,
           execution: plan.bridgeExecution,
           userId: user.id,
-          usePaymaster: true,
+          usePaymaster: networkConfig?.defaultUsePaymaster ?? true,
         });
         approved = confirmResult.approved;
         preparedUserOp = confirmResult.prepared;
@@ -882,7 +883,7 @@ export const DexScreen: React.FC = () => {
       let didSubmit = false;
       try {
         const opToSign = preparedUserOp ?? await SmartAccountExecutionService.prepareUserOperation(
-          plan.bridgeExecution, { userId: user.id, usePaymaster: true },
+          plan.bridgeExecution, { userId: user.id, usePaymaster: networkConfig?.defaultUsePaymaster ?? true },
         );
         await TransactionHistoryService.markPrepared(bridgeDraft.id, {
           targetAddress: plan.bridgeExecution.target,
@@ -1072,7 +1073,7 @@ export const DexScreen: React.FC = () => {
           preview,
           execution: plan.swapExecution,
           userId: user.id,
-          usePaymaster: true,
+          usePaymaster: networkConfig?.defaultUsePaymaster ?? true,
         });
         approved = confirmResult.approved;
         preparedUserOp = confirmResult.prepared;
@@ -1119,7 +1120,7 @@ export const DexScreen: React.FC = () => {
       let didSubmit = false;
       try {
         const opToSign = preparedUserOp ?? await SmartAccountExecutionService.prepareUserOperation(
-          plan.swapExecution, { userId: user.id, usePaymaster: true },
+          plan.swapExecution, { userId: user.id, usePaymaster: networkConfig?.defaultUsePaymaster ?? true },
         );
         await TransactionHistoryService.markPrepared(swapDraft.id, {
           targetAddress: plan.swapExecution.target,
@@ -1294,6 +1295,19 @@ export const DexScreen: React.FC = () => {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Live LI.FI aggregator route (read-only). Renders only on mainnet/fork keys. */}
+        <LiveRouteCard
+          mode={activeTab}
+          networkKey={networkKey}
+          account={walletAddress}
+          sellToken={sellToken}
+          buyToken={buyToken}
+          sellAmountDecimal={sellAmountDecimal}
+          slippageBps={effectiveSlippageBps}
+          destNetworkKey={bridgeDestNetworkKey as NetworkKey | null}
+          destOutputToken={effectiveBridgeOutputToken}
+        />
 
         {activeTab === "bridge" && (
           <>
