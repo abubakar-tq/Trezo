@@ -32,11 +32,12 @@ class BinanceWS {
       this.ws.close();
     }
 
-    // Filter and sanitize symbols (only alphanumeric, lowercase)
+    // Filter and sanitize symbols (only alphanumeric, lowercase); cap at 50 to stay within URL limits
     const validSymbols = symbols
       .map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ''))
       .filter(s => s.length > 0 && s.length < 10) // Basic sanity check
-      .map(s => s.endsWith('usdt') ? s : `${s}usdt`);
+      .map(s => s.endsWith('usdt') ? s : `${s}usdt`)
+      .slice(0, 50);
 
     const streams = validSymbols.map(s => `${s}@ticker`).join('/');
     const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;

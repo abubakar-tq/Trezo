@@ -88,7 +88,7 @@ class MarketService {
     if (cached) {
       // Refresh in background without blocking
       fetchTask();
-      return cached;
+      return cached.slice(0, limit);
     }
 
     return await fetchTask();
