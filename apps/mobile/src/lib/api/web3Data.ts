@@ -95,7 +95,7 @@ type CoinFullInfo = {
   };
 };
 
-const MORALIS_BASE_URL = "https://deep-index.moralis.io/api/v2.2";
+const MORALIS_BASE_URL = "https://jhjnybcscdwpbnztzozy.supabase.co/functions/v1/crypto-prices/moralis";
 const COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3";
 
 const CACHE_DURATION_MS = 60_000;
@@ -423,20 +423,7 @@ const mapMoralisChainToEvm = (value: string): Exclude<EvmChain, "all"> | null =>
 };
 
 export const resolveMoralisApiKey = (): string | null => {
-  const fromProcess = typeof process !== "undefined" ? process.env?.MORALIS_API_KEY : undefined;
-  const key = fromProcess ?? ENV_MORALIS_API_KEY;
-  if (!key) {
-    console.warn('⚠️ MORALIS_API_KEY not found in environment variables');
-    return null;
-  }
-  const trimmed = key.trim();
-  if (trimmed.length === 0) {
-    console.warn('⚠️ MORALIS_API_KEY is empty');
-    return null;
-  }
-  // Log first few characters to verify key is loaded (don't log full key for security)
-  console.log(`✅ Moralis API key loaded (${trimmed.substring(0, 10)}...)`);
-  return trimmed;
+  return "proxy-handled";
 };
 
 type CacheEntry<T> = {
@@ -530,7 +517,6 @@ const requestMoralisTokenPrice = async (
   try {
     const response = await fetch(`${MORALIS_BASE_URL}/erc20/${lower}/price?${params}`, {
       headers: {
-        "X-API-Key": apiKey,
         Accept: "application/json",
       },
       signal,
@@ -1238,7 +1224,7 @@ export const fetchDiscoveryTokens = async (options?: {
     try {
       const params = new URLSearchParams({ limit: String(limit) });
       const response = await fetch(`${MORALIS_BASE_URL}/discovery/tokens?${params}`, {
-        headers: { "X-API-Key": apiKey },
+        headers: { Accept: "application/json" },
         signal: options?.signal,
       });
       if (!response.ok) {
