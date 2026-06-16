@@ -11,12 +11,10 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { AuthBackground } from "@/assets/components";
-import { useAppTheme } from "@theme";
 
 const { width, height } = Dimensions.get("window");
 
 const SplashScreen: React.FC = () => {
-  const { theme } = useAppTheme();
   const sheen = useSharedValue(-1);
 
   useEffect(() => {
@@ -46,12 +44,12 @@ const SplashScreen: React.FC = () => {
 
       <View style={styles.center}>
         <View style={styles.wordmarkWrap}>
-          <Text style={[styles.wordmark, { color: theme.colors.textPrimary }]}>
+          <Text style={styles.wordmark}>
             TREZO
           </Text>
           <Animated.View style={[styles.sheen, sheenStyle]} />
         </View>
-        <Text style={[styles.tagline, { color: theme.colors.textSecondary }]}>
+        <Text style={styles.tagline}>
           SECURE DIGITAL FINANCE
         </Text>
       </View>
@@ -76,6 +74,7 @@ const styles = StyleSheet.create({
     fontSize: 40,
     fontWeight: "900",
     letterSpacing: 6,
+    color: "#ffffff",
   },
   sheen: {
     position: "absolute",
@@ -91,6 +90,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     letterSpacing: 6,
+    color: "rgba(255,255,255,0.5)",
   },
 });
 
