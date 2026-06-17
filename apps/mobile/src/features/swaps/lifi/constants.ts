@@ -27,6 +27,7 @@ export const LIFI_NATIVE_ADDRESS = "0x0000000000000000000000000000000000000000" 
 /** Network keys on which LI.FI is the aggregator. */
 const LIFI_NETWORK_KEYS: ReadonlySet<NetworkKey> = new Set<NetworkKey>([
   "base-mainnet",
+  "arb-mainnet",
   "base-mainnet-fork",
 ]);
 
@@ -47,6 +48,8 @@ export const lifiChainIdForNetwork = (networkKey: NetworkKey): number => {
     case "base-mainnet":
     case "base-mainnet-fork":
       return 8453;
+    case "arb-mainnet":
+      return 42161;
     default:
       throw new Error(`No LI.FI chain id mapping for non-LI.FI network ${networkKey}.`);
   }

@@ -23,11 +23,13 @@ export type NetworkKey =
   | "base-sepolia"
   | "arbitrum-sepolia"
   | "base-mainnet"
+  | "arb-mainnet"
   | "base-mainnet-fork";
 
 export type DeploymentProfile =
   | "31337"
   | "base-mainnet"
+  | "arb-mainnet"
   | "base-mainnet-fork"
   | "sepolia"
   | "base-sepolia"
@@ -50,6 +52,7 @@ export type SupportedChainId =
   | 11155111
   | 84532
   | 421614
+  | 42161
   | 1
   | 324
   | 300
@@ -234,6 +237,33 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
         d?.entryPoint && d?.accountFactory &&
         process.env.EXPO_PUBLIC_BASE_MAINNET_RPC_URL &&
         process.env.EXPO_PUBLIC_BASE_MAINNET_BUNDLER_URL
+      ),
+      defaultUsePaymaster: false,
+      swapSupported: Boolean(d?.swapSupported),
+      emailRecoverySupported: false,
+      crossChainSwapSupported: true,
+    };
+  })(),
+
+  "arb-mainnet": (() => {
+    const d = getDeployment("arb-mainnet");
+    return {
+      networkKey: "arb-mainnet" as NetworkKey,
+      chainId: 42161 as SupportedChainId,
+      sourceChainId: 42161,
+      deploymentProfile: "arb-mainnet" as DeploymentProfile,
+      name: "Arbitrum One",
+      displayName: "Arbitrum",
+      nativeCurrency: DEFAULT_NATIVE_ETH,
+      rpcUrl: process.env.EXPO_PUBLIC_ARB_MAINNET_RPC_URL ?? "",
+      bundlerUrl: process.env.EXPO_PUBLIC_ARB_MAINNET_BUNDLER_URL ?? "",
+      paymasterUrl: undefined,
+      environment: "mainnet" as ChainEnvironmentExtended,
+      blockExplorerUrl: "https://arbiscan.io",
+      isEnabled: Boolean(
+        d?.entryPoint && d?.accountFactory &&
+        process.env.EXPO_PUBLIC_ARB_MAINNET_RPC_URL &&
+        process.env.EXPO_PUBLIC_ARB_MAINNET_BUNDLER_URL
       ),
       defaultUsePaymaster: false,
       swapSupported: Boolean(d?.swapSupported),

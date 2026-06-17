@@ -48,12 +48,20 @@ try {
   deploymentBaseMainnet = undefined;
 }
 
+let deploymentArbMainnet: DeploymentAddresses | undefined;
+try {
+  deploymentArbMainnet = require("../contracts/deployment.arb-mainnet.json") as DeploymentAddresses;
+} catch {
+  deploymentArbMainnet = undefined;
+}
+
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 /** App-level deployment profile identifier — decoupled from chainId. */
 export type DeploymentProfile =
   | "31337"
   | "base-mainnet"
+  | "arb-mainnet"
   | "base-mainnet-fork"
   | "sepolia"
   | "base-sepolia"
@@ -110,6 +118,7 @@ export type DeploymentAddresses = {
 export const DEPLOYMENTS_BY_PROFILE: Partial<Record<DeploymentProfile, DeploymentAddresses>> = {
   "31337": deployment31337 as DeploymentAddresses,
   "base-mainnet": deploymentBaseMainnet,
+  "arb-mainnet": deploymentArbMainnet,
   "base-mainnet-fork": deploymentBaseFork,
   "sepolia": deploymentSepolia,
   "base-sepolia": deploymentBaseSepolia,
@@ -130,6 +139,7 @@ export function getDeployment(profileOrChainId: DeploymentProfile | number): Dep
     if (profileOrChainId === 11155111) return DEPLOYMENTS_BY_PROFILE["sepolia"];
     if (profileOrChainId === 84532) return DEPLOYMENTS_BY_PROFILE["base-sepolia"];
     if (profileOrChainId === 421614) return DEPLOYMENTS_BY_PROFILE["arb-sepolia"];
+    if (profileOrChainId === 42161) return DEPLOYMENTS_BY_PROFILE["arb-mainnet"];
     return undefined;
   }
   return DEPLOYMENTS_BY_PROFILE[profileOrChainId];
@@ -148,6 +158,7 @@ export function getDeploymentForNetwork(networkKey: string): DeploymentAddresses
     "base-sepolia": "base-sepolia",
     "arbitrum-sepolia": "arb-sepolia",
     "base-mainnet": "base-mainnet",
+    "arb-mainnet": "arb-mainnet",
     "base-mainnet-fork": "base-mainnet-fork",
   };
 

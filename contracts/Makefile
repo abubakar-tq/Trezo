@@ -521,6 +521,26 @@ deploy-base-mainnet:
 	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=base-mainnet
 	$(MAKE) sync-abi
 
+# ── Arbitrum One ─────────────────────────────────────────────────────────────
+# Prereqs: deployer EOA funded with ~0.01 ETH on Arb mainnet (chainId 42161)
+# Usage:   make deploy-arb-mainnet ARB_MAINNET_RPC_URL=https://arb-mainnet.g.alchemy.com/v2/KEY ETHERSCAN_API_KEY=...
+ARB_MAINNET_RPC_URL ?= https://arb1.arbitrum.io/rpc
+
+.PHONY: deploy-arb-mainnet
+deploy-arb-mainnet:
+	@[ -n "$(ARB_MAINNET_RPC_URL)" ] || (echo "❌ Set ARB_MAINNET_RPC_URL" && exit 1)
+	$(MAKE) check-root-factory RPC_URL=$(ARB_MAINNET_RPC_URL)
+	$(MAKE) predict-infra RPC_URL=$(ARB_MAINNET_RPC_URL)
+	-$(MAKE) deploy-infra \
+		RPC_URL=$(ARB_MAINNET_RPC_URL) \
+		USE_KEYSTORE=1 \
+		DEPLOYMENT_PROFILE=arb-mainnet \
+		DEPLOYMENT_NAMESPACE=arb-mainnet
+	$(MAKE) verify-infra RPC_URL=$(ARB_MAINNET_RPC_URL)
+	@echo "Skipping email recovery: no hosted ZK Email relayer on Arb mainnet."
+	$(MAKE) sync-mobile DEPLOYMENT_PROFILE=arb-mainnet
+	$(MAKE) sync-abi
+
 # ── Verifying Paymaster (Base Mainnet) ───────────────────────────────────────
 # Deploys a VerifyingPaymaster and optionally seeds it with ETH.
 # The pm-rpc Supabase edge function is the off-chain signer that calls pm_sponsorUserOperation.
