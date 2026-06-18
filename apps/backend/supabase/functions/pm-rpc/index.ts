@@ -18,8 +18,18 @@ import {
   encodeAbiParameters,
   encodePacked,
   keccak256,
+  type Hex,
 } from "npm:viem";
 import { privateKeyToAccount } from "npm:viem/accounts";
+
+const normalizePrivateKey = (value: string): Hex => {
+  const unquoted = value.trim().replace(/^['"]|['"]$/g, "");
+  const prefixed = unquoted.startsWith("0x") ? unquoted : `0x${unquoted}`;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(prefixed)) {
+    throw new Error("PAYMASTER_SIGNER_PRIVATE_KEY must be a 32-byte hex private key, with or without 0x prefix.");
+  }
+  return prefixed.toLowerCase() as Hex;
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,13 +66,15 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const PAYMASTER_ADDRESS = Deno.env.get("PAYMASTER_ADDRESS") as `0x${string}` | undefined;
-  const SIGNER_KEY = Deno.env.get("PAYMASTER_SIGNER_PRIVATE_KEY") as `0x${string}` | undefined;
+  const rawSignerKey = Deno.env.get("PAYMASTER_SIGNER_PRIVATE_KEY");
   const CHAIN_ID = BigInt(Deno.env.get("CHAIN_ID") ?? "8453");
 
-  if (!PAYMASTER_ADDRESS || !SIGNER_KEY) {
+  if (!PAYMASTER_ADDRESS || !rawSignerKey?.trim()) {
     console.error("[pm-rpc] Missing PAYMASTER_ADDRESS or PAYMASTER_SIGNER_PRIVATE_KEY secret");
     return json({ error: "Paymaster not configured" }, 503);
   }
+
+  const SIGNER_KEY = normalizePrivateKey(rawSignerKey);
 
   let body: { jsonrpc?: string; id?: unknown; method?: string; params?: unknown[] };
   try {
