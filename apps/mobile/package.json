@@ -1,5 +1,5 @@
 {
-  "name": "trezo-wallet",
+  "name": "trezo_wallet",
   "main": "index.js",
   "expo": {
     "entryPoint": "./index.js"
