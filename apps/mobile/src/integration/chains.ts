@@ -9,12 +9,11 @@ export type SupportedChainId =
   | 11155111
   | 84532
   | 421614
+  | 42161
   | 1
   | 324
   | 300
-  | 8453
-  | 84532
-  | 421614;
+  | 8453;
 
 /** @deprecated Use ChainEnvironmentExtended from networks.ts which includes 'local_fork'. */
 export type ChainEnvironment = "local" | "local_fork" | "testnet" | "mainnet";
@@ -49,7 +48,7 @@ const DEFAULT_NATIVE_CURRENCY: NativeCurrency = {
 
 const parseSupportedChainId = (value?: string): SupportedChainId | undefined => {
   const parsed = Number(value);
-  if ([31337, 11155111, 84532, 421614, 1, 324, 300, 8453].includes(parsed)) {
+  if ([31337, 11155111, 84532, 421614, 42161, 1, 324, 300, 8453].includes(parsed)) {
     return parsed as SupportedChainId;
   }
   return undefined;
@@ -102,6 +101,7 @@ const localDeployment = withDeployment(31337);
 const sepoliaDeployment = withDeployment(11155111);
 const baseSepoliaDeployment = withDeployment(84532);
 const arbSepoliaDeployment = withDeployment(421614);
+const baseMainnetDeployment = withDeployment(8453 as never);
 
 export const CHAINS: Record<SupportedChainId, ChainConfig> = {
   31337: {
@@ -208,24 +208,33 @@ export const CHAINS: Record<SupportedChainId, ChainConfig> = {
       && arbSepoliaDeployment.accountFactory,
     ),
   },
+  42161: {
+    id: 42161,
+    name: "Arbitrum One",
+    nativeCurrency: DEFAULT_NATIVE_CURRENCY,
+    rpcUrl: process.env.EXPO_PUBLIC_ARB_MAINNET_RPC_URL ?? "https://arb1.arbitrum.io/rpc",
+    bundlerUrl: process.env.EXPO_PUBLIC_ARB_MAINNET_BUNDLER_URL ?? "",
+    paymasterUrl: undefined,
+    ...withDeployment(42161 as never),
+    blockExplorerUrl: "https://arbiscan.io",
+    environment: "mainnet" as ChainEnvironment,
+    isEnabled: false,
+  },
   8453: {
     id: 8453,
-    name: "Base Mainnet Fork",
+    name: "Base",
     nativeCurrency: DEFAULT_NATIVE_CURRENCY,
-    rpcUrl:
-      process.env.EXPO_PUBLIC_BASE_FORK_RPC_URL ??
-      `http://${process.env.EXPO_PUBLIC_INFRA_IP ?? "192.168.100.68"}:8545`,
-    bundlerUrl:
-      process.env.EXPO_PUBLIC_BASE_FORK_BUNDLER_URL ??
-      `http://${process.env.EXPO_PUBLIC_INFRA_IP ?? "192.168.100.68"}:4337`,
-    paymasterUrl:
-      process.env.EXPO_PUBLIC_BASE_FORK_PAYMASTER_URL ??
-      `http://${process.env.EXPO_PUBLIC_INFRA_IP ?? "192.168.100.68"}:3000`,
-    ...withDeployment(8453 as never), // 8453 resolves via profile in deployments.ts
+    rpcUrl: process.env.EXPO_PUBLIC_BASE_MAINNET_RPC_URL ?? "https://mainnet.base.org",
+    bundlerUrl: process.env.EXPO_PUBLIC_BASE_MAINNET_BUNDLER_URL ?? "",
+    paymasterUrl: process.env.EXPO_PUBLIC_BASE_MAINNET_PAYMASTER_URL,
+    ...baseMainnetDeployment,
     blockExplorerUrl: "https://basescan.org",
-    environment: "local_fork" as ChainEnvironment,
-    // Wallet-ops disabled per docs/plans/App-improvements-brief.md §4.1 — kept for read-only/dev use only.
-    isEnabled: false,
+    environment: "mainnet" as ChainEnvironment,
+    isEnabled: Boolean(
+      process.env.EXPO_PUBLIC_BASE_MAINNET_BUNDLER_URL &&
+      baseMainnetDeployment.entryPoint &&
+      baseMainnetDeployment.accountFactory,
+    ),
   },
 };
 

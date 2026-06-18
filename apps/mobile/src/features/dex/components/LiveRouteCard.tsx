@@ -1,155 +1,158 @@
 /**
  * LiveRouteCard
  *
- * Read-only "live aggregator route" banner. On a LI.FI (mainnet) network it
- * queries the live LI.FI /quote API for the current inputs and shows the chosen
- * DEX/bridge + estimated output. Needs no funds, no contracts, no RPC — pure
- * LI.FI API. This is the FR-06/FR-07 proof surfaced from the phone (TC-06/07).
+ * Compact route-attribution row that reads from the already-fetched swap/bridge
+ * quote. No independent API call — the main quote effect in DexScreen owns the
+ * data; this component just surfaces it in a polished, low-distraction way.
  *
- * Returns null on non-LI.FI networks, so testnet is unaffected.
+ * Renders only on LI.FI-enabled networks (mainnet / fork). Returns null on
+ * testnet so the component is invisible during testnet demos.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
-import { formatUnits, parseUnits, type Address } from "viem";
-
-import type { TokenMetadata } from "@/src/features/assets/types/token";
+import type { SwapQuote } from "@/src/features/swaps/types/swap";
+import type { BridgeQuote } from "@/src/features/swaps/types/bridge";
 import type { NetworkKey } from "@/src/integration/networks";
-import {
-  isLifiNetwork,
-  lifiChainIdForNetwork,
-  LIFI_NATIVE_ADDRESS,
-} from "@/src/features/swaps/lifi/constants";
-import { LifiClient } from "@/src/features/swaps/lifi/LifiClient";
-
-const client = new LifiClient();
-
-const lifiAddr = (t: TokenMetadata): string => (t.type === "native" ? LIFI_NATIVE_ADDRESS : t.address);
+import { isLifiNetwork } from "@/src/features/swaps/lifi/constants";
 
 type Props = {
   mode: "swap" | "bridge";
   networkKey: NetworkKey;
-  account: Address | null;
-  sellToken: TokenMetadata | null;
-  buyToken: TokenMetadata | null;
-  sellAmountDecimal: string;
-  slippageBps: number;
-  destNetworkKey?: NetworkKey | null;
-  destOutputToken?: TokenMetadata | null;
+  /** Swap quote — drives display on the swap tab. */
+  quote?: SwapQuote | null;
+  /** Bridge quote — drives display on the bridge tab. */
+  bridgeQuote?: BridgeQuote | null;
+  /** True while the parent is fetching a fresh quote. */
+  loading?: boolean;
 };
 
-export const LiveRouteCard: React.FC<Props> = (props) => {
+type RouteInfo = {
+  toolName: string;
+  etaSeconds: number | null;
+  attribution: string;
+};
+
+function extractSwapRoute(q: SwapQuote): RouteInfo {
+  const meta = q.routeMetadata ?? {};
+  return {
+    toolName: (meta.toolName as string) ?? (meta.tool as string) ?? "LI.FI",
+    etaSeconds: typeof meta.executionDurationSec === "number" ? meta.executionDurationSec : null,
+    attribution: "LI.FI",
+  };
+}
+
+function extractBridgeRoute(q: BridgeQuote): RouteInfo {
+  const meta = q.routeMetadata ?? {};
+  const bridgeId = (meta.bridgeId as string) ?? "bridge";
+  const toolName =
+    bridgeId === "across_v3" ? "Across V3"
+    : bridgeId === "lifi" ? "LI.FI Bridge"
+    : bridgeId;
+  return {
+    toolName,
+    etaSeconds: null,
+    attribution: bridgeId === "across_v3" ? "Across" : "LI.FI",
+  };
+}
+
+export const LiveRouteCard: React.FC<Props> = ({ mode, networkKey, quote, bridgeQuote, loading }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
 
-  const [loading, setLoading] = useState(false);
-  const [label, setLabel] = useState<string | null>(null);
-  const [outDisplay, setOutDisplay] = useState<string | null>(null);
-  const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  if (!isLifiNetwork(networkKey)) return null;
 
-  const enabled = isLifiNetwork(props.networkKey);
-  const toToken = props.mode === "swap" ? props.buyToken : props.destOutputToken ?? null;
-  const destOk = props.mode === "swap" || Boolean(props.destNetworkKey);
+  const route: RouteInfo | null =
+    mode === "swap" && quote ? extractSwapRoute(quote)
+    : mode === "bridge" && bridgeQuote ? extractBridgeRoute(bridgeQuote)
+    : null;
 
-  const amountRaw = useMemo(() => {
-    if (!props.sellToken || !props.sellAmountDecimal.trim()) return null;
-    try {
-      return parseUnits(props.sellAmountDecimal.trim(), props.sellToken.decimals);
-    } catch {
-      return null;
-    }
-  }, [props.sellAmountDecimal, props.sellToken]);
-
-  useEffect(() => {
-    if (!enabled || !destOk || !props.account || !props.sellToken || !toToken || !amountRaw || amountRaw <= 0n) {
-      setLabel(null);
-      setOutDisplay(null);
-      setEtaSeconds(null);
-      setError(null);
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const fromChain = lifiChainIdForNetwork(props.networkKey);
-        const toChain =
-          props.mode === "bridge" && props.destNetworkKey
-            ? lifiChainIdForNetwork(props.destNetworkKey)
-            : fromChain;
-        const q = await client.getQuote({
-          fromChain,
-          toChain,
-          fromToken: lifiAddr(props.sellToken!),
-          toToken: lifiAddr(toToken!),
-          fromAmount: amountRaw!.toString(),
-          fromAddress: props.account!,
-          slippage: props.slippageBps / 10_000,
-        });
-        if (cancelled) return;
-        setLabel(q.toolDetails?.name ?? q.tool);
-        setOutDisplay(`${formatUnits(BigInt(q.estimate.toAmount), toToken!.decimals)} ${toToken!.symbol}`);
-        setEtaSeconds(typeof q.estimate.executionDuration === "number" ? q.estimate.executionDuration : null);
-      } catch (e) {
-        if (cancelled) return;
-        setLabel(null);
-        setOutDisplay(null);
-        setEtaSeconds(null);
-        setError((e as Error).message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }, 500);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [
-    enabled,
-    destOk,
-    props.account,
-    props.sellToken,
-    toToken,
-    amountRaw,
-    props.networkKey,
-    props.destNetworkKey,
-    props.slippageBps,
-    props.mode,
-  ]);
-
-  if (!enabled) return null;
+  if (!route && !loading) return null;
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
-      <View style={styles.headerRow}>
-        <Text style={[styles.kicker, { color: colors.textMuted }]}>LIVE AGGREGATOR ROUTE · LI.FI</Text>
-        {loading && <ActivityIndicator size="small" color={colors.accent} />}
+    <View style={[styles.row, { backgroundColor: colors.glass, borderColor: colors.borderMuted }]}>
+      <View style={styles.left}>
+        <Feather name="zap" size={11} color={colors.accent} />
+        {loading && !route ? (
+          <ActivityIndicator size="small" color={colors.textMuted} style={styles.spinner} />
+        ) : route ? (
+          <>
+            <Text style={[styles.via, { color: colors.textSecondary }]}>
+              via{" "}
+              <Text style={[styles.toolName, { color: colors.textPrimary }]}>
+                {route.toolName}
+              </Text>
+            </Text>
+            {route.etaSeconds != null && (
+              <View style={[styles.etaPill, { backgroundColor: colors.accentSoft }]}>
+                <Text style={[styles.etaText, { color: colors.accent }]}>
+                  ~{route.etaSeconds}s
+                </Text>
+              </View>
+            )}
+          </>
+        ) : null}
       </View>
-      {label && outDisplay && (
-        <Text style={[styles.body, { color: colors.textPrimary }]}>
-          Best route via <Text style={{ fontWeight: "700" }}>{label}</Text> · est. {outDisplay}
-          {etaSeconds != null ? ` · ~${etaSeconds}s` : ""}
+
+      <View style={styles.right}>
+        {loading && route && (
+          <ActivityIndicator size="small" color={colors.textMuted} style={styles.spinner} />
+        )}
+        <Text style={[styles.attribution, { color: colors.textMuted }]}>
+          {route?.attribution ?? "LI.FI"}
         </Text>
-      )}
-      {!label && !loading && !error && (
-        <Text style={[styles.muted, { color: colors.textMuted }]}>Enter an amount to fetch a live route.</Text>
-      )}
-      {error && (
-        <Text style={[styles.muted, { color: colors.warning }]} numberOfLines={2}>
-          No live route: {error}
-        </Text>
-      )}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 16, padding: 14, marginTop: 12, gap: 6 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  kicker: { fontSize: 11, letterSpacing: 1, fontWeight: "700" },
-  body: { fontSize: 14 },
-  muted: { fontSize: 12 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 10,
+  },
+  left: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  right: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  spinner: {
+    marginLeft: 2,
+  },
+  via: {
+    fontSize: 12,
+    letterSpacing: 0.1,
+  },
+  toolName: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  etaPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  etaText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  attribution: {
+    fontSize: 11,
+    letterSpacing: 0.5,
+    fontWeight: "600",
+  },
 });

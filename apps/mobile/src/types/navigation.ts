@@ -75,7 +75,7 @@ export type RootStackParamList = {
   Buy: undefined;
   Receive: undefined;
   ReceiveChain: { chainId: number };
-  Send: undefined;
+  Send: { tokenSymbol?: string } | undefined;
   TransactionHistory: { walletAddress?: Address; chainId?: number } | undefined;
   TransactionStatus: { transactionId: string };
   TransactionDetail: { transactionId: string };

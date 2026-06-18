@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
 
 import * as Clipboard from "expo-clipboard";
@@ -108,6 +108,9 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const initialTokenSymbol: string | undefined = route.params?.tokenSymbol;
+  const initialTokenApplied = useRef(false);
 
   // ── Wallet state ──────────────────────────────────────────────────────────
   const user = useUserStore((s) => s.user);
@@ -229,7 +232,20 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
   const canContinueAmount = Boolean(
     selectedAmountRaw > 0n && selectedAmountRaw <= selectedTokenBalanceRaw,
   );
+  const isInsufficientAmount = selectedAmountRaw > 0n && selectedAmountRaw > selectedTokenBalanceRaw;
   const canContinueRecipient = Boolean(recipient.trim().length > 0);
+
+  // Only show tokens the user actually holds (non-zero balance). Native is
+  // always included so the user can see their ETH. While balances are still
+  // loading we show the full list so there's no flash of empty content.
+  const sendableTokens = useMemo(() => {
+    if (balancesLoading) return tokenOptions;
+    return tokenOptions.filter((token) => {
+      if (token.type === "native") return true;
+      const key = token.address.toLowerCase();
+      return (tokenBalances[key] ?? 0n) > 0n;
+    });
+  }, [tokenOptions, tokenBalances, balancesLoading]);
 
   // ── Effects ───────────────────────────────────────────────────────────────
 
@@ -246,6 +262,20 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
       setSelectedToken(tokenOptions[0]);
     }
   }, [selectedToken, tokenOptions]);
+
+  // Pre-select a token from navigation params (e.g. "Send ETH" from home screen card)
+  // and skip straight to the amount step. Only runs once per navigation.
+  useEffect(() => {
+    if (!initialTokenSymbol || initialTokenApplied.current || !tokenOptions.length) return;
+    const match = tokenOptions.find(
+      (t) => t.symbol.toLowerCase() === initialTokenSymbol.toLowerCase(),
+    );
+    if (match) {
+      setSelectedToken(match);
+      setStep("amount");
+      initialTokenApplied.current = true;
+    }
+  }, [initialTokenSymbol, tokenOptions]);
 
   // Load wallet for selected chain
   useEffect(() => {
@@ -773,7 +803,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
             Tokens
           </Text>
 
-          {tokenOptions.map((token) => {
+          {sendableTokens.map((token) => {
             const key =
               token.address === "native"
                 ? "native"
@@ -961,7 +991,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
               <Text
                 style={[s.continueBtnText, { color: colors.textOnAccent }]}
               >
-                Continue
+                {isInsufficientAmount ? "Insufficient Funds" : "Continue"}
               </Text>
             </TouchableOpacity>
           </View>

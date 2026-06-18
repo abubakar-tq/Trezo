@@ -37,7 +37,7 @@ import { usePortfolioSnapshots } from "../hooks/usePortfolioSnapshots";
 import { enabledPeriods, disabledPeriodMessage, valueChange } from "../utils/portfolioChart";
 import type { Period } from "../utils/portfolioChart";
 import { computeAllocation } from "../utils/allocation";
-import { popularTestnetTokens } from "../utils/popularTestnet";
+import { popularTokensForNetwork, popularSectionLabel } from "../utils/popularTestnet";
 import { resolveNetworkKey, type SupportedChainId } from "@/src/integration/networks";
 
 const { width } = Dimensions.get("window");
@@ -197,7 +197,8 @@ const PortfolioScreen: React.FC = () => {
   } catch {
     // keep fallback
   }
-  const popularTokens = useMemo(() => popularTestnetTokens(networkKey), [networkKey]);
+  const popularTokens = useMemo(() => popularTokensForNetwork(networkKey), [networkKey]);
+  const popularLabel = useMemo(() => popularSectionLabel(networkKey), [networkKey]);
 
   const isEmpty = !walletLoading && totalBalanceUSD === 0;
 
@@ -536,7 +537,7 @@ const PortfolioScreen: React.FC = () => {
   const renderPopularShelf = () => (
     <View style={styles.sectionWrapper}>
       <View style={[styles.popularCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
-        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>POPULAR ON TESTNET</Text>
+        <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{popularLabel}</Text>
         {popularTokens.map((pt) => (
           <View
             key={pt.symbol}

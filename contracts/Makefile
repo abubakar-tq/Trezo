@@ -570,7 +570,6 @@ deploy-verifying-paymaster: build
 		--rpc-url $(BASE_MAINNET_RPC_URL) \
 		$(KEYSTORE_FLAGS) \
 		--broadcast \
-		--value $(PAYMASTER_DEPOSIT_WEI) \
 		$(VERIFY_FLAGS) \
 		$(SCRIPT_VERBOSITY)
 	@echo "✅ Paymaster deployed. Address is in deployments/verifying-paymaster-8453.json"

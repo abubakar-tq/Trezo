@@ -243,6 +243,14 @@ export class SupabaseWalletService {
         return networkResult.data as AAWallet;
       }
 
+      // Only fall back to chain_id lookup when no explicit networkKey was provided.
+      // When networkKey is given and the network-key query returns nothing, return null
+      // rather than risk matching a different network sharing the same chainId (e.g.
+      // base-mainnet-fork and base-mainnet both use chainId 8453).
+      if (networkKey) {
+        return null;
+      }
+
       const { data, error } = await supabase
         .from('aa_wallets')
         .select('*')

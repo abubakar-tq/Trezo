@@ -238,7 +238,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
         process.env.EXPO_PUBLIC_BASE_MAINNET_RPC_URL &&
         process.env.EXPO_PUBLIC_BASE_MAINNET_BUNDLER_URL
       ),
-      defaultUsePaymaster: false,
+      defaultUsePaymaster: Boolean(process.env.EXPO_PUBLIC_BASE_MAINNET_PAYMASTER_URL),
       swapSupported: Boolean(d?.swapSupported),
       emailRecoverySupported: false,
       crossChainSwapSupported: true,
@@ -280,7 +280,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
       sourceChainId: 8453,
       deploymentProfile: "base-mainnet-fork" as DeploymentProfile,
       name: "Base Mainnet Fork",
-      displayName: "Base Fork",
+      displayName: "Base (Local Fork)",
       nativeCurrency: DEFAULT_NATIVE_ETH,
       rpcUrl:
         process.env.EXPO_PUBLIC_BASE_FORK_RPC_URL ??
@@ -293,9 +293,7 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
         `http://${INFRA_IP}:3000`,
       environment: "local_fork" as ChainEnvironmentExtended,
       blockExplorerUrl: "https://basescan.org",
-      isEnabled: Boolean(
-        deployment?.entryPoint && deployment?.accountFactory
-      ),
+      isEnabled: false,
       isDevelopmentOnly: true,
       defaultUsePaymaster: true,
       swapSupported: Boolean(deployment?.swapSupported ?? true), // fork has working Uniswap
@@ -326,9 +324,11 @@ export const getNetworkConfig = (networkKey: NetworkKey): NetworkConfig => {
   return config;
 };
 
-/** Returns all enabled networks. */
+/** Returns all enabled networks. Dev-only networks (isDevelopmentOnly) are hidden in production. */
 export const getEnabledNetworks = (): NetworkConfig[] =>
-  ALL_NETWORK_KEYS.map((k) => NETWORKS[k]).filter((n) => n.isEnabled);
+  ALL_NETWORK_KEYS
+    .map((k) => NETWORKS[k])
+    .filter((n) => n.isEnabled && (__DEV__ || !n.isDevelopmentOnly));
 
 /**
  * Returns the RPC URL for a network.

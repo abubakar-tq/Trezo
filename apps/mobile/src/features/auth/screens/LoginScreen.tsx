@@ -2,7 +2,7 @@ import { NavigationProp, RouteProp, useNavigation, useRoute } from "@react-navig
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
-import { AppleIconSignin, GoogleIconSignin, SigninIcon } from "@/assets/components";
+import { GoogleIconSignin, SigninIcon } from "@/assets/components";
 import { AuthStackParamList } from "@/src/types/navigation";
 import DevicePairingService from "@/src/features/wallet/services/DevicePairingService";
 import { navigate } from "@app/navigation/navigationRef";
@@ -259,12 +259,6 @@ const LoginScreen: React.FC = () => {
           icon={<GoogleIconSignin size={24} />}
           onPress={() => handleSocial("google")}
           loading={socialLoading === "google"}
-        />
-        <SocialButton
-          label="Apple"
-          icon={<AppleIconSignin size={24} />}
-          onPress={() => handleSocial("apple")}
-          loading={socialLoading === "apple"}
         />
       </View>
     </AuthScaffold>

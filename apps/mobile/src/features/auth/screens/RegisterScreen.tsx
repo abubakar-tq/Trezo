@@ -3,7 +3,7 @@ import { AuthApiError } from "@supabase/supabase-js";
 import React, { useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
-import { AppleIconSignin, GoogleIconSignin, SigninIcon } from "@/assets/components";
+import { GoogleIconSignin, SigninIcon } from "@/assets/components";
 import { AuthStackParamList } from "@/src/types/navigation";
 import { AuthGradientButton, AuthScaffold, PasswordInput, PasswordRulesCard, SocialButton } from "@features/auth/components";
 import {
@@ -231,12 +231,6 @@ const RegisterScreen: React.FC = () => {
           icon={<GoogleIconSignin size={24} />}
           onPress={() => handleSocial("google")}
           loading={socialLoading === "google"}
-        />
-        <SocialButton
-          label="Apple"
-          icon={<AppleIconSignin size={24} />}
-          onPress={() => handleSocial("apple")}
-          loading={socialLoading === "apple"}
         />
       </View>
     </AuthScaffold>
