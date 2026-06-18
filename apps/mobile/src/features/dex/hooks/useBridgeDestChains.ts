@@ -1,0 +1,97 @@
+import { useState, useEffect, useMemo } from "react";
+import { LIFI_BASE_URL, isLifiNetwork } from "@/src/features/swaps/lifi/constants";
+import { getBridgeConfig } from "@/src/features/swaps/config/bridgeRegistry";
+import { getNetworkConfig, resolveNetworkKey, type NetworkKey } from "@/src/integration/networks";
+
+type LifiChainRaw = { id: number; chainType: string };
+type LifiChainsResponse = { chains: LifiChainRaw[] };
+
+// Module-level cache — one fetch per session regardless of how many components mount.
+let lifiChainsCache: string[] | null = null;
+let lifiChainsFetching: Promise<string[]> | null = null;
+
+async function fetchLifiDestChains(sourceNetworkKey: string): Promise<string[]> {
+  if (lifiChainsCache) return lifiChainsCache.filter((k) => k !== sourceNetworkKey);
+
+  if (!lifiChainsFetching) {
+    lifiChainsFetching = (async () => {
+      const res = await fetch(`${LIFI_BASE_URL}/chains?chainTypes=EVM`);
+      if (!res.ok) throw new Error(`LI.FI chains fetch failed (${res.status})`);
+      const json = (await res.json()) as LifiChainsResponse;
+
+      const keys: string[] = [];
+      for (const chain of json.chains) {
+        try {
+          const key = resolveNetworkKey(chain.id as any);
+          if (isLifiNetwork(key)) keys.push(key);
+        } catch {
+          // Chain not in our registry — skip silently
+        }
+      }
+      lifiChainsCache = keys;
+      return keys;
+    })();
+  }
+
+  return lifiChainsFetching.then((keys) => keys.filter((k) => k !== sourceNetworkKey));
+}
+
+export function useBridgeDestChains(
+  sourceNetworkKey: string,
+  isMainnet: boolean,
+): { destChainKeys: string[]; destChainLabels: Record<string, string>; loading: boolean } {
+  const [destChainKeys, setDestChainKeys] = useState<string[]>(() => {
+    if (!isMainnet) {
+      const config = getBridgeConfig(sourceNetworkKey as NetworkKey);
+      return config?.routes.map((r) => r.destinationNetworkKey) ?? [];
+    }
+    // Serve from cache synchronously if already fetched
+    return lifiChainsCache
+      ? lifiChainsCache.filter((k) => k !== sourceNetworkKey)
+      : [];
+  });
+  const [loading, setLoading] = useState(isMainnet && !lifiChainsCache);
+
+  useEffect(() => {
+    if (!isMainnet) {
+      const config = getBridgeConfig(sourceNetworkKey as NetworkKey);
+      setDestChainKeys(config?.routes.map((r) => r.destinationNetworkKey) ?? []);
+      setLoading(false);
+      return;
+    }
+
+    if (lifiChainsCache) {
+      setDestChainKeys(lifiChainsCache.filter((k) => k !== sourceNetworkKey));
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    fetchLifiDestChains(sourceNetworkKey)
+      .then((keys) => {
+        setDestChainKeys(keys);
+        setLoading(false);
+      })
+      .catch(() => {
+        // Fallback: empty list — picker opens with no chain filter
+        setDestChainKeys([]);
+        setLoading(false);
+      });
+  }, [sourceNetworkKey, isMainnet]);
+
+  const destChainLabels = useMemo<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        destChainKeys.map((k) => {
+          try {
+            return [k, getNetworkConfig(k as NetworkKey).displayName];
+          } catch {
+            return [k, k];
+          }
+        }),
+      ),
+    [destChainKeys],
+  );
+
+  return { destChainKeys, destChainLabels, loading };
+}
