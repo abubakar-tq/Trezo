@@ -163,7 +163,7 @@ export const isCrossChainSwapReady = (destinationNetworkKey: NetworkKey): boolea
   return Boolean(config?.spokePool && config?.crossChainExecutor);
 };
 
-/** Returns the allowlisted destination networks for a given source. */
+/** Returns the allowlisted destination networks for a given testnet source. For mainnet, use useBridgeDestChains hook. */
 export const getCrossChainDestinations = (networkKey: NetworkKey): NetworkKey[] =>
   BRIDGE_CONFIGS[networkKey]?.routes.map((r) => r.destinationNetworkKey) ?? [];
 

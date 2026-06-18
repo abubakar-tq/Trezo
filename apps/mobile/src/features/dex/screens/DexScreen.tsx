@@ -19,6 +19,7 @@ import { formatUnits, parseUnits, type Address, type Hex } from "viem";
 
 import { BalanceService } from "@/src/features/assets/services/BalanceService";
 import { TokenRegistryService } from "@/src/features/assets/services/TokenRegistryService";
+import { useLifiTokens } from "@features/dex/hooks/useLifiTokens";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 import { AllowanceService } from "@/src/features/swaps/services/AllowanceService";
 import { classify, type ClassifiedError } from "@/src/features/swaps/services/SwapErrorClassifier";
@@ -37,14 +38,14 @@ import { SmartAccountExecutionService } from "@/src/features/wallet/services/Sma
 import type { PreparedSmartAccountExecution } from "@/src/features/wallet/types/execution";
 import WalletPersistenceService from "@/src/features/wallet/services/SupabaseWalletService";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
-import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chains";
+import { DEFAULT_CHAIN_ID, isPortableChain, type SupportedChainId } from "@/src/integration/chains";
 import { resolveNetworkKey, getNetworkConfig, type NetworkKey } from "@/src/integration/networks";
 import {
   getBridgeConfig,
   isCrossChainBridgeReady,
-  isCrossChainSwapReady,
-  getCrossChainDestinations,
 } from "@/src/features/swaps/config/bridgeRegistry";
+import { isLifiNetwork } from "@/src/features/swaps/lifi/constants";
+import { BridgeDestPicker } from "@/src/features/dex/components/BridgeDestPicker";
 import { getDexConfig } from "@/src/features/swaps/config/dexRegistry";
 import { useUserStore } from "@/src/store/useUserStore";
 import { defaultSlippageBps } from "@/src/features/dex/utils/slippage";
@@ -170,11 +171,12 @@ export const DexScreen: React.FC = () => {
   const [preparedPlan, setPreparedPlan] = useState<SwapPlan | null>(null);
   const [uiState, setUiState] = useState<UiState>("idle");
   const [errorState, setErrorState] = useState<ClassifiedError | null>(null);
+  const [insufficientBalance, setInsufficientBalance] = useState(false);
   const [toast, setToast] = useState<{ message: string; severity: "info" | "warning" | "error" } | null>(null);
   const [retryNonce, setRetryNonce] = useState<number>(0);
 
   const [isAssetPickerVisible, setIsAssetPickerVisible] = useState(false);
-  const [assetPickerSide, setAssetPickerSide] = useState<"sell" | "buy" | "bridgeOutput">("sell");
+  const [assetPickerSide, setAssetPickerSide] = useState<"sell" | "buy">("sell");
 
   // ── Bridge tab state ───────────────────────────────────────────────────────
   const [bridgeDestNetworkKey, setBridgeDestNetworkKey] = useState<string | null>(null);
@@ -187,6 +189,8 @@ export const DexScreen: React.FC = () => {
   // chain's passkey). null = not yet resolved or no row exists on destination.
   const [destWalletAddress, setDestWalletAddress] = useState<Address | null>(null);
   const [destWalletLookupError, setDestWalletLookupError] = useState<string | null>(null);
+  // null = use the auto-resolved destWalletAddress; set = user has entered a custom recipient.
+  const [customBridgeRecipient, setCustomBridgeRecipient] = useState<Address | null>(null);
 
   const networkKey = useMemo(() => resolveNetworkKey(selectedChainId), [selectedChainId]);
 
@@ -201,14 +205,14 @@ export const DexScreen: React.FC = () => {
 
   const bridgeReady = useMemo(() => isCrossChainBridgeReady(networkKey), [networkKey]);
   const bridgeConfig = useMemo(() => getBridgeConfig(networkKey), [networkKey]);
-  const bridgeDestinations = useMemo(() => getCrossChainDestinations(networkKey), [networkKey]);
 
-  // Cross-chain swap (different output token on destination) requires a
-  // CrossChainExecutor on the destination. Same-asset bridge does not.
-  const crossChainSwapReadyOnDest = useMemo(
-    () => (bridgeDestNetworkKey ? isCrossChainSwapReady(bridgeDestNetworkKey as never) : false),
-    [bridgeDestNetworkKey],
-  );
+  const effectiveRecipient: Address | null = customBridgeRecipient ?? destWalletAddress;
+
+  // When the destination chain changes, reset any custom recipient — the resolved
+  // address is chain-specific and a custom address may not be intended for the new chain.
+  useEffect(() => {
+    setCustomBridgeRecipient(null);
+  }, [bridgeDestNetworkKey]);
 
   // Destination-chain token list — used for the bridge-tab output picker.
   const bridgeDestTokens = useMemo(
@@ -247,10 +251,12 @@ export const DexScreen: React.FC = () => {
     setBridgeDestOutputToken(null);
   }, [sellToken?.symbol, sellToken?.chainId, bridgeDestNetworkKey]);
 
-  const swapTokens = useMemo(
-    () => TokenRegistryService.listSwapTokensForNetwork(networkKey),
-    [networkKey],
-  );
+  // topTokens = curated static list shown by default in the picker (~15 tokens, instant).
+  // allSwapTokens = full LI.FI catalogue used for in-picker search (~400, loads in bg).
+  const { topTokens, tokens: allSwapTokens, loading: swapTokensLoading } = useLifiTokens(networkKey);
+  // Selection logic and balance fetching use the full list so a token picked via search
+  // is not immediately reset by the "is this token still in the list?" effect.
+  const swapTokens = allSwapTokens;
 
   const sellTokenBalanceRaw = useMemo(() => {
     const key = toTokenKey(sellToken);
@@ -270,37 +276,34 @@ export const DexScreen: React.FC = () => {
   const effectiveSlippageBps = slippageBpsOverride ?? defaultBps;
 
   const assetPickerList = useMemo(() => {
-    // The bridge-output picker draws from the destination chain's token list
-    // (balances on destination aren't loaded in this screen, so render as 0).
-    if (assetPickerSide === "bridgeOutput") {
-      return bridgeDestTokens
-        .filter((token) => token.type === "erc20")
-        .map((token) => toAsset(token, 0n));
-    }
-    // Hide the wrap/unwrap counterpart when picking the opposite side.
-    // ETH<->WETH isn't a V3 swap (no pool for the same asset on both sides);
-    // it's a deposit/withdraw on the WETH contract and lives in a different
-    // flow. Showing it here only sets up a confusing "no provider" error.
     const dexConfig = getDexConfig(networkKey);
     const wrappedNative = dexConfig?.wrappedNativeAddress?.toLowerCase();
     const otherSide = assetPickerSide === "sell" ? buyToken : sellToken;
     const isWrapCounterpart = (token: TokenMetadata): boolean => {
       if (!otherSide || !wrappedNative) return false;
-      // other side native -> hide WETH; other side is WETH -> hide native
       if (otherSide.type === "native" && token.type === "erc20") {
         return token.address.toLowerCase() === wrappedNative;
       }
-      if (otherSide.type === "erc20"
-          && otherSide.address.toLowerCase() === wrappedNative
-          && token.type === "native") {
+      if (
+        otherSide.type === "erc20" &&
+        otherSide.address.toLowerCase() === wrappedNative &&
+        token.type === "native"
+      ) {
         return true;
       }
       return false;
     };
-    return swapTokens
+    // Default display: curated top tokens only — fast and uncluttered.
+    return topTokens
       .filter((token) => !isWrapCounterpart(token))
       .map((token) => toAsset(token, tokenBalances[toTokenKey(token) ?? "native"] ?? 0n));
-  }, [assetPickerSide, swapTokens, tokenBalances, bridgeDestTokens, networkKey, sellToken, buyToken]);
+  }, [assetPickerSide, topTokens, tokenBalances, networkKey, sellToken, buyToken]);
+
+  // Full catalogue for in-picker search (all LI.FI tokens, no balance lookup needed).
+  const assetPickerSearchList = useMemo(
+    () => allSwapTokens.map((token) => toAsset(token, tokenBalances[toTokenKey(token) ?? "native"] ?? 0n)),
+    [allSwapTokens, tokenBalances],
+  );
 
   useEffect(() => {
     if (route.params?.initialTab) {
@@ -357,19 +360,26 @@ export const DexScreen: React.FC = () => {
     };
   }, [selectedChainId, user?.id]);
 
+  // Only fetch balance for the two selected tokens, not the entire list.
+  // Fetching all swapTokens hammers the RPC endpoint with hundreds of eth_calls
+  // when the LI.FI token list loads (~400 tokens). The picker's "YOUR HOLDINGS"
+  // section already shows real balances via useHoldingsAcrossChains.
   useEffect(() => {
     let cancelled = false;
 
     const loadBalances = async () => {
-      if (!walletAddress || !swapTokens.length) {
+      if (!walletAddress) {
         setTokenBalances({});
         return;
       }
 
+      const tokensToFetch = [sellToken, buyToken].filter(Boolean) as TokenMetadata[];
+      if (!tokensToFetch.length) return;
+
       setBalancesLoading(true);
       try {
         const entries = await Promise.all(
-          swapTokens.map(async (token) => {
+          tokensToFetch.map(async (token) => {
             const key = toTokenKey(token) ?? "native";
             const balance = await BalanceService.getBalance({
               chainId: selectedChainId,
@@ -381,7 +391,7 @@ export const DexScreen: React.FC = () => {
         );
 
         if (!cancelled) {
-          setTokenBalances(Object.fromEntries(entries));
+          setTokenBalances((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
         }
       } catch (error) {
         if (!cancelled) {
@@ -391,7 +401,6 @@ export const DexScreen: React.FC = () => {
           } else {
             setErrorState(c);
           }
-          setTokenBalances({});
         }
       } finally {
         if (!cancelled) {
@@ -405,11 +414,12 @@ export const DexScreen: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [selectedChainId, swapTokens, walletAddress]);
+  }, [selectedChainId, sellToken, buyToken, walletAddress]);
 
   useEffect(() => {
     let cancelled = false;
     setPreparedPlan(null);
+    setInsufficientBalance(false);
 
     if (!walletAddress || !sellToken || !buyToken) {
       setQuote(null);
@@ -459,14 +469,6 @@ export const DexScreen: React.FC = () => {
           throw new Error("Sell amount must be greater than zero.");
         }
 
-        if (sellAmountRaw > sellTokenBalanceRaw) {
-          setQuote(null);
-          setApprovalRequired(false);
-          setUiState("idle");
-          setErrorState(classify(new Error("Insufficient balance.")));
-          return;
-        }
-
         const nextQuote = await SwapQuoteService.getQuote({
           networkKey,
           chainId: selectedChainId,
@@ -490,6 +492,7 @@ export const DexScreen: React.FC = () => {
 
         setQuote(nextQuote);
         setApprovalRequired(allowance.required);
+        setInsufficientBalance(sellAmountRaw > sellTokenBalanceRaw);
         setUiState(allowance.required ? "approval_required" : "quote_ready");
       } catch (error) {
         if (cancelled) return;
@@ -511,18 +514,11 @@ export const DexScreen: React.FC = () => {
     };
   }, [buyToken, networkKey, selectedChainId, sellAmountDecimal, sellToken, effectiveSlippageBps, walletAddress, retryNonce, swapSupported, sellTokenBalanceRaw]);
 
-  // ── Bridge: auto-pick first available destination when source changes ──────
-  useEffect(() => {
-    if (activeTab !== "bridge") return;
-    if (!bridgeDestNetworkKey || !bridgeDestinations.includes(bridgeDestNetworkKey as never)) {
-      setBridgeDestNetworkKey(bridgeDestinations[0] ?? null);
-    }
-  }, [activeTab, bridgeDestNetworkKey, bridgeDestinations]);
-
   // ── Bridge: fetch quote when bridge inputs are ready ───────────────────────
   useEffect(() => {
     let cancelled = false;
     setBridgePlan(null);
+    setInsufficientBalance(false);
 
     if (activeTab !== "bridge") {
       setBridgeQuote(null);
@@ -560,12 +556,6 @@ export const DexScreen: React.FC = () => {
           throw new Error("Bridge amount must be greater than zero.");
         }
 
-        if (inputAmountRaw > sellTokenBalanceRaw) {
-          setBridgeQuote(null);
-          setErrorState(classify(new Error("Insufficient balance.")));
-          return;
-        }
-
         const q = await BridgeQuoteService.getQuote({
           sourceNetworkKey: networkKey,
           sourceChainId: selectedChainId,
@@ -577,7 +567,7 @@ export const DexScreen: React.FC = () => {
           // If unresolved (lookup still pending or row missing), the quote
           // falls back to the source address — buildBridgeIntent then refuses
           // to proceed via the destWalletLookupError gate.
-          destAccount: destWalletAddress ?? undefined,
+          destAccount: effectiveRecipient ?? undefined,
           inputToken: sellToken,
           outputToken: destOutputToken,
           inputAmountRaw,
@@ -586,6 +576,7 @@ export const DexScreen: React.FC = () => {
 
         if (cancelled) return;
         setBridgeQuote(q);
+        setInsufficientBalance(inputAmountRaw > sellTokenBalanceRaw);
       } catch (error) {
         if (cancelled) return;
         setBridgeQuote(null);
@@ -605,7 +596,7 @@ export const DexScreen: React.FC = () => {
   }, [
     activeTab, bridgeReady, walletAddress, sellToken, sellAmountDecimal,
     bridgeDestNetworkKey, networkKey, selectedChainId, retryNonce,
-    effectiveBridgeOutputToken, effectiveSlippageBps, destWalletAddress, sellTokenBalanceRaw,
+    effectiveBridgeOutputToken, effectiveSlippageBps, effectiveRecipient, sellTokenBalanceRaw,
   ]);
 
   // Eagerly resolve the destination-chain wallet address so the bridge UI
@@ -634,6 +625,10 @@ export const DexScreen: React.FC = () => {
         if (cancelled) return;
         if (destWallet?.predicted_address) {
           setDestWalletAddress(destWallet.predicted_address as Address);
+        } else if (walletAddress && isPortableChain(destNetworkConfig.chainId)) {
+          // Wallet not deployed on dest yet, but the CREATE2 address is identical
+          // on all portable chains — bridge funds arrive at the same address.
+          setDestWalletAddress(walletAddress);
         } else {
           setDestWalletLookupError(
             `No Trezo smart account on ${destNetworkConfig.displayName} yet. Switch to that chain and deploy first.`,
@@ -649,7 +644,7 @@ export const DexScreen: React.FC = () => {
     })();
 
     return () => { cancelled = true; };
-  }, [user?.id, bridgeDestNetworkKey]);
+  }, [user?.id, bridgeDestNetworkKey, walletAddress]);
 
   // Async because we look up the user's destination-chain wallet so
   // bridged funds arrive at the right address even when the user has
@@ -674,20 +669,26 @@ export const DexScreen: React.FC = () => {
     // source address loses funds when recovery has rotated the user's
     // passkey on one chain but not the other, because the deterministic
     // CREATE2 address diverges between chains.
-    if (destWalletLookupError) {
-      throw new Error(destWalletLookupError);
+    // If user provided a custom recipient, skip the lookup error — they know the address.
+    if (!customBridgeRecipient) {
+      if (destWalletLookupError) {
+        throw new Error(destWalletLookupError);
+      }
+      if (!destWalletAddress) {
+        throw new Error(
+          `Still resolving your ${destNetworkConfig.displayName} wallet address — try again in a moment.`,
+        );
+      }
     }
-    if (!destWalletAddress) {
-      throw new Error(
-        `Still resolving your ${destNetworkConfig.displayName} wallet address — try again in a moment.`,
-      );
+    if (!effectiveRecipient) {
+      throw new Error("No recipient address — enter a destination address to proceed.");
     }
 
     return {
       userId: user.id,
       aaWalletId: walletId,
       walletAddress,
-      destWalletAddress,
+      destWalletAddress: effectiveRecipient,
       sourceNetworkKey: networkKey,
       sourceChainId: selectedChainId,
       destNetworkKey: bridgeDestNetworkKey as never,
@@ -975,18 +976,6 @@ export const DexScreen: React.FC = () => {
   };
 
   const handleTokenSelect = (asset: Asset) => {
-    if (assetPickerSide === "bridgeOutput") {
-      const next = bridgeDestTokens.find(
-        (token) =>
-          token.symbol === asset.symbol
-          && (asset.chainId === undefined || token.chainId === asset.chainId),
-      );
-      if (!next) return;
-      setBridgeDestOutputToken(next);
-      setBridgePlan(null);
-      return;
-    }
-
     const next = swapTokens.find((token) => token.symbol === asset.symbol);
     if (!next) return;
 
@@ -1296,17 +1285,13 @@ export const DexScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Live LI.FI aggregator route (read-only). Renders only on mainnet/fork keys. */}
+        {/* Route attribution — reads from the already-fetched quote; no extra API call. */}
         <LiveRouteCard
           mode={activeTab}
           networkKey={networkKey}
-          account={walletAddress}
-          sellToken={sellToken}
-          buyToken={buyToken}
-          sellAmountDecimal={sellAmountDecimal}
-          slippageBps={effectiveSlippageBps}
-          destNetworkKey={bridgeDestNetworkKey as NetworkKey | null}
-          destOutputToken={effectiveBridgeOutputToken}
+          quote={quote}
+          bridgeQuote={bridgeQuote}
+          loading={isQuoteLoading}
         />
 
         {activeTab === "bridge" && (
@@ -1380,86 +1365,24 @@ export const DexScreen: React.FC = () => {
                     <View style={[styles.dividerLine, { backgroundColor: colors.borderMuted }]} />
                   </View>
 
+                  {/* Bridge: destination side (token + chain badge + recipient address) */}
                   <View style={styles.swapSide}>
-                    <View style={styles.swapSideTopRow}>
-                      <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>To chain</Text>
-                    </View>
-                    <View style={styles.destChainRow}>
-                      {bridgeDestinations.map((dest) => {
-                        const isSelected = dest === bridgeDestNetworkKey;
-                        const destName = (() => {
-                          try { return getNetworkConfig(dest).displayName; } catch { return dest; }
-                        })();
-                        return (
-                          <TouchableOpacity
-                            key={dest}
-                            onPress={() => setBridgeDestNetworkKey(dest)}
-                            style={[
-                              styles.destChainChip,
-                              {
-                                backgroundColor: isSelected ? colors.accent : colors.glass,
-                                borderColor: isSelected ? colors.accent : colors.border,
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.destChainChipText,
-                                { color: isSelected ? colors.textOnAccent : colors.textPrimary },
-                              ]}
-                            >
-                              {destName}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
+                    <BridgeDestPicker
+                      sourceNetworkKey={networkKey}
+                      isMainnet={isLifiNetwork(networkKey as never)}
+                      destNetworkKey={bridgeDestNetworkKey}
+                      destToken={bridgeDestOutputToken}
+                      resolvedOwnAddress={destWalletAddress}
+                      resolvedOwnAddressError={destWalletLookupError}
+                      customRecipient={customBridgeRecipient}
+                      onDestChange={(nk, token) => {
+                        setBridgeDestNetworkKey(nk);
+                        setBridgeDestOutputToken(token);
+                      }}
+                      onRecipientChange={setCustomBridgeRecipient}
+                      colors={colors}
+                    />
                   </View>
-
-                  {/* Destination output token picker — only meaningful when cross-chain swap is wired on dest */}
-                  {bridgeDestNetworkKey && (
-                    <View style={styles.swapSide}>
-                      <View style={styles.swapSideTopRow}>
-                        <Text style={[styles.swapSideLabel, { color: colors.textSecondary }]}>You receive</Text>
-                        {!crossChainSwapReadyOnDest && (
-                          <Text style={[styles.swapSideLabel, { color: colors.textMuted, fontSize: 11 }]}>
-                            same-asset only on this dest
-                          </Text>
-                        )}
-                      </View>
-                      <TouchableOpacity
-                        disabled={!crossChainSwapReadyOnDest}
-                        onPress={() => {
-                          setAssetPickerSide("bridgeOutput");
-                          setIsAssetPickerVisible(true);
-                        }}
-                        style={[
-                          styles.tokenBtn,
-                          {
-                            backgroundColor: colors.glass,
-                            borderColor: colors.border,
-                            opacity: crossChainSwapReadyOnDest ? 1 : 0.6,
-                          },
-                        ]}
-                      >
-                        {effectiveBridgeOutputToken ? (
-                          <>
-                            <TokenIcon symbol={effectiveBridgeOutputToken.symbol} size={20} />
-                            <Text style={[styles.tokenBtnSymbol, { color: colors.textPrimary }]}>
-                              {effectiveBridgeOutputToken.symbol}
-                            </Text>
-                          </>
-                        ) : (
-                          <Text style={[styles.tokenBtnSymbol, { color: colors.textMuted }]}>
-                            No matching token on destination
-                          </Text>
-                        )}
-                        {crossChainSwapReadyOnDest && (
-                          <Feather name="chevron-down" size={13} color={colors.textSecondary} />
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  )}
                 </View>
 
                 {/* Bridge details card */}
@@ -1517,42 +1440,6 @@ export const DexScreen: React.FC = () => {
                           {Math.round((bridgeQuote.fillDeadline * 1000 - Date.now()) / 60_000)}m
                         </Text>
                       </View>
-                      <View style={styles.detailRow}>
-                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Delivered to</Text>
-                        <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
-                          {bridgeQuote.destSwapRequired
-                            ? `${shorten(bridgeQuote.destExecutor ?? "")} (executor → your dest wallet)`
-                            : `${shorten(destWalletAddress ?? bridgeQuote.destRecipient)} (your dest wallet)`}
-                        </Text>
-                      </View>
-                      {destWalletAddress
-                        && walletAddress
-                        && destWalletAddress.toLowerCase() !== walletAddress.toLowerCase() && (
-                        <View
-                          style={[
-                            styles.errorBanner,
-                            { backgroundColor: colors.warningSoft, borderColor: `${colors.warning}66` },
-                          ]}
-                        >
-                          <Text style={[styles.errorBannerText, { color: colors.warning }]}>
-                            Heads up — your destination address ({shorten(destWalletAddress)}) differs
-                            from your source address ({shorten(walletAddress)}). This usually means a
-                            recovery rotation. Funds will go to the destination address.
-                          </Text>
-                        </View>
-                      )}
-                      {destWalletLookupError && (
-                        <View
-                          style={[
-                            styles.errorBanner,
-                            { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}66` },
-                          ]}
-                        >
-                          <Text style={[styles.errorBannerText, { color: colors.danger }]}>
-                            {destWalletLookupError}
-                          </Text>
-                        </View>
-                      )}
                     </>
                   ) : (
                     <Text style={[styles.detailLabel, { color: colors.textMuted }]}>
@@ -1590,18 +1477,20 @@ export const DexScreen: React.FC = () => {
                     {
                       backgroundColor: colors.accent,
                       opacity:
-                        bridgeQuote && !bridgeBusy && destWalletAddress && !destWalletLookupError
+                        bridgeQuote && !bridgeBusy && effectiveRecipient && !insufficientBalance
                           ? 1
                           : 0.38,
                     },
                   ]}
                   onPress={handleReviewBridge}
-                  disabled={!bridgeQuote || bridgeBusy || !destWalletAddress || !!destWalletLookupError}
+                  disabled={!bridgeQuote || bridgeBusy || !effectiveRecipient || insufficientBalance}
                 >
                   {bridgeBusy ? (
                     <ActivityIndicator size="small" color={colors.textOnAccent} />
                   ) : (
-                    <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>Review Bridge</Text>
+                    <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>
+                      {insufficientBalance ? "Insufficient Funds" : "Review Bridge"}
+                    </Text>
                   )}
                 </TouchableOpacity>
 
@@ -1872,14 +1761,16 @@ export const DexScreen: React.FC = () => {
 
         {/* CTA buttons */}
         <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: colors.accent, opacity: canReview ? 1 : 0.38 }]}
+          style={[styles.primaryBtn, { backgroundColor: colors.accent, opacity: canReview && !insufficientBalance ? 1 : 0.38 }]}
           onPress={handleReviewSwap}
-          disabled={!canReview || isValidating}
+          disabled={!canReview || isValidating || insufficientBalance}
         >
           {isValidating ? (
             <ActivityIndicator size="small" color={colors.textOnAccent} />
           ) : (
-            <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>Review Swap</Text>
+            <Text style={[styles.primaryBtnText, { color: colors.textOnAccent }]}>
+              {insufficientBalance ? "Insufficient Funds" : "Review Swap"}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -1895,13 +1786,9 @@ export const DexScreen: React.FC = () => {
           setIsAssetPickerVisible(false);
         }}
         assets={assetPickerList}
-        title={
-          assetPickerSide === "sell"
-            ? "Select Sell Token"
-            : assetPickerSide === "buy"
-              ? "Select Buy Token"
-              : "Select Destination Token"
-        }
+        searchableTokens={assetPickerSearchList}
+        showChainFilter={false}
+        title={assetPickerSide === "sell" ? "Select Sell Token" : "Select Buy Token"}
       />
 
       {/* ── Unified pre-broadcast confirm sheet (swap + bridge) ─────────────── */}
