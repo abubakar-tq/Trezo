@@ -1,5 +1,5 @@
 {
-  "name": "trezo_wallet",
+  "name": "trezo-wallet",
   "main": "index.js",
   "expo": {
     "entryPoint": "./index.js"
@@ -22,7 +22,8 @@
     "test:swap-preview": "tsx --tsconfig tsconfig.test.json src/features/swaps/services/__tests__/buildSwapPreview.test.ts",
     "test:bridge-preview": "tsx --tsconfig tsconfig.test.json src/features/swaps/services/__tests__/buildBridgePreview.test.ts",
     "test:dapp-preview": "tsx --tsconfig tsconfig.test.json src/features/browser/components/dapp/__tests__/buildDappPreview.test.ts",
-    "test:recovery": "tsx --tsconfig tsconfig.test.json src/integration/viem/__tests__/recoveryHash.test.ts && tsx --tsconfig tsconfig.test.json src/features/wallet/utils/__tests__/guardianRecoveryTarget.test.ts && tsx --tsconfig tsconfig.test.json src/features/wallet/utils/__tests__/recoveryLiveness.test.ts"
+    "test:recovery": "tsx --tsconfig tsconfig.test.json src/integration/viem/__tests__/recoveryHash.test.ts && tsx --tsconfig tsconfig.test.json src/features/wallet/utils/__tests__/guardianRecoveryTarget.test.ts && tsx --tsconfig tsconfig.test.json src/features/wallet/utils/__tests__/recoveryLiveness.test.ts",
+    "test:bridge-dest-picker": "node --require ./test/setup.cjs -e \"require('tsx/cjs'); require('./src/features/dex/components/__tests__/BridgeDestPicker.test.tsx');\""
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",

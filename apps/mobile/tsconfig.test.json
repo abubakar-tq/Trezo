@@ -6,6 +6,9 @@
     "paths": {
       "react-native": ["./test/stubs/react-native.ts"],
       "expo-constants": ["./test/stubs/expo-constants.ts"],
+      "@expo/vector-icons": ["./test/stubs/expo-vector-icons.ts"],
+      "expo-haptics": ["./test/stubs/expo-haptics.ts"],
+      "@react-native-async-storage/async-storage": ["./test/stubs/async-storage.ts"],
       "@/*": ["./*"],
       "@app/*": ["src/app/*"],
       "@features/*": ["src/features/*"],
