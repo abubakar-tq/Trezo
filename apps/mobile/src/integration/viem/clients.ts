@@ -53,6 +53,7 @@ const VIEM_CHAINS: Record<SupportedChainId, Chain> = {
   11155111: chainConfigToViemChain(CHAINS[11155111]),
   84532: chainConfigToViemChain(CHAINS[84532]),
   421614: chainConfigToViemChain(CHAINS[421614]),
+  42161: chainConfigToViemChain(CHAINS[42161]),
   1: chainConfigToViemChain(CHAINS[1]),
   324: chainConfigToViemChain(CHAINS[324]),
   300: chainConfigToViemChain(CHAINS[300]),

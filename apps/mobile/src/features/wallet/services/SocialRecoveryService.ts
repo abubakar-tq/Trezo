@@ -103,9 +103,9 @@ export class SocialRecoveryService {
     params: SocialRecoveryInstallRequest,
   ): Promise<SocialRecoveryInstallResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const paymasterUrl = params.usePaymaster
-      ? params.paymasterUrl ?? getPaymasterUrl()
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
       : params.paymasterUrl;
     const deployment = getDeployment(chainId);
     if (!deployment?.socialRecovery) {
@@ -142,9 +142,9 @@ export class SocialRecoveryService {
     params: GuardianUpdateRequest,
   ): Promise<GuardianUpdateResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const paymasterUrl = params.usePaymaster
-      ? params.paymasterUrl ?? getPaymasterUrl()
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
       : params.paymasterUrl;
     const deployment = getDeployment(chainId);
     if (!deployment?.socialRecovery) {
@@ -169,9 +169,9 @@ export class SocialRecoveryService {
     params: GuardianUpdateRequest,
   ): Promise<GuardianUpdateResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const paymasterUrl = params.usePaymaster
-      ? params.paymasterUrl ?? getPaymasterUrl()
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
       : params.paymasterUrl;
     const deployment = getDeployment(chainId);
     if (!deployment?.socialRecovery) {
@@ -203,9 +203,9 @@ export class SocialRecoveryService {
     nonce?: bigint;
   }): Promise<GuardianUpdateResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const paymasterUrl = params.usePaymaster
-      ? params.paymasterUrl ?? getPaymasterUrl()
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
       : params.paymasterUrl;
     const deployment = getDeployment(chainId);
     if (!deployment?.socialRecovery) {
@@ -242,9 +242,9 @@ export class SocialRecoveryService {
     nonce?: bigint;
   }): Promise<GuardianUpdateResponse> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     const paymasterUrl = params.usePaymaster
-      ? params.paymasterUrl ?? getPaymasterUrl()
+      ? params.paymasterUrl ?? getPaymasterUrl(chainId)
       : params.paymasterUrl;
     const { userOp, userOpHash } = await _buildRawCallUserOp({
       chainId,
@@ -275,7 +275,7 @@ export class SocialRecoveryService {
 
   static async submitInstallModuleUserOp(params: SocialRecoverySubmitRequest): Promise<Hex> {
     const chainId = params.chainId ?? DEFAULT_CHAIN_ID;
-    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl();
+    const bundlerUrl = params.bundlerUrl ?? getBundlerUrl(chainId);
     if (!params.signedUserOp.signature || params.signedUserOp.signature === "0x") {
       throw new Error("Signed UserOperation must include a signature before submission");
     }
@@ -291,7 +291,7 @@ export class SocialRecoveryService {
     return waitForUserOperationReceipt(
       userOpHash,
       chainId,
-      bundlerUrl ?? getBundlerUrl(),
+      bundlerUrl ?? getBundlerUrl(chainId),
       timeoutMs,
     );
   }
