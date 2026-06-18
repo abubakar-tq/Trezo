@@ -30,6 +30,7 @@ import type { Address, Hex } from "viem";
 import { useUserStore } from "@store/useUserStore";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
+import { ChainSwitcherChip } from "@features/wallet/components/ChainSwitcherChip";
 
 const statusConfig = (status: string, colors: ThemeColors) => {
   if (status === "active") return { color: colors.success, bg: colors.successSoft, label: "Active" };
@@ -679,7 +680,7 @@ const DevicesPasskeysScreen: React.FC = () => {
           <Text style={styles.headerKicker}>SECURITY</Text>
           <Text style={styles.headerTitle}>Linked Devices</Text>
         </View>
-        <View style={{ width: 40 }} />
+        <ChainSwitcherChip />
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>

@@ -20,6 +20,7 @@ import { DEFAULT_CHAIN_ID, type SupportedChainId } from "@/src/integration/chain
 import type { ThemeColors } from "@theme";
 import { useAppTheme } from "@theme";
 import { FontFamilies } from "@shared/components/TokenRegistry";
+import { ChainSwitcherChip } from "@features/wallet/components/ChainSwitcherChip";
 
 import { useRecoveryStatusStore } from "@store/useRecoveryStatusStore";
 import type { Guardian } from "@store/useRecoveryStatusStore";
@@ -454,7 +455,7 @@ const GuardianRecoveryScreen: React.FC = () => {
             <Feather name="arrow-left" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Guardians</Text>
-          <View style={{ width: 24 }} />
+          <ChainSwitcherChip />
         </View>
 
         <ScrollView
@@ -512,7 +513,7 @@ const GuardianRecoveryScreen: React.FC = () => {
             <Feather name="arrow-left" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Guardians</Text>
-          <View style={{ width: 24 }} />
+          <ChainSwitcherChip />
         </View>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <View style={styles.blockedCard}>
@@ -547,21 +548,20 @@ const GuardianRecoveryScreen: React.FC = () => {
           <Feather name="arrow-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Guardians</Text>
-        <TouchableOpacity
-          onPress={handleRefreshModuleStatus}
-          style={styles.refreshButton}
-          disabled={!smartAccountReady || checkingModule}
-        >
-          {checkingModule ? (
-            <ActivityIndicator size="small" color={colors.textMuted} />
-          ) : (
-            <Feather
-              name="refresh-ccw"
-              size={16}
-              color={smartAccountReady ? colors.textMuted : colors.textMuted}
-            />
-          )}
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <ChainSwitcherChip />
+          <TouchableOpacity
+            onPress={handleRefreshModuleStatus}
+            style={styles.refreshButton}
+            disabled={!smartAccountReady || checkingModule}
+          >
+            {checkingModule ? (
+              <ActivityIndicator size="small" color={colors.textMuted} />
+            ) : (
+              <Feather name="refresh-ccw" size={16} color={colors.textMuted} />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
