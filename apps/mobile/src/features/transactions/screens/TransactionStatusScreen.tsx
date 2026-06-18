@@ -3,7 +3,8 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import { useAppTheme } from "@theme";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TransactionStatusBadge } from "@/src/features/transactions/components/TransactionStatusBadge";
 import { TransactionHistoryService } from "@/src/features/transactions/services/TransactionHistoryService";
@@ -30,6 +31,7 @@ export const TransactionStatusScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { theme } = useAppTheme();
   const { colors } = theme;
+  const insets = useSafeAreaInsets();
 
   const [row, setRow] = useState<WalletTransaction | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,10 +68,10 @@ export const TransactionStatusScreen: React.FC = () => {
   }, [loadStatus]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <TouchableOpacity
         accessibilityLabel="Close"
-        style={styles.closeButton}
+        style={[styles.closeButton, { top: 14 }]}
         onPress={() => navigation.popToTop()}
         hitSlop={8}
       >
@@ -154,7 +156,7 @@ export const TransactionStatusScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 

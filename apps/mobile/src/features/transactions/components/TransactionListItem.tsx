@@ -160,7 +160,7 @@ export const TransactionListItem: React.FC<{
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    alignItems: "stretch",
+    alignItems: "center",
     justifyContent: "space-between",
     borderWidth: 1,
     borderRadius: 14,
