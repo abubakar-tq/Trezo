@@ -1371,7 +1371,7 @@ export const DexScreen: React.FC = () => {
                       sourceNetworkKey={networkKey}
                       isMainnet={isLifiNetwork(networkKey as never)}
                       destNetworkKey={bridgeDestNetworkKey}
-                      destToken={bridgeDestOutputToken}
+                      destToken={effectiveBridgeOutputToken}
                       resolvedOwnAddress={destWalletAddress}
                       resolvedOwnAddressError={destWalletLookupError}
                       customRecipient={customBridgeRecipient}
