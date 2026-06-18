@@ -48,6 +48,7 @@ import {
 } from "../components/dashboard";
 import type { QuickAction } from "../components/dashboard/ActionGrid";
 import { MarketTrendsCarousel } from "../components/dashboard/MarketTrendsCarousel";
+import { TopMovers } from "../components/dashboard/TopMovers";
 import { useAccountManagement } from "../hooks/useAccountManagement";
 import { computeTotalChange24h } from "../utils/portfolio24h";
 
@@ -425,6 +426,18 @@ const HomeScreen: React.FC<HomeScreenProps> = () => {
             <MarketTrendsCarousel onTokenPress={handleAssetPress} />
           </View>
         </View>
+
+        {/* ── Top Movers ────────────────────────────────────────────────── */}
+        {marketAssets.length > 0 && (
+          <View style={styles.sectionWrapper}>
+            <View style={[styles.sectionCard, { backgroundColor: colors.surfaceCard, borderColor: colors.border }]}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Top Movers</Text>
+              </View>
+              <TopMovers assets={marketAssets} onTokenPress={handleAssetPress} />
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       <TokenDetailModal
