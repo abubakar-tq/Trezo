@@ -17,17 +17,94 @@ export interface IncomingTransfer {
   blockTimestampSec: bigint;
 }
 
-export async function projectIncomingTransfer(t: IncomingTransfer): Promise<void> {
-  const networkKey = networkKeyForChain(t.chainId);
-  if (!networkKey) return; // unknown chain — ignore
+type ReceivingWallet = {
+  id: string;
+  user_id: string;
+  predicted_address: string;
+  wallet_identity?: string | null;
+  wallet_index?: number | null;
+  deployment_mode?: "portable" | "chain-specific" | null;
+  owner_address?: string | null;
+  wallet_name?: string | null;
+};
 
-  // Resolve the receiving wallet → user_id. Only project transfers to known wallets.
-  const { data: wallet } = await supabase
+async function resolveReceivingWallet(
+  networkKey: string,
+  t: IncomingTransfer,
+): Promise<ReceivingWallet | null> {
+  const { data: wallet, error } = await supabase
     .from("aa_wallets")
     .select("id, user_id, predicted_address")
     .eq("network_key", networkKey)
     .ilike("predicted_address", t.to)
     .maybeSingle();
+
+  if (error) {
+    console.error("[indexer] wallet lookup failed", { networkKey, to: t.to, error });
+  }
+  if (wallet) return wallet as ReceivingWallet;
+
+  const { data: portableWallet, error: portableError } = await supabase
+    .from("aa_wallets")
+    .select("id, user_id, predicted_address, wallet_identity, wallet_index, deployment_mode, owner_address, wallet_name")
+    .ilike("predicted_address", t.to)
+    .eq("deployment_mode", "portable")
+    .limit(1)
+    .maybeSingle();
+
+  if (portableError) {
+    console.error("[indexer] portable wallet lookup failed", { networkKey, to: t.to, error: portableError });
+  }
+  if (!portableWallet) return null;
+
+  const source = portableWallet as ReceivingWallet;
+  if (!source.owner_address) return source;
+
+  const { data: created, error: insertError } = await supabase
+    .from("aa_wallets")
+    .insert({
+      user_id: source.user_id,
+      wallet_identity: source.wallet_identity ?? null,
+      wallet_index: source.wallet_index ?? 0,
+      deployment_mode: source.deployment_mode ?? "portable",
+      predicted_address: source.predicted_address,
+      owner_address: source.owner_address,
+      wallet_name: source.wallet_name ?? "Passkey Smart Account",
+      chain_id: t.chainId,
+      network_key: networkKey,
+      is_deployed: false,
+    })
+    .select("id, user_id, predicted_address")
+    .single();
+
+  if (insertError) {
+    if (insertError.code === "23505") {
+      const { data: existing } = await supabase
+        .from("aa_wallets")
+        .select("id, user_id, predicted_address")
+        .eq("network_key", networkKey)
+        .ilike("predicted_address", t.to)
+        .maybeSingle();
+      return (existing as ReceivingWallet | null) ?? null;
+    }
+
+    console.error("[indexer] failed to create portable wallet network row", {
+      networkKey,
+      to: t.to,
+      error: insertError,
+    });
+    return null;
+  }
+
+  return created as ReceivingWallet;
+}
+
+export async function projectIncomingTransfer(t: IncomingTransfer): Promise<void> {
+  const networkKey = networkKeyForChain(t.chainId);
+  if (!networkKey) return; // unknown chain — ignore
+
+  // Resolve the receiving wallet → user_id. Only project transfers to known wallets.
+  const wallet = await resolveReceivingWallet(networkKey, t);
   if (!wallet) return;
 
   const amountDisplay = formatUnits(t.valueRaw, t.tokenDecimals);

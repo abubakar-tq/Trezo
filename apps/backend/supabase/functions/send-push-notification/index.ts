@@ -60,6 +60,7 @@ type ExpoMessage = {
   sound?: "default";
   channelId?: string;
   priority?: "default" | "high";
+  [key: string]: any;
 };
 
 type ExpoTicket =
@@ -228,6 +229,9 @@ serve(async (req: Request) => {
     sound: "default",
     priority: "high",
     channelId: "default",
+    android: {
+      imageUrl: "https://raw.githubusercontent.com/abubakar-tq/Trezo/main/apps/mobile/assets/images/icon.png",
+    },
   }));
 
   const tickets = await sendToExpo(messages);
