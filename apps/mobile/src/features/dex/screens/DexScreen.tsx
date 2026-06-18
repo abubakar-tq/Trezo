@@ -183,6 +183,7 @@ export const DexScreen: React.FC = () => {
   // null = use canonical same-symbol token; set = user has explicitly picked a different output.
   const [bridgeDestOutputToken, setBridgeDestOutputToken] = useState<TokenMetadata | null>(null);
   const [bridgeQuote, setBridgeQuote] = useState<BridgeQuote | null>(null);
+  const [bridgeQuoteLoading, setBridgeQuoteLoading] = useState(false);
   const [bridgePlan, setBridgePlan] = useState<BridgePlan | null>(null);
   const [bridgeBusy, setBridgeBusy] = useState<boolean>(false);
   // Resolved destination-chain wallet address (predicted CREATE2 from that
@@ -528,6 +529,7 @@ export const DexScreen: React.FC = () => {
     let cancelled = false;
     setBridgePlan(null);
     setInsufficientBalance(false);
+    setBridgeQuoteLoading(false);
 
     if (activeTab !== "bridge") {
       setBridgeQuote(null);
@@ -539,7 +541,8 @@ export const DexScreen: React.FC = () => {
       return () => { cancelled = true; };
     }
 
-    if (sellToken.type !== "erc20") {
+    // LI.FI supports native ETH; Across V3 only supports ERC-20.
+    if (!isLifiNetwork(networkKey as never) && sellToken.type !== "erc20") {
       setBridgeQuote(null);
       return () => { cancelled = true; };
     }
@@ -551,6 +554,7 @@ export const DexScreen: React.FC = () => {
 
     const debounce = setTimeout(async () => {
       if (cancelled) return;
+      setBridgeQuoteLoading(true);
       setErrorState(null);
 
       try {
@@ -585,10 +589,12 @@ export const DexScreen: React.FC = () => {
 
         if (cancelled) return;
         setBridgeQuote(q);
+        setBridgeQuoteLoading(false);
         setInsufficientBalance(inputAmountRaw > sellTokenBalanceRaw);
       } catch (error) {
         if (cancelled) return;
         setBridgeQuote(null);
+        setBridgeQuoteLoading(false);
         const c = classify(error);
         if (c.kind === "network") {
           setToast({ message: c.userMessage, severity: c.severity });
@@ -662,7 +668,8 @@ export const DexScreen: React.FC = () => {
     if (!user?.id || !walletId || !walletAddress || !sellToken || !bridgeDestNetworkKey) {
       return null;
     }
-    if (sellToken.type !== "erc20") return null;
+    // LI.FI supports native ETH; Across V3 only supports ERC-20.
+    if (!isLifiNetwork(networkKey as never) && sellToken.type !== "erc20") return null;
 
     const destNetworkConfig = (() => {
       try { return getNetworkConfig(bridgeDestNetworkKey as never); } catch { return null; }
@@ -1300,7 +1307,7 @@ export const DexScreen: React.FC = () => {
           networkKey={networkKey}
           quote={quote}
           bridgeQuote={bridgeQuote}
-          loading={isQuoteLoading}
+          loading={activeTab === "bridge" ? bridgeQuoteLoading : isQuoteLoading}
         />
 
         {activeTab === "bridge" && (

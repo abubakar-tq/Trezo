@@ -82,8 +82,11 @@ export function useBridgeDestChains(
         setLoading(false);
       })
       .catch(() => {
-        // Fallback: empty list — picker opens with no chain filter
-        setDestChainKeys([]);
+        // Fallback: hardcoded known LI.FI mainnet keys so the picker and quote
+        // still work even when the /chains endpoint is temporarily unavailable.
+        const fallback = (["base-mainnet", "arb-mainnet", "eth-mainnet"] as string[])
+          .filter((k) => k !== sourceNetworkKey);
+        setDestChainKeys(fallback);
         setLoading(false);
       });
   }, [sourceNetworkKey, isMainnet]);
