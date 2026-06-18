@@ -17,6 +17,7 @@ import {
   findBridgeRoute,
   getBridgeConfig,
 } from "@/src/features/swaps/config/bridgeRegistry";
+import { isLifiBridgeRoute } from "@/src/features/swaps/lifi/constants";
 import type {
   BridgeIntent,
   BridgePlan,
@@ -210,19 +211,25 @@ export class BridgePreparationService {
       );
     }
 
-    // Source side: SpokePool required. Executor is only checked downstream
-    // when a destination-side swap is needed (see BridgeQuoteService).
-    const sourceBridge = getBridgeConfig(intent.sourceNetworkKey);
-    if (!sourceBridge?.spokePool) {
-      throw new Error(`No Across SpokePool configured for source ${intent.sourceNetworkKey}.`);
-    }
+    // LI.FI routes (mainnet) don't use bridge-registry or Across SpokePool —
+    // execution data comes directly from the LI.FI quote.
+    const isLifi = isLifiBridgeRoute(intent.sourceNetworkKey, intent.destNetworkKey);
 
-    // Route + token-pair must be allowlisted.
-    const route = findBridgeRoute(intent.sourceNetworkKey, intent.destNetworkKey);
-    if (!route) {
-      throw new Error(
-        `No allowlisted bridge route ${intent.sourceNetworkKey} -> ${intent.destNetworkKey}.`,
-      );
+    if (!isLifi) {
+      // Source side: SpokePool required. Executor is only checked downstream
+      // when a destination-side swap is needed (see BridgeQuoteService).
+      const sourceBridge = getBridgeConfig(intent.sourceNetworkKey);
+      if (!sourceBridge?.spokePool) {
+        throw new Error(`No Across SpokePool configured for source ${intent.sourceNetworkKey}.`);
+      }
+
+      // Route + token-pair must be allowlisted.
+      const route = findBridgeRoute(intent.sourceNetworkKey, intent.destNetworkKey);
+      if (!route) {
+        throw new Error(
+          `No allowlisted bridge route ${intent.sourceNetworkKey} -> ${intent.destNetworkKey}.`,
+        );
+      }
     }
 
     // ── 2. Validate wallet ────────────────────────────────────────────────────
@@ -239,11 +246,12 @@ export class BridgePreparationService {
     const inputToken = ensureKnownToken(intent.sourceNetworkKey, intent.inputToken);
     const outputToken = ensureKnownToken(intent.destNetworkKey, intent.outputToken);
 
-    if (inputToken.type !== "erc20") {
-      throw new Error("Bridge currently only supports ERC20 inputs.");
+    // LI.FI handles native ETH natively; Across V3 only supports ERC-20.
+    if (!isLifi && inputToken.type !== "erc20") {
+      throw new Error("Across bridge only supports ERC20 inputs.");
     }
-    if (outputToken.type !== "erc20") {
-      throw new Error("Bridge currently only supports ERC20 outputs.");
+    if (!isLifi && outputToken.type !== "erc20") {
+      throw new Error("Across bridge only supports ERC20 outputs.");
     }
 
     if (!Number.isInteger(intent.slippageBps) || intent.slippageBps <= 0 || intent.slippageBps > 5_000) {
@@ -287,59 +295,76 @@ export class BridgePreparationService {
       throw new Error("Bridge quote marked destSwapRequired but produced no destination-side swap quote.");
     }
 
-    // ── 6. Encode BridgeMessage + depositV3 calldata ──────────────────────────
-    // Same-asset bridge: recipient is the user wallet itself, message is empty.
-    // Cross-chain swap: recipient is the executor and message carries
-    // (recipient, buyToken, minOut, feeTier, deadline) for it to decode.
-    const bridgeMessage: Hex = quote.destSwapRequired
-      ? encodeBridgeMessage({
-          // Recipient on the DESTINATION chain - the wallet that should
-          // receive the executor's swapped tokens. Falls back to source
-          // address (deterministic match on portable chains).
-          recipient: intent.destWalletAddress,
-          buyToken: outputToken.address as Address,
-          minOut: quote.destSwap!.minOutRaw,
-          feeTier: quote.destSwap!.feeTier,
-          deadline: quote.destSwap!.deadlineSec,
-        })
-      : "0x";
+    // ── 6. Build execution calldata (provider-specific) ───────────────────────
+    let bridgeMessage: Hex;
+    let depositCalldata: Hex;
+    let bridgeTarget: Address;
+    let bridgeValue: bigint;
 
-    // Across delivers the CANONICAL destination token (the input token's equivalent
-    // on the dest chain), per the bridgeRegistry design note. For same-asset bridges
-    // this equals outputToken; for a cross-chain swap the executor receives the
-    // canonical token and swaps it to the user's desired outputToken (carried in
-    // bridgeMessage.buyToken). Passing the desired token here would (a) ask Across for
-    // a cross-asset route it isn't configured for and (b) make the executor's
-    // `buyToken == tokenSent` short-circuit skip the swap entirely.
-    const canonicalOutputToken = findBridgeOutputToken(
-      intent.sourceNetworkKey,
-      intent.destNetworkKey,
-      inputToken.address as Address,
-    );
-    if (!canonicalOutputToken) {
-      throw new Error(
-        `No canonical bridge output token for ${inputToken.symbol} on ${intent.sourceNetworkKey} -> ${intent.destNetworkKey}.`,
-      );
-    }
+    if (isLifi) {
+      // LI.FI: use the pre-encoded calldata from the quote directly.
+      // No SpokePool, no BridgeMessage, no depositV3 ABI encoding needed.
+      const meta = quote.routeMetadata as {
+        target?: Address;
+        calldata?: Hex;
+        value?: bigint;
+        spender?: Address;
+      } | undefined;
+      if (!meta?.target || !meta?.calldata) {
+        throw new Error("LI.FI bridge quote is missing execution data — please retry.");
+      }
+      bridgeMessage = "0x";
+      depositCalldata = meta.calldata;
+      bridgeTarget = meta.target;
+      bridgeValue = meta.value ?? 0n;
+    } else {
+      // Across V3: same-asset bridge → empty message; cross-chain swap → encode
+      // (recipient, buyToken, minOut, feeTier, deadline) for the CrossChainExecutor.
+      bridgeMessage = quote.destSwapRequired
+        ? encodeBridgeMessage({
+            recipient: intent.destWalletAddress,
+            buyToken: outputToken.address as Address,
+            minOut: quote.destSwap!.minOutRaw,
+            feeTier: quote.destSwap!.feeTier,
+            deadline: quote.destSwap!.deadlineSec,
+          })
+        : "0x";
 
-    const depositCalldata = encodeFunctionData({
-      abi: SPOKE_POOL_ABI,
-      functionName: "depositV3",
-      args: [
-        intent.walletAddress, // depositor
-        quote.destRecipient, // user wallet (same-asset) or executor (cross-chain swap)
+      // Across delivers the CANONICAL destination token. For same-asset bridges this
+      // equals outputToken; for cross-chain swaps the executor swaps it to outputToken
+      // on arrival (buyToken carried in bridgeMessage).
+      const canonicalOutputToken = findBridgeOutputToken(
+        intent.sourceNetworkKey,
+        intent.destNetworkKey,
         inputToken.address as Address,
-        canonicalOutputToken, // canonical dest token Across delivers (NOT the user's desired token)
-        quote.inputAmountRaw,
-        quote.outputAmountRaw,
-        BigInt(intent.destChainId),
-        quote.exclusiveRelayer,
-        quote.quoteTimestamp,
-        quote.fillDeadline,
-        quote.exclusivityDeadline,
-        bridgeMessage,
-      ],
-    }) as Hex;
+      );
+      if (!canonicalOutputToken) {
+        throw new Error(
+          `No canonical bridge output token for ${inputToken.symbol} on ${intent.sourceNetworkKey} -> ${intent.destNetworkKey}.`,
+        );
+      }
+
+      depositCalldata = encodeFunctionData({
+        abi: SPOKE_POOL_ABI,
+        functionName: "depositV3",
+        args: [
+          intent.walletAddress,
+          quote.destRecipient,
+          inputToken.address as Address,
+          canonicalOutputToken,
+          quote.inputAmountRaw,
+          quote.outputAmountRaw,
+          BigInt(intent.destChainId),
+          quote.exclusiveRelayer,
+          quote.quoteTimestamp,
+          quote.fillDeadline,
+          quote.exclusivityDeadline,
+          bridgeMessage,
+        ],
+      }) as Hex;
+      bridgeTarget = quote.spokePool;
+      bridgeValue = 0n;
+    }
 
     // ── 7. Check allowance (SpokePool is the spender) ─────────────────────────
     const allowanceCheck = await AllowanceService.isApprovalRequired({
@@ -384,18 +409,19 @@ export class BridgePreparationService {
         }
       : null;
 
+    const bridgeId = isLifi ? "lifi" : "across_v3";
     const bridgeExecution = {
       chainId: intent.sourceChainId,
       networkKey: intent.sourceNetworkKey,
       account: intent.walletAddress,
-      target: quote.spokePool,
-      value: 0n,
+      target: bridgeTarget,
+      value: bridgeValue,
       data: depositCalldata,
       operationLabel: "bridge",
       riskLevel: "medium" as const,
       metadata: {
         quoteId: quote.quoteId,
-        bridgeId: "across_v3",
+        bridgeId,
         sourceNetworkKey: intent.sourceNetworkKey,
         destNetworkKey: intent.destNetworkKey,
         destRecipient: quote.destRecipient,
@@ -411,12 +437,12 @@ export class BridgePreparationService {
     };
 
     const bridgeTransactionInput = toBridgeDraftInput(intent, {
-      target: quote.spokePool,
+      target: bridgeTarget,
       calldata: depositCalldata,
       inputAmountRaw,
       outputAmountRaw: quote.outputAmountRaw,
       metadata: {
-        bridgeId: "across_v3",
+        bridgeId,
         quoteId: quote.quoteId,
         sourceNetworkKey: intent.sourceNetworkKey,
         destNetworkKey: intent.destNetworkKey,
@@ -426,7 +452,7 @@ export class BridgePreparationService {
         inputAmountRaw: quote.inputAmountRaw.toString(),
         outputAmountRaw: quote.outputAmountRaw.toString(),
         feeBps: quote.feeBps,
-        spokePool: quote.spokePool,
+        spokePool: isLifi ? null : quote.spokePool,
         destRecipient: quote.destRecipient,
         destExecutor: quote.destExecutor ?? null,
         destSwapRequired: quote.destSwapRequired,

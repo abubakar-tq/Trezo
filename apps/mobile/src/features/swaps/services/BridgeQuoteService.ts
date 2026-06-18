@@ -100,15 +100,21 @@ export class BridgeQuoteService {
         fillDeadline: nowSec + (routeQuote.etaSeconds ?? 3600),
         exclusivityDeadline: 0,
         exclusiveRelayer: zeroAddress,
-        spokePool: zeroAddress,
+        // Use the LI.FI Diamond as the spender for approval checks.
+        spokePool: routeQuote.spender ?? zeroAddress,
         destRecipient: request.destAccount ?? request.account,
         destSwapRequired: false,
         expiresAt: new Date((nowSec + 60) * 1000).toISOString(),
         routeMetadata: {
+          provider: "lifi",
           bridgeId: "lifi",
           routeLabel: routeQuote.routeLabel,
           etaSeconds: routeQuote.etaSeconds,
-          ...routeQuote.routeMetadata,
+          // Execution-ready fields for BridgePreparationService.
+          target: routeQuote.target,
+          calldata: routeQuote.calldata,
+          value: routeQuote.value ?? 0n,
+          spender: routeQuote.spender,
         },
       };
     }
