@@ -14,15 +14,22 @@ export async function nextApproval(): Promise<ApprovalRequest | null> {
 
 export async function resolveApproval(id: string, result: unknown): Promise<void> {
   await dequeue(id);
-  chrome.runtime.sendMessage({ type: "trezo-approval-result", id, result }, () => {
-    if (chrome.runtime.lastError) console.warn("[trezo] approval bridge SW gone:", chrome.runtime.lastError.message);
+  // Await the callback so the message is delivered before window.close() destroys the page context.
+  await new Promise<void>((resolve) => {
+    chrome.runtime.sendMessage({ type: "trezo-approval-result", id, result }, () => {
+      if (chrome.runtime.lastError) console.warn("[trezo] approval bridge SW gone:", chrome.runtime.lastError.message);
+      resolve();
+    });
   });
 }
 
 export async function rejectApproval(id: string, error: string): Promise<void> {
   await dequeue(id);
-  chrome.runtime.sendMessage({ type: "trezo-approval-result", id, error }, () => {
-    if (chrome.runtime.lastError) console.warn("[trezo] approval bridge SW gone:", chrome.runtime.lastError.message);
+  await new Promise<void>((resolve) => {
+    chrome.runtime.sendMessage({ type: "trezo-approval-result", id, error }, () => {
+      if (chrome.runtime.lastError) console.warn("[trezo] approval bridge SW gone:", chrome.runtime.lastError.message);
+      resolve();
+    });
   });
 }
 

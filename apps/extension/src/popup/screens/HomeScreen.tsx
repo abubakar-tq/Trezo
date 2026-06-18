@@ -835,7 +835,7 @@ export function HomeScreen({
               <QuickAction
                 icon={<ArrowUpRight size={17} strokeWidth={1.9} />}
                 label="Send"
-                onClick={onSend}
+                onClick={onSend ? () => onSend() : undefined}
                 disabled={!onSend}
               />
               <QuickAction
