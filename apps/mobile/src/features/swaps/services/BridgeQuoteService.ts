@@ -1,12 +1,14 @@
 /**
  * BridgeQuoteService.ts
  *
- * Computes a BridgeQuote for an Across V3 deposit. The bridge fee itself is
- * a flat per-route compute (BRIDGE_FLAT_FEE_BPS) because Trezo runs the only
- * relayer that watches testnets — no Across hosted-fees-API call needed.
+ * Computes a BridgeQuote. Routes to LI.FI for mainnet (base-mainnet,
+ * arb-mainnet) and to Across V3 for testnet (base-sepolia, arb-sepolia,
+ * ethereum-sepolia). The Across fee is a flat per-route compute
+ * (BRIDGE_FLAT_FEE_BPS) because Trezo runs the only relayer that watches
+ * testnets. LI.FI quotes are fetched live from the LI.FI routing API.
  *
- * When the user picks an outputToken that differs from the route's canonical
- * pair, this service ALSO calls BridgeDestQuoteService to query the
+ * When the Across path picks an outputToken that differs from the route's
+ * canonical pair, this service ALSO calls BridgeDestQuoteService to query the
  * destination chain's Uniswap V3 quoter and produce the (minOut, feeTier,
  * deadline) the CrossChainExecutor will enforce.
  */
@@ -20,6 +22,8 @@ import {
   getBridgeConfig,
 } from "@/src/features/swaps/config/bridgeRegistry";
 import { BridgeDestQuoteService } from "@/src/features/swaps/services/BridgeDestQuoteService";
+import { LiFiBridgeProvider } from "@/src/features/swaps/providers/LiFiBridgeProvider";
+import { isLifiBridgeRoute } from "@/src/features/swaps/lifi/constants";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 import type { BridgeDestSwap, BridgeQuote } from "@/src/features/swaps/types/bridge";
 import type { SupportedChainId } from "@/src/integration/chains";
@@ -61,14 +65,60 @@ export class BridgeQuoteService {
     if (request.inputAmountRaw <= 0n) {
       throw new Error("Bridge amount must be greater than zero.");
     }
+    if (request.sourceNetworkKey === request.destNetworkKey) {
+      throw new Error("Source and destination networks must differ.");
+    }
+
+    // ── LI.FI path (mainnet: base-mainnet, arb-mainnet, eth-mainnet) ──────────
+    if (isLifiBridgeRoute(request.sourceNetworkKey, request.destNetworkKey)) {
+      const provider = new LiFiBridgeProvider();
+      const routeQuote = await provider.getRoute({
+        sourceNetworkKey: request.sourceNetworkKey,
+        sourceChainId: request.sourceChainId,
+        destNetworkKey: request.destNetworkKey,
+        destChainId: request.destChainId,
+        account: request.account,
+        destAccount: request.destAccount,
+        inputToken: request.inputToken,
+        outputToken: request.outputToken,
+        inputAmountRaw: request.inputAmountRaw,
+        slippageBps: request.destSwapSlippageBps ?? 50,
+      });
+      const nowSec = Math.floor(Date.now() / 1000);
+      return {
+        quoteId: `lifi-bridge-${request.sourceNetworkKey}-${request.destNetworkKey}-${nowSec}`,
+        sourceNetworkKey: request.sourceNetworkKey,
+        sourceChainId: request.sourceChainId,
+        destNetworkKey: request.destNetworkKey,
+        destChainId: request.destChainId,
+        inputToken: request.inputToken,
+        outputToken: request.outputToken,
+        inputAmountRaw: request.inputAmountRaw,
+        outputAmountRaw: routeQuote.estimatedOutRaw,
+        feeBps: routeQuote.feeBps ?? 0,
+        quoteTimestamp: nowSec,
+        fillDeadline: nowSec + (routeQuote.etaSeconds ?? 3600),
+        exclusivityDeadline: 0,
+        exclusiveRelayer: zeroAddress,
+        spokePool: zeroAddress,
+        destRecipient: request.destAccount ?? request.account,
+        destSwapRequired: false,
+        expiresAt: new Date((nowSec + 60) * 1000).toISOString(),
+        routeMetadata: {
+          bridgeId: "lifi",
+          routeLabel: routeQuote.routeLabel,
+          etaSeconds: routeQuote.etaSeconds,
+          ...routeQuote.routeMetadata,
+        },
+      };
+    }
+
+    // ── Across V3 path (testnet) ───────────────────────────────────────────────
     if (request.inputToken.type !== "erc20") {
       throw new Error("Bridge currently only supports ERC20 inputs.");
     }
     if (request.outputToken.type !== "erc20") {
       throw new Error("Bridge currently only supports ERC20 outputs.");
-    }
-    if (request.sourceNetworkKey === request.destNetworkKey) {
-      throw new Error("Source and destination networks must differ.");
     }
 
     const sourceConfig = getBridgeConfig(request.sourceNetworkKey);

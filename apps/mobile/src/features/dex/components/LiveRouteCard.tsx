@@ -48,12 +48,13 @@ function extractBridgeRoute(q: BridgeQuote): RouteInfo {
   const meta = q.routeMetadata ?? {};
   const bridgeId = (meta.bridgeId as string) ?? "bridge";
   const toolName =
-    bridgeId === "across_v3" ? "Across V3"
-    : bridgeId === "lifi" ? "LI.FI Bridge"
+    bridgeId === "lifi" ? ((meta.routeLabel as string) ?? "LI.FI Bridge")
+    : bridgeId === "across_v3" ? "Across V3"
     : bridgeId;
+  const etaSeconds = typeof meta.etaSeconds === "number" ? meta.etaSeconds : null;
   return {
     toolName,
-    etaSeconds: null,
+    etaSeconds,
     attribution: bridgeId === "across_v3" ? "Across" : "LI.FI",
   };
 }

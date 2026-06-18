@@ -1439,15 +1439,19 @@ export const DexScreen: React.FC = () => {
                         </View>
                       )}
                       <View style={styles.detailRow}>
-                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Relayer fee</Text>
+                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                          {bridgeQuote.routeMetadata?.bridgeId === "lifi" ? "Protocol fee" : "Relayer fee"}
+                        </Text>
                         <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
-                          {(bridgeQuote.feeBps / 100).toFixed(2)}%
+                          {bridgeQuote.feeBps > 0 ? `${(bridgeQuote.feeBps / 100).toFixed(2)}%` : "—"}
                         </Text>
                       </View>
                       <View style={styles.detailRow}>
-                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Fill deadline</Text>
+                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                          {bridgeQuote.routeMetadata?.bridgeId === "lifi" ? "Est. time" : "Fill deadline"}
+                        </Text>
                         <Text style={[styles.detailValue, { color: colors.textSecondary }]}>
-                          {Math.round((bridgeQuote.fillDeadline * 1000 - Date.now()) / 60_000)}m
+                          ~{Math.max(1, Math.round((bridgeQuote.fillDeadline * 1000 - Date.now()) / 60_000))}m
                         </Text>
                       </View>
                     </>
