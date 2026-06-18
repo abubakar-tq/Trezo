@@ -37,7 +37,7 @@ const baseWeth = findToken("base-sepolia", "WETH");
 assert(Boolean(baseWeth), "Base Sepolia builtin WETH present");
 
 // ── Sibling testnets carry USDC too (the same Send path applies on each) ──
-for (const nk of ["ethereum-sepolia", "arbitrum-sepolia"] as const) {
+for (const nk of ["ethereum-sepolia"] as const) {
   const usdc = findToken(nk, "USDC");
   assert(Boolean(usdc), `${nk} builtin USDC present`);
   assert(usdc!.decimals === 6, `${nk} USDC has 6 decimals`);

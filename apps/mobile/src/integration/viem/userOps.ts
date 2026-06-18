@@ -330,7 +330,7 @@ const sponsorUserOp = async (
 ) => {
   const client = createClient({
     chain: getViemChain(chainId),
-    transport: http(paymasterUrl),
+    transport: http(paymasterUrl, { timeout: 30_000 }),
   }) as unknown as RpcRequestClient;
 
   return client.request({
@@ -350,7 +350,7 @@ const sponsorUserOp = async (
 const getBundlerClient = (bundlerUrl: string, chainId: SupportedChainId): RpcRequestClient =>
   createClient({
     chain: getViemChain(chainId),
-    transport: http(bundlerUrl),
+    transport: http(bundlerUrl, { timeout: 30_000 }),
   }) as unknown as RpcRequestClient;
 
 const resolveEntryPoint = (chainId: SupportedChainId): Hex => {

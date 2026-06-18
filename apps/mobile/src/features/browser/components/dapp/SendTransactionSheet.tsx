@@ -88,6 +88,7 @@ export const SendTransactionSheet = forwardRef<SendTransactionHandle>((_, ref) =
       loading={tc.loading}
       onApprove={tc.onApprove}
       onReject={tc.onReject}
+      onDismiss={tc.onDismiss}
     />
   );
 });

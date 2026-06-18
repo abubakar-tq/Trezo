@@ -27,13 +27,6 @@ console.log("running popularTestnet.test.ts");
   assertEqual(symbols.includes("LINK"), false, "ethereum-sepolia: LINK is NOT included");
 }
 
-// arbitrum-sepolia does NOT include LINK
-{
-  const tokens = popularTestnetTokens("arbitrum-sepolia");
-  const symbols = tokens.map((t) => t.symbol);
-  assertEqual(symbols.includes("LINK"), false, "arbitrum-sepolia: LINK is NOT included");
-}
-
 // ETH always action "buy"
 {
   const tokens = popularTestnetTokens("base-sepolia");
@@ -82,11 +75,6 @@ console.log("running popularTestnet.test.ts");
 {
   const tokens = popularTestnetTokens("ethereum-sepolia");
   assertEqual(tokens.length, 2, "ethereum-sepolia: 2 tokens total");
-}
-
-{
-  const tokens = popularTestnetTokens("arbitrum-sepolia");
-  assertEqual(tokens.length, 2, "arbitrum-sepolia: 2 tokens total");
 }
 
 // ETH is always first (index 0)

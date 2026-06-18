@@ -39,7 +39,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountPickerModal } from "@shared/components/modals/AccountPickerModal";
-import { AssetPickerModal, type Asset } from "@shared/components/modals/AssetPickerModal";
+import type { Asset } from "@shared/components/modals/AssetPickerModal";
 import { NetworkPickerModal, type Network } from "@shared/components/modals/NetworkPickerModal";
 
 import { useUserStore } from "@/src/store/useUserStore";
@@ -138,7 +138,6 @@ export const BuyScreen: React.FC = () => {
     name: "Ethereum",
     logo: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
   });
-  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
   const [isAccountPickerOpen, setIsAccountPickerOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeOrder, setActiveOrder] = useState<RampOrder | null>(null);
@@ -151,40 +150,6 @@ export const BuyScreen: React.FC = () => {
       .find(([, cfg]) => cfg.chainId === selectedChainId);
     return entry ? entry[0] : "ethereum";
   }, [selectedChainId]);
-
-  // Transak-supported crypto assets for the active network — replaces the user's
-  // owned-tokens list so the Buy picker offers what's actually buyable.
-  const [transakAssets, setTransakAssets] = useState<Asset[]>([]);
-  const [transakAssetsLoading, setTransakAssetsLoading] = useState<boolean>(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setTransakAssetsLoading(true);
-    void RampService.fetchTransakCryptoCurrencies({
-      network: transakNetwork,
-      isTestnet: selectedChain?.environment !== "mainnet",
-    })
-      .then((list) => {
-        if (cancelled) return;
-        const mapped: Asset[] = list.map((a) => ({
-          symbol: a.symbol,
-          name: a.name,
-          logo: a.image,
-          chainId: a.chainId ?? selectedChainId,
-        }));
-        setTransakAssets(mapped);
-        // If currently-selected asset isn't in the list, default to first (usually ETH).
-        if (mapped.length > 0 && !mapped.some((m) => m.symbol === selectedAsset.symbol)) {
-          setSelectedAsset(mapped[0]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setTransakAssetsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [transakNetwork, selectedChain?.environment, selectedChainId, selectedAsset.symbol]);
 
   // Quick-amount chips are capped so none exceeds MAX_BUY_ETH at the $2 500/ETH
   // rate used by estimateCrypto. Max spend = 0.025 × $2 500 = $62.50 USD.
@@ -442,11 +407,9 @@ export const BuyScreen: React.FC = () => {
               targetAddress={targetAddress}
               displayAddress={displayAddress}
               onAmountChange={handleAmountChange}
-              onAssetPress={() => setIsAssetPickerOpen(true)}
               onAccountPress={() => setIsAccountPickerOpen(true)}
               quickAmounts={QUICK_AMOUNTS}
               onQuickAmount={(v) => setAmount(v)}
-              assetLoading={transakAssetsLoading}
               maxHint={`Max ${MAX_BUY_ETH} ETH (~$${Math.floor(MAX_BUY_ETH * 2500)})`}
               capError={isOverCap ? `Exceeds testnet cap of ${MAX_BUY_ETH} ETH. Lower your amount.` : undefined}
             />
@@ -500,16 +463,6 @@ export const BuyScreen: React.FC = () => {
         }}
         accounts={accounts}
         selectedAddress={activeAccount?.address}
-      />
-      <AssetPickerModal
-        isVisible={isAssetPickerOpen}
-        onClose={() => setIsAssetPickerOpen(false)}
-        onSelect={(asset) => {
-          setSelectedAsset(asset);
-          setIsAssetPickerOpen(false);
-        }}
-        assets={transakAssets}
-        title="Select crypto to buy"
       />
       <NetworkPickerModal
         isVisible={isNetworkPickerOpen}

@@ -21,7 +21,7 @@ async function run(): Promise<void> {
   const provider = new LiFiBridgeProvider(new LifiClient({ fetchImpl: fakeFetch }));
 
   assert(provider.supportsRoute({ sourceNetworkKey: "base-mainnet-fork", destNetworkKey: "base-mainnet" } as any) === true, "mainnet pair supported");
-  assert(provider.supportsRoute({ sourceNetworkKey: "base-sepolia", destNetworkKey: "arbitrum-sepolia" } as any) === false, "testnet pair not supported");
+  assert(provider.supportsRoute({ sourceNetworkKey: "base-sepolia", destNetworkKey: "ethereum-sepolia" } as any) === false, "testnet pair not supported");
 
   const route = await provider.getRoute({
     sourceNetworkKey: "base-mainnet-fork", sourceChainId: 8453 as any,

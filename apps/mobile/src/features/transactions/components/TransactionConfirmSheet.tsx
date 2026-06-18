@@ -16,6 +16,8 @@ type Props = {
   loading: boolean;
   onApprove: () => void;
   onReject: () => void;
+  /** Fires when the sheet finishes closing for ANY reason (button, pan-down, backdrop). */
+  onDismiss: () => void;
 };
 
 const changesLabel = (kind?: string) =>
@@ -26,7 +28,7 @@ const changesLabel = (kind?: string) =>
       : "Estimated balance changes";
 
 export const TransactionConfirmSheet = forwardRef<BottomSheetModal, Props>(
-  ({ preview, simulation, gasFee, loading, onApprove, onReject }, ref) => {
+  ({ preview, simulation, gasFee, loading, onApprove, onReject, onDismiss }, ref) => {
     const { theme } = useAppTheme();
     const c = theme.colors;
     const deltas = simulation?.assetDeltas ?? preview?.assetDeltas ?? [];
@@ -36,7 +38,7 @@ export const TransactionConfirmSheet = forwardRef<BottomSheetModal, Props>(
       <TrezoBottomSheet
         ref={ref}
         enableDynamicSizing
-        onDismiss={onReject}
+        onDismiss={onDismiss}
         backgroundColor={c.surfaceElevated}
       >
         {preview ? (

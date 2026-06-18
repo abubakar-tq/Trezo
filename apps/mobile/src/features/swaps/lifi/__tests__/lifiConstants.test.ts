@@ -16,12 +16,11 @@ function run(): void {
   assert(isLifiNetwork("base-mainnet-fork") === true, "fork is lifi");
   assert(isLifiNetwork("base-sepolia") === false, "base-sepolia not lifi");
   assert(isLifiNetwork("ethereum-sepolia") === false, "sepolia not lifi");
-  assert(isLifiNetwork("arbitrum-sepolia") === false, "arb-sepolia not lifi");
   assert(isLifiNetwork("anvil-local") === false, "anvil not lifi");
 
   // bridge-route predicate
   assert(isLifiBridgeRoute("base-mainnet-fork", "base-mainnet") === true, "mainnet pair is lifi route");
-  assert(isLifiBridgeRoute("base-sepolia", "arbitrum-sepolia") === false, "testnet pair not lifi route");
+  assert(isLifiBridgeRoute("base-sepolia", "ethereum-sepolia") === false, "testnet pair not lifi route");
   assert(isLifiBridgeRoute("base-mainnet", "base-sepolia") === false, "mixed pair not lifi route");
 
   // chain id mapping

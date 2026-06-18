@@ -2,7 +2,7 @@
  * BridgeQuoteService.ts
  *
  * Computes a BridgeQuote. Routes to LI.FI for mainnet (base-mainnet,
- * arb-mainnet) and to Across V3 for testnet (base-sepolia, arb-sepolia,
+ * arb-mainnet) and to Across V3 for testnet (base-sepolia,
  * ethereum-sepolia). The Across fee is a flat per-route compute
  * (BRIDGE_FLAT_FEE_BPS) because Trezo runs the only relayer that watches
  * testnets. LI.FI quotes are fetched live from the LI.FI routing API.

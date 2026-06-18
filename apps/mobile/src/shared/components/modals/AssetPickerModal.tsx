@@ -69,7 +69,6 @@ function chainIconUrl(chainId: number): string | undefined {
     case 11155111:
       return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
     case 42161:
-    case 421614:
       return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png';
     case 8453:
     case 84532:
@@ -89,7 +88,6 @@ function chainColor(chainId: number): string {
     case 11155111:
       return '#627EEA';
     case 42161:
-    case 421614:
       return '#28A0F0';
     case 8453:
     case 84532:
@@ -356,6 +354,7 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              style={styles.bridgeFilterScroll}
               contentContainerStyle={styles.bridgeFilterRow}
             >
               {(['all', ...(bridgeChainFilterKeys ?? [])] as string[]).map((key) => {
@@ -634,6 +633,13 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 13,
     fontWeight: '500',
+  },
+  // Horizontal ScrollViews stretch to fill the cross-axis (vertical) in a flex
+  // column unless constrained — flexGrow:0 keeps the tab row at its content
+  // height instead of opening a large gap above the token list.
+  bridgeFilterScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
   },
   bridgeFilterRow: {
     paddingHorizontal: 16,

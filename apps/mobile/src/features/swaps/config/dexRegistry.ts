@@ -30,6 +30,17 @@ export type DexPoolConfig = {
   enabled: boolean;
 };
 
+/**
+ * A multi-hop route for a pair that has no direct pool.
+ * The router encodes the path as: sellToken | legs[0].fee | legs[0].token | legs[1].fee | legs[1].token | ...
+ * The buy token is legs[legs.length - 1].token.
+ */
+export type DexMultihopRoute = {
+  sellToken: Address;
+  legs: Array<{ fee: UniswapV3FeeTier; token: Address }>;
+  enabled: boolean;
+};
+
 export type DexConfig = {
   networkKey: NetworkKey;
   dexId: DexId;
@@ -42,6 +53,8 @@ export type DexConfig = {
   /** Addresses that are allowed to receive ERC20 approvals. */
   trustedSpenders: Address[];
   supportedPools: DexPoolConfig[];
+  /** Multi-hop routes for pairs with no direct pool (e.g. USDC→WETH→LINK). */
+  multihopRoutes?: DexMultihopRoute[];
 };
 
 // ─── Base Mainnet Addresses ───────────────────────────────────────────────────
@@ -77,13 +90,6 @@ const BASE_SEPOLIA_LINK = "0xE4aB69C077896252FAFBD49EFD26B5D171A32410" as Addres
 const UNISWAP_V3_FACTORY_BASE_SEPOLIA = "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24" as Address;
 const UNISWAP_QUOTER_V2_BASE_SEPOLIA = "0xC5290058841028F1614F3A6F0F5816cAd0df5E27" as Address;
 const UNISWAP_SWAP_ROUTER02_BASE_SEPOLIA = "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4" as Address;
-
-// ─── Arbitrum Sepolia Addresses ───────────────────────────────────────────────
-const ARB_SEPOLIA_USDC = "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d" as Address;
-const ARB_SEPOLIA_WETH = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73" as Address;
-const UNISWAP_V3_FACTORY_ARB_SEPOLIA = "0x248AB79Bbb9bC29bB72f7Cd42F17e054Fc40188e" as Address;
-const UNISWAP_QUOTER_V2_ARB_SEPOLIA = "0x2779a0CC1c3e0E44D2542EC3e79e3864Ae93Ef0B" as Address;
-const UNISWAP_SWAP_ROUTER02_ARB_SEPOLIA = "0x101F443B4d1b059569D643917553c771E1b9663E" as Address;
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
@@ -164,19 +170,18 @@ const DEX_CONFIGS: Partial<Record<NetworkKey, DexConfig>> = {
         enabled: true,
       },
     ],
-  },
-  "arbitrum-sepolia": {
-    networkKey: "arbitrum-sepolia",
-    dexId: "uniswap_v3",
-    label: "Uniswap V3 on Arbitrum Sepolia",
-    factoryAddress: UNISWAP_V3_FACTORY_ARB_SEPOLIA,
-    quoterAddress: UNISWAP_QUOTER_V2_ARB_SEPOLIA,
-    routerAddress: UNISWAP_SWAP_ROUTER02_ARB_SEPOLIA,
-    wrappedNativeAddress: ARB_SEPOLIA_WETH,
-    trustedSpenders: [UNISWAP_SWAP_ROUTER02_ARB_SEPOLIA],
-    supportedPools: [
-      { sellToken: ARB_SEPOLIA_USDC, buyToken: ARB_SEPOLIA_WETH, feeTier: 500, enabled: true },
-      { sellToken: ARB_SEPOLIA_WETH, buyToken: ARB_SEPOLIA_USDC, feeTier: 500, enabled: true },
+    // No direct USDC/LINK pool exists on Base Sepolia — route through WETH.
+    multihopRoutes: [
+      {
+        sellToken: BASE_SEPOLIA_USDC,
+        legs: [{ fee: 3000, token: BASE_SEPOLIA_WETH }, { fee: 3000, token: BASE_SEPOLIA_LINK }],
+        enabled: true,
+      },
+      {
+        sellToken: BASE_SEPOLIA_LINK,
+        legs: [{ fee: 3000, token: BASE_SEPOLIA_WETH }, { fee: 3000, token: BASE_SEPOLIA_USDC }],
+        enabled: true,
+      },
     ],
   },
   "base-mainnet-fork": {
@@ -269,5 +274,27 @@ export const getPoolConfig = (
       pool.enabled &&
       pool.sellToken.toLowerCase() === sellToken.toLowerCase() &&
       pool.buyToken.toLowerCase() === buyToken.toLowerCase()
+  );
+};
+
+/**
+ * Returns a multi-hop route for pairs without a direct pool, or undefined.
+ * The buy token is the last entry in route.legs[].token.
+ */
+export const getMultihopRoute = (
+  networkKey: NetworkKey,
+  sellToken: Address,
+  buyToken: Address,
+): DexMultihopRoute | undefined => {
+  const config = DEX_CONFIGS[networkKey];
+  if (!config?.multihopRoutes?.length) return undefined;
+  const sellLc = sellToken.toLowerCase();
+  const buyLc = buyToken.toLowerCase();
+  return config.multihopRoutes.find(
+    (r) =>
+      r.enabled &&
+      r.sellToken.toLowerCase() === sellLc &&
+      r.legs.length > 0 &&
+      r.legs[r.legs.length - 1].token.toLowerCase() === buyLc,
   );
 };

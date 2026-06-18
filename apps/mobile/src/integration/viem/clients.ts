@@ -52,7 +52,6 @@ const VIEM_CHAINS: Record<SupportedChainId, Chain> = {
   31337: chainConfigToViemChain(CHAINS[31337]),
   11155111: chainConfigToViemChain(CHAINS[11155111]),
   84532: chainConfigToViemChain(CHAINS[84532]),
-  421614: chainConfigToViemChain(CHAINS[421614]),
   42161: chainConfigToViemChain(CHAINS[42161]),
   1: chainConfigToViemChain(CHAINS[1]),
   324: chainConfigToViemChain(CHAINS[324]),
@@ -82,7 +81,7 @@ export const getViemChain = (chainId: SupportedChainId = DEFAULT_CHAIN_ID): Chai
 export const getPublicClient = (chainId: SupportedChainId = DEFAULT_CHAIN_ID) =>
   createPublicClient({
     chain: getViemChain(chainId),
-    transport: http(requireLegacyRpcUrl(chainId)),
+    transport: http(requireLegacyRpcUrl(chainId), { timeout: 30_000 }),
   });
 
 /** @deprecated Prefer getWalletClientFromPrivateKeyForNetwork(key, networkKey). */

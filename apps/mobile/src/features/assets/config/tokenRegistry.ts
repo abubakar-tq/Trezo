@@ -84,34 +84,6 @@ export const BUILTIN_TOKENS_BY_NETWORK: Record<NetworkKey, BuiltinTokenEntry[]> 
       source: "builtin",
     },
   ],
-  "arbitrum-sepolia": [
-    {
-      chainId: 421614,
-      networkKey: "arbitrum-sepolia",
-      type: "erc20",
-      address: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d", // Circle Arb Sepolia USDC
-      symbol: "USDC",
-      name: "USD Coin",
-      decimals: 6,
-      tags: ["stablecoin", "arb-sepolia"],
-      isSwapSupported: true,
-      isVerified: true,
-      source: "builtin",
-    },
-    {
-      chainId: 421614,
-      networkKey: "arbitrum-sepolia",
-      type: "erc20",
-      address: "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73", // canonical Arb Sepolia WETH
-      symbol: "WETH",
-      name: "Wrapped Ether",
-      decimals: 18,
-      tags: ["wrapped-native", "arb-sepolia"],
-      isSwapSupported: true,
-      isVerified: true,
-      source: "builtin",
-    },
-  ],
   "base-mainnet": [
     {
       chainId: 8453,

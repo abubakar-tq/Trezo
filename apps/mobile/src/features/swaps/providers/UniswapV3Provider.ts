@@ -20,7 +20,7 @@ import type { SwapQuote } from "@/src/features/swaps/types/swap";
 import type { SupportedChainId } from "@/src/integration/chains";
 import type { NetworkKey } from "@/src/integration/networks";
 import { getPublicClientForNetwork } from "@/src/integration/viem/clients";
-import { getDexConfig, getPoolConfig } from "@/src/features/swaps/config/dexRegistry";
+import { getDexConfig, getMultihopRoute, getPoolConfig } from "@/src/features/swaps/config/dexRegistry";
 import { encodeFunctionData, type Address, type Hex } from "viem";
 
 // ─── ABIs ─────────────────────────────────────────────────────────────────────
@@ -111,6 +111,59 @@ const SWAP_ROUTER02_ABI = [
   },
 ] as const;
 
+// ─── Multi-hop ABIs ───────────────────────────────────────────────────────────
+
+const QUOTER_V2_EXACT_INPUT_ABI = [
+  {
+    type: "function",
+    name: "quoteExactInput",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "path", type: "bytes" },
+      { name: "amountIn", type: "uint256" },
+    ],
+    outputs: [
+      { name: "amountOut", type: "uint256" },
+      { name: "sqrtPriceX96AfterList", type: "uint160[]" },
+      { name: "initializedTicksCrossedList", type: "uint32[]" },
+      { name: "gasEstimate", type: "uint256" },
+    ],
+  },
+] as const;
+
+const SWAP_ROUTER02_EXACT_INPUT_ABI = [
+  {
+    type: "function",
+    name: "exactInput",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "params",
+        type: "tuple",
+        components: [
+          { name: "path", type: "bytes" },
+          { name: "recipient", type: "address" },
+          { name: "amountIn", type: "uint256" },
+          { name: "amountOutMinimum", type: "uint256" },
+        ],
+      },
+    ],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+] as const;
+
+/**
+ * Encode a Uniswap V3 multi-hop path as tightly packed bytes:
+ * sellToken (20B) | fee0 (3B) | legs[0].token (20B) | fee1 (3B) | legs[1].token (20B) | ...
+ */
+const encodeMultihopPath = (sellToken: Address, legs: Array<{ fee: number; token: Address }>): Hex => {
+  let hex = sellToken.slice(2).toLowerCase();
+  for (const { fee, token } of legs) {
+    hex += fee.toString(16).padStart(6, "0") + token.slice(2).toLowerCase();
+  }
+  return `0x${hex}` as Hex;
+};
+
 // ─── Provider implementation ───────────────────────────────────────────────────
 
 export class UniswapV3Provider implements SwapRouteProvider {
@@ -144,13 +197,9 @@ export class UniswapV3Provider implements SwapRouteProvider {
         ? dexConfig.wrappedNativeAddress
         : (request.buyToken.address as Address);
 
-    const pool = getPoolConfig(
-      request.networkKey,
-      effectiveSellAddress,
-      effectiveBuyAddress,
-    );
-
-    return pool !== undefined;
+    if (getPoolConfig(request.networkKey, effectiveSellAddress, effectiveBuyAddress)) return true;
+    if (getMultihopRoute(request.networkKey, effectiveSellAddress, effectiveBuyAddress)) return true;
+    return false;
   }
 
   async getQuote(request: SwapQuoteRequest): Promise<SwapQuote> {
@@ -183,26 +232,93 @@ export class UniswapV3Provider implements SwapRouteProvider {
       ? dexConfig.wrappedNativeAddress
       : (buyToken.address as Address);
 
-    const poolConfig = getPoolConfig(
-      networkKey,
-      effectiveSellAddress,
-      effectiveBuyAddress,
-    );
-    if (!poolConfig) {
+    const poolConfig = getPoolConfig(networkKey, effectiveSellAddress, effectiveBuyAddress);
+    const multihopRoute = !poolConfig
+      ? getMultihopRoute(networkKey, effectiveSellAddress, effectiveBuyAddress)
+      : undefined;
+
+    if (!poolConfig && !multihopRoute) {
       throw new Error(
         `Unsupported pair on ${networkKey}: ${sellToken.symbol} → ${buyToken.symbol}. Configure the pool in dexRegistry.ts.`
       );
     }
 
     const client = getPublicClientForNetwork(networkKey);
-    const feeTier = poolConfig.feeTier;
+
+    // ── Multi-hop path (e.g. USDC → WETH → LINK) ─────────────────────────────
+    if (multihopRoute) {
+      const path = encodeMultihopPath(effectiveSellAddress, multihopRoute.legs);
+
+      let estimatedBuyAmountRaw: bigint;
+      try {
+        const result = await client.simulateContract({
+          address: dexConfig.quoterAddress,
+          abi: QUOTER_V2_EXACT_INPUT_ABI,
+          functionName: "quoteExactInput",
+          args: [path, sellAmountRaw],
+        });
+        estimatedBuyAmountRaw = (result.result as [bigint, bigint[], number[], bigint])[0];
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`QuoterV2 multihop quote failed for ${sellToken.symbol}→${buyToken.symbol}: ${message}`);
+      }
+
+      if (estimatedBuyAmountRaw <= 0n) {
+        throw new Error("Quoter returned zero output amount. Pool may have insufficient liquidity.");
+      }
+
+      const minimumBuyAmountRaw = (estimatedBuyAmountRaw * BigInt(10_000 - slippageBps)) / 10_000n;
+      if (minimumBuyAmountRaw <= 0n) {
+        throw new Error("Slippage is too high — minimum buy amount is zero.");
+      }
+
+      const calldata = encodeFunctionData({
+        abi: SWAP_ROUTER02_EXACT_INPUT_ABI,
+        functionName: "exactInput",
+        args: [{
+          path,
+          recipient: account,
+          amountIn: sellAmountRaw,
+          amountOutMinimum: minimumBuyAmountRaw,
+        }],
+      }) as Hex;
+
+      const now = Date.now();
+      return {
+        quoteId: `uniswap-v3-multihop-${networkKey}-${sellToken.symbol}-${buyToken.symbol}-${now}`,
+        chainId,
+        networkKey,
+        sellToken,
+        buyToken,
+        sellAmountRaw,
+        estimatedBuyAmountRaw,
+        minimumBuyAmountRaw,
+        slippageBps,
+        spender: dexConfig.routerAddress,
+        target: dexConfig.routerAddress,
+        value: 0n,
+        calldata,
+        provider: this.id,
+        providerId: this.id,
+        expiresAt: new Date(now + 30_000).toISOString(),
+        routeMetadata: {
+          dexId: dexConfig.dexId,
+          dexLabel: dexConfig.label,
+          routeKind: "v3_multihop",
+          path,
+        },
+      };
+    }
+
+    // ── Single-hop path ───────────────────────────────────────────────────────
+    const feeTier = poolConfig!.feeTier;
 
     // ── 3. Resolve pool address — use hardcoded address when available to avoid RPC round-trips ─
     let poolAddress: Address;
 
-    if (poolConfig.poolAddress) {
+    if (poolConfig!.poolAddress) {
       // Hardcoded in dexRegistry — skip factory lookup entirely
-      poolAddress = poolConfig.poolAddress;
+      poolAddress = poolConfig!.poolAddress;
     } else {
       // Dynamic lookup via factory (slower — avoid for remote infra RPCs)
       const factoryPool = await client.readContract({

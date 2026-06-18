@@ -4,11 +4,9 @@
  * The input form for the buy screen.
  * Handles amount entry and asset selection.
  */
-import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@theme";
 import React from "react";
 import {
-  ActivityIndicator,
   Image,
   StyleSheet,
   Text,
@@ -26,11 +24,9 @@ interface Props {
   targetAddress: string;
   displayAddress: string;
   onAmountChange: (v: string) => void;
-  onAssetPress: () => void;
   onAccountPress: () => void;
   quickAmounts?: string[];
   onQuickAmount?: (v: string) => void;
-  assetLoading?: boolean;
   /** Small hint shown below the crypto estimate, e.g. "Max 0.025 ETH (~$62)" */
   maxHint?: string;
   /** Inline validation error shown in red below the amount (e.g. cap exceeded). */
@@ -44,11 +40,9 @@ export const BuyAmountForm: React.FC<Props> = ({
   targetAddress,
   displayAddress,
   onAmountChange,
-  onAssetPress,
   onAccountPress,
   quickAmounts,
   onQuickAmount,
-  assetLoading,
   maxHint,
   capError,
 }) => {
@@ -116,15 +110,9 @@ export const BuyAmountForm: React.FC<Props> = ({
         ) : null}
       </View>
 
-      {/* Asset Chip */}
-      <TouchableOpacity
-        style={[styles.assetChip, { backgroundColor: `${colors.accent}1A` }]}
-        onPress={onAssetPress}
-        disabled={assetLoading}
-      >
-        {assetLoading ? (
-          <ActivityIndicator size="small" color={colors.accent} />
-        ) : selectedAsset.logo ? (
+      {/* Asset Chip — locked to ETH, not interactive */}
+      <View style={[styles.assetChip, { backgroundColor: `${colors.accent}1A` }]}>
+        {selectedAsset.logo ? (
           <Image source={{ uri: selectedAsset.logo }} style={styles.assetLogo} />
         ) : (
           <View style={[styles.assetLogoFallback, { backgroundColor: `${colors.accent}33` }]}>
@@ -134,8 +122,7 @@ export const BuyAmountForm: React.FC<Props> = ({
           </View>
         )}
         <Text style={[styles.assetSymbol, { color: colors.accent }]}>{selectedAsset.symbol}</Text>
-        <Feather name="chevron-down" size={14} color={colors.accent} />
-      </TouchableOpacity>
+      </View>
 
       {/* Quick amount chips */}
       {quickAmounts && quickAmounts.length > 0 && (

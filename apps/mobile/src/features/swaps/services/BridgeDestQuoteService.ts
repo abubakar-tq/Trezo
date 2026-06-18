@@ -16,6 +16,7 @@ import { getDexConfig, getPoolConfig } from "@/src/features/swaps/config/dexRegi
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 import { getPublicClientForNetwork } from "@/src/integration/viem/clients";
 import type { NetworkKey } from "@/src/integration/networks";
+import { withTimeoutAndRetry } from "@/src/features/swaps/utils/withTimeoutAndRetry";
 import type { Address } from "viem";
 
 // QuoterV2.quoteExactInputSingle — NOT a Solidity view; must be called via
@@ -122,20 +123,27 @@ export class BridgeDestQuoteService {
 
     let expectedOutRaw: bigint;
     try {
-      const result = await client.simulateContract({
-        address: dexConfig.quoterAddress,
-        abi: QUOTER_V2_ABI,
-        functionName: "quoteExactInputSingle",
-        args: [
-          {
-            tokenIn: request.canonicalToken.address as Address,
-            tokenOut: request.outputToken.address as Address,
-            amountIn: request.inputAmountRaw,
-            fee: poolConfig.feeTier,
-            sqrtPriceLimitX96: 0n,
-          },
-        ],
-      });
+      // Bound the cross-chain RPC like every sibling service (Balance/Allowance).
+      // Without this it rode only viem's 60s transport timeout, which froze the
+      // bridge "Review" spinner — this call runs inside prepareBridge, BEFORE the
+      // confirm sheet is presented, so a stall here hangs the whole flow.
+      const result = await withTimeoutAndRetry(
+        () => client.simulateContract({
+          address: dexConfig.quoterAddress,
+          abi: QUOTER_V2_ABI,
+          functionName: "quoteExactInputSingle",
+          args: [
+            {
+              tokenIn: request.canonicalToken.address as Address,
+              tokenOut: request.outputToken.address as Address,
+              amountIn: request.inputAmountRaw,
+              fee: poolConfig.feeTier,
+              sqrtPriceLimitX96: 0n,
+            },
+          ],
+        }),
+        { timeoutMs: 8_000 },
+      );
       expectedOutRaw = (result.result as [bigint, bigint, number, bigint])[0];
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

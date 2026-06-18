@@ -6,7 +6,7 @@ export type SponsoredOperation =
   | "send"
   | "swap";
 
-const TESTNET_CHAIN_IDS = new Set<number>([31337, 11155111, 84532, 421614]);
+const TESTNET_CHAIN_IDS = new Set<number>([31337, 11155111, 84532]);
 
 const MAINNET_SUBSIDIZED_OPS = new Set<SponsoredOperation>([
   "deploy",

@@ -1,6 +1,6 @@
 export type RampProvider = 'transak' | 'mock';
 
-export type TransakNetwork = 'ethereum' | 'base' | 'arbitrum';
+export type TransakNetwork = 'ethereum' | 'base';
 
 export interface TransakNetworkConfig {
   label: string;
@@ -21,12 +21,6 @@ export const TRANSAK_NETWORKS: Record<TransakNetwork, TransakNetworkConfig> = {
     chainId: 84532,
     color: '#0052FF',
     testnetName: 'Base Sepolia',
-  },
-  arbitrum: {
-    label: 'Arb Sepolia',
-    chainId: 421614,
-    color: '#28A0F0',
-    testnetName: 'Arbitrum Sepolia',
   },
 } as const;
 

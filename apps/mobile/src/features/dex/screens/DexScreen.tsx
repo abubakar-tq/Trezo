@@ -270,12 +270,18 @@ export const DexScreen: React.FC = () => {
   const swapTokens = allSwapTokens;
 
   // Bridge mode only supports ERC-20 sell tokens (Across V3 testnet; LI.FI mainnet).
-  // Auto-switch to the first ERC-20 when native ETH is selected in bridge mode.
+  // When native ETH is selected in bridge mode, switch to its wrapped equivalent
+  // (WETH) — the token the user actually intends. Falling back to "first ERC-20"
+  // previously bounced ETH → LINK, which looked like the wrong token was picked.
   useEffect(() => {
     if (activeTab !== "bridge") return;
     if (!sellToken || sellToken.type !== "native") return;
-    const firstErc20 = swapTokens.find((t) => t.type === "erc20");
-    if (firstErc20) setSellToken(firstErc20);
+    const erc20s = swapTokens.filter((t) => t.type === "erc20");
+    const preferred =
+      erc20s.find((t) => t.symbol.toUpperCase() === "WETH") ??
+      erc20s.find((t) => t.symbol.toUpperCase() === "USDC") ??
+      erc20s[0];
+    if (preferred) setSellToken(preferred);
   }, [activeTab, sellToken?.type, swapTokens]);
 
   const sellTokenBalanceRaw = useMemo(() => {
@@ -358,7 +364,17 @@ export const DexScreen: React.FC = () => {
       }
 
       const walletService = new WalletPersistenceService();
-      const wallet = await walletService.getAAWalletForChain(user.id, selectedChainId);
+      let wallet = await walletService.getAAWalletForChain(user.id, selectedChainId);
+      // Portable smart accounts share ONE CREATE2 address across every chain
+      // (ADR 0006/0007). When there's no per-chain wallet row for this network
+      // — e.g. you onboarded on Base Sepolia and then switch to Base mainnet —
+      // fall back to the user's primary wallet so quotes/previews resolve by
+      // address. A LI.FI/Uniswap quote only needs the account address, not a
+      // deployed per-chain row; without this the receive-amount stayed silently
+      // blank on any portable chain the wallet wasn't explicitly created on.
+      if (!wallet && isPortableChain(selectedChainId)) {
+        wallet = await walletService.getAAWallet(user.id);
+      }
       if (cancelled) return;
 
       setWalletId(wallet?.id ?? null);
@@ -826,7 +842,15 @@ export const DexScreen: React.FC = () => {
     setBridgeBusy(true);
     let plan: BridgePlan | null = null;
     try {
-      plan = await BridgePreparationService.prepareBridge(intent);
+      // Backstop: every RPC inside prepareBridge is individually timeout-bounded,
+      // but guard the whole chain too so the Review spinner can never deadlock if
+      // a future step is added without its own timeout.
+      plan = await Promise.race([
+        BridgePreparationService.prepareBridge(intent),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Bridge preparation timed out — please try again.")), 30_000),
+        ),
+      ]);
       setBridgePlan(plan);
     } catch (error) {
       setBridgePlan(null);
@@ -1419,6 +1443,17 @@ export const DexScreen: React.FC = () => {
                       }}
                       onRecipientChange={setCustomBridgeRecipient}
                       onDefaultChain={setBridgeDestNetworkKey}
+                      receiveAmountDisplay={
+                        bridgeQuote
+                          ? formatTokenAmount(
+                              bridgeQuote.destSwap
+                                ? bridgeQuote.destSwap.expectedOutRaw
+                                : bridgeQuote.outputAmountRaw,
+                              bridgeQuote.outputToken.decimals,
+                            )
+                          : null
+                      }
+                      receiveLoading={bridgeQuoteLoading}
                       colors={colors}
                     />
                   </View>
@@ -1843,6 +1878,7 @@ export const DexScreen: React.FC = () => {
         loading={tc.loading}
         onApprove={tc.onApprove}
         onReject={tc.onReject}
+        onDismiss={tc.onDismiss}
       />
     </TabScreenContainer>
   );

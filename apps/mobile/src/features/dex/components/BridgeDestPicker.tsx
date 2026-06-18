@@ -6,13 +6,14 @@ import {
   TextInput,
   Image,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import type { Address } from "viem";
 import type { ThemeColors } from "@theme";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 import { TokenRegistryService } from "@/src/features/assets/services/TokenRegistryService";
-import { getNetworkConfig, resolveNetworkKey, type NetworkKey } from "@/src/integration/networks";
+import { getNetworkConfig, type NetworkKey } from "@/src/integration/networks";
 import { TokenIcon } from "@shared/components/visuals/TokenIcon";
 import { AssetPickerModal, type Asset } from "@/src/shared/components/modals/AssetPickerModal";
 import { useBridgeDestChains } from "../hooks/useBridgeDestChains";
@@ -37,7 +38,7 @@ export function validateRecipientAddress(input: string): string | null {
 function chainIconUrl(chainId: number): string | undefined {
   switch (chainId) {
     case 1: case 11155111: return "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png";
-    case 42161: case 421614: return "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png";
+    case 42161: return "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png";
     case 8453: case 84532: return "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png";
     default: return undefined;
   }
@@ -63,6 +64,10 @@ export interface BridgeDestPickerProps {
   onRecipientChange: (addr: Address | null) => void;
   /** Called with the first available dest chain key when chains load and none is selected yet. */
   onDefaultChain?: (chainKey: string) => void;
+  /** Formatted estimated receive amount (e.g. "0.0123"), shown inline next to the token. */
+  receiveAmountDisplay?: string | null;
+  /** True while the bridge quote is being fetched. */
+  receiveLoading?: boolean;
   colors: ThemeColors;
 }
 
@@ -79,6 +84,8 @@ export const BridgeDestPicker: React.FC<BridgeDestPickerProps> = ({
   onDestChange,
   onRecipientChange,
   onDefaultChain,
+  receiveAmountDisplay,
+  receiveLoading,
   colors,
 }) => {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -146,14 +153,21 @@ export const BridgeDestPicker: React.FC<BridgeDestPickerProps> = ({
 
   const handleBridgeSelect = useCallback(
     (asset: Asset, chainKey: string | null) => {
-      // Infer chain key from asset.chainId if filter was "All"
+      // On the "All" tab no chainKey is passed, so resolve it from the tapped
+      // token's chainId by matching against THIS source's actual destination
+      // chains. (resolveNetworkKey() must NOT be used here: for a chainId it
+      // doesn't recognise it silently returns the DEFAULT network key, which
+      // routed the dest to the wrong chain and left "You receive" empty.)
       let resolvedChainKey = chainKey;
       if (!resolvedChainKey && asset.chainId !== undefined) {
-        try {
-          resolvedChainKey = resolveNetworkKey(asset.chainId as any);
-        } catch {
-          return; // Can't determine chain — ignore
-        }
+        resolvedChainKey =
+          destChainKeys.find((k) => {
+            try {
+              return getNetworkConfig(k as NetworkKey).chainId === asset.chainId;
+            } catch {
+              return false;
+            }
+          }) ?? null;
       }
       if (!resolvedChainKey) return;
 
@@ -165,7 +179,7 @@ export const BridgeDestPicker: React.FC<BridgeDestPickerProps> = ({
       onDestChange(resolvedChainKey, match ?? null);
       setPickerOpen(false);
     },
-    [allDestTokens, onDestChange],
+    [allDestTokens, destChainKeys, onDestChange],
   );
 
   const handleAddressBlur = useCallback(() => {
@@ -236,6 +250,23 @@ export const BridgeDestPicker: React.FC<BridgeDestPickerProps> = ({
           )}
           <Feather name="chevron-down" size={13} color={colors.textSecondary} style={styles.chevron} />
         </TouchableOpacity>
+
+        {/* Inline estimated receive amount — mirrors the swap "You receive" row. */}
+        <View style={styles.receiveBox}>
+          {receiveLoading ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Text
+              style={[
+                styles.receiveAmount,
+                { color: receiveAmountDisplay ? colors.textPrimary : colors.textMuted },
+              ]}
+              numberOfLines={1}
+            >
+              {receiveAmountDisplay ?? "0.00"}
+            </Text>
+          )}
+        </View>
       </View>
 
       {/* ── Advanced collapsible section (recipient address) ── */}
@@ -381,6 +412,8 @@ const styles = StyleSheet.create({
   tokenBtnSymbol: { fontSize: 15, fontWeight: "700" },
   tokenBtnChain: { fontSize: 12, fontWeight: "500" },
   chevron: { marginLeft: "auto" },
+  receiveBox: { flex: 1, alignItems: "flex-end", justifyContent: "center", minHeight: 36 },
+  receiveAmount: { fontSize: 26, fontWeight: "700", letterSpacing: -0.5 },
   advancedToggle: {
     flexDirection: "row",
     alignItems: "center",

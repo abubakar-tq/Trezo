@@ -1,6 +1,7 @@
 import { getPublicClient } from "@/src/integration/viem/clients";
 import type { TokenMetadata } from "@/src/features/assets/types/token";
 import type { SupportedChainId } from "@/src/integration/chains";
+import { withTimeoutAndRetry } from "@/src/features/swaps/utils/withTimeoutAndRetry";
 import { formatUnits, type Address } from "viem";
 
 const DEFAULT_NATIVE_GAS_RESERVE = 3_000_000_000_000_000n;
@@ -28,7 +29,7 @@ export type SpendableBalanceParams = {
 export class BalanceService {
   static async getNativeBalance(chainId: SupportedChainId, walletAddress: Address): Promise<bigint> {
     const client = getPublicClient(chainId);
-    return client.getBalance({ address: walletAddress });
+    return withTimeoutAndRetry(() => client.getBalance({ address: walletAddress }), { timeoutMs: 8_000 });
   }
 
   static async getErc20Balance(
@@ -37,13 +38,15 @@ export class BalanceService {
     walletAddress: Address,
   ): Promise<bigint> {
     const client = getPublicClient(chainId);
-    const raw = await client.readContract({
-      address: tokenAddress,
-      abi: ERC20_MIN_ABI,
-      functionName: "balanceOf",
-      args: [walletAddress],
-    });
-
+    const raw = await withTimeoutAndRetry(
+      () => client.readContract({
+        address: tokenAddress,
+        abi: ERC20_MIN_ABI,
+        functionName: "balanceOf",
+        args: [walletAddress],
+      }),
+      { timeoutMs: 8_000 },
+    );
     return raw as bigint;
   }
 

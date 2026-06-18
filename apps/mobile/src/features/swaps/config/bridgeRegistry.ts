@@ -67,8 +67,6 @@ const SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as Address;
 const SEPOLIA_WETH = "0xfff9976782d46cc05630d1f6ebab18b2324d6b14" as Address;
 const BASE_SEPOLIA_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address;
 const BASE_SEPOLIA_WETH = "0x4200000000000000000000000000000000000006" as Address;
-const ARB_SEPOLIA_USDC = "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d" as Address;
-const ARB_SEPOLIA_WETH = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73" as Address;
 
 // ─── Across V3 SpokePool addresses ────────────────────────────────────────────
 // Pinned from https://github.com/across-protocol/contracts/tree/master/deployments
@@ -76,7 +74,6 @@ const ARB_SEPOLIA_WETH = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73" as Address
 
 const SPOKE_POOL_SEPOLIA = "0x5ef6C01E11889d86803e0B23e3cB3F9E9d97B662" as Address;
 const SPOKE_POOL_BASE_SEPOLIA = "0x82B564983aE7274c86695917BBf8C99ECb6F0F8F" as Address;
-const SPOKE_POOL_ARB_SEPOLIA = "0x7E63A5f1a8F0B4d0934B2f2327DAED3F6bb2ee75" as Address;
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
@@ -90,7 +87,6 @@ const pairsBetween = (
 
 const SEPOLIA_TOKENS = { usdc: SEPOLIA_USDC, weth: SEPOLIA_WETH };
 const BASE_SEPOLIA_TOKENS = { usdc: BASE_SEPOLIA_USDC, weth: BASE_SEPOLIA_WETH };
-const ARB_SEPOLIA_TOKENS = { usdc: ARB_SEPOLIA_USDC, weth: ARB_SEPOLIA_WETH };
 
 const BRIDGE_CONFIGS: Partial<Record<NetworkKey, BridgeConfig>> = {
   "ethereum-sepolia": {
@@ -99,7 +95,6 @@ const BRIDGE_CONFIGS: Partial<Record<NetworkKey, BridgeConfig>> = {
     spokePool: SPOKE_POOL_SEPOLIA,
     routes: [
       { destinationNetworkKey: "base-sepolia", pairs: pairsBetween(SEPOLIA_TOKENS, BASE_SEPOLIA_TOKENS) },
-      { destinationNetworkKey: "arbitrum-sepolia", pairs: pairsBetween(SEPOLIA_TOKENS, ARB_SEPOLIA_TOKENS) },
     ],
   },
   "base-sepolia": {
@@ -108,16 +103,6 @@ const BRIDGE_CONFIGS: Partial<Record<NetworkKey, BridgeConfig>> = {
     spokePool: SPOKE_POOL_BASE_SEPOLIA,
     routes: [
       { destinationNetworkKey: "ethereum-sepolia", pairs: pairsBetween(BASE_SEPOLIA_TOKENS, SEPOLIA_TOKENS) },
-      { destinationNetworkKey: "arbitrum-sepolia", pairs: pairsBetween(BASE_SEPOLIA_TOKENS, ARB_SEPOLIA_TOKENS) },
-    ],
-  },
-  "arbitrum-sepolia": {
-    networkKey: "arbitrum-sepolia",
-    bridgeId: "across_v3",
-    spokePool: SPOKE_POOL_ARB_SEPOLIA,
-    routes: [
-      { destinationNetworkKey: "ethereum-sepolia", pairs: pairsBetween(ARB_SEPOLIA_TOKENS, SEPOLIA_TOKENS) },
-      { destinationNetworkKey: "base-sepolia", pairs: pairsBetween(ARB_SEPOLIA_TOKENS, BASE_SEPOLIA_TOKENS) },
     ],
   },
 };

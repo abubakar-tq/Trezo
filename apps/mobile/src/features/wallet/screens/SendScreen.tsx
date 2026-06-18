@@ -95,7 +95,6 @@ const CHAIN_EMOJI: Record<number, string> = {
   31337: "⬡",
   11155111: "Ξ",
   84532: "🔵",
-  421614: "🔷",
   1: "Ξ",
   324: "⧫",
   300: "⧫",
@@ -1133,6 +1132,7 @@ export const SendScreen: React.FC<SendScreenProps> = ({ onCancel }) => {
         loading={tc.loading}
         onApprove={tc.onApprove}
         onReject={tc.onReject}
+        onDismiss={tc.onDismiss}
       />
 
       {/* ════════════════════════════════════════════════════════════════

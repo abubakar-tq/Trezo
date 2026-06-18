@@ -34,6 +34,17 @@ async function run(): Promise<void> {
   assert(r2.status === "revert", "send revert");
   assert((r2.revertReason ?? "").length > 0, "revert reason present");
 
+  // REGRESSION: swap/bridge must NOT preflight. A direct eth_call from the smart
+  // account to a DEX router / SpokePool yields false reverts; the bundler's
+  // estimateUserOpGas (run before the sheet) is authoritative. A reverting client
+  // must therefore still produce a derived success so Approve is not blocked.
+  const r2a = await SimulationService.simulate(basePreview("swap"), { gasFee: gas, client: revertClient, provider: nullProvider });
+  assert(r2a.status === "success", "swap skips preflight (no false revert)");
+  assert(r2a.source === "derived", "swap derived even with reverting client");
+  const r2b = await SimulationService.simulate(basePreview("bridge"), { gasFee: gas, client: revertClient, provider: nullProvider });
+  assert(r2b.status === "success", "bridge skips preflight (no false revert)");
+  assert(r2b.source === "derived", "bridge derived even with reverting client");
+
   // dapp with provider -> provider deltas override, source provider
   const r3 = await SimulationService.simulate(basePreview("dapp"), { gasFee: gas, client: okClient, provider: richProvider });
   assert(r3.status === "success", "dapp success");

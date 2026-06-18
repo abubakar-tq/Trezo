@@ -21,7 +21,6 @@ export type NetworkKey =
   | "anvil-local"
   | "ethereum-sepolia"
   | "base-sepolia"
-  | "arbitrum-sepolia"
   | "base-mainnet"
   | "arb-mainnet"
   | "base-mainnet-fork"
@@ -34,8 +33,7 @@ export type DeploymentProfile =
   | "base-mainnet-fork"
   | "eth-mainnet"
   | "sepolia"
-  | "base-sepolia"
-  | "arb-sepolia";
+  | "base-sepolia";
 
 export type ChainEnvironmentExtended =
   | "local"
@@ -53,14 +51,11 @@ export type SupportedChainId =
   | 31337
   | 11155111
   | 84532
-  | 421614
   | 42161
   | 1
   | 324
   | 300
-  | 8453
-  | 84532
-  | 421614;
+  | 8453;
 
 export type NetworkConfig = {
   networkKey: NetworkKey;
@@ -190,32 +185,6 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
       defaultUsePaymaster: Boolean(process.env.EXPO_PUBLIC_BASE_SEPOLIA_PAYMASTER_URL),
       swapSupported: Boolean(d?.swapSupported),
       emailRecoverySupported: true, // ZK Email hosted relayer is on Base Sepolia
-      crossChainSwapSupported: Boolean(d?.crossChainExecutor),
-    };
-  })(),
-
-  "arbitrum-sepolia": (() => {
-    const d = getDeployment("arb-sepolia");
-    return {
-      networkKey: "arbitrum-sepolia" as NetworkKey,
-      chainId: 421614 as SupportedChainId,
-      sourceChainId: 421614,
-      deploymentProfile: "arb-sepolia" as DeploymentProfile,
-      name: "Arbitrum Sepolia",
-      displayName: "Arbitrum Sepolia",
-      nativeCurrency: DEFAULT_NATIVE_ETH,
-      rpcUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_RPC_URL ?? "https://sepolia-rollup.arbitrum.io/rpc",
-      bundlerUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL ?? "",
-      paymasterUrl: process.env.EXPO_PUBLIC_ARB_SEPOLIA_PAYMASTER_URL,
-      environment: "testnet" as ChainEnvironmentExtended,
-      blockExplorerUrl: "https://sepolia.arbiscan.io",
-      isEnabled: Boolean(
-        d?.entryPoint && d?.accountFactory &&
-        process.env.EXPO_PUBLIC_ARB_SEPOLIA_BUNDLER_URL
-      ),
-      defaultUsePaymaster: Boolean(process.env.EXPO_PUBLIC_ARB_SEPOLIA_PAYMASTER_URL),
-      swapSupported: Boolean(d?.swapSupported),
-      emailRecoverySupported: false, // ZK Email hosted relayer is Base Sepolia only
       crossChainSwapSupported: Boolean(d?.crossChainExecutor),
     };
   })(),

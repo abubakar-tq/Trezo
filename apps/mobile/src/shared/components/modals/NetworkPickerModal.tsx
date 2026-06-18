@@ -32,7 +32,6 @@ function chainIconUrl(chainId: number): string | undefined {
     case 11155111: return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
     case 137:     return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png';
     case 42161:   return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png';
-    case 421614:  return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png';
     case 10:      return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png';
     case 8453:    return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png';
     case 84532:   return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png';
@@ -49,7 +48,6 @@ function chainColor(chainId: number): string {
     case 11155111: return '#627EEA';
     case 137:     return '#8247E5';
     case 42161:   return '#28A0F0';
-    case 421614:  return '#28A0F0';
     case 10:      return '#FF0420';
     case 8453:    return '#0052FF';
     case 84532:   return '#0052FF';

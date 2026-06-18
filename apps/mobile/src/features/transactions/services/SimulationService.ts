@@ -25,9 +25,21 @@ export class SimulationService {
     const primary = preview.calls[0];
 
     // 1) preflight: does the inner call revert?
+    //
+    // Swap/bridge inner calls target a DEX router (Uniswap SwapRouter02) or an
+    // Across SpokePool. A standalone eth_call from the smart-account address to
+    // those contracts does NOT reproduce EntryPoint execution context and yields
+    // FALSE reverts (e.g. router pay()/wrap branches, transferFrom accounting).
+    // For these flows the bundler's eth_estimateUserOperationGas — already run
+    // inside prepareUserOperation before this sheet is shown — is the
+    // authoritative simulation: if the op would revert, preparation throws and we
+    // never reach here. So we skip the redundant, false-positive preflight and
+    // surface the quote-derived deltas. `send` and `dapp` keep the preflight,
+    // where a direct eth_call faithfully models the inner call (ADR 0013).
+    const shouldPreflight = preview.kind === "send" || preview.kind === "dapp";
     let status: SimulationResult["status"] = "success";
     let revertReason: string | undefined;
-    if (primary) {
+    if (primary && shouldPreflight) {
       try {
         await deps.client.call({ account: preview.account, to: primary.to, data: primary.data, value: primary.value });
       } catch (err) {

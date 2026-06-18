@@ -51,7 +51,16 @@ export const classify = (err: unknown): ClassifiedError => {
   if (lower.includes("quote is stale") || lower.includes("quote_stale") || lower.includes("price moved")) {
     return { kind: "quote_stale", userMessage: "Quote changed — review again.", retryable: true, severity: "warning" };
   }
-  if (lower.includes("network error") || lower.includes("timeout") || lower.includes("fetch failed") || lower.includes("econnrefused") || lower.includes("etimedout")) {
+  if (
+    lower.includes("network error") ||
+    lower.includes("timeout") ||
+    lower.includes("timed out") ||
+    lower.includes("took too long") ||
+    lower.includes("fetch failed") ||
+    lower.includes("econnrefused") ||
+    lower.includes("etimedout") ||
+    lower.includes("aborted")
+  ) {
     return { kind: "network", userMessage: "Network error. Check your connection and try again.", retryable: true, severity: "warning" };
   }
   if (lower.includes("useroperation") || lower.includes("bundler") || lower.includes("reverted")) {
