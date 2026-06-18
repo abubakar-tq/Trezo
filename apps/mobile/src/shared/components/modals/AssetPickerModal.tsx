@@ -158,11 +158,13 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
 
   const normalizedQuery = searchQuery.toLowerCase().trim();
 
-  // Holdings section — filter by chain if active
+  // Holdings section — empty in bridge mode (dest picker shows recipient-chain tokens,
+  // not the user's source-chain balances, so holdings would be irrelevant and confusing).
   const filteredHoldings = useMemo(() => {
+    if (isBridgeMode) return [];
     if (chainFilter === ALL) return holdings;
     return holdings.filter((h) => h.chainId === chainFilter);
-  }, [holdings, chainFilter]);
+  }, [holdings, chainFilter, isBridgeMode]);
 
   // All tokens section — deduplicated by symbol, alphabetical, chain-filtered
   const filteredAll = useMemo(() => {
@@ -376,9 +378,12 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
                     >
                       {label}
                     </Text>
-                    {isActive && (
-                      <View style={[styles.bridgeFilterTabUnderline, { backgroundColor: colors.accent }]} />
-                    )}
+                    <View
+                      style={[
+                        styles.bridgeFilterTabUnderline,
+                        { backgroundColor: isActive ? colors.accent : 'transparent' },
+                      ]}
+                    />
                   </TouchableOpacity>
                 );
               })}

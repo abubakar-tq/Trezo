@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -61,6 +61,8 @@ export interface BridgeDestPickerProps {
   customRecipient: Address | null;
   onDestChange: (networkKey: string, token: TokenMetadata | null) => void;
   onRecipientChange: (addr: Address | null) => void;
+  /** Called with the first available dest chain key when chains load and none is selected yet. */
+  onDefaultChain?: (chainKey: string) => void;
   colors: ThemeColors;
 }
 
@@ -76,26 +78,41 @@ export const BridgeDestPicker: React.FC<BridgeDestPickerProps> = ({
   customRecipient,
   onDestChange,
   onRecipientChange,
+  onDefaultChain,
   colors,
 }) => {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [addressEditMode, setAddressEditMode] = useState(false);
   const [draftAddress, setDraftAddress] = useState("");
   const [addressError, setAddressError] = useState<string | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const { destChainKeys, loading } = useBridgeDestChains(sourceNetworkKey, isMainnet);
 
-  // Combined static token list for all dest chains
+  // Auto-pick the first available destination chain when chains load and none is selected.
+  useEffect(() => {
+    if (!destNetworkKey && destChainKeys.length > 0 && onDefaultChain) {
+      onDefaultChain(destChainKeys[0]);
+    }
+  }, [destNetworkKey, destChainKeys, onDefaultChain]);
+
+  // Combined token list for all dest chains.
+  // For testnet (Across V3): exclude native tokens — only ERC-20s (WETH/USDC) are bridgeable.
   const allDestTokens = useMemo<TokenMetadata[]>(
-    () =>
-      destChainKeys.flatMap((k) => {
+    () => {
+      const rawTokens = destChainKeys.flatMap((k) => {
         try {
           return TokenRegistryService.listSwapTokensForNetwork(k as NetworkKey);
         } catch {
           return [];
         }
-      }),
-    [destChainKeys],
+      });
+      if (!isMainnet) {
+        return rawTokens.filter((t) => t.type !== "native");
+      }
+      return rawTokens;
+    },
+    [destChainKeys, isMainnet],
   );
 
   // Convert TokenMetadata → Asset for the modal
@@ -221,86 +238,104 @@ export const BridgeDestPicker: React.FC<BridgeDestPickerProps> = ({
         </TouchableOpacity>
       </View>
 
-      {/* ── Recipient address row ── */}
-      <View style={styles.recipientRow}>
-        <Text style={[styles.recipientLabel, { color: colors.textMuted }]}>To</Text>
-        {addressEditMode ? (
-          <View style={styles.recipientEditContainer}>
-            <TextInput
-              style={[
-                styles.recipientInput,
-                {
-                  color: colors.textPrimary,
-                  borderColor: addressError ? colors.danger : colors.border,
-                  backgroundColor: colors.glass,
-                },
-              ]}
-              value={draftAddress}
-              onChangeText={setDraftAddress}
-              onBlur={handleAddressBlur}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="0x…"
-              placeholderTextColor={colors.textMuted}
-              autoFocus
-            />
-            {addressError && (
-              <Text style={[styles.recipientErrorText, { color: colors.danger }]}>
-                {addressError}
-              </Text>
-            )}
-            {isCustom && (
-              <TouchableOpacity onPress={handleUseMyWallet} hitSlop={8}>
-                <Text style={[styles.useMyWalletLink, { color: colors.accent }]}>
-                  Use my wallet
+      {/* ── Advanced collapsible section (recipient address) ── */}
+      <TouchableOpacity
+        onPress={() => setAdvancedOpen((v) => !v)}
+        style={styles.advancedToggle}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.advancedToggleText, { color: colors.textMuted }]}>Advanced</Text>
+        <Feather
+          name={advancedOpen ? "chevron-up" : "chevron-down"}
+          size={12}
+          color={colors.textMuted}
+        />
+      </TouchableOpacity>
+
+      {advancedOpen && (
+        <View style={styles.advancedContent}>
+          {/* ── Recipient address row ── */}
+          <View style={styles.recipientRow}>
+            <Text style={[styles.recipientLabel, { color: colors.textMuted }]}>To</Text>
+            {addressEditMode ? (
+              <View style={styles.recipientEditContainer}>
+                <TextInput
+                  style={[
+                    styles.recipientInput,
+                    {
+                      color: colors.textPrimary,
+                      borderColor: addressError ? colors.danger : colors.border,
+                      backgroundColor: colors.glass,
+                    },
+                  ]}
+                  value={draftAddress}
+                  onChangeText={setDraftAddress}
+                  onBlur={handleAddressBlur}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="0x…"
+                  placeholderTextColor={colors.textMuted}
+                  autoFocus
+                />
+                {addressError && (
+                  <Text style={[styles.recipientErrorText, { color: colors.danger }]}>
+                    {addressError}
+                  </Text>
+                )}
+                {isCustom && (
+                  <TouchableOpacity onPress={handleUseMyWallet} hitSlop={8}>
+                    <Text style={[styles.useMyWalletLink, { color: colors.accent }]}>
+                      Use my wallet
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <>
+                <Text
+                  style={[styles.recipientAddressText, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {displayAddress
+                    ? shortenAddress(displayAddress)
+                    : resolvedOwnAddressError
+                    ? "Unresolved"
+                    : "—"}
                 </Text>
-              </TouchableOpacity>
+                <TouchableOpacity onPress={handleEditPress} hitSlop={8}>
+                  <Feather name="edit-2" size={13} color={colors.textMuted} />
+                </TouchableOpacity>
+              </>
             )}
           </View>
-        ) : (
-          <>
-            <Text
-              style={[styles.recipientAddressText, { color: colors.textSecondary }]}
-              numberOfLines={1}
+
+          {/* ── Custom address warning banner ── */}
+          {isCustom && !addressEditMode && (
+            <View
+              style={[
+                styles.warningBanner,
+                { backgroundColor: colors.warningSoft, borderColor: `${colors.warning}66` },
+              ]}
             >
-              {displayAddress
-                ? shortenAddress(displayAddress)
-                : resolvedOwnAddressError
-                ? "Unresolved"
-                : "—"}
-            </Text>
-            <TouchableOpacity onPress={handleEditPress} hitSlop={8}>
-              <Feather name="edit-2" size={13} color={colors.textMuted} />
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+              <Text style={[styles.warningBannerText, { color: colors.warning }]}>
+                Sending to a custom address. Double-check it before bridging.
+              </Text>
+            </View>
+          )}
 
-      {/* ── Custom address warning banner ── */}
-      {isCustom && !addressEditMode && (
-        <View
-          style={[
-            styles.warningBanner,
-            { backgroundColor: colors.warningSoft, borderColor: `${colors.warning}66` },
-          ]}
-        >
-          <Text style={[styles.warningBannerText, { color: colors.warning }]}>
-            Sending to a custom address. Double-check it before bridging.
-          </Text>
-        </View>
-      )}
-
-      {/* ── Resolved address error ── */}
-      {resolvedOwnAddressError && !customRecipient && (
-        <View
-          style={[
-            styles.warningBanner,
-            { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}66` },
-          ]}
-        >
-          <Text style={[styles.warningBannerText, { color: colors.danger }]}>
-            {resolvedOwnAddressError}
-          </Text>
+          {/* ── Resolved address error ── */}
+          {resolvedOwnAddressError && !customRecipient && (
+            <View
+              style={[
+                styles.warningBanner,
+                { backgroundColor: colors.dangerSoft, borderColor: `${colors.danger}66` },
+              ]}
+            >
+              <Text style={[styles.warningBannerText, { color: colors.danger }]}>
+                {resolvedOwnAddressError}
+              </Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -346,11 +381,20 @@ const styles = StyleSheet.create({
   tokenBtnSymbol: { fontSize: 15, fontWeight: "700" },
   tokenBtnChain: { fontSize: 12, fontWeight: "500" },
   chevron: { marginLeft: "auto" },
+  advancedToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 10,
+    alignSelf: "flex-start",
+    paddingVertical: 2,
+  },
+  advancedToggleText: { fontSize: 12, fontWeight: "600" },
+  advancedContent: { marginTop: 8 },
   recipientRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginTop: 10,
     paddingHorizontal: 2,
   },
   recipientLabel: { fontSize: 12, fontWeight: "600" },

@@ -29,6 +29,7 @@ const LIFI_NETWORK_KEYS: ReadonlySet<NetworkKey> = new Set<NetworkKey>([
   "base-mainnet",
   "arb-mainnet",
   "base-mainnet-fork",
+  "eth-mainnet",
 ]);
 
 /** True when LI.FI should be used for the given network key (mainnet only). */
@@ -50,6 +51,8 @@ export const lifiChainIdForNetwork = (networkKey: NetworkKey): number => {
       return 8453;
     case "arb-mainnet":
       return 42161;
+    case "eth-mainnet":
+      return 1;
     default:
       throw new Error(`No LI.FI chain id mapping for non-LI.FI network ${networkKey}.`);
   }

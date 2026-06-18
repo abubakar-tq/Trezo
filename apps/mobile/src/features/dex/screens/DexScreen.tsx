@@ -1380,6 +1380,7 @@ export const DexScreen: React.FC = () => {
                         setBridgeDestOutputToken(token);
                       }}
                       onRecipientChange={setCustomBridgeRecipient}
+                      onDefaultChain={setBridgeDestNetworkKey}
                       colors={colors}
                     />
                   </View>

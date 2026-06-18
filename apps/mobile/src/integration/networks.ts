@@ -24,13 +24,15 @@ export type NetworkKey =
   | "arbitrum-sepolia"
   | "base-mainnet"
   | "arb-mainnet"
-  | "base-mainnet-fork";
+  | "base-mainnet-fork"
+  | "eth-mainnet";
 
 export type DeploymentProfile =
   | "31337"
   | "base-mainnet"
   | "arb-mainnet"
   | "base-mainnet-fork"
+  | "eth-mainnet"
   | "sepolia"
   | "base-sepolia"
   | "arb-sepolia";
@@ -260,17 +262,33 @@ export const NETWORKS: Record<NetworkKey, NetworkConfig> = {
       paymasterUrl: undefined,
       environment: "mainnet" as ChainEnvironmentExtended,
       blockExplorerUrl: "https://arbiscan.io",
-      isEnabled: Boolean(
-        d?.entryPoint && d?.accountFactory &&
-        process.env.EXPO_PUBLIC_ARB_MAINNET_RPC_URL &&
-        process.env.EXPO_PUBLIC_ARB_MAINNET_BUNDLER_URL
-      ),
+      // Hidden until Trezo infra is deployed on Arbitrum One.
+      isEnabled: false,
       defaultUsePaymaster: false,
       swapSupported: Boolean(d?.swapSupported),
       emailRecoverySupported: false,
       crossChainSwapSupported: true,
     };
   })(),
+
+  "eth-mainnet": {
+    networkKey: "eth-mainnet",
+    chainId: 1 as SupportedChainId,
+    sourceChainId: 1,
+    deploymentProfile: "eth-mainnet" as DeploymentProfile,
+    name: "Ethereum Mainnet",
+    displayName: "Ethereum",
+    nativeCurrency: DEFAULT_NATIVE_ETH,
+    rpcUrl: "",
+    bundlerUrl: "",
+    environment: "mainnet" as ChainEnvironmentExtended,
+    blockExplorerUrl: "https://etherscan.io",
+    isEnabled: false, // Bridge destination only — no Trezo wallet infrastructure deployed
+    defaultUsePaymaster: false,
+    swapSupported: false,
+    emailRecoverySupported: false,
+    crossChainSwapSupported: false,
+  },
 
   "base-mainnet-fork": (() => {
     const deployment = getDeployment("base-mainnet-fork");
@@ -369,18 +387,26 @@ export const getBundlerUrlForNetwork = (networkKey: NetworkKey): string => {
 };
 
 /**
- * Returns the default NetworkConfig for a given chainId.
- * For chainId 8453, returns base-mainnet-fork when enabled, otherwise base-mainnet.
+ * Finds the first non-local NetworkConfig for a given chainId, scanning ALL networks
+ * (enabled or not). Used for bridge destination resolution where a chain may not be
+ * fully enabled for wallet use but is still a valid bridge target.
+ */
+export const findNetworkByChainId = (chainId: number): NetworkConfig | undefined =>
+  Object.values(NETWORKS).find(
+    (n) => n.chainId === chainId &&
+      n.environment !== "local" &&
+      n.environment !== "local_fork",
+  );
+
+/**
+ * Returns the default NetworkConfig for a given chainId — the first enabled
+ * network registered for that chainId (registry order). For chainId 8453 that
+ * is base-mainnet; the local fork is no longer preferred.
  */
 export const getDefaultNetworkForChain = (
   chainId: SupportedChainId
-): NetworkConfig | undefined => {
-  const enabled = getEnabledNetworks().filter((n) => n.chainId === chainId);
-  if (enabled.length === 0) return undefined;
-  // Prefer fork over mainnet for dev
-  const fork = enabled.find((n) => n.environment === "local_fork");
-  return fork ?? enabled[0];
-};
+): NetworkConfig | undefined =>
+  getEnabledNetworks().find((n) => n.chainId === chainId);
 
 /**
  * Resolves a NetworkConfig from either a NetworkKey or a legacy SupportedChainId.

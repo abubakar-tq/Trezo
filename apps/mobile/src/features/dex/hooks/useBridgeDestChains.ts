@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { LIFI_BASE_URL, isLifiNetwork } from "@/src/features/swaps/lifi/constants";
 import { getBridgeConfig } from "@/src/features/swaps/config/bridgeRegistry";
-import { getNetworkConfig, resolveNetworkKey, type NetworkKey } from "@/src/integration/networks";
+import { findNetworkByChainId, getNetworkConfig, type NetworkKey } from "@/src/integration/networks";
 
 type LifiChainRaw = { id: number; chainType: string };
 type LifiChainsResponse = { chains: LifiChainRaw[] };
@@ -28,11 +28,11 @@ async function fetchLifiDestChains(sourceNetworkKey: string): Promise<string[]> 
 
         const keys: string[] = [];
         for (const chain of json.chains) {
-          try {
-            const key = resolveNetworkKey(chain.id as any);
-            if (isLifiNetwork(key)) keys.push(key);
-          } catch {
-            // Chain not in our registry — skip silently
+          // Scan ALL registered networks (enabled or not) so bridge-dest-only
+          // chains like eth-mainnet resolve even without wallet infrastructure.
+          const network = findNetworkByChainId(chain.id);
+          if (network && isLifiNetwork(network.networkKey)) {
+            keys.push(network.networkKey);
           }
         }
         lifiChainsCache = keys;

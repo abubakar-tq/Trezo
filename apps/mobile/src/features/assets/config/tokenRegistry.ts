@@ -350,37 +350,74 @@ export const BUILTIN_TOKENS_BY_NETWORK: Record<NetworkKey, BuiltinTokenEntry[]> 
       source: "builtin",
     },
   ],
-  "base-mainnet-fork": [
+  "eth-mainnet": [
     {
-      chainId: 8453,
-      networkKey: "base-mainnet-fork",
+      chainId: 1,
+      networkKey: "eth-mainnet",
       type: "erc20",
-      // Real Base mainnet USDC — forked state
-      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       symbol: "USDC",
       name: "USD Coin",
       decimals: 6,
-      tags: ["stablecoin", "base", "fork"],
+      tags: ["stablecoin", "ethereum"],
       isSwapSupported: true,
       isVerified: true,
       source: "builtin",
     },
     {
-      chainId: 8453,
-      networkKey: "base-mainnet-fork",
+      chainId: 1,
+      networkKey: "eth-mainnet",
       type: "erc20",
-      // Real Base WETH — forked state
-      address: "0x4200000000000000000000000000000000000006",
+      address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
       symbol: "WETH",
       name: "Wrapped Ether",
       decimals: 18,
-      tags: ["wrapped-native", "base", "fork"],
+      tags: ["wrapped-native", "ethereum"],
+      isSwapSupported: true,
+      isVerified: true,
+      source: "builtin",
+    },
+    {
+      chainId: 1,
+      networkKey: "eth-mainnet",
+      type: "erc20",
+      address: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      symbol: "USDT",
+      name: "Tether USD",
+      decimals: 6,
+      tags: ["stablecoin", "ethereum"],
+      isSwapSupported: true,
+      isVerified: true,
+      source: "builtin",
+    },
+    {
+      chainId: 1,
+      networkKey: "eth-mainnet",
+      type: "erc20",
+      address: "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      symbol: "DAI",
+      name: "Dai Stablecoin",
+      decimals: 18,
+      tags: ["stablecoin", "ethereum"],
       isSwapSupported: true,
       isVerified: true,
       source: "builtin",
     },
   ],
-} as const;
+  // Populated after this object — derived from base-mainnet (same forked 8453).
+  "base-mainnet-fork": [],
+};
+
+// base-mainnet-fork mirrors base-mainnet's forked state — same chainId (8453)
+// and identical token contracts. Derive the fork's token set from base-mainnet
+// so the two lists can never drift apart.
+BUILTIN_TOKENS_BY_NETWORK["base-mainnet-fork"] = BUILTIN_TOKENS_BY_NETWORK[
+  "base-mainnet"
+].map((t) => ({
+  ...t,
+  networkKey: "base-mainnet-fork",
+  tags: [...(t.tags ?? []), "fork"],
+}));
 
 const STABLECOIN_ADDRESSES: Set<string> = new Set(
   Object.values(BUILTIN_TOKENS_BY_NETWORK)
