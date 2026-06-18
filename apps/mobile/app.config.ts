@@ -85,4 +85,27 @@ const config: ExpoConfig = {
   extra,
 };
 
-export default config;
+const { withAppBuildGradle } = require("expo/config-plugins");
+
+const withMetroMonorepoFix = (config: ExpoConfig) => {
+  return withAppBuildGradle(config, (config) => {
+    if (config.modResults.language === "groovy") {
+      let buildGradle = config.modResults.contents;
+      
+      if (buildGradle.includes("entryFile = file([") && !buildGradle.includes("evaluatedEntryFile")) {
+        buildGradle = buildGradle.replace(
+          /entryFile = file\(\["node", "-e", "require\('expo\/scripts\/resolveAppEntry'\)", projectRoot, "android", "absolute"\]\.execute\(null, rootDir\)\.text\.trim\(\)\)/,
+          `def evaluatedEntryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())\n    entryFile = evaluatedEntryFile`
+        );
+        buildGradle = buildGradle.replace(
+          /extraPackagerArgs = \[\]/,
+          `extraPackagerArgs = ["--entry-file", evaluatedEntryFile.absolutePath]`
+        );
+        config.modResults.contents = buildGradle;
+      }
+    }
+    return config;
+  });
+};
+
+export default withMetroMonorepoFix(config);
