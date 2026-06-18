@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { withAppBuildGradle } from "@expo/config-plugins";
 import type { ExpoConfig } from "expo/config";
 
 const extra = {
@@ -10,6 +11,28 @@ const extra = {
     projectId: "7c6127fd-2254-4834-907e-9db320c2d7d7"
   }
 };
+
+// In a monorepo the RN Gradle plugin passes `--entry-file index.js` (a
+// relative path) to Expo CLI, but Expo CLI can detect the workspace root
+// as its projectRoot instead of apps/mobile.  Metro then looks for
+// index.js at the workspace root and fails.  Passing the absolute path
+// via extraPackagerArgs forces Metro to use the right file regardless of
+// where Expo CLI thinks the project root is.
+const withAbsoluteEntryFile = (config: ExpoConfig): ExpoConfig =>
+  withAppBuildGradle(config, (mod) => {
+    if (mod.modResults.contents.includes("evaluatedEntryFile")) {
+      return mod;
+    }
+    mod.modResults.contents = mod.modResults.contents.replace(
+      /( +)entryFile = (file\([^\n]+\))/,
+      [
+        "$1def evaluatedEntryFile = $2",
+        "$1entryFile = evaluatedEntryFile",
+        '$1extraPackagerArgs = ["--entry-file", evaluatedEntryFile.absolutePath]',
+      ].join("\n"),
+    );
+    return mod;
+  });
 
 const config: ExpoConfig = {
   name: "Trezo",
@@ -85,4 +108,4 @@ const config: ExpoConfig = {
   extra,
 };
 
-export default config;
+export default withAbsoluteEntryFile(config);
