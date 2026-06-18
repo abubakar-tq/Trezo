@@ -10,26 +10,37 @@ type LifiChainsResponse = { chains: LifiChainRaw[] };
 let lifiChainsCache: string[] | null = null;
 let lifiChainsFetching: Promise<string[]> | null = null;
 
+/** Pure helper — exported for testing. Returns testnet dest chain keys for a source. */
+export function getTestnetDestChainKeys(sourceNetworkKey: string): string[] {
+  const config = getBridgeConfig(sourceNetworkKey as NetworkKey);
+  return config?.routes.map((r) => r.destinationNetworkKey as string) ?? [];
+}
+
 async function fetchLifiDestChains(sourceNetworkKey: string): Promise<string[]> {
   if (lifiChainsCache) return lifiChainsCache.filter((k) => k !== sourceNetworkKey);
 
   if (!lifiChainsFetching) {
     lifiChainsFetching = (async () => {
-      const res = await fetch(`${LIFI_BASE_URL}/chains?chainTypes=EVM`);
-      if (!res.ok) throw new Error(`LI.FI chains fetch failed (${res.status})`);
-      const json = (await res.json()) as LifiChainsResponse;
+      try {
+        const res = await fetch(`${LIFI_BASE_URL}/chains?chainTypes=EVM`);
+        if (!res.ok) throw new Error(`LI.FI chains fetch failed (${res.status})`);
+        const json = (await res.json()) as LifiChainsResponse;
 
-      const keys: string[] = [];
-      for (const chain of json.chains) {
-        try {
-          const key = resolveNetworkKey(chain.id as any);
-          if (isLifiNetwork(key)) keys.push(key);
-        } catch {
-          // Chain not in our registry — skip silently
+        const keys: string[] = [];
+        for (const chain of json.chains) {
+          try {
+            const key = resolveNetworkKey(chain.id as any);
+            if (isLifiNetwork(key)) keys.push(key);
+          } catch {
+            // Chain not in our registry — skip silently
+          }
         }
+        lifiChainsCache = keys;
+        return keys;
+      } catch (err) {
+        lifiChainsFetching = null; // Clear so next call retries
+        throw err;
       }
-      lifiChainsCache = keys;
-      return keys;
     })();
   }
 
@@ -42,8 +53,7 @@ export function useBridgeDestChains(
 ): { destChainKeys: string[]; destChainLabels: Record<string, string>; loading: boolean } {
   const [destChainKeys, setDestChainKeys] = useState<string[]>(() => {
     if (!isMainnet) {
-      const config = getBridgeConfig(sourceNetworkKey as NetworkKey);
-      return config?.routes.map((r) => r.destinationNetworkKey) ?? [];
+      return getTestnetDestChainKeys(sourceNetworkKey);
     }
     // Serve from cache synchronously if already fetched
     return lifiChainsCache
@@ -54,8 +64,7 @@ export function useBridgeDestChains(
 
   useEffect(() => {
     if (!isMainnet) {
-      const config = getBridgeConfig(sourceNetworkKey as NetworkKey);
-      setDestChainKeys(config?.routes.map((r) => r.destinationNetworkKey) ?? []);
+      setDestChainKeys(getTestnetDestChainKeys(sourceNetworkKey));
       setLoading(false);
       return;
     }
