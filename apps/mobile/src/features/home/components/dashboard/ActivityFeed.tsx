@@ -2,13 +2,16 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
 import { FontFamilies } from "@shared/components/TokenRegistry";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { TransactionHistoryService } from "@/src/features/transactions/services/TransactionHistoryService";
 import type { WalletTransaction } from "@/src/features/transactions/types/transaction";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import { resolveNetworkKey, type NetworkKey } from "@/src/integration/networks";
+import type { SupportedChainId } from "@/src/integration/chains";
 import { useUserStore } from "@/src/store/useUserStore";
+import { getSupabaseClient } from "@/src/lib/supabase";
 
 interface ActivityFeedProps {
   limit?: number;
@@ -64,6 +67,14 @@ const FAILED_STATUSES: readonly WalletTransaction["status"][] = [
 const isFailedStatus = (status: WalletTransaction["status"]): boolean =>
   FAILED_STATUSES.includes(status);
 
+const getNetworkKey = (chainId: number): NetworkKey | null => {
+  try {
+    return resolveNetworkKey(chainId as SupportedChainId);
+  } catch {
+    return null;
+  }
+};
+
 const getAmount = (tx: WalletTransaction): string => {
   if (!tx.amountDisplay || !tx.tokenSymbol) return "-";
   if (isFailedStatus(tx.status)) {
@@ -81,55 +92,63 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 3 }) => {
   const { colors } = theme;
 
   const user = useUserStore((state) => state.user);
+  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const aaAccount = useWalletStore((state) => state.aaAccount);
   const activeChainId = useWalletStore((state) => state.activeChainId);
 
   const [rows, setRows] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      let cancelled = false;
+  const walletAddress = aaAccount?.predictedAddress ?? smartAccountAddress;
 
-      const load = async () => {
-        if (!user?.id || !aaAccount?.predictedAddress) {
-          if (!cancelled) {
-            setRows([]);
-            setLoading(false);
-          }
-          return;
-        }
+  const load = useCallback(async (silent = false) => {
+    if (!user?.id || !walletAddress) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      const chainId = activeChainId ?? aaAccount?.chainId;
+      const networkKey = chainId ? getNetworkKey(chainId) : null;
+      if (!silent) setLoading(true);
+      const result = await TransactionHistoryService.listForWallet({
+        userId: user.id,
+        walletAddress: walletAddress as `0x${string}`,
+        limit,
+        backfillIfEmpty: networkKey && chainId
+          ? { aaWalletId: aaAccount?.id ?? null, networkKey, chainId }
+          : undefined,
+      });
+      setRows(result);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [aaAccount?.chainId, aaAccount?.id, aaAccount?.predictedAddress, activeChainId, limit, walletAddress, user?.id]);
 
-        try {
-          setLoading(true);
-          const result = await TransactionHistoryService.listForWallet({
-            userId: user.id,
-            walletAddress: aaAccount.predictedAddress as `0x${string}`,
-            chainId: aaAccount.chainId ?? activeChainId,
-            limit,
-          });
+  // Reload on tab focus
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
-          if (!cancelled) {
-            setRows(result);
-          }
-        } catch {
-          if (!cancelled) {
-            setRows([]);
-          }
-        } finally {
-          if (!cancelled) {
-            setLoading(false);
-          }
-        }
-      };
-
-      load();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [aaAccount?.chainId, aaAccount?.predictedAddress, activeChainId, limit, user?.id]),
-  );
+  // Realtime: re-fetch silently when a new wallet_transactions row lands for this wallet
+  useEffect(() => {
+    if (!user?.id || !walletAddress) return;
+    const supabase = getSupabaseClient();
+    const channel = supabase
+      .channel(`activity-feed-${walletAddress}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "wallet_transactions",
+          filter: `wallet_address=eq.${(walletAddress as string).toLowerCase()}`,
+        },
+        () => { load(true); },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, walletAddress, load]);
 
   if (loading) {
     return (

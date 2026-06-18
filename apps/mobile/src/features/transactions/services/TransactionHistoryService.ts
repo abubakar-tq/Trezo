@@ -222,7 +222,7 @@ const updateById = async (id: string, patch: Record<string, unknown>): Promise<W
 };
 
 export class TransactionHistoryService {
-  static async backfillHistoricalTransfers(userId: string, aaWalletId: string, walletAddress: string, chainId: number, networkKey: string) {
+  static async backfillHistoricalTransfers(userId: string, aaWalletId: string | null, walletAddress: string, chainId: number, networkKey: string) {
     try {
       const { native, erc20 } = await fetchMoralisHistoricalTransfers(walletAddress, chainId);
       if (!native.length && !erc20.length) return;
@@ -642,35 +642,55 @@ export class TransactionHistoryService {
     chainId?: number;
     networkKey?: NetworkKey;
     limit?: number;
+    backfillIfEmpty?: {
+      aaWalletId: string | null;
+      networkKey: string;
+      chainId: number;
+    };
   }): Promise<WalletTransaction[]> {
-    let query = supabase
-      .from("wallet_transactions")
-      .select("*")
-      .eq("wallet_address", params.walletAddress.toLowerCase())
-      .order("created_at", { ascending: false });
+    const runQuery = async (): Promise<WalletTransactionRow[]> => {
+      let query = supabase
+        .from("wallet_transactions")
+        .select("*")
+        .eq("wallet_address", params.walletAddress.toLowerCase())
+        .order("created_at", { ascending: false });
 
-    if (params.userId) {
-      query = query.eq("user_id", params.userId);
+      if (params.userId) {
+        query = query.eq("user_id", params.userId);
+      }
+
+      if (params.chainId !== undefined) {
+        query = query.eq("chain_id", params.chainId);
+      }
+
+      if (params.networkKey !== undefined) {
+        query = query.eq("network_key", params.networkKey);
+      }
+
+      if (params.limit !== undefined) {
+        query = query.limit(params.limit);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        throw new Error(`Failed to list wallet transactions: ${error.message}`);
+      }
+      return (data ?? []) as WalletTransactionRow[];
+    };
+
+    let rows = await runQuery();
+    if (rows.length === 0 && params.userId && params.backfillIfEmpty) {
+      await this.backfillHistoricalTransfers(
+        params.userId,
+        params.backfillIfEmpty.aaWalletId,
+        params.walletAddress,
+        params.backfillIfEmpty.chainId,
+        params.backfillIfEmpty.networkKey,
+      );
+      rows = await runQuery();
     }
 
-    if (params.chainId !== undefined) {
-      query = query.eq("chain_id", params.chainId);
-    }
-
-    if (params.networkKey !== undefined) {
-      query = query.eq("network_key", params.networkKey);
-    }
-
-    if (params.limit !== undefined) {
-      query = query.limit(params.limit);
-    }
-
-    const { data, error } = await query;
-    if (error) {
-      throw new Error(`Failed to list wallet transactions: ${error.message}`);
-    }
-
-    return (data as WalletTransactionRow[]).map(toRecord);
+    return rows.map(toRecord);
   }
 
   static async listPendingForWallet(params: {

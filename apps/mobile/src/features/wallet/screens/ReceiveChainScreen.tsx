@@ -7,6 +7,7 @@ import {
   AccountDeploymentService,
   deriveDefaultWalletId,
 } from "@features/wallet/services/AccountDeploymentService";
+import WalletSyncService from "@features/wallet/services/WalletSyncService";
 import { useWalletStore } from "@features/wallet/store/useWalletStore";
 import { useUserStore } from "@store/useUserStore";
 import {
@@ -59,12 +60,41 @@ export const ReceiveChainScreen: React.FC = () => {
     (async () => {
       setResolving(true);
 
+      const persistReceiveWallet = async (
+        predictedAddress: string,
+        deploymentMode: "portable" | "chain-specific",
+      ) => {
+        if (!user || !aaAccount?.ownerAddress) return;
+        const sameChain = aaAccount.chainId === chainId;
+        await WalletSyncService.persistWalletMetadata({
+          userId: user.id,
+          predictedAddress,
+          ownerAddress: aaAccount.ownerAddress,
+          walletName: aaAccount.walletName ?? "Passkey Smart Account",
+          chainId: chainId as SupportedChainId,
+          walletId: aaAccount.walletId ?? deriveDefaultWalletId(user.id),
+          walletIndex: aaAccount.walletIndex ?? 0,
+          deploymentMode,
+          ...(sameChain
+            ? {
+                isDeployed: aaAccount.isDeployed,
+                deploymentTxHash: aaAccount.deploymentTxHash ?? null,
+                deploymentBlockNumber: aaAccount.deploymentBlockNumber ?? null,
+                deployedAt: aaAccount.deployedAt ?? null,
+              }
+            : {}),
+        });
+      };
+
       // Fast path 1: aaAccount already predicted for this exact chain.
       if (aaAccount?.predictedAddress && aaAccount.chainId === chainId) {
         if (!cancelled) {
           setAddress(aaAccount.predictedAddress);
           setResolving(false);
         }
+        persistReceiveWallet(aaAccount.predictedAddress, aaAccount.deploymentMode).catch((err) => {
+          console.warn("[ReceiveChainScreen] receive wallet sync failed:", err);
+        });
         return;
       }
 
@@ -74,6 +104,9 @@ export const ReceiveChainScreen: React.FC = () => {
           setAddress(aaAccount.predictedAddress);
           setResolving(false);
         }
+        persistReceiveWallet(aaAccount.predictedAddress, "portable").catch((err) => {
+          console.warn("[ReceiveChainScreen] receive wallet sync failed:", err);
+        });
         return;
       }
 
@@ -118,6 +151,7 @@ export const ReceiveChainScreen: React.FC = () => {
           walletIndex,
           deploymentMode,
         );
+        await persistReceiveWallet(predicted, deploymentMode);
         if (!cancelled) {
           setAddress(predicted);
         }

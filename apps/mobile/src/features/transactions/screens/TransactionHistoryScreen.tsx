@@ -18,6 +18,8 @@ import { TransactionHistoryService } from "@/src/features/transactions/services/
 import { TransactionReceiptTracker } from "@/src/features/transactions/services/TransactionReceiptTracker";
 import type { WalletTransaction } from "@/src/features/transactions/types/transaction";
 import { useWalletStore } from "@/src/features/wallet/store/useWalletStore";
+import type { SupportedChainId } from "@/src/integration/chains";
+import { resolveNetworkKey, type NetworkKey } from "@/src/integration/networks";
 import { useUserStore } from "@/src/store/useUserStore";
 import type { RootStackParamList } from "@/src/types/navigation";
 
@@ -25,6 +27,14 @@ type TransactionHistoryRoute = RouteProp<RootStackParamList, "TransactionHistory
 
 /** Number of rows to show by default before the user scrolls. */
 const DEFAULT_LIMIT = 20;
+
+const getNetworkKey = (chainId: number): NetworkKey | null => {
+  try {
+    return resolveNetworkKey(chainId as SupportedChainId);
+  } catch {
+    return null;
+  }
+};
 
 export const TransactionHistoryScreen: React.FC = () => {
   const { theme } = useAppTheme();
@@ -34,6 +44,7 @@ export const TransactionHistoryScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
 
   const user = useUserStore((state) => state.user);
+  const smartAccountAddress = useUserStore((state) => state.smartAccountAddress);
   const aaAccount = useWalletStore((state) => state.aaAccount);
   const activeChainId = useWalletStore((state) => state.activeChainId);
 
@@ -45,10 +56,14 @@ export const TransactionHistoryScreen: React.FC = () => {
   const walletAddress = useMemo<Address | null>(() => {
     if (route.params?.walletAddress) return route.params.walletAddress;
     if (aaAccount?.predictedAddress) return aaAccount.predictedAddress as Address;
+    if (smartAccountAddress) return smartAccountAddress as Address;
     return null;
-  }, [aaAccount?.predictedAddress, route.params?.walletAddress]);
+  }, [aaAccount?.predictedAddress, route.params?.walletAddress, smartAccountAddress]);
 
-  const chainId = route.params?.chainId ?? aaAccount?.chainId ?? activeChainId;
+  // Only filter by chain when explicitly requested via route params.
+  // When navigated from "See All" on the home screen (no param), show all chains.
+  const explicitChainId = route.params?.chainId ?? null;
+  const activeChain = activeChainId ?? aaAccount?.chainId;
 
   const loadRows = useCallback(async (withReconcile: boolean) => {
     if (!user?.id || !walletAddress) {
@@ -60,21 +75,28 @@ export const TransactionHistoryScreen: React.FC = () => {
 
     try {
       setError(null);
-      if (withReconcile) {
+      if (withReconcile && activeChain) {
         await TransactionReceiptTracker.reconcilePendingForWallet({
           userId: user.id,
           walletAddress,
-          chainId,
+          chainId: activeChain,
           timeoutMs: 1_000,
           pollIntervalMs: 500,
         });
       }
 
+      // For backfill, target the active chain; for display, use explicitChainId only if set
+      const backfillChainId = explicitChainId ?? activeChain;
+      const networkKey = backfillChainId ? getNetworkKey(backfillChainId) : null;
       const nextRows = await TransactionHistoryService.listForWallet({
         userId: user.id,
         walletAddress,
-        chainId,
+        chainId: explicitChainId ?? undefined,
+        networkKey: explicitChainId && networkKey ? networkKey : undefined,
         limit: DEFAULT_LIMIT,
+        backfillIfEmpty: networkKey && backfillChainId
+          ? { aaWalletId: aaAccount?.id ?? null, networkKey, chainId: backfillChainId }
+          : undefined,
       });
       setRows(nextRows);
     } catch (err) {
@@ -83,7 +105,7 @@ export const TransactionHistoryScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [chainId, user?.id, walletAddress]);
+  }, [explicitChainId, activeChain, user?.id, walletAddress, aaAccount?.id]);
 
   useFocusEffect(
     useCallback(() => {
