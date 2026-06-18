@@ -229,8 +229,14 @@ serve(async (req: Request) => {
     sound: "default",
     priority: "high",
     channelId: "default",
+    // Force Android and iOS to use the colorful logo as the rich media / large icon in the expanded tray
     android: {
       imageUrl: "https://raw.githubusercontent.com/abubakar-tq/Trezo/main/apps/mobile/assets/images/icon.png",
+    },
+    ios: {
+      richContent: {
+        image: "https://raw.githubusercontent.com/abubakar-tq/Trezo/main/apps/mobile/assets/images/icon.png",
+      },
     },
   }));
 

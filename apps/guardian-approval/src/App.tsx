@@ -101,10 +101,15 @@ type ApprovalMode = 'EOA_ECDSA' | 'APPROVE_HASH' | null;
 const APPROVE_HASH_ABI = parseAbi(['function approveHash(bytes32 hash)']);
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_URL
+const stripNonLatin1 = (value: string) => value.replace(/[^\x00-\xFF]/g, "");
+
+const rawSupabaseUrl = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_URL
   || (import.meta as any).env?.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_ANON_KEY
+const rawSupabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_ANON_KEY
   || (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+const supabaseUrl = rawSupabaseUrl ? stripNonLatin1(rawSupabaseUrl).trim() : undefined;
+const supabaseAnonKey = rawSupabaseAnonKey ? stripNonLatin1(rawSupabaseAnonKey).trim() : undefined;
 
 // Why this exists: in some browsers the portal threw
 // "Failed to execute 'set' on 'Headers': String contains non ISO-8859-1 code
@@ -117,7 +122,6 @@ const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_OVERRIDE_ANON_KE
 // Fix: don't use window.fetch for Supabase at all. Issue the request over
 // XMLHttpRequest, which extensions typically do not patch. We control every
 // header value (all pure ASCII) and strip stray non-Latin-1 code points anyway.
-const stripNonLatin1 = (value: string) => value.replace(/[^\x00-\xFF]/g, "");
 
 const headerEntries = (source: HeadersInit | undefined): Array<[string, string]> => {
   if (!source) return [];

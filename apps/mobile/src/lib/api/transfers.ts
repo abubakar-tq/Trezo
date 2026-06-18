@@ -14,7 +14,6 @@ export const fetchMoralisHistoricalTransfers = async (walletAddress: string, cha
 
   try {
     const headers = {
-      "X-API-Key": apiKey,
       accept: "application/json",
     };
 

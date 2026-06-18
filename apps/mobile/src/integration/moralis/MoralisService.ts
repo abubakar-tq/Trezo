@@ -29,14 +29,9 @@ export interface MoralisWalletTokensResponse {
 }
 
 export class MoralisService {
-  private static baseUrl = "https://deep-index.moralis.io/api/v2.2";
+  private static baseUrl = "https://jhjnybcscdwpbnztzozy.supabase.co/functions/v1/crypto-prices/moralis";
 
   private static async request<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
-    if (!MORALIS_API_KEY) {
-      console.warn("⚠️ MORALIS_API_KEY is not defined. Ensure EXPO_PUBLIC_MORALIS_API_KEY is in your .env");
-      throw new Error("Moralis API Key missing.");
-    }
-
     const queryString = new URLSearchParams(params).toString();
     const url = `${this.baseUrl}${endpoint}${queryString ? `?${queryString}` : ""}`;
     
@@ -49,14 +44,13 @@ export class MoralisService {
       const response = await fetch(url, {
         method: "GET",
         headers: {
-          "x-api-key": MORALIS_API_KEY,
           "accept": "application/json",
         },
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error(`❌ [Moralis] API Error ${response.status}:`, errorData.message || response.statusText);
+        console.error(`❌ [Moralis Proxy] API Error ${response.status}:`, errorData.message || response.statusText);
         throw new Error(errorData.message || `HTTP ${response.status}`);
       }
 
