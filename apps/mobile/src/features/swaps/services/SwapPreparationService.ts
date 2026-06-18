@@ -29,16 +29,29 @@ const normalizeTokenAddress = (token: TokenMetadata): string =>
 const ensureKnownToken = (intent: SwapIntent, token: TokenMetadata): TokenMetadata =>
   TokenRegistryService.assertTokenOnNetwork(intent.networkKey, token);
 
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Wallet lookup timed out — check your connection and try again.")), ms),
+    ),
+  ]);
+
 const ensureWalletConsistency = async (intent: SwapIntent, walletService: WalletPersistenceService): Promise<void> => {
+  const LOOKUP_TIMEOUT_MS = 8_000;
   // Try to get wallet by networkKey first, fall back to chainId
   let wallet = null;
   try {
-    wallet = await walletService.getAAWalletForNetwork?.(intent.userId, intent.networkKey);
+    const networkLookup = walletService.getAAWalletForNetwork?.(intent.userId, intent.networkKey);
+    if (networkLookup) wallet = await withTimeout(networkLookup, LOOKUP_TIMEOUT_MS);
   } catch {
-    // Method may not exist yet
+    // Method may not exist yet, or timed out — fall through to chain lookup
   }
   if (!wallet) {
-    wallet = await walletService.getAAWalletForChain(intent.userId, intent.chainId);
+    wallet = await withTimeout(
+      walletService.getAAWalletForChain(intent.userId, intent.chainId),
+      LOOKUP_TIMEOUT_MS,
+    );
   }
 
   if (!wallet) {

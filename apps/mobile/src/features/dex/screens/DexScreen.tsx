@@ -1,9 +1,9 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { useAppTheme } from "@theme";
 import type { ThemeColors } from "@theme";
 import * as Clipboard from "expo-clipboard";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -171,6 +171,13 @@ export const DexScreen: React.FC = () => {
   const [preparedPlan, setPreparedPlan] = useState<SwapPlan | null>(null);
   const [uiState, setUiState] = useState<UiState>("idle");
   const [errorState, setErrorState] = useState<ClassifiedError | null>(null);
+
+  // Clear stale errors when the user switches tabs — bridge errors must not bleed into swap and vice-versa.
+  useEffect(() => { setErrorState(null); }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear stale errors when returning to this screen after navigating away.
+  useFocusEffect(useCallback(() => { setErrorState(null); }, []));
+
   const [insufficientBalance, setInsufficientBalance] = useState(false);
   const [toast, setToast] = useState<{ message: string; severity: "info" | "warning" | "error" } | null>(null);
   const [retryNonce, setRetryNonce] = useState<number>(0);
@@ -245,12 +252,15 @@ export const DexScreen: React.FC = () => {
     return stillValid ? bridgeDestOutputToken : canonicalBridgeOutputToken;
   }, [bridgeDestOutputToken, canonicalBridgeOutputToken, bridgeDestTokens]);
 
-  // Reset the user's explicit pick when the source token or destination changes —
-  // a USDC→WETH route on Base Sepolia doesn't make sense if the user just switched
-  // source to a token with no WETH pool on the new destination.
+  // Reset the user's explicit dest-token pick when the SOURCE token changes.
+  // Deliberately excludes bridgeDestNetworkKey: when onDestChange fires, it sets
+  // both the network key and the output token in the same batch; including the
+  // key here caused the effect to fire AFTER that batch and wipe the user's pick.
+  // The effectiveBridgeOutputToken memo already guards against stale picks via
+  // its stillValid check, so no separate reset is needed for chain changes.
   useEffect(() => {
     setBridgeDestOutputToken(null);
-  }, [sellToken?.symbol, sellToken?.chainId, bridgeDestNetworkKey]);
+  }, [sellToken?.symbol, sellToken?.chainId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // topTokens = curated static list shown by default in the picker (~15 tokens, instant).
   // allSwapTokens = full LI.FI catalogue used for in-picker search (~400, loads in bg).
@@ -552,6 +562,11 @@ export const DexScreen: React.FC = () => {
       return () => { cancelled = true; };
     }
 
+    // No destination token yet — user must pick one. Wait silently, no error.
+    if (!effectiveBridgeOutputToken) {
+      return () => { cancelled = true; };
+    }
+
     const debounce = setTimeout(async () => {
       if (cancelled) return;
       setBridgeQuoteLoading(true);
@@ -560,9 +575,6 @@ export const DexScreen: React.FC = () => {
       try {
         const destNetworkConfig = getNetworkConfig(bridgeDestNetworkKey as never);
         const destOutputToken = effectiveBridgeOutputToken;
-        if (!destOutputToken) {
-          throw new Error(`No matching ${sellToken.symbol} on destination network.`);
-        }
 
         const inputAmountRaw = parseUnits(sellAmountDecimal, sellToken.decimals);
         if (inputAmountRaw <= 0n) {
@@ -799,7 +811,13 @@ export const DexScreen: React.FC = () => {
   };
 
   const handleReviewBridge = async () => {
-    const intent = await buildBridgeIntent();
+    let intent;
+    try {
+      intent = await buildBridgeIntent();
+    } catch (err) {
+      setErrorState(classify(err));
+      return;
+    }
     if (!intent) {
       setErrorState(classify(new Error("Missing user, wallet, or token context for bridge.")));
       return;
@@ -968,6 +986,10 @@ export const DexScreen: React.FC = () => {
           setErrorState(classify(error));
         }
       }
+    } catch (err) {
+      // Catch anything that escaped the inner handlers (e.g. TransactionHistoryService
+      // createDraft network failure) so the error is shown rather than silently dropped.
+      setErrorState(classify(err));
     } finally {
       setBridgeBusy(false);
     }

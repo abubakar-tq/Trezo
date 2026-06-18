@@ -62,7 +62,9 @@ export const BRIDGE_QUOTE_VALIDITY_SECONDS = 60;
 // ─── Token addresses (mirror dexRegistry.ts and tokenRegistry.ts) ──────────────
 
 const SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as Address;
-const SEPOLIA_WETH = "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9" as Address;
+// Same address as dexRegistry.ts SEPOLIA_WETH (SwapRouter02.WETH9) so canonical bridge
+// output token matches tokenRegistry and no cross-chain swap leg is required for WETH→WETH.
+const SEPOLIA_WETH = "0xfff9976782d46cc05630d1f6ebab18b2324d6b14" as Address;
 const BASE_SEPOLIA_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address;
 const BASE_SEPOLIA_WETH = "0x4200000000000000000000000000000000000006" as Address;
 const ARB_SEPOLIA_USDC = "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d" as Address;

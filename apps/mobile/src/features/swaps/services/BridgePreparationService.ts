@@ -65,18 +65,31 @@ const SPOKE_POOL_ABI = [
 const ensureKnownToken = (networkKey: BridgeIntent["sourceNetworkKey"], token: TokenMetadata): TokenMetadata =>
   TokenRegistryService.assertTokenOnNetwork(networkKey, token);
 
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Wallet lookup timed out — check your connection and try again.")), ms),
+    ),
+  ]);
+
 const ensureWalletConsistency = async (
   intent: BridgeIntent,
   walletService: WalletPersistenceService,
 ): Promise<void> => {
+  const LOOKUP_TIMEOUT_MS = 8_000;
   let wallet = null;
   try {
-    wallet = await walletService.getAAWalletForNetwork?.(intent.userId, intent.sourceNetworkKey);
+    const networkLookup = walletService.getAAWalletForNetwork?.(intent.userId, intent.sourceNetworkKey);
+    if (networkLookup) wallet = await withTimeout(networkLookup, LOOKUP_TIMEOUT_MS);
   } catch {
-    // Method may not exist yet
+    // Method may not exist yet, or timed out — fall through to chain lookup
   }
   if (!wallet) {
-    wallet = await walletService.getAAWalletForChain(intent.userId, intent.sourceChainId);
+    wallet = await withTimeout(
+      walletService.getAAWalletForChain(intent.userId, intent.sourceChainId),
+      LOOKUP_TIMEOUT_MS,
+    );
   }
 
   if (!wallet) {
