@@ -258,6 +258,15 @@ export const DexScreen: React.FC = () => {
   // is not immediately reset by the "is this token still in the list?" effect.
   const swapTokens = allSwapTokens;
 
+  // Bridge mode only supports ERC-20 sell tokens (Across V3 testnet; LI.FI mainnet).
+  // Auto-switch to the first ERC-20 when native ETH is selected in bridge mode.
+  useEffect(() => {
+    if (activeTab !== "bridge") return;
+    if (!sellToken || sellToken.type !== "native") return;
+    const firstErc20 = swapTokens.find((t) => t.type === "erc20");
+    if (firstErc20) setSellToken(firstErc20);
+  }, [activeTab, sellToken?.type, swapTokens]);
+
   const sellTokenBalanceRaw = useMemo(() => {
     const key = toTokenKey(sellToken);
     return key ? (tokenBalances[key] ?? 0n) : 0n;
