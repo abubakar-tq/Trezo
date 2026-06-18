@@ -90,6 +90,15 @@ export type MultiChainRecoveryState = RecoveryDetailsState & {
 
 const DEFAULT_TIMELOCK_SECONDS = 86400n;
 
+// Budget for the per-chain CONNECTIVITY PROBE (not the data reads). The viem
+// transport allows 30s + retries (~90s) before failing, which is catastrophic
+// here: an unreachable candidate chain (e.g. local Anvil at the laptop IP, viewed
+// from a physical device) would stall the whole Promise.all for over a minute and
+// leave the "Create request" button spinning. If a chain can't even answer the
+// first request within this budget it's treated as unreachable → emptyState. A
+// reachable chain answers far faster, after which its data reads run uncapped.
+const MULTICHAIN_READ_TIMEOUT_MS = 8_000;
+
 export class SocialRecoveryService {
   static encodeInitData(
     guardians: readonly Address[],
@@ -449,22 +458,48 @@ export class SocialRecoveryService {
       activeRecovery: null,
     });
 
+    // Connectivity probe with a short budget. Unreachability shows up on the very
+    // first request: an unreachable RPC (e.g. local Anvil at the laptop IP, viewed
+    // from a physical device) never answers, so without this it would wait out the
+    // full 30s × retries transport timeout (~90s) and stall the whole Promise.all.
+    // CRITICAL: only the PROBE is capped. Once a chain answers (a live chain does so
+    // in well under a second) the real data reads run UNCAPPED — a merely-slow but
+    // reachable RPC must never be cut short and reported as "no config", or the UI
+    // would show an already-configured wallet as un-configured.
+    const probeReachable = (chainId: SupportedChainId, probe: Promise<unknown>): Promise<unknown> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`chain ${chainId} unreachable (probe exceeded ${MULTICHAIN_READ_TIMEOUT_MS}ms)`)),
+          MULTICHAIN_READ_TIMEOUT_MS,
+        );
+      });
+      return Promise.race([probe, timeout]).finally(() => {
+        if (timer) clearTimeout(timer);
+      });
+    };
+
     const states = await Promise.all(
       chainIds.map(async (chainId) => {
         try {
           const publicClient = getPublicClient(chainId);
-          const bytecode = await publicClient.getBytecode({ address: smartAccountAddress });
+          // Probe is the connectivity gate; a timeout here means the chain is unreachable.
+          const bytecode = (await probeReachable(
+            chainId,
+            publicClient.getBytecode({ address: smartAccountAddress }),
+          )) as Awaited<ReturnType<typeof publicClient.getBytecode>>;
           const accountDeployed = Boolean(bytecode && bytecode !== "0x");
 
           if (!accountDeployed) return emptyState(chainId);
 
-        const [moduleInstalled, details, nonce, hashes, activeRecovery] = await Promise.all([
-          this.isModuleInstalled(smartAccountAddress, chainId),
-          this.getRecoveryDetails(smartAccountAddress, chainId),
-          this.getRecoveryNonce(smartAccountAddress, chainId),
-          this.getRecoveryHashes(smartAccountAddress, chainId),
-          this.getActiveRecovery(smartAccountAddress, chainId),
-        ]);
+          // Chain is reachable — run the full read with NO timeout.
+          const [moduleInstalled, details, nonce, hashes, activeRecovery] = await Promise.all([
+            this.isModuleInstalled(smartAccountAddress, chainId),
+            this.getRecoveryDetails(smartAccountAddress, chainId),
+            this.getRecoveryNonce(smartAccountAddress, chainId),
+            this.getRecoveryHashes(smartAccountAddress, chainId),
+            this.getActiveRecovery(smartAccountAddress, chainId),
+          ]);
 
           return {
             chainId,

@@ -219,27 +219,18 @@ const RecoveryProgressScreen: React.FC = () => {
   const handleSubmitAction = useCallback(
     async (action: "schedule" | "execute") => {
       const targetChains = action === "schedule" ? schedulableChains : executableChains;
-      if (targetChains.length === 0) {
-        return;
-      }
+      if (targetChains.length === 0) return;
 
       setSubmittingAction(action);
       setError(null);
       try {
-        // The recovering device has no on-chain authority to sign schedule /
-        // execute UserOps — only the guardian (whose passkey is registered on
-        // the wallet) can. Instead of trying the broken relayer-EOA path, we
-        // sync Supabase state from on-chain truth. If a guardian already
-        // submitted the tx via their inbox, this will pick it up. If not, the
-        // status won't change and the user will see a clear "ask guardian"
-        // hint in the UI.
         for (const status of targetChains) {
-          await serviceRef.current.syncRecoveryStateFromChain({
-            requestId,
-            chainId: status.chain_id,
-          });
+          if (action === "schedule") {
+            await serviceRef.current.relayerScheduleRecovery({ requestId, chainId: status.chain_id });
+          } else {
+            await serviceRef.current.relayerExecuteRecovery({ requestId, chainId: status.chain_id });
+          }
         }
-
         await loadRequestState();
       } catch (e) {
         setError(e instanceof Error ? e.message : `Failed to ${action} recovery.`);
@@ -399,39 +390,37 @@ const RecoveryProgressScreen: React.FC = () => {
           })
         )}
 
-        {/* Recovery actions happen on the guardian's device, not here. This
-            device (the recovering one) has no on-chain signing authority
-            until executeRecovery completes. Show clear guidance instead of a
-            broken button. */}
         {thresholdReached && schedulableChains.length > 0 && (
-          <View style={[styles.statusBanner, { backgroundColor: theme.colors.warningSoft, borderColor: theme.colors.warning, marginTop: 16 }]}>
-            <Text style={[styles.statusBannerText, { color: theme.colors.warning }]}>
-              Ready to schedule
+          <TouchableOpacity
+            style={[styles.primaryButton, submittingAction !== null && styles.disabledButton, { marginTop: 16 }]}
+            disabled={submittingAction !== null}
+            onPress={() => void handleSubmitAction("schedule")}
+          >
+            <Text style={styles.primaryButtonText}>
+              {submittingAction === "schedule" ? "Scheduling…" : "Schedule Recovery On-Chain"}
             </Text>
-            <Text style={[styles.rowMeta, { marginTop: 4 }]}>
-              Ask your guardian to open Guardian Inbox and tap <Text style={{ fontWeight: "700" }}>Submit Schedule On-Chain</Text>.
-            </Text>
-          </View>
+          </TouchableOpacity>
         )}
 
         {executableChains.length > 0 && (
-          <View style={[styles.statusBanner, { backgroundColor: theme.colors.successSoft, borderColor: theme.colors.success, marginTop: 12 }]}>
-            <Text style={[styles.statusBannerText, { color: theme.colors.success }]}>
-              Timelock expired — ready to execute
+          <TouchableOpacity
+            style={[styles.primaryButton, submittingAction !== null && styles.disabledButton, { marginTop: 12 }]}
+            disabled={submittingAction !== null}
+            onPress={() => void handleSubmitAction("execute")}
+          >
+            <Text style={styles.primaryButtonText}>
+              {submittingAction === "execute" ? "Executing…" : "Execute Recovery"}
             </Text>
-            <Text style={[styles.rowMeta, { marginTop: 4 }]}>
-              Ask your guardian to open Guardian Inbox and tap <Text style={{ fontWeight: "700" }}>Execute Recovery</Text> to activate your new passkey.
-            </Text>
-          </View>
+          </TouchableOpacity>
         )}
 
         <TouchableOpacity
           style={[styles.secondaryButton, { marginTop: 12 }]}
-          disabled={submittingAction !== null}
-          onPress={() => void handleSubmitAction("execute")}
+          disabled={refreshing}
+          onPress={() => void handleRefresh()}
         >
           <Text style={styles.secondaryButtonText}>
-            {submittingAction !== null ? "Refreshing…" : "Refresh status from chain"}
+            {refreshing ? "Refreshing…" : "Refresh status from chain"}
           </Text>
         </TouchableOpacity>
 

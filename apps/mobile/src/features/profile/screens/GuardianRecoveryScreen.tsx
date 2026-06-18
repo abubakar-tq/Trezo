@@ -199,6 +199,29 @@ const GuardianRecoveryScreen: React.FC = () => {
     };
   }, [moduleInstalledState, smartAccountAddress, resolvedChainId, moduleStatusNonce]);
 
+  // On-chain is the source of truth once the module is installed. If this device
+  // has no local guardian cache (e.g. after recovering onto a fresh passkey, or a
+  // reinstall) the persisted store is empty and the screen would otherwise fall
+  // back to the misleading "Configure Guardians" form. Hydrate the local view
+  // from the on-chain set so it shows the existing guardians + the on-chain
+  // update path instead. Guarded by `storedGuardians.length === 0` so it only
+  // fills an empty cache and can't loop or clobber a populated one.
+  useEffect(() => {
+    if (!moduleInstalledState) return;
+    if (onChainGuardians.length === 0) return;
+    if (storedGuardians.length > 0) return;
+
+    const hydrated: Guardian[] = onChainGuardians.map((address, idx) => ({
+      id: `onchain-${idx}-${address.toLowerCase()}`,
+      address: address.toLowerCase(),
+    }));
+    const threshold = Number(onChainThreshold) || hydrated.length;
+    setGuardians(hydrated, threshold, hydrated.length);
+    setMValue(String(threshold));
+    setNValue(String(hydrated.length));
+    setViewMode("list");
+  }, [moduleInstalledState, onChainGuardians, onChainThreshold, storedGuardians.length, setGuardians]);
+
   const handleMNChange = useCallback(
     (field: "m" | "n", value: string) => {
       const numValue = parseInt(value) || 0;
@@ -596,8 +619,9 @@ const GuardianRecoveryScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Form mode: configure guardians */}
-        {viewMode === "form" && (
+        {/* Form mode: configure guardians (initial setup only — never once the
+            module is installed, where on-chain is the source of truth). */}
+        {viewMode === "form" && moduleInstalledState === false && (
           <View style={styles.configCard}>
             <View style={styles.configHeader}>
               <Text style={styles.configTitle}>Configure Guardians</Text>

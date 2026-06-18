@@ -502,6 +502,36 @@ export class RecoveryRequestService {
     };
   }
 
+  async relayerScheduleRecovery(input: {
+    requestId: string;
+    chainId: number;
+  }): Promise<{ txHash: string; requestStatus: RecoveryRequestStatus; alreadyScheduled?: boolean }> {
+    const { data, error } = await supabase.functions.invoke("submit-recovery-operation", {
+      body: { requestId: input.requestId, chainId: input.chainId, action: "schedule", rpcUrl: "" },
+    });
+    if (error) {
+      const detail = await parseFunctionInvokeErrorMessage(error);
+      throw new Error(detail ?? error.message ?? "relayer schedule failed");
+    }
+    if (!data?.success) throw new Error((data as any)?.error ?? "relayer schedule failed");
+    return { txHash: data.txHash, requestStatus: data.requestStatus, alreadyScheduled: data.alreadyScheduled };
+  }
+
+  async relayerExecuteRecovery(input: {
+    requestId: string;
+    chainId: number;
+  }): Promise<{ txHash: string; requestStatus: RecoveryRequestStatus }> {
+    const { data, error } = await supabase.functions.invoke("submit-recovery-operation", {
+      body: { requestId: input.requestId, chainId: input.chainId, action: "execute", rpcUrl: "" },
+    });
+    if (error) {
+      const detail = await parseFunctionInvokeErrorMessage(error);
+      throw new Error(detail ?? error.message ?? "relayer execute failed");
+    }
+    if (!data?.success) throw new Error((data as any)?.error ?? "relayer execute failed");
+    return { txHash: data.txHash, requestStatus: data.requestStatus };
+  }
+
   /**
    * After the client submits the schedule/execute UserOp and gets a tx hash,
    * tell the backend to record it. The backend will wait for the receipt,
