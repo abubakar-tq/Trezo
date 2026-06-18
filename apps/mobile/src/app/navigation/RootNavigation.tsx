@@ -49,11 +49,17 @@ import { useDevicePairingDeepLink } from "@features/wallet/hooks/useDevicePairin
 import PasskeyService from "@features/wallet/services/PasskeyService";
 import { useAuthFlowStore } from "@store/useAuthFlowStore";
 import { useUserStore } from "@store/useUserStore";
-import { useAppTheme } from "@theme";
+import { DarkThemeScope, useAppTheme } from "@theme";
 import AuthNavigation from "./AuthNavigation";
 import TabNavigation from "./TabNavigation";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+const AuthNavigationDark = () => (
+  <DarkThemeScope>
+    <AuthNavigation />
+  </DarkThemeScope>
+);
 
 const RootNavigation = () => {
   const isLoggedIn = useUserStore((state) => state.isLoggedIn);
@@ -165,7 +171,7 @@ const RootNavigation = () => {
         />
         <Stack.Screen
           name="AuthNavigation"
-          component={AuthNavigation}
+          component={AuthNavigationDark}
           listeners={{
             focus: () =>
               console.log("👀 [Navigation] AuthNavigation focused"),

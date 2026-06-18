@@ -49,3 +49,12 @@ export const useAppTheme = () => {
   }
   return context;
 };
+
+export const DarkThemeScope: React.FC<PropsWithChildren> = ({ children }) => {
+  const { setMode } = useAppTheme();
+  const value = useMemo<ThemeContextValue>(
+    () => ({ theme: darkTheme, mode: "dark", resolvedMode: "dark", setMode }),
+    [setMode],
+  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+};
