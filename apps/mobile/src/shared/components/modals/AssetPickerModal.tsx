@@ -1,14 +1,16 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   SectionList,
   FlatList,
+  ScrollView,
   StyleSheet,
   Modal,
   Dimensions,
   Image,
+  TextInput,
 } from 'react-native';
 import { useAppTheme } from '@theme';
 import { TokenIcon } from '../visuals/TokenIcon';
@@ -16,6 +18,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useHoldingsAcrossChains } from '@features/dex/hooks/useHoldingsAcrossChains';
 import { getEnabledChains, getChainConfig } from '@/src/integration/chains';
+import { getNetworkConfig } from '@/src/integration/networks';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -34,11 +37,30 @@ interface AssetPickerModalProps {
   onClose: () => void;
   onSelect: (asset: Asset) => void;
   assets: Asset[];
+  searchableTokens?: Asset[];
   title?: string;
+  /** Whether to show the existing chain-ID filter row (default true). Ignored when bridgeChainFilterKeys is set. */
+  showChainFilter?: boolean;
+  /**
+   * When provided, replaces the default chain filter with a plain-text bridge
+   * destination chain filter. Each entry is a NetworkKey string.
+   */
+  bridgeChainFilterKeys?: string[];
+  /**
+   * Called instead of onSelect when bridgeChainFilterKeys is set.
+   * chainKey is the active filter tab's network key, or null if "All" is active.
+   */
+  onBridgeSelect?: (asset: Asset, chainKey: string | null) => void;
 }
 
 const ALL = 'all' as const;
 type ChainFilter = typeof ALL | number;
+
+/** Exported for unit testing. Filters an asset list to a specific chainId, or returns all if chainId is null. */
+export function filterTokensByBridgeChain(assets: Asset[], chainId: number | null): Asset[] {
+  if (chainId === null) return assets;
+  return assets.filter((a) => a.chainId !== undefined && a.chainId === chainId);
+}
 
 /** Map a chain ID to a TrustWallet icon URL. */
 function chainIconUrl(chainId: number): string | undefined {
@@ -114,16 +136,27 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
   onClose,
   onSelect,
   assets = [],
+  searchableTokens,
   title = 'Select Asset',
+  showChainFilter = true,
+  bridgeChainFilterKeys,
+  onBridgeSelect,
 }) => {
   const { theme } = useAppTheme();
   const { colors } = theme;
 
   const [chainFilter, setChainFilter] = useState<ChainFilter>(ALL);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Bridge-mode chain filter (network key string) — separate from the existing chain-id filter
+  const [activeBridgeChain, setActiveBridgeChain] = useState<string | null>(null);
+  const isBridgeMode = Boolean(bridgeChainFilterKeys && bridgeChainFilterKeys.length > 0);
 
   const holdings = useHoldingsAcrossChains();
   const enabledChains = useMemo(() => getEnabledChains(), []);
-  const showFilterRow = enabledChains.length > 1;
+  const showFilterRow = showChainFilter && enabledChains.length > 1;
+
+  const normalizedQuery = searchQuery.toLowerCase().trim();
 
   // Holdings section — filter by chain if active
   const filteredHoldings = useMemo(() => {
@@ -133,25 +166,65 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
 
   // All tokens section — deduplicated by symbol, alphabetical, chain-filtered
   const filteredAll = useMemo(() => {
-    const list =
-      chainFilter === ALL
-        ? assets
-        : assets.filter(
-            (a) => a.chainId === undefined || a.chainId === chainFilter,
-          );
+    const source = normalizedQuery && searchableTokens ? searchableTokens : assets;
+
+    let list: Asset[];
+    if (isBridgeMode) {
+      // In bridge mode, filter by the active bridge chain's chainId
+      const activeChainId = activeBridgeChain
+        ? (() => {
+            try { return (getNetworkConfig as any)(activeBridgeChain)?.chainId ?? null; }
+            catch { return null; }
+          })()
+        : null;
+      list = filterTokensByBridgeChain(source, activeChainId);
+    } else {
+      list = chainFilter === ALL
+        ? source
+        : source.filter((a) => a.chainId === undefined || a.chainId === chainFilter);
+    }
+
+    if (normalizedQuery) {
+      list = list.filter(
+        (a) =>
+          a.symbol.toLowerCase().includes(normalizedQuery) ||
+          a.name.toLowerCase().includes(normalizedQuery),
+      );
+      const score = (a: Asset): number => {
+        const sym = a.symbol.toLowerCase();
+        const name = a.name.toLowerCase();
+        if (sym === normalizedQuery) return 0;
+        if (sym.startsWith(normalizedQuery)) return 1;
+        if (name.startsWith(normalizedQuery)) return 2;
+        if (sym.includes(normalizedQuery)) return 3;
+        return 4;
+      };
+      return [...list].sort((a, b) => {
+        const diff = score(a) - score(b);
+        return diff !== 0 ? diff : a.symbol.localeCompare(b.symbol);
+      });
+    }
     return [...list].sort((a, b) => a.symbol.localeCompare(b.symbol));
-  }, [assets, chainFilter]);
+  }, [assets, searchableTokens, chainFilter, normalizedQuery, isBridgeMode, activeBridgeChain]);
 
   // Reset filter when modal opens
   React.useEffect(() => {
-    if (isVisible) setChainFilter(ALL);
+    if (isVisible) {
+      setChainFilter(ALL);
+      setSearchQuery('');
+      setActiveBridgeChain(null);
+    }
   }, [isVisible]);
 
-  const handleSelect = (asset: Asset) => {
+  const handleSelect = useCallback((asset: Asset) => {
     Haptics.selectionAsync();
-    onSelect(asset);
+    if (isBridgeMode && onBridgeSelect) {
+      onBridgeSelect(asset, activeBridgeChain);
+    } else {
+      onSelect(asset);
+    }
     onClose();
-  };
+  }, [isBridgeMode, onBridgeSelect, onSelect, onClose, activeBridgeChain]);
 
   const renderHoldingRow = ({ item }: { item: (typeof filteredHoldings)[0] }) => {
     const balanceDisplay = parseFloat(item.balance || '0').toLocaleString(undefined, {
@@ -276,51 +349,85 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Chain filter row — only shown when more than one chain is enabled */}
-          {showFilterRow && (
-            <FlatList
-              data={[ALL, ...enabledChains.map((c) => c.id)] as ChainFilter[]}
+          {/* Chain filter row — bridge mode or default */}
+          {isBridgeMode ? (
+            <ScrollView
               horizontal
-              keyExtractor={(item) => String(item)}
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterRow}
-              renderItem={({ item }) => {
-                const isActive = chainFilter === item;
-                const label =
-                  item === ALL ? 'All' : (getChainConfig(item as any)?.name ?? String(item));
+              contentContainerStyle={styles.bridgeFilterRow}
+            >
+              {(['all', ...(bridgeChainFilterKeys ?? [])] as string[]).map((key) => {
+                const isActive = key === 'all' ? activeBridgeChain === null : activeBridgeChain === key;
+                const label = key === 'all'
+                  ? 'All'
+                  : (() => { try { return (getNetworkConfig as any)(key)?.displayName ?? key; } catch { return key; } })();
                 return (
                   <TouchableOpacity
-                    onPress={() => setChainFilter(item)}
-                    style={[
-                      styles.filterChip,
-                      {
-                        backgroundColor: isActive
-                          ? `${colors.accent}22`
-                          : `${colors.surfaceMuted}CC`,
-                        borderColor: isActive ? colors.accent : `${colors.border}80`,
-                      },
-                    ]}
+                    key={key}
+                    onPress={() => setActiveBridgeChain(key === 'all' ? null : key)}
+                    style={styles.bridgeFilterTab}
                     activeOpacity={0.7}
                   >
-                    {item !== ALL && (
-                      <View style={styles.filterChipDot}>
-                        <ChainBadge chainId={item as number} />
-                      </View>
-                    )}
                     <Text
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
                       style={[
-                        styles.filterChipText,
-                        { color: isActive ? colors.accent : colors.textSecondary, maxWidth: 110 },
+                        styles.bridgeFilterTabText,
+                        { color: isActive ? colors.accent : colors.textSecondary },
                       ]}
                     >
                       {label}
                     </Text>
+                    {isActive && (
+                      <View style={[styles.bridgeFilterTabUnderline, { backgroundColor: colors.accent }]} />
+                    )}
                   </TouchableOpacity>
                 );
-              }}
-            />
+              })}
+            </ScrollView>
+          ) : (
+            showFilterRow && (
+              <FlatList
+                data={[ALL, ...enabledChains.map((c) => c.id)] as ChainFilter[]}
+                horizontal
+                keyExtractor={(item) => String(item)}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterRow}
+                renderItem={({ item }) => {
+                  const isActive = chainFilter === item;
+                  const label = item === ALL ? 'All' : (getChainConfig(item as any)?.name ?? String(item));
+                  return (
+                    <TouchableOpacity
+                      onPress={() => setChainFilter(item)}
+                      style={[
+                        styles.filterChip,
+                        {
+                          backgroundColor: isActive
+                            ? `${colors.accent}22`
+                            : `${colors.surfaceMuted}CC`,
+                          borderColor: isActive ? colors.accent : `${colors.border}80`,
+                        },
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      {item !== ALL && (
+                        <View style={styles.filterChipDot}>
+                          <ChainBadge chainId={item as number} />
+                        </View>
+                      )}
+                      <Text
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                        style={[
+                          styles.filterChipText,
+                          { color: isActive ? colors.accent : colors.textSecondary, maxWidth: 110 },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            )
           )}
 
           <SectionList
@@ -522,5 +629,26 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 13,
     fontWeight: '500',
+  },
+  bridgeFilterRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    gap: 0,
+  },
+  bridgeFilterTab: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 16,
+    alignItems: 'center',
+  },
+  bridgeFilterTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  bridgeFilterTabUnderline: {
+    height: 2,
+    width: '100%',
+    borderRadius: 1,
+    marginTop: 3,
   },
 });
