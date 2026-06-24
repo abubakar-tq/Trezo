@@ -143,6 +143,7 @@ The repository contains numerous utility scripts to streamline development:
 
 The Trezo ecosystem relies on a distributed modern cloud infrastructure for its production deployments:
 
+- **Smart Contracts (`contracts`)**: The ERC-4337 and ERC-7579-style smart accounts and modules are actively deployed across three live networks: **Base Sepolia** (testnet), **ETH Sepolia** (testnet), and **Base Mainnet**.
 - **Mobile App (`apps/mobile`)**: Built and deployed using **Expo Cloud (EAS)**. Push notifications are securely routed to devices using Firebase Cloud Messaging (**FCM**).
 - **Backend Database & Auth**: **Supabase** serves as the primary production database, handling Postgres, authentication, and Edge Functions.
 - **On-chain Indexer (`apps/backend/indexer`)**: The Ponder-based indexer is deployed and hosted on **Railway**.
