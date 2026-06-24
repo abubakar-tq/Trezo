@@ -139,6 +139,17 @@ The repository contains numerous utility scripts to streamline development:
 
 ---
 
+## 🌍 Current Production Deployment
+
+The Trezo ecosystem relies on a distributed modern cloud infrastructure for its production deployments:
+
+- **Mobile App (`apps/mobile`)**: Built and deployed using **Expo Cloud (EAS)**. Push notifications are securely routed to devices using Firebase Cloud Messaging (**FCM**).
+- **Backend Database & Auth**: **Supabase** serves as the primary production database, handling Postgres, authentication, and Edge Functions.
+- **On-chain Indexer (`apps/backend/indexer`)**: The Ponder-based indexer is deployed and hosted on **Railway**.
+- **Guardian Approval Web App (`apps/guardian-approval`)**: The React/Vite interface for external guardians is deployed on **Vercel** for global edge performance.
+
+---
+
 ## Security & Secrets
 - `.env` files must stay out of git; use examples/templates where available.
 - Dev keys in the local bundler stack are public test keys only.
